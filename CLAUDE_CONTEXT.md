@@ -232,12 +232,220 @@ Code: Fira Code
 - E2E tests with Playwright
 - Test coverage > 70%
 - Visual regression tests
+- **CRITICAL**: Use Chrome DevTools MCP for real browser testing
 
 ### Load Testing
 - Use k6 for load tests
 - Test with 10,000 concurrent users
 - Verify p95 latency < 100ms
 - Run before marking complete
+
+## 🌐 MCP TOOLS AVAILABLE TO YOU
+
+### Chrome DevTools MCP (MANDATORY for Frontend Testing)
+**When to use**: ALWAYS test frontend features using Chrome DevTools MCP before marking complete.
+
+**Available operations**:
+- `mcp__chrome-devtools__navigate_page` - Navigate to pages
+- `mcp__chrome-devtools__take_snapshot` - Get page content with UIDs
+- `mcp__chrome-devtools__click` - Click elements
+- `mcp__chrome-devtools__fill` - Fill form inputs
+- `mcp__chrome-devtools__fill_form` - Fill multiple fields at once
+- `mcp__chrome-devtools__take_screenshot` - Visual verification
+- `mcp__chrome-devtools__evaluate_script` - Execute JavaScript
+- `mcp__chrome-devtools__list_network_requests` - Verify API calls
+
+**Testing workflow**:
+1. Start frontend: `cd apps/web && npm run dev`
+2. Navigate: `mcp__chrome-devtools__navigate_page` to http://localhost:3000
+3. Take snapshot: `mcp__chrome-devtools__take_snapshot` to see elements
+4. Interact: Use `click`, `fill`, etc. with UIDs from snapshot
+5. Verify: Check network requests, screenshots, console messages
+6. Fix bugs: If issues found, fix code and re-test
+
+**Example - Testing SSO Login**:
+```typescript
+// 1. Navigate to login page
+mcp__chrome-devtools__navigate_page({ url: "http://localhost:3000/login" })
+
+// 2. Take snapshot to see SSO buttons
+mcp__chrome-devtools__take_snapshot()
+
+// 3. Click Google SSO button (using UID from snapshot)
+mcp__chrome-devtools__click({ uid: "button-123" })
+
+// 4. Verify redirect occurred
+mcp__chrome-devtools__list_network_requests()
+
+// 5. Take screenshot to verify UI
+mcp__chrome-devtools__take_screenshot()
+```
+
+### WebSearch (For Research & Documentation)
+**When to use**: When you need to research best practices, find documentation, or verify technology choices.
+
+**Available operations**:
+- `WebSearch` - Search the web for information
+
+**Example uses**:
+- Research Go Fiber v3 best practices
+- Find latest Next.js 15 features
+- Look up PostgreSQL optimization techniques
+- Verify Shadcn/ui component usage
+- Check latest security best practices
+
+**Example**:
+```typescript
+WebSearch({ query: "Go Fiber v3 middleware best practices 2025" })
+WebSearch({ query: "Next.js 15 App Router authentication patterns" })
+WebSearch({ query: "PostgreSQL 16 performance tuning" })
+```
+
+## 🎯 FRONTEND TESTING MANDATE
+
+**CRITICAL RULE**: You MUST test frontend features using Chrome DevTools MCP before marking any frontend task as complete.
+
+### Why This Matters
+- Catches bugs that unit tests miss
+- Verifies actual user experience
+- Tests real browser behavior
+- Validates API integration
+- Ensures responsive design works
+
+### Testing Checklist (Every Frontend Feature)
+Before marking frontend task complete:
+- ✅ Feature implemented in code
+- ✅ Unit tests written and passing
+- ✅ **Chrome DevTools MCP testing completed**
+- ✅ All user flows tested
+- ✅ No console errors
+- ✅ Network requests correct
+- ✅ UI looks correct (screenshot)
+- ✅ Responsive on mobile/tablet/desktop
+- ✅ Error states handled gracefully
+
+### Common Testing Scenarios
+
+#### 1. SSO Login Flow
+```typescript
+// Navigate to login
+navigate_page({ url: "http://localhost:3000/login" })
+
+// Take snapshot to see SSO buttons
+take_snapshot()
+
+// Click Google OAuth button
+click({ uid: "google-sso-button-uid" })
+
+// Verify OAuth redirect
+list_network_requests({ resourceTypes: ["document"] })
+
+// After callback, verify dashboard loads
+navigate_page({ url: "http://localhost:3000/dashboard" })
+take_snapshot()
+```
+
+#### 2. Agent Registration
+```typescript
+// Navigate to registration
+navigate_page({ url: "http://localhost:3000/agents/new" })
+take_snapshot()
+
+// Fill form
+fill_form({
+  elements: [
+    { uid: "name-input-uid", value: "test-agent" },
+    { uid: "display-name-uid", value: "Test Agent" },
+    { uid: "type-select-uid", value: "ai_agent" }
+  ]
+})
+
+// Submit
+click({ uid: "submit-button-uid" })
+
+// Verify API call
+list_network_requests({ resourceTypes: ["xhr", "fetch"] })
+
+// Verify success modal appears
+take_snapshot()
+take_screenshot()
+```
+
+#### 3. API Key Generation
+```typescript
+// Navigate to API keys page
+navigate_page({ url: "http://localhost:3000/api-keys" })
+
+// Click "Generate API Key"
+click({ uid: "generate-key-button-uid" })
+
+// Verify modal appears with key
+take_snapshot()
+
+// Test copy button
+click({ uid: "copy-button-uid" })
+
+// Verify clipboard (using evaluate_script)
+evaluate_script({
+  function: "async () => { return await navigator.clipboard.readText(); }"
+})
+
+// Test download buttons
+click({ uid: "download-txt-uid" })
+click({ uid: "download-env-uid" })
+```
+
+#### 4. Admin Dashboard
+```typescript
+// Navigate to admin dashboard
+navigate_page({ url: "http://localhost:3000/admin" })
+
+// Verify charts render
+take_screenshot()
+
+// Test user management
+click({ uid: "users-tab-uid" })
+take_snapshot()
+
+// Test search/filter
+fill({ uid: "search-input-uid", value: "test@example.com" })
+
+// Verify results update
+take_snapshot()
+```
+
+### Debugging Frontend Issues
+
+If you find issues during testing:
+
+1. **Check Console Messages**:
+   ```typescript
+   list_console_messages()
+   ```
+
+2. **Inspect Network Requests**:
+   ```typescript
+   list_network_requests()
+   get_network_request({ url: "/api/v1/agents" })
+   ```
+
+3. **Verify JavaScript Execution**:
+   ```typescript
+   evaluate_script({
+     function: "() => { return window.location.href; }"
+   })
+   ```
+
+4. **Take Screenshots for Visual Bugs**:
+   ```typescript
+   take_screenshot({ fullPage: true })
+   ```
+
+5. **Fix and Re-test**:
+   - Fix the bug in code
+   - Restart dev server if needed
+   - Re-run the test flow
+   - Verify fix works
 
 ## 📝 DOCUMENTATION REQUIREMENTS
 
