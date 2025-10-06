@@ -1,4 +1,4 @@
-# 🛡️ OpenA2A Identity
+# 🛡️ Agent Identity Management
 
 **Enterprise-grade identity verification and security platform for AI agents and MCP servers.**
 
@@ -6,9 +6,9 @@ Part of the [OpenA2A](https://opena2a.org) (Open Agent-to-Agent) ecosystem.
 
 ---
 
-## 🎯 What is OpenA2A Identity?
+## 🎯 What is Agent Identity Management?
 
-OpenA2A Identity is the first open-source platform designed specifically for:
+Agent Identity Management is the first open-source platform designed specifically for:
 - ✅ **AI Agent Identity Management**: Verify and manage autonomous AI agent identities
 - ✅ **MCP Server Verification**: Cryptographic verification of Model Context Protocol servers
 - ✅ **Trust Scoring**: ML-powered assessment of agent/MCP trustworthiness
@@ -36,8 +36,8 @@ open http://localhost:3000
 ### For Developers Building This
 **New Claude Code session command**:
 ```
-cd /Users/decimai/workspace/opena2a-identity
-Please start building OpenA2A Identity and use git as you see fit
+cd /Users/decimai/workspace/agent-identity-management
+Please start building Agent Identity Management and use git as you see fit
 ```
 
 Claude will automatically:
@@ -59,7 +59,7 @@ Claude will automatically:
 ### What's Next
 After running the build command, Claude will create:
 ```
-opena2a-identity/
+agent-identity-management/
 ├── apps/
 │   ├── backend/        # Go backend (Fiber)
 │   ├── web/            # Next.js frontend
@@ -134,7 +134,7 @@ opena2a-identity/
 
 ## 📊 OpenA2A Product Ecosystem
 
-### Current: OpenA2A Identity (Free & Open Source)
+### Current: Agent Identity Management (Free & Open Source)
 **Status**: In Development (30-hour build)
 **Focus**: Identity verification, trust scoring, basic security
 
@@ -256,4 +256,4 @@ Questions? Reach out:
 
 **🚀 Ready to build the future of Agent-to-Agent security.**
 
-*OpenA2A Identity - Secure the Agent-to-Agent Future*
+*Agent Identity Management - Secure the Agent-to-Agent Future*

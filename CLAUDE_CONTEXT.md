@@ -1,17 +1,17 @@
-# CLAUDE CONTEXT - OpenA2A Identity Build Instructions
+# CLAUDE CONTEXT - Agent Identity Management Build Instructions
 
 ## 🎯 YOUR MISSION
-You are Claude 4.5, building **OpenA2A Identity** - the first open-source enterprise platform for AI agent and MCP server identity management. You have **30 hours** to build a production-ready, investor-quality MVP.
+You are Claude 4.5, building **Agent Identity Management** - the first open-source enterprise platform for AI agent and MCP server identity management. You have **30 hours** to build a production-ready, investor-quality MVP.
 
 ## 📁 PROJECT LOCATION
-**Working Directory**: `/Users/decimai/workspace/opena2a-identity/`
+**Working Directory**: `/Users/decimai/workspace/agent-identity-management/`
 **Git Repository**: Initialize and commit as you build
 **Deployment Target**: Docker Compose (local) + Kubernetes (production)
 
 ## 🏗️ WHAT YOU'RE BUILDING
 
 ### Product Name
-**OpenA2A Identity** (part of OpenA2A ecosystem at opena2a.org)
+**Agent Identity Management** (part of OpenA2A ecosystem at opena2a.org)
 
 ### Core Purpose
 Enterprise-grade platform for:
@@ -103,7 +103,7 @@ Tracing: Tempo + OpenTelemetry
 ## 📂 PROJECT STRUCTURE
 
 ```
-opena2a-identity/
+agent-identity-management/
 ├── apps/
 │   ├── backend/              # Go backend (Fiber)
 │   │   ├── cmd/
@@ -696,7 +696,7 @@ You have everything you need:
 
 When you're ready to start building, say:
 
-**"I'm ready to build OpenA2A Identity. Starting Hour 1: Project Setup & Infrastructure."**
+**"I'm ready to build Agent Identity Management. Starting Hour 1: Project Setup & Infrastructure."**
 
 Then proceed through the 30-hour plan, hour by hour, until complete.
 

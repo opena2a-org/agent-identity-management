@@ -1,6 +1,6 @@
-# OpenA2A Identity - 30 Hour Build Plan
+# Agent Identity Management - 30 Hour Build Plan
 
-**Reference**: This file references the comprehensive build plan created earlier. The plan remains identical - just substitute "Sentinel MCP" with "OpenA2A Identity" throughout.
+**Reference**: This file references the comprehensive build plan created earlier. The plan remains identical - just substitute "Sentinel MCP" with "Agent Identity Management" throughout.
 
 ## Quick Reference
 
@@ -27,7 +27,7 @@
 - **Hour 27-28**: Documentation (Docusaurus + examples)
 - **Hour 29-30**: Final polish + launch prep
 
-## Key Adaptations for OpenA2A Identity
+## Key Adaptations for Agent Identity Management
 
 ### Terminology Updates
 - "MCP server" includes both **AI agents** and **MCP servers**
@@ -60,8 +60,8 @@ Use OpenA2A naming:
 
 ### Environment Variables
 ```bash
-# OpenA2A Identity Configuration
-APP_NAME=opena2a-identity
+# Agent Identity Management Configuration
+APP_NAME=agent-identity-management
 APP_DOMAIN=opena2a.org
 API_URL=https://identity.opena2a.org
 ```
@@ -71,7 +71,7 @@ API_URL=https://identity.opena2a.org
 To start the 30-hour build, open a new Claude Code session and say:
 
 ```
-Please start building OpenA2A Identity. Follow the plan in CLAUDE_CONTEXT.md and 30_HOUR_BUILD_PLAN.md. Use git as you see fit to track progress.
+Please start building Agent Identity Management. Follow the plan in CLAUDE_CONTEXT.md and 30_HOUR_BUILD_PLAN.md. Use git as you see fit to track progress.
 ```
 
 Claude will then execute the build plan hour by hour, committing frequently.
@@ -93,4 +93,4 @@ Claude will then execute the build plan hour by hour, committing frequently.
 
 ---
 
-**Note**: For the complete detailed hour-by-hour breakdown with code samples, see the original detailed build plan. This file serves as a quick reference for the OpenA2A Identity-specific build.
+**Note**: For the complete detailed hour-by-hour breakdown with code samples, see the original detailed build plan. This file serves as a quick reference for the Agent Identity Management-specific build.

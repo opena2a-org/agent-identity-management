@@ -14,7 +14,7 @@ You have a **complete, ready-to-build project** with:
 ### Step 1: Open a New Claude Code Session
 ```bash
 # In your terminal
-cd /Users/decimai/workspace/opena2a-identity
+cd /Users/decimai/workspace/agent-identity-management
 code .  # or open in your IDE
 ```
 
@@ -325,4 +325,4 @@ Because:
 
 ---
 
-*OpenA2A Identity - Secure the Agent-to-Agent Future*
+*Agent Identity Management - Secure the Agent-to-Agent Future*

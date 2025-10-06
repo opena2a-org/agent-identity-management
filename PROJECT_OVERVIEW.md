@@ -1,8 +1,8 @@
-# OpenA2A Identity - Enterprise Agent & MCP Identity Management Platform
+# Agent Identity Management - Enterprise Agent & MCP Identity Management Platform
 
 ## Part of the OpenA2A Ecosystem
 **Domain**: opena2a.org
-**Product**: OpenA2A Identity (first product in the OpenA2A suite)
+**Product**: Agent Identity Management (first product in the OpenA2A suite)
 
 ## What is OpenA2A?
 **Open Agent-to-Agent** (OpenA2A) is the open-source ecosystem for secure, verified, and trusted AI agent and MCP server interactions. Our mission is to bring enterprise-grade security, identity management, and governance to the rapidly growing agent-to-agent (A2A) and Model Context Protocol (MCP) ecosystems.
@@ -27,7 +27,7 @@ Organizations deploying AI agents and MCP servers face critical challenges:
 4. **Compliance Blind Spots**: No audit trails or compliance reporting
 5. **A2A Communication Risks**: Agents talking to agents with no governance
 
-## Solution: OpenA2A Identity
+## Solution: Agent Identity Management
 Enterprise-grade platform providing:
 - **Identity Verification**: Cryptographic verification of AI agents and MCP servers
 - **Trust Scoring**: ML-powered trust assessment based on behavior
@@ -38,7 +38,7 @@ Enterprise-grade platform providing:
 
 ## OpenA2A Product Roadmap
 
-### Phase 1: OpenA2A Identity (This Project - First 30 Hours)
+### Phase 1: Agent Identity Management (This Project - First 30 Hours)
 **Status**: In Development
 **Focus**: Identity verification, trust scoring, basic security
 **Target**: Open-source community + enterprises
@@ -78,7 +78,7 @@ Enterprise-grade platform providing:
 
 ## Open Source Strategy
 
-### Free Tier (OpenA2A Identity - Community Edition)
+### Free Tier (Agent Identity Management - Community Edition)
 ✅ Core identity verification
 ✅ Basic trust scoring
 ✅ SSO integration (OIDC/SAML)
