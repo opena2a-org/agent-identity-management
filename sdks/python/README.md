@@ -1,246 +1,145 @@
 # AIM Python SDK
 
-[![PyPI version](https://badge.fury.io/py/aim-sdk.svg)](https://badge.fury.io/py/aim-sdk)
-[![Python Support](https://img.shields.io/pypi/pyversions/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+**"AIM is Stripe for AI Agent Identity"**
 
-Python SDK for **AIM (Agent Identity Management)** - Automatic identity verification for AI agents and MCP servers.
+One-line agent registration with automatic cryptographic verification.
 
-## Features
+## Quick Start (ONE LINE!)
 
-✅ **Zero-friction identity verification** - Automatic cryptographic signing and verification
-✅ **Ed25519 signatures** - Industry-standard elliptic curve cryptography
-✅ **Decorator-based API** - Simple `@perform_action` wrapper for automatic verification
-✅ **Automatic retry** - Built-in retry logic for transient failures
-✅ **Type hints** - Full type annotations for IDE support
-✅ **Context manager support** - Clean resource management with `with` statements
+```python
+from aim_sdk import register_agent
+
+# That's it! Agent is registered, verified, and ready to use
+agent = register_agent("my-agent", "http://localhost:8080")
+
+# Use decorator-based verification for sensitive actions
+@agent.perform_action("send_email", resource="admin@example.com")
+def send_critical_notification(message):
+    # AIM automatically verifies this action before execution
+    send_email("admin@example.com", message)
+    
+# Call the function - AIM handles verification automatically
+send_critical_notification("System alert!")
+```
 
 ## Installation
 
 ```bash
-pip install aim-sdk
+pip install -r requirements.txt
 ```
 
-## Quick Start
+## Features
 
-### 1. Register Your Agent with AIM
+- ✅ **One-line registration**: No manual key generation needed
+- ✅ **Automatic key management**: Ed25519 keys generated and stored securely
+- ✅ **Local credential storage**: Credentials saved to `~/.aim/credentials.json`
+- ✅ **Decorator-based verification**: Simple `@agent.perform_action()` decorator
+- ✅ **Challenge-response auth**: Cryptographic proof without exposing private keys
+- ✅ **Trust scoring**: ML-powered risk assessment
+- ✅ **Audit logging**: Complete action history
 
-First, register your agent at your AIM dashboard (e.g., `https://aim.example.com/dashboard/agents/new`).
+## Usage
 
-AIM will automatically generate cryptographic keys for your agent - no manual key management required!
+### Option 1: One-Line Registration (Recommended)
 
-### 2. Download SDK with Embedded Keys
+```python
+from aim_sdk import register_agent
 
-After registration, download the pre-configured SDK from the success page. Your SDK will come with keys already embedded.
+# Register agent with minimal configuration
+agent = register_agent(
+    name="my-agent",
+    aim_url="http://localhost:8080"
+)
 
-### 3. Use the SDK
+# Advanced registration with metadata
+agent = register_agent(
+    name="my-agent",
+    aim_url="http://localhost:8080",
+    display_name="My Awesome Agent",
+    description="Production agent for user management",
+    version="1.0.0",
+    repository_url="https://github.com/myorg/my-agent",
+    documentation_url="https://docs.myorg.com"
+)
+```
+
+### Option 2: Manual Initialization (If you have existing credentials)
 
 ```python
 from aim_sdk import AIMClient
 
-# Initialize client (keys are already embedded in downloaded SDK)
 client = AIMClient(
-    agent_id="550e8400-e29b-41d4-a716-446655440000",
-    public_key="base64-encoded-public-key",
-    private_key="base64-encoded-private-key",
-    aim_url="https://aim.example.com"
+    agent_id="your-agent-id",
+    public_key="base64-public-key",
+    private_key="base64-private-key",
+    aim_url="http://localhost:8080"
 )
+```
 
-# Automatic verification with decorator
-@client.perform_action("read_database", resource="users_table")
+### Performing Verified Actions
+
+```python
+# Simple action verification
+@agent.perform_action("read_database", resource="users_table")
 def get_user_data(user_id):
-    """
-    This function is automatically verified before execution.
+    return database.query(f"SELECT * FROM users WHERE id = {user_id}")
 
-    1. SDK signs request with your private key
-    2. Sends verification request to AIM
-    3. Waits for approval (auto-approved based on trust score)
-    4. Executes function if approved
-    5. Logs result back to AIM
-    """
-    return database.query("SELECT * FROM users WHERE id = ?", user_id)
-
-# Just call the function - verification happens automatically!
-users = get_user_data("123")
-```
-
-## Advanced Usage
-
-### Manual Verification
-
-If you need more control over the verification process:
-
-```python
-from aim_sdk import AIMClient, ActionDeniedError, VerificationError
-
-client = AIMClient(...)
-
-try:
-    # Request verification manually
-    verification = client.verify_action(
-        action_type="send_email",
-        resource="admin@example.com",
-        context={
-            "subject": "System Alert",
-            "recipients": ["admin@example.com"],
-            "priority": "high"
-        },
-        timeout_seconds=300  # Wait up to 5 minutes for approval
+# Action with additional context
+@agent.perform_action(
+    "modify_user", 
+    resource="user:12345",
+    metadata={"reason": "Account update requested by user"}
+)
+def update_user_email(user_id, new_email):
+    return database.execute(
+        "UPDATE users SET email = ? WHERE id = ?",
+        new_email, user_id
     )
 
-    print(f"Verified by: {verification['approved_by']}")
-    print(f"Expires at: {verification['expires_at']}")
-
-    # Perform your action
-    result = send_email(...)
-
-    # Log the result
-    client.log_action_result(
-        verification_id=verification['verification_id'],
-        success=True,
-        result_summary="Email sent successfully"
-    )
-
-except ActionDeniedError as e:
-    print(f"Action denied: {e}")
-
-except VerificationError as e:
-    print(f"Verification failed: {e}")
-```
-
-### Context Manager
-
-Use the client as a context manager for automatic cleanup:
-
-```python
-from aim_sdk import AIMClient
-
-with AIMClient(...) as client:
-    @client.perform_action("delete_file", resource="/tmp/sensitive.txt")
-    def cleanup_temp_files():
-        os.remove("/tmp/sensitive.txt")
-
-    cleanup_temp_files()
-# Client automatically closed
-```
-
-### Custom Configuration
-
-```python
-client = AIMClient(
-    agent_id="...",
-    public_key="...",
-    private_key="...",
-    aim_url="https://aim.example.com",
-    timeout=60,        # Request timeout in seconds
-    auto_retry=True,   # Automatically retry on failure
-    max_retries=5      # Maximum retry attempts
+# High-risk action (requires higher trust score)
+@agent.perform_action(
+    "delete_data",
+    resource="user:12345",
+    risk_level="high"
 )
+def delete_user_account(user_id):
+    return database.execute("DELETE FROM users WHERE id = ?", user_id)
 ```
 
-## Action Types
+## Credential Storage
 
-Common action types you can use:
+Credentials are automatically saved to `~/.aim/credentials.json` with secure permissions (0600).
 
-- `read_database` - Database read operations
-- `write_database` - Database write operations
-- `send_email` - Email sending
-- `access_api` - External API calls
-- `read_file` - File system reads
-- `write_file` - File system writes
-- `execute_command` - Shell command execution
-- `access_secret` - Secret/credential access
+**⚠️ Security Warning**: The private key is only returned ONCE during registration. Keep it safe!
 
-You can define custom action types based on your organization's policies.
-
-## Error Handling
-
-The SDK provides specific exceptions for different failure scenarios:
-
-```python
-from aim_sdk import (
-    AIMError,              # Base exception
-    AuthenticationError,   # Invalid credentials
-    VerificationError,     # Verification request failed
-    ActionDeniedError,     # Action explicitly denied
-    ConfigurationError     # SDK misconfigured
-)
-
-try:
-    result = get_user_data("123")
-
-except AuthenticationError:
-    print("Invalid agent credentials - check your keys")
-
-except ActionDeniedError as e:
-    print(f"Action denied by AIM: {e}")
-
-except VerificationError as e:
-    print(f"Verification failed: {e}")
-
-except ConfigurationError as e:
-    print(f"SDK configuration error: {e}")
+```json
+{
+  "my-agent": {
+    "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+    "public_key": "base64-encoded-public-key",
+    "private_key": "base64-encoded-private-key",
+    "aim_url": "http://localhost:8080",
+    "status": "verified",
+    "trust_score": 75.0,
+    "registered_at": "2025-10-07T16:05:27.143786Z"
+  }
+}
 ```
 
-## How It Works
+## Examples
 
-1. **Registration**: You register your agent with AIM through the web dashboard
-2. **Automatic Keys**: AIM generates Ed25519 key pair automatically (no manual crypto!)
-3. **SDK Download**: You download pre-configured SDK with embedded keys
-4. **Runtime Verification**: Every `@perform_action` decorated function:
-   - Creates signed verification request
-   - Sends to AIM server
-   - Waits for approval (auto-approved based on trust score or requires manual approval)
-   - Executes function if approved
-   - Logs result to build trust score
+See `example.py` for a complete working example.
 
-## Security
-
-- **Ed25519 signatures** - Industry-standard elliptic curve cryptography
-- **Private keys never transmitted** - Only signatures are sent to AIM
-- **Automatic key generation** - Prevents weak or predictable keys
-- **Encrypted storage** - Private keys encrypted with AES-256-GCM on AIM server
-- **Trust scoring** - Agent behavior tracked to enable auto-approval for trusted agents
+```bash
+python example.py
+```
 
 ## Requirements
 
-- Python 3.8 or higher
-- Internet connection to AIM server
-
-## Development
-
-```bash
-# Clone repository
-git clone https://github.com/opena2a-org/agent-identity-management
-cd agent-identity-management/sdks/python
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/ -v --cov=aim_sdk
-
-# Format code
-black aim_sdk/
-
-# Type checking
-mypy aim_sdk/
-```
+- Python 3.8+
+- requests
+- pynacl (for Ed25519 cryptography)
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
-
-## Support
-
-- **Documentation**: https://docs.opena2a.org/aim
-- **Issues**: https://github.com/opena2a-org/agent-identity-management/issues
-- **Discussions**: https://github.com/opena2a-org/agent-identity-management/discussions
-
-## Contributing
-
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
-
----
-
-Built with ❤️ by [OpenA2A](https://opena2a.org)
+MIT

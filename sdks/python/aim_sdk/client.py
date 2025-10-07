@@ -450,3 +450,198 @@ class AIMClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
+
+
+# ============================================================================
+# ONE-LINE AGENT REGISTRATION - "AIM is Stripe for AI Agent Identity"
+# ============================================================================
+
+import os
+import pathlib
+
+
+def _get_credentials_path():
+    """Get path to credentials file (~/.aim/credentials.json)."""
+    home = pathlib.Path.home()
+    aim_dir = home / ".aim"
+    aim_dir.mkdir(exist_ok=True)
+    return aim_dir / "credentials.json"
+
+
+def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
+    """
+    Save agent credentials locally.
+
+    Args:
+        agent_name: Name of the agent
+        credentials: Credentials dict from registration response
+    """
+    creds_path = _get_credentials_path()
+
+    # Load existing credentials
+    all_creds = {}
+    if creds_path.exists():
+        try:
+            with open(creds_path, 'r') as f:
+                all_creds = json.load(f)
+        except Exception:
+            pass  # Start fresh if corrupted
+
+    # Add new agent credentials
+    all_creds[agent_name] = {
+        "agent_id": credentials["agent_id"],
+        "public_key": credentials["public_key"],
+        "private_key": credentials["private_key"],
+        "aim_url": credentials["aim_url"],
+        "status": credentials["status"],
+        "trust_score": credentials["trust_score"],
+        "registered_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    # Save with secure permissions (owner read/write only)
+    with open(creds_path, 'w') as f:
+        json.dump(all_creds, f, indent=2)
+    os.chmod(creds_path, 0o600)  # -rw------- (owner only)
+
+
+def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Load agent credentials from local storage.
+
+    Args:
+        agent_name: Name of the agent
+
+    Returns:
+        Credentials dict if found, None otherwise
+    """
+    creds_path = _get_credentials_path()
+    if not creds_path.exists():
+        return None
+
+    try:
+        with open(creds_path, 'r') as f:
+            all_creds = json.load(f)
+        return all_creds.get(agent_name)
+    except Exception:
+        return None
+
+
+def register_agent(
+    name: str,
+    aim_url: str,
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    agent_type: str = "ai_agent",
+    version: Optional[str] = None,
+    repository_url: Optional[str] = None,
+    documentation_url: Optional[str] = None,
+    organization_domain: Optional[str] = None,
+    force_new: bool = False
+) -> AIMClient:
+    """
+    ONE-LINE agent registration with AIM.
+
+    This is the magic function that makes AIM "Stripe for AI Agent Identity".
+    Call this once and your agent is registered, verified, and ready to use.
+
+    Args:
+        name: Agent name (unique identifier)
+        aim_url: AIM server URL (e.g., "https://aim.example.com")
+        display_name: Human-readable display name (defaults to name)
+        description: Agent description (defaults to auto-generated)
+        agent_type: "ai_agent" or "mcp_server" (default: "ai_agent")
+        version: Agent version (e.g., "1.0.0")
+        repository_url: GitHub/GitLab repository URL
+        documentation_url: Documentation URL
+        organization_domain: Organization domain for auto-approval
+        force_new: Force new registration even if credentials exist
+
+    Returns:
+        AIMClient instance ready to use
+
+    Example:
+        >>> from aim_sdk import register_agent
+        >>> agent = register_agent("my-agent", "https://aim.example.com")
+        >>> @agent.perform_action("send_email")
+        ... def send_notification():
+        ...     send_email("admin@example.com", "Hello from AIM!")
+
+    Raises:
+        ConfigurationError: If registration fails
+        AuthenticationError: If credentials are invalid
+    """
+    # Check for existing credentials (unless force_new)
+    if not force_new:
+        existing_creds = _load_credentials(name)
+        if existing_creds:
+            print(f"✅ Found existing credentials for '{name}'")
+            print(f"   Agent ID: {existing_creds['agent_id']}")
+            print(f"   Status: {existing_creds['status']}")
+            print(f"   Trust Score: {existing_creds['trust_score']}")
+            print(f"\n   To register a new agent, use force_new=True")
+
+            return AIMClient(
+                agent_id=existing_creds["agent_id"],
+                public_key=existing_creds["public_key"],
+                private_key=existing_creds["private_key"],
+                aim_url=existing_creds["aim_url"]
+            )
+
+    # Prepare registration request
+    registration_data = {
+        "name": name,
+        "display_name": display_name or name,
+        "description": description or f"Agent {name} registered via AIM SDK",
+        "agent_type": agent_type
+    }
+
+    if version:
+        registration_data["version"] = version
+    if repository_url:
+        registration_data["repository_url"] = repository_url
+    if documentation_url:
+        registration_data["documentation_url"] = documentation_url
+    if organization_domain:
+        registration_data["organization_domain"] = organization_domain
+
+    # Call public registration endpoint (no auth required!)
+    url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
+
+    try:
+        response = requests.post(
+            url,
+            json=registration_data,
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+
+        if response.status_code != 201:
+            error_msg = response.json().get("error", "Unknown error")
+            raise ConfigurationError(f"Registration failed: {error_msg}")
+
+        credentials = response.json()
+
+        # Save credentials locally
+        _save_credentials(name, credentials)
+
+        print(f"\n🎉 Agent registered successfully!")
+        print(f"   Agent ID: {credentials['agent_id']}")
+        print(f"   Name: {credentials['name']}")
+        print(f"   Status: {credentials['status']}")
+        print(f"   Trust Score: {credentials['trust_score']}")
+        print(f"   Message: {credentials['message']}")
+        print(f"\n   ⚠️  Credentials saved to: {_get_credentials_path()}")
+        print(f"   🔐 Private key will NOT be retrievable again - keep it safe!\n")
+
+        # Return ready-to-use client
+        return AIMClient(
+            agent_id=credentials["agent_id"],
+            public_key=credentials["public_key"],
+            private_key=credentials["private_key"],
+            aim_url=credentials["aim_url"]
+        )
+
+    except requests.RequestException as e:
+        raise ConfigurationError(f"Failed to connect to AIM server: {e}")
+    except Exception as e:
+        raise ConfigurationError(f"Registration failed: {e}")
