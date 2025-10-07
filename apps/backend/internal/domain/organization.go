@@ -8,15 +8,17 @@ import (
 
 // Organization represents a tenant organization
 type Organization struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Domain      string    `json:"domain"`
-	PlanType    string    `json:"plan_type"` // free, pro, enterprise
-	MaxAgents   int       `json:"max_agents"`
-	MaxUsers    int       `json:"max_users"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             uuid.UUID              `json:"id"`
+	Name           string                 `json:"name"`
+	Domain         string                 `json:"domain"`
+	PlanType       string                 `json:"plan_type"` // free, pro, enterprise
+	MaxAgents      int                    `json:"max_agents"`
+	MaxUsers       int                    `json:"max_users"`
+	IsActive       bool                   `json:"is_active"`
+	AutoApproveSSO bool                   `json:"auto_approve_sso"` // When TRUE, SSO users auto-approved
+	Settings       map[string]interface{} `json:"settings"`         // Additional org settings
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 // OrganizationRepository defines the interface for organization persistence

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -15,14 +16,28 @@ export default function NewAgentPage() {
     version: '',
     repository_url: '',
     documentation_url: '',
-    public_key: '',
+    // ✅ REMOVED: public_key - AIM generates this automatically
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Call API to create agent
-    console.log('Creating agent:', formData);
-    router.push('/dashboard/agents');
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      // Call API to create agent
+      const response = await api.createAgent(formData);
+
+      // Redirect to success page with the new agent ID
+      router.push(`/dashboard/agents/${response.id}/success`);
+    } catch (err: any) {
+      console.error('Failed to create agent:', err);
+      setError(err.message || 'Failed to create agent. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -175,22 +190,12 @@ export default function NewAgentPage() {
               />
             </div>
 
-            {/* Public Key */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Public Key (Optional)
-              </label>
-              <textarea
-                rows={6}
-                placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent font-mono text-sm"
-                value={formData.public_key}
-                onChange={(e) => setFormData({ ...formData, public_key: e.target.value })}
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Provide a PEM-encoded public key for cryptographic verification
-              </p>
-            </div>
+            {/* Error Message */}
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex justify-end gap-4 pt-6 border-t">
@@ -198,11 +203,19 @@ export default function NewAgentPage() {
                 type="button"
                 variant="outline"
                 onClick={() => router.back()}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
-              <Button type="submit">
-                Register Agent
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Registering...
+                  </>
+                ) : (
+                  'Register Agent'
+                )}
               </Button>
             </div>
           </CardContent>

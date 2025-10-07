@@ -16,24 +16,37 @@ const (
 	RoleViewer  UserRole = "viewer"
 )
 
+// UserStatus represents user account status
+type UserStatus string
+
+const (
+	UserStatusPending     UserStatus = "pending"     // Awaiting admin approval
+	UserStatusActive      UserStatus = "active"      // Can use system
+	UserStatusSuspended   UserStatus = "suspended"   // Temporarily blocked
+	UserStatusDeactivated UserStatus = "deactivated" // Permanently disabled
+)
+
 // User represents a platform user
 type User struct {
-	ID                    uuid.UUID  `json:"id"`
-	OrganizationID        uuid.UUID  `json:"organization_id"`
-	Email                 string     `json:"email"`
-	Name                  string     `json:"name"`
-	AvatarURL             *string    `json:"avatar_url"` // Nullable for local users
-	Role                  UserRole   `json:"role"`
-	Provider              string     `json:"provider"` // google, microsoft, okta, local
-	ProviderID            string     `json:"provider_id"`
-	PasswordHash           *string    `json:"-"` // Never expose in JSON
-	EmailVerified          bool       `json:"email_verified"`
-	ForcePasswordChange    bool       `json:"force_password_change"`
-	PasswordResetToken     *string    `json:"-"` // Never expose in JSON
+	ID                    uuid.UUID   `json:"id"`
+	OrganizationID        uuid.UUID   `json:"organization_id"`
+	Email                 string      `json:"email"`
+	Name                  string      `json:"name"`
+	AvatarURL             *string     `json:"avatar_url"` // Nullable for local users
+	Role                  UserRole    `json:"role"`
+	Status                UserStatus  `json:"status"` // pending, active, suspended, deactivated
+	Provider              string      `json:"provider"` // google, microsoft, okta, local
+	ProviderID            string      `json:"provider_id"`
+	PasswordHash          *string     `json:"-"` // Never expose in JSON
+	EmailVerified         bool        `json:"email_verified"`
+	ForcePasswordChange   bool        `json:"force_password_change"`
+	PasswordResetToken    *string     `json:"-"` // Never expose in JSON
 	PasswordResetExpiresAt *time.Time `json:"-"` // Never expose in JSON
-	LastLoginAt            *time.Time `json:"last_login_at"`
-	CreatedAt              time.Time  `json:"created_at"`
-	UpdatedAt              time.Time  `json:"updated_at"`
+	ApprovedBy            *uuid.UUID  `json:"approved_by,omitempty"` // Admin who approved this user
+	ApprovedAt            *time.Time  `json:"approved_at,omitempty"` // When user was approved
+	LastLoginAt           *time.Time  `json:"last_login_at"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
 }
 
 // UserRepository defines the interface for user persistence
@@ -43,6 +56,7 @@ type UserRepository interface {
 	GetByEmail(email string) (*User, error)
 	GetByProvider(provider, providerID string) (*User, error)
 	GetByOrganization(orgID uuid.UUID) ([]*User, error)
+	GetByOrganizationAndStatus(orgID uuid.UUID, status UserStatus) ([]*User, error)
 	Update(user *User) error
 	UpdateRole(id uuid.UUID, role UserRole) error
 	Delete(id uuid.UUID) error

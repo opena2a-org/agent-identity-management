@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/crypto"
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
@@ -14,6 +15,7 @@ type AgentService struct {
 	agentRepo      domain.AgentRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
+	keyVault       *crypto.KeyVault // ✅ NEW: For secure private key storage
 }
 
 // NewAgentService creates a new agent service
@@ -21,25 +23,27 @@ func NewAgentService(
 	agentRepo domain.AgentRepository,
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
+	keyVault *crypto.KeyVault, // ✅ NEW: KeyVault dependency injection
 ) *AgentService {
 	return &AgentService{
 		agentRepo:      agentRepo,
 		trustCalc:      trustCalc,
 		trustScoreRepo: trustScoreRepo,
+		keyVault:       keyVault,
 	}
 }
 
 // CreateAgentRequest represents agent creation request
 type CreateAgentRequest struct {
-	Name             string
-	DisplayName      string
-	Description      string
-	AgentType        domain.AgentType
-	Version          string
-	PublicKey        string
-	CertificateURL   string
-	RepositoryURL    string
-	DocumentationURL string
+	Name             string           `json:"name"`
+	DisplayName      string           `json:"display_name"`
+	Description      string           `json:"description"`
+	AgentType        domain.AgentType `json:"agent_type"`
+	Version          string           `json:"version"`
+	// ✅ REMOVED: PublicKey - AIM generates this automatically
+	CertificateURL   string `json:"certificate_url"`
+	RepositoryURL    string `json:"repository_url"`
+	DocumentationURL string `json:"documentation_url"`
 }
 
 // CreateAgent creates a new agent
@@ -53,21 +57,38 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		return nil, fmt.Errorf("invalid agent_type")
 	}
 
-	// Create agent
-	publicKey := &req.PublicKey
+	// ✅ AUTOMATIC KEY GENERATION - Zero effort for developers
+	// Generate Ed25519 key pair automatically
+	keyPair, err := crypto.GenerateEd25519KeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate cryptographic keys: %w", err)
+	}
+
+	// Encode keys to base64 for storage
+	encodedKeys := crypto.EncodeKeyPair(keyPair)
+
+	// Encrypt private key before storing (NEVER stored in plaintext)
+	encryptedPrivateKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt private key: %w", err)
+	}
+
+	// Create agent with auto-generated keys
 	agent := &domain.Agent{
-		OrganizationID:   orgID,
-		Name:             req.Name,
-		DisplayName:      req.DisplayName,
-		Description:      req.Description,
-		AgentType:        req.AgentType,
-		Version:          req.Version,
-		PublicKey:        publicKey,
-		CertificateURL:   req.CertificateURL,
-		RepositoryURL:    req.RepositoryURL,
-		DocumentationURL: req.DocumentationURL,
-		Status:           domain.AgentStatusPending,
-		CreatedBy:        userID,
+		OrganizationID:      orgID,
+		Name:                req.Name,
+		DisplayName:         req.DisplayName,
+		Description:         req.Description,
+		AgentType:           req.AgentType,
+		Version:             req.Version,
+		PublicKey:           &encodedKeys.PublicKeyBase64, // ✅ Stored for verification
+		EncryptedPrivateKey: &encryptedPrivateKey,         // ✅ Encrypted storage (never exposed in API)
+		KeyAlgorithm:        encodedKeys.Algorithm,        // ✅ "Ed25519"
+		CertificateURL:      req.CertificateURL,
+		RepositoryURL:       req.RepositoryURL,
+		DocumentationURL:    req.DocumentationURL,
+		Status:              domain.AgentStatusPending,
+		CreatedBy:           userID,
 	}
 
 	if err := s.agentRepo.Create(agent); err != nil {
@@ -119,10 +140,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.Version != "" {
 		agent.Version = req.Version
 	}
-	if req.PublicKey != "" {
-		publicKey := &req.PublicKey
-		agent.PublicKey = publicKey
-	}
+	// ✅ REMOVED: PublicKey update - keys are immutable after creation
 	if req.CertificateURL != "" {
 		agent.CertificateURL = req.CertificateURL
 	}
@@ -256,4 +274,26 @@ func (s *AgentService) LogActionResult(
 	// 4. Alert on repeated failures
 
 	return nil
+}
+
+// GetAgentCredentials retrieves agent credentials for SDK generation
+// ⚠️ INTERNAL USE ONLY - Never expose through public API
+// This method decrypts the private key for embedding in SDKs
+func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUID) (publicKey, privateKey string, err error) {
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return "", "", fmt.Errorf("agent not found: %w", err)
+	}
+
+	if agent.PublicKey == nil || agent.EncryptedPrivateKey == nil {
+		return "", "", fmt.Errorf("agent keys not generated")
+	}
+
+	// Decrypt private key
+	privateKeyBase64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to decrypt private key: %w", err)
+	}
+
+	return *agent.PublicKey, privateKeyBase64, nil
 }

@@ -15,40 +15,80 @@ import {
   LogOut,
   ChevronLeft,
   Menu,
-  X
+  X,
+  Activity,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { filterNavigationByRole, type UserRole, type NavSection } from '@/lib/permissions';
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: any;
-  badge?: number;
-}
-
-interface NavSection {
-  title?: string;
-  items: NavItem[];
-}
-
+// ✅ Navigation with role-based access control
 const navigationBase: NavSection[] = [
   {
     items: [
-      { name: 'Dashboard', href: '/dashboard', icon: Home },
-      { name: 'Agents', href: '/dashboard/agents', icon: Shield },
-      { name: 'Activity Monitoring', href: '/dashboard/monitoring', icon: CheckCircle },
-      { name: 'Security', href: '/dashboard/security', icon: AlertTriangle },
-      { name: 'MCP Servers', href: '/dashboard/mcp', icon: Server },
-      { name: 'API Keys', href: '/dashboard/api-keys', icon: Key },
+      // Everyone can see Dashboard and Agents
+      {
+        name: 'Dashboard',
+        href: '/dashboard',
+        icon: Home,
+        roles: ['admin', 'manager', 'member', 'viewer'],
+      },
+      {
+        name: 'Agents',
+        href: '/dashboard/agents',
+        icon: Shield,
+        roles: ['admin', 'manager', 'member', 'viewer'],
+      },
+      // Member+ can access MCP Servers and API Keys
+      {
+        name: 'MCP Servers',
+        href: '/dashboard/mcp',
+        icon: Server,
+        roles: ['admin', 'manager', 'member'],
+      },
+      {
+        name: 'API Keys',
+        href: '/dashboard/api-keys',
+        icon: Key,
+        roles: ['admin', 'manager', 'member'],
+      },
+      // Manager+ can access monitoring and security
+      {
+        name: 'Activity Monitoring',
+        href: '/dashboard/monitoring',
+        icon: Activity,
+        roles: ['admin', 'manager'],
+      },
+      {
+        name: 'Security',
+        href: '/dashboard/security',
+        icon: AlertTriangle,
+        roles: ['admin', 'manager'],
+      },
     ],
   },
   {
     title: 'Administration',
     items: [
-      { name: 'Users', href: '/dashboard/admin/users', icon: Users },
-      { name: 'Alerts', href: '/dashboard/admin/alerts', icon: Bell },
-      { name: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: FileText },
+      // Admin-only access to user management and audit logs
+      {
+        name: 'Users',
+        href: '/dashboard/admin/users',
+        icon: Users,
+        roles: ['admin'],
+      },
+      {
+        name: 'Alerts',
+        href: '/dashboard/admin/alerts',
+        icon: Bell,
+        roles: ['admin', 'manager'], // Managers can view alerts
+      },
+      {
+        name: 'Audit Logs',
+        href: '/dashboard/admin/audit-logs',
+        icon: FileText,
+        roles: ['admin'],
+      },
     ],
   },
 ];
@@ -58,7 +98,7 @@ export function Sidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string; display_name?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; display_name?: string; role?: UserRole } | null>(null);
   const [alertCount, setAlertCount] = useState<number>(0);
   const [navigation, setNavigation] = useState<NavSection[]>(navigationBase);
 
@@ -90,7 +130,7 @@ export function Sidebar() {
             setUser({
               email: payload.email || '',
               display_name: payload.email?.split('@')[0] || 'User',
-              role: payload.role || 'viewer'
+              role: (payload.role as UserRole) || 'viewer'
             });
           } catch (e) {
             console.log('Token invalid, redirecting to login');
@@ -104,36 +144,13 @@ export function Sidebar() {
       }
     };
     fetchUser();
-  }, []);
+  }, [router]);
 
-  // Filter navigation based on user role
+  // ✅ Filter navigation based on user role using permissions system
   useEffect(() => {
     if (!user?.role) return;
 
-    const isViewer = user.role === 'viewer';
-
-    // Filter navigation sections
-    const filteredNav = navigationBase
-      .map(section => {
-        // Remove Administration section for viewers
-        if (section.title === 'Administration' && isViewer) {
-          return null;
-        }
-
-        // Filter individual items
-        return {
-          ...section,
-          items: section.items.filter(item => {
-            // Remove Security page for viewers
-            if (item.name === 'Security' && isViewer) {
-              return false;
-            }
-            return true;
-          })
-        };
-      })
-      .filter(section => section !== null) as NavSection[];
-
+    const filteredNav = filterNavigationByRole(navigationBase, user.role);
     setNavigation(filteredNav);
   }, [user?.role]);
 

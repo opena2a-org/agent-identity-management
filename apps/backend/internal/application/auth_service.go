@@ -98,8 +98,18 @@ func (s *AuthService) autoProvisionUser(ctx context.Context, oauthUser *auth.OAu
 	}
 
 	role := domain.RoleMember
-	if len(existingUsers) == 0 {
+	userStatus := domain.UserStatusActive
+	isFirstUser := len(existingUsers) == 0
+
+	if isFirstUser {
+		// First user is always admin and active
 		role = domain.RoleAdmin
+		userStatus = domain.UserStatusActive
+	} else {
+		// Subsequent users: check organization's auto_approve_sso setting
+		if !org.AutoApproveSSO {
+			userStatus = domain.UserStatusPending
+		}
 	}
 
 	// Create new user
@@ -110,6 +120,7 @@ func (s *AuthService) autoProvisionUser(ctx context.Context, oauthUser *auth.OAu
 		Name:           oauthUser.Name,
 		AvatarURL:      &avatarURL,
 		Role:           role,
+		Status:         userStatus,
 		Provider:       oauthUser.Provider,
 		ProviderID:     oauthUser.ID,
 	}

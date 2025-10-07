@@ -12,17 +12,23 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Search, Shield, Users, Mail } from 'lucide-react'
+import { Search, Shield, Users, Mail, Check, X, Clock, Ban, UserX, Settings } from 'lucide-react'
 import { api } from '@/lib/api'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 interface User {
   id: string
   email: string
-  display_name: string
+  name: string
+  display_name?: string
   role: 'admin' | 'manager' | 'member' | 'viewer'
+  status: 'pending' | 'active' | 'suspended' | 'deactivated'
   organization_id: string
-  organization_name: string
+  organization_name?: string
   provider: string
+  approved_by?: string
+  approved_at?: string
   created_at: string
   last_login_at?: string
 }
@@ -32,6 +38,20 @@ const roleColors = {
   manager: 'bg-blue-100 text-blue-800',
   member: 'bg-green-100 text-green-800',
   viewer: 'bg-gray-100 text-gray-800'
+}
+
+const statusColors = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  active: 'bg-green-100 text-green-800',
+  suspended: 'bg-orange-100 text-orange-800',
+  deactivated: 'bg-red-100 text-red-800'
+}
+
+const statusIcons = {
+  pending: Clock,
+  active: Check,
+  suspended: Ban,
+  deactivated: UserX
 }
 
 const roleIcons = {
@@ -46,9 +66,13 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterOrg, setFilterOrg] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [autoApproveSSO, setAutoApproveSSO] = useState(true)
+  const [savingSettings, setSavingSettings] = useState(false)
 
   useEffect(() => {
     fetchUsers()
+    fetchSettings()
   }, [])
 
   const fetchUsers = async () => {
@@ -59,6 +83,28 @@ export default function UsersPage() {
       console.error('Failed to fetch users:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchSettings = async () => {
+    try {
+      const settings = await api.getOrganizationSettings()
+      setAutoApproveSSO(settings.auto_approve_sso)
+    } catch (error) {
+      console.error('Failed to fetch settings:', error)
+    }
+  }
+
+  const toggleAutoApprove = async (enabled: boolean) => {
+    setSavingSettings(true)
+    try {
+      await api.updateOrganizationSettings(enabled)
+      setAutoApproveSSO(enabled)
+    } catch (error) {
+      console.error('Failed to update settings:', error)
+      alert('Failed to update settings')
+    } finally {
+      setSavingSettings(false)
     }
   }
 
@@ -75,20 +121,53 @@ export default function UsersPage() {
     }
   }
 
+  const approveUser = async (userId: string) => {
+    try {
+      await api.approveUser(userId)
+      // Update local state
+      setUsers(users?.map(u =>
+        u.id === userId ? { ...u, status: 'active' as User['status'] } : u
+      ) || [])
+    } catch (error) {
+      console.error('Failed to approve user:', error)
+      alert('Failed to approve user')
+    }
+  }
+
+  const rejectUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to reject this user? This will delete their account.')) {
+      return
+    }
+
+    try {
+      await api.rejectUser(userId)
+      // Remove from local state
+      setUsers(users?.filter(u => u.id !== userId) || [])
+    } catch (error) {
+      console.error('Failed to reject user:', error)
+      alert('Failed to reject user')
+    }
+  }
+
   const filteredUsers = users?.filter(user => {
     const matchesSearch =
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesOrg = filterOrg === 'all' || user.organization_id === filterOrg
+    const matchesStatus = filterStatus === 'all' || user.status === filterStatus
 
-    return matchesSearch && matchesOrg
+    return matchesSearch && matchesOrg && matchesStatus
   }) || []
 
   const organizations = Array.from(new Set(users?.map(u => ({
     id: u.organization_id,
-    name: u.organization_name
+    name: u.organization_name || 'Unknown'
   })) || []))
+
+  const pendingCount = users?.filter(u => u.status === 'pending').length || 0
+  const activeCount = users?.filter(u => u.status === 'active').length || 0
 
   if (loading) {
     return <div className="flex items-center justify-center h-96">Loading users...</div>
@@ -115,22 +194,18 @@ export default function UsersPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Admins</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {users?.filter(u => u.role === 'admin').length || 0}
-            </div>
+            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Managers</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {users?.filter(u => u.role === 'manager').length || 0}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{activeCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -142,6 +217,40 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Organization Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-muted-foreground" />
+            <CardTitle>User Approval Settings</CardTitle>
+          </div>
+          <CardDescription>
+            Configure how new SSO users are handled when they sign in
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-approve" className="text-base">
+                Auto-Approve SSO Users
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                When enabled, new SSO users are automatically granted access. When disabled, admins must manually approve new users.
+              </p>
+            </div>
+            <Switch
+              id="auto-approve"
+              checked={autoApproveSSO}
+              onCheckedChange={toggleAutoApprove}
+              disabled={savingSettings}
+            />
+          </div>
+          <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+            <strong>Note:</strong> The first user in any organization is always automatically approved as admin, regardless of this setting.
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -158,6 +267,18 @@ export default function UsersPage() {
               className="pl-10"
             />
           </div>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
+              <SelectItem value="deactivated">Deactivated</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={filterOrg} onValueChange={setFilterOrg}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Filter by organization" />
@@ -179,13 +300,16 @@ export default function UsersPage() {
         <CardHeader>
           <CardTitle>Users ({filteredUsers.length})</CardTitle>
           <CardDescription>
-            Click on a role to change user permissions
+            Click on a role to change user permissions. Approve or reject pending users.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {filteredUsers.map((user) => {
               const RoleIcon = roleIcons[user.role]
+              const StatusIcon = statusIcons[user.status]
+              const isPending = user.status === 'pending'
+
               return (
                 <div
                   key={user.id}
@@ -193,23 +317,29 @@ export default function UsersPage() {
                 >
                   <div className="flex items-center gap-4 flex-1">
                     <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                      {user.email[0].toUpperCase()}
+                      {(user.email || 'U')[0].toUpperCase()}
                     </div>
 
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium">{user.display_name || user.email}</p>
+                        <p className="font-medium">{user.name || user.display_name || user.email}</p>
                         <Badge variant="outline" className="text-xs">
                           {user.provider}
+                        </Badge>
+                        <Badge className={`text-xs ${statusColors[user.status]}`}>
+                          <StatusIcon className="h-3 w-3 mr-1" />
+                          {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Mail className="h-3 w-3" />
                         {user.email}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {user.organization_name}
-                      </p>
+                      {user.organization_name && (
+                        <p className="text-xs text-muted-foreground">
+                          {user.organization_name}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -221,45 +351,69 @@ export default function UsersPage() {
                       </p>
                     </div>
 
-                    <Select
-                      value={user.role}
-                      onValueChange={(role) => updateUserRole(user.id, role)}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue>
-                          <div className="flex items-center gap-2">
-                            <RoleIcon className="h-4 w-4" />
-                            <span className="capitalize">{user.role}</span>
-                          </div>
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">
-                          <div className="flex items-center gap-2">
-                            <Shield className="h-4 w-4" />
-                            Admin
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="manager">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            Manager
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="member">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            Member
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="viewer">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            Viewer
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {isPending && (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => approveUser(user.id)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => rejectUser(user.id)}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+
+                    {!isPending && (
+                      <Select
+                        value={user.role}
+                        onValueChange={(role) => updateUserRole(user.id, role)}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue>
+                            <div className="flex items-center gap-2">
+                              <RoleIcon className="h-4 w-4" />
+                              <span className="capitalize">{user.role}</span>
+                            </div>
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">
+                            <div className="flex items-center gap-2">
+                              <Shield className="h-4 w-4" />
+                              Admin
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="manager">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              Manager
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="member">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              Member
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="viewer">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              Viewer
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                 </div>
               )

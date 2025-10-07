@@ -22,14 +22,19 @@ func NewOrganizationRepository(db *sql.DB) *OrganizationRepository {
 // Create creates a new organization
 func (r *OrganizationRepository) Create(org *domain.Organization) error {
 	query := `
-		INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active, auto_approve_sso, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	now := time.Now()
 	org.ID = uuid.New()
 	org.CreatedAt = now
 	org.UpdatedAt = now
+
+	// Default auto_approve_sso to true for new organizations
+	if !org.AutoApproveSSO {
+		org.AutoApproveSSO = true
+	}
 
 	_, err := r.db.Exec(query,
 		org.ID,
@@ -39,6 +44,7 @@ func (r *OrganizationRepository) Create(org *domain.Organization) error {
 		org.MaxAgents,
 		org.MaxUsers,
 		org.IsActive,
+		org.AutoApproveSSO,
 		org.CreatedAt,
 		org.UpdatedAt,
 	)
@@ -49,7 +55,7 @@ func (r *OrganizationRepository) Create(org *domain.Organization) error {
 // GetByID retrieves an organization by ID
 func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, created_at, updated_at
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, auto_approve_sso, created_at, updated_at
 		FROM organizations
 		WHERE id = $1
 	`
@@ -63,6 +69,7 @@ func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, er
 		&org.MaxAgents,
 		&org.MaxUsers,
 		&org.IsActive,
+		&org.AutoApproveSSO,
 		&org.CreatedAt,
 		&org.UpdatedAt,
 	)
@@ -80,7 +87,7 @@ func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, er
 // GetByDomain retrieves an organization by domain
 func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, created_at, updated_at
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, auto_approve_sso, created_at, updated_at
 		FROM organizations
 		WHERE domain = $1
 	`
@@ -94,6 +101,7 @@ func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organiz
 		&org.MaxAgents,
 		&org.MaxUsers,
 		&org.IsActive,
+		&org.AutoApproveSSO,
 		&org.CreatedAt,
 		&org.UpdatedAt,
 	)
@@ -112,8 +120,8 @@ func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organiz
 func (r *OrganizationRepository) Update(org *domain.Organization) error {
 	query := `
 		UPDATE organizations
-		SET name = $1, plan_type = $2, max_agents = $3, max_users = $4, is_active = $5, updated_at = $6
-		WHERE id = $7
+		SET name = $1, plan_type = $2, max_agents = $3, max_users = $4, is_active = $5, auto_approve_sso = $6, updated_at = $7
+		WHERE id = $8
 	`
 
 	org.UpdatedAt = time.Now()
@@ -124,6 +132,7 @@ func (r *OrganizationRepository) Update(org *domain.Organization) error {
 		org.MaxAgents,
 		org.MaxUsers,
 		org.IsActive,
+		org.AutoApproveSSO,
 		org.UpdatedAt,
 		org.ID,
 	)

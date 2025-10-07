@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { api } from '@/lib/api';
+import { getDashboardPermissions, type UserRole } from '@/lib/permissions';
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -127,7 +128,7 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
-  const [userRole, setUserRole] = useState<string>('viewer');
+  const [userRole, setUserRole] = useState<UserRole>('viewer');
 
   // Extract user role from JWT token
   useEffect(() => {
@@ -135,7 +136,7 @@ function DashboardContent() {
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserRole(payload.role || 'viewer');
+        setUserRole((payload.role as UserRole) || 'viewer');
       } catch (e) {
         console.error('Failed to decode JWT token:', e);
         setUserRole('viewer');
@@ -208,8 +209,8 @@ function DashboardContent() {
 
   const data = dashboardData!;
 
-  // Determine if user can see admin features
-  const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
+  // Get role-based permissions
+  const permissions = getDashboardPermissions(userRole);
 
   // Prepare stats for display using actual backend field names
   const allStats = [
@@ -219,6 +220,7 @@ function DashboardContent() {
       change: `${data.verification_rate.toFixed(1)}% verified`,
       changeType: 'positive' as const,
       icon: Shield,
+      permission: 'canViewAgentStats' as const,
     },
     {
       name: 'MCP Servers',
@@ -226,6 +228,7 @@ function DashboardContent() {
       change: `${data.active_mcp_servers} active`,
       changeType: 'positive' as const,
       icon: Network,
+      permission: 'canViewMCPStats' as const,
     },
     {
       name: 'Avg Trust Score',
@@ -233,6 +236,7 @@ function DashboardContent() {
       change: data.avg_trust_score >= 80 ? 'Excellent' : data.avg_trust_score >= 60 ? 'Good' : 'Fair',
       changeType: data.avg_trust_score >= 80 ? 'positive' as const : 'negative' as const,
       icon: TrendingUp,
+      permission: 'canViewTrustScore' as const,
     },
     {
       name: 'Active Alerts',
@@ -240,12 +244,12 @@ function DashboardContent() {
       change: data.critical_alerts > 0 ? `${data.critical_alerts} critical` : 'Normal',
       changeType: data.critical_alerts > 0 ? 'negative' as const : 'positive' as const,
       icon: AlertTriangle,
-      adminOnly: true, // Hide from viewers
+      permission: 'canViewAlerts' as const,
     },
   ];
 
-  // Filter stats based on role
-  const stats = allStats.filter(stat => !stat.adminOnly || isAdminOrManager);
+  // Filter stats based on role permissions
+  const stats = allStats.filter(stat => permissions[stat.permission]);
 
   return (
     <div className="space-y-6">
@@ -273,12 +277,13 @@ function DashboardContent() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Trust Score Trend */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Trust Score Trend (30 Days)</h3>
-            <TrendingUp className="h-5 w-5 text-gray-400" />
-          </div>
+        {/* Trust Score Trend - All roles can see */}
+        {permissions.canViewTrustTrend && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Trust Score Trend (30 Days)</h3>
+              <TrendingUp className="h-5 w-5 text-gray-400" />
+            </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={[
@@ -311,13 +316,15 @@ function DashboardContent() {
             </ResponsiveContainer>
           </div>
         </div>
+        )}
 
-        {/* Agent Activity */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agent Verification Activity</h3>
-            <Activity className="h-5 w-5 text-gray-400" />
-          </div>
+        {/* Agent Activity - All roles can see */}
+        {permissions.canViewActivityChart && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agent Verification Activity</h3>
+              <Activity className="h-5 w-5 text-gray-400" />
+            </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={[
@@ -349,12 +356,14 @@ function DashboardContent() {
             </ResponsiveContainer>
           </div>
         </div>
+        )}
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 gap-6 ${isAdminOrManager ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-        {/* Agent Metrics */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+      <div className={`grid grid-cols-1 gap-6 ${permissions.canViewSecurityMetrics ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+        {/* Agent Metrics - All roles can see */}
+        {permissions.canViewDetailedMetrics && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
             <Shield className="h-5 w-5 text-blue-500" />
             Agent Metrics
@@ -378,9 +387,10 @@ function DashboardContent() {
             </div>
           </div>
         </div>
+        )}
 
-        {/* Security Metrics - Admin/Manager Only */}
-        {isAdminOrManager && (
+        {/* Security Metrics - Manager+ Only */}
+        {permissions.canViewSecurityMetrics && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
@@ -410,14 +420,14 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* MCP Metrics (viewers see this) or User & MCP Metrics (admins see this) */}
+        {/* Platform/MCP Metrics - All roles see this */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            {isAdminOrManager ? <Users className="h-5 w-5 text-purple-500" /> : <Network className="h-5 w-5 text-purple-500" />}
-            {isAdminOrManager ? 'Platform Metrics' : 'MCP Servers'}
+            {permissions.canViewUserStats ? <Users className="h-5 w-5 text-purple-500" /> : <Network className="h-5 w-5 text-purple-500" />}
+            {permissions.canViewUserStats ? 'Platform Metrics' : 'MCP Servers'}
           </h3>
           <div className="space-y-3">
-            {isAdminOrManager && (
+            {permissions.canViewUserStats && (
               <>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500 dark:text-gray-400">Total Users</span>
@@ -433,7 +443,7 @@ function DashboardContent() {
                 </div>
               </>
             )}
-            {!isAdminOrManager && (
+            {!permissions.canViewUserStats && (
               <>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500 dark:text-gray-400">Total MCP Servers</span>
@@ -450,15 +460,16 @@ function DashboardContent() {
               </>
             )}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">{isAdminOrManager ? 'Active MCPs' : 'Verified Agents'}</span>
-              <span className="text-sm font-medium text-green-600">{isAdminOrManager ? data.active_mcp_servers : data.verified_agents}</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">{permissions.canViewUserStats ? 'Active MCPs' : 'Verified Agents'}</span>
+              <span className="text-sm font-medium text-green-600">{permissions.canViewUserStats ? data.active_mcp_servers : data.verified_agents}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Recent Activity Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      {/* Recent Activity Table - All roles can see */}
+      {permissions.canViewRecentActivity && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Recent Activity</h3>
@@ -531,6 +542,7 @@ function DashboardContent() {
           </table>
         </div>
       </div>
+      )}
 
     </div>
   );

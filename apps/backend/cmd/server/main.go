@@ -17,6 +17,7 @@ import (
 
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/config"
+	"github.com/opena2a/identity/backend/internal/crypto"
 	"github.com/opena2a/identity/backend/internal/domain"
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
@@ -274,6 +275,7 @@ func initRepositories(db *sql.DB) *Repositories {
 
 type Services struct {
 	Auth              *application.AuthService
+	Admin             *application.AdminService
 	Agent             *application.AgentService
 	APIKey            *application.APIKeyService
 	Trust             *application.TrustCalculator
@@ -288,8 +290,20 @@ type Services struct {
 }
 
 func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) *Services {
+	// ✅ Initialize KeyVault for secure private key storage
+	keyVault, err := crypto.NewKeyVaultFromEnv()
+	if err != nil {
+		log.Fatal("Failed to initialize KeyVault:", err)
+	}
+	log.Println("✅ KeyVault initialized for automatic key generation")
+
 	// Create services
 	authService := application.NewAuthService(
+		repos.User,
+		repos.Organization,
+	)
+
+	adminService := application.NewAdminService(
 		repos.User,
 		repos.Organization,
 	)
@@ -306,6 +320,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.Agent,
 		trustCalculator,
 		repos.TrustScore,
+		keyVault, // ✅ NEW: Inject KeyVault for automatic key generation
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -354,6 +369,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 
 	return &Services{
 		Auth:              authService,
+		Admin:             adminService,
 		Agent:             agentService,
 		APIKey:            apiKeyService,
 		Trust:             trustCalculator,
@@ -405,6 +421,7 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 		),
 		Admin: handlers.NewAdminHandler(
 			services.Auth,
+			services.Admin,
 			services.Agent,
 			services.MCP,
 			services.Audit,
@@ -530,6 +547,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	// Runtime verification endpoints - CORE functionality
 	agents.Post("/:id/verify-action", h.Agent.VerifyAction)
 	agents.Post("/:id/log-action/:audit_id", h.Agent.LogActionResult)
+	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
+	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -555,8 +574,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 
 	// User management
 	admin.Get("/users", h.Admin.ListUsers)
+	admin.Get("/users/pending", h.Admin.GetPendingUsers)
+	admin.Post("/users/:id/approve", h.Admin.ApproveUser)
+	admin.Post("/users/:id/reject", h.Admin.RejectUser)
 	admin.Put("/users/:id/role", h.Admin.UpdateUserRole)
 	admin.Delete("/users/:id", h.Admin.DeactivateUser)
+
+	// Organization settings
+	admin.Get("/organization/settings", h.Admin.GetOrganizationSettings)
+	admin.Put("/organization/settings", h.Admin.UpdateOrganizationSettings)
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)

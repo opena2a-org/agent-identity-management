@@ -35,6 +35,7 @@ type Agent struct {
 	Status                   AgentStatus `json:"status"`
 	Version                  string      `json:"version"`
 	PublicKey                *string     `json:"public_key"`
+	EncryptedPrivateKey      *string     `json:"-"` // ✅ NEW: Stored encrypted, never exposed in API
 	KeyAlgorithm             string      `json:"key_algorithm"`
 	CertificateURL           string      `json:"certificate_url"`
 	RepositoryURL            string      `json:"repository_url"`

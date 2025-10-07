@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/sdkgen"
 )
 
 type AgentHandler struct {
@@ -53,6 +56,8 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 
 	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID)
 	if err != nil {
+		// Log the full error for debugging
+		fmt.Printf("ERROR creating agent: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -371,4 +376,127 @@ func (h *AgentHandler) LogActionResult(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"success": true,
 	})
+}
+
+// DownloadSDK generates and downloads SDK package with embedded credentials
+// @Summary Download SDK for agent
+// @Description Generate and download SDK package (Python, Node.js, or Go) with embedded credentials
+// @Tags agents
+// @Produce application/zip
+// @Param id path string true "Agent ID"
+// @Param lang query string false "SDK language (python, nodejs, go)" default(python)
+// @Success 200 {file} binary "SDK package as zip file"
+// @Failure 400 {object} ErrorResponse "Invalid agent ID or language"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/sdk [get]
+func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Get SDK language (default: python)
+	language := c.Query("lang", "python")
+	if language != "python" && language != "nodejs" && language != "go" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid language. Supported: python, nodejs, go",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Get agent credentials (decrypts private key)
+	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve agent credentials",
+		})
+	}
+
+	// Generate SDK package based on language
+	var sdkBytes []byte
+	var filename string
+
+	switch language {
+	case "python":
+		sdkBytes, err = sdkgen.GeneratePythonSDK(sdkgen.PythonSDKConfig{
+			AgentID:    agentID.String(),
+			PublicKey:  publicKey,
+			PrivateKey: privateKey,
+			AIMURL:     getAIMBaseURL(c),
+			AgentName:  agent.Name,
+			Version:    "1.0.0",
+		})
+		filename = fmt.Sprintf("aim-sdk-%s-python.zip", agent.Name)
+
+	case "nodejs":
+		// TODO: Implement Node.js SDK generator
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Node.js SDK not yet implemented",
+		})
+
+	case "go":
+		// TODO: Implement Go SDK generator
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Go SDK not yet implemented",
+		})
+	}
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to generate SDK",
+		})
+	}
+
+	// Set response headers for file download
+	c.Set("Content-Type", "application/zip")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Set("Content-Length", fmt.Sprintf("%d", len(sdkBytes)))
+
+	// Log audit
+	userID := c.Locals("user_id").(uuid.UUID)
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"agent_sdk",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"language":   language,
+			"agent_name": agent.Name,
+		},
+	)
+
+	return c.Send(sdkBytes)
+}
+
+// getAIMBaseURL extracts the base URL from the request
+func getAIMBaseURL(c fiber.Ctx) string {
+	// Get protocol (http or https)
+	protocol := "http"
+	if c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https" {
+		protocol = "https"
+	}
+
+	// Get host
+	host := c.Hostname()
+
+	return fmt.Sprintf("%s://%s", protocol, host)
 }

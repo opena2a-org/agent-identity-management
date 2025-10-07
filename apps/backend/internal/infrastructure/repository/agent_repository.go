@@ -23,10 +23,10 @@ func NewAgentRepository(db *sql.DB) *AgentRepository {
 func (r *AgentRepository) Create(agent *domain.Agent) error {
 	query := `
 		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
-		                    public_key, key_algorithm, certificate_url, repository_url, documentation_url,
+		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		                    trust_score, capability_violation_count, is_compromised,
 		                    created_at, updated_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 	`
 
 	now := time.Now()
@@ -53,6 +53,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.Status,
 		agent.Version,
 		agent.PublicKey,
+		agent.EncryptedPrivateKey, // ✅ NEW: Store encrypted private key
 		agent.KeyAlgorithm,
 		agent.CertificateURL,
 		agent.RepositoryURL,
@@ -72,7 +73,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
-		       public_key, key_algorithm, certificate_url, repository_url, documentation_url,
+		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		       trust_score, verified_at, last_capability_check_at, capability_violation_count,
 		       is_compromised, created_at, updated_at, created_by
 		FROM agents
@@ -81,6 +82,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 
 	agent := &domain.Agent{}
 	var publicKey sql.NullString
+	var encryptedPrivateKey sql.NullString
 	var keyAlgorithm sql.NullString
 	var lastCapabilityCheck sql.NullTime
 
@@ -94,6 +96,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.Status,
 		&agent.Version,
 		&publicKey,
+		&encryptedPrivateKey, // ✅ NEW: Retrieve encrypted private key
 		&keyAlgorithm,
 		&agent.CertificateURL,
 		&agent.RepositoryURL,
@@ -118,6 +121,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	// Convert nullable fields
 	if publicKey.Valid {
 		agent.PublicKey = &publicKey.String
+	}
+	if encryptedPrivateKey.Valid {
+		agent.EncryptedPrivateKey = &encryptedPrivateKey.String
 	}
 	if keyAlgorithm.Valid {
 		agent.KeyAlgorithm = keyAlgorithm.String
@@ -180,11 +186,11 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 	query := `
 		UPDATE agents
 		SET display_name = $1, description = $2, agent_type = $3, status = $4, version = $5,
-		    public_key = $6, key_algorithm = $7, certificate_url = $8, repository_url = $9,
-		    documentation_url = $10, trust_score = $11, verified_at = $12,
-		    last_capability_check_at = $13, capability_violation_count = $14,
-		    is_compromised = $15, updated_at = $16
-		WHERE id = $17
+		    public_key = $6, encrypted_private_key = $7, key_algorithm = $8, certificate_url = $9, repository_url = $10,
+		    documentation_url = $11, trust_score = $12, verified_at = $13,
+		    last_capability_check_at = $14, capability_violation_count = $15,
+		    is_compromised = $16, updated_at = $17
+		WHERE id = $18
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -196,6 +202,7 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.Status,
 		agent.Version,
 		agent.PublicKey,
+		agent.EncryptedPrivateKey, // ✅ NEW: Update encrypted private key if changed
 		agent.KeyAlgorithm,
 		agent.CertificateURL,
 		agent.RepositoryURL,
