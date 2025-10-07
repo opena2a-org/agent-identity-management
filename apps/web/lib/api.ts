@@ -1,0 +1,453 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+
+export interface Agent {
+  id: string
+  organization_id: string
+  name: string
+  display_name: string
+  description: string
+  agent_type: 'ai_agent' | 'mcp_server'
+  status: 'pending' | 'verified' | 'suspended' | 'revoked'
+  version: string
+  trust_score: number
+  created_at: string
+  updated_at: string
+}
+
+export interface User {
+  id: string
+  organization_id: string
+  email: string
+  name: string
+  avatar_url: string
+  role: 'admin' | 'manager' | 'member' | 'viewer'
+  created_at: string
+}
+
+export interface APIKey {
+  id: string
+  agent_id: string
+  name: string
+  prefix: string
+  last_used_at?: string
+  expires_at?: string
+  is_active: boolean
+  created_at: string
+}
+
+class APIClient {
+  private baseURL: string
+  private token: string | null = null
+
+  constructor(baseURL: string) {
+    this.baseURL = baseURL
+  }
+
+  setToken(token: string) {
+    this.token = token
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aim_token', token)
+    }
+  }
+
+  getToken(): string | null {
+    if (this.token) return this.token
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('aim_token')
+    }
+    return null
+  }
+
+  clearToken() {
+    this.token = null
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('aim_token')
+    }
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const token = this.getToken()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    }
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include', // Send cookies with requests
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Request failed' }))
+      throw new Error(error.message || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  }
+
+  // Auth
+  async login(provider: string): Promise<{ redirect_url: string }> {
+    return this.request(`/api/v1/auth/login/${provider}`)
+  }
+
+  async getCurrentUser(): Promise<User> {
+    return this.request('/api/v1/auth/me')
+  }
+
+  async logout(): Promise<void> {
+    await this.request('/api/v1/auth/logout', { method: 'POST' })
+    this.clearToken()
+  }
+
+  // Agents
+  async listAgents(): Promise<{ agents: Agent[] }> {
+    return this.request('/api/v1/agents')
+  }
+
+  async createAgent(data: Partial<Agent>): Promise<Agent> {
+    return this.request('/api/v1/agents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getAgent(id: string): Promise<Agent> {
+    return this.request(`/api/v1/agents/${id}`)
+  }
+
+  async updateAgent(id: string, data: Partial<Agent>): Promise<Agent> {
+    return this.request(`/api/v1/agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteAgent(id: string): Promise<void> {
+    return this.request(`/api/v1/agents/${id}`, { method: 'DELETE' })
+  }
+
+  async verifyAgent(id: string): Promise<{ verified: boolean }> {
+    return this.request(`/api/v1/agents/${id}/verify`, { method: 'POST' })
+  }
+
+  // API Keys
+  async listAPIKeys(): Promise<{ api_keys: APIKey[] }> {
+    return this.request('/api/v1/api-keys')
+  }
+
+  async createAPIKey(agentId: string, name: string): Promise<{ api_key: string; id: string }> {
+    return this.request('/api/v1/api-keys', {
+      method: 'POST',
+      body: JSON.stringify({ agent_id: agentId, name }),
+    })
+  }
+
+  async revokeAPIKey(id: string): Promise<void> {
+    return this.request(`/api/v1/api-keys/${id}`, { method: 'DELETE' })
+  }
+
+  // Trust Score
+  async getTrustScore(agentId: string): Promise<{ trust_score: number }> {
+    return this.request(`/api/v1/trust-score/agents/${agentId}`)
+  }
+
+  // User management
+  async getUsers(limit = 100, offset = 0): Promise<any[]> {
+    const response = await this.request(`/api/v1/admin/users?limit=${limit}&offset=${offset}`)
+    return response.users || []
+  }
+
+  async updateUserRole(userId: string, role: string): Promise<void> {
+    return this.request(`/api/v1/admin/users/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role })
+    })
+  }
+
+  // Audit logs
+  async getAuditLogs(limit = 100, offset = 0): Promise<any[]> {
+    const response: any = await this.request(`/api/v1/admin/audit-logs?limit=${limit}&offset=${offset}`)
+    return response.logs || []
+  }
+
+  // Alerts
+  async getAlerts(limit = 100, offset = 0): Promise<any[]> {
+    const response: any = await this.request(`/api/v1/admin/alerts?limit=${limit}&offset=${offset}`)
+    return response.alerts || []
+  }
+
+  async acknowledgeAlert(alertId: string): Promise<void> {
+    return this.request(`/api/v1/admin/alerts/${alertId}/acknowledge`, {
+      method: 'POST'
+    })
+  }
+
+  async getUnacknowledgedAlertCount(): Promise<number> {
+    const alerts = await this.getAlerts(100, 0)
+    return alerts.filter((a: any) => !a.is_acknowledged).length
+  }
+
+  // Dashboard stats - Viewer-accessible analytics endpoint
+  async getDashboardStats(): Promise<{
+    // Agent metrics
+    total_agents: number
+    verified_agents: number
+    pending_agents: number
+    verification_rate: number
+    avg_trust_score: number
+
+    // MCP Server metrics
+    total_mcp_servers: number
+    active_mcp_servers: number
+
+    // User metrics
+    total_users: number
+    active_users: number
+
+    // Security metrics
+    active_alerts: number
+    critical_alerts: number
+    security_incidents: number
+
+    // Verification metrics (last 24 hours)
+    total_verifications?: number
+    successful_verifications?: number
+    failed_verifications?: number
+    avg_response_time?: number
+
+    // Organization
+    organization_id: string
+  }> {
+    return this.request('/api/v1/analytics/dashboard')
+  }
+
+  // Verifications
+  async listVerifications(limit = 100, offset = 0): Promise<{
+    verifications: Array<{
+      id: string
+      agent_id: string
+      agent_name: string
+      action: string
+      status: 'approved' | 'denied' | 'pending'
+      duration_ms: number
+      timestamp: string
+      metadata: any
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/verifications?limit=${limit}&offset=${offset}`)
+  }
+
+  async getVerificationDetails(id: string): Promise<any> {
+    return this.request(`/api/v1/verifications/${id}`)
+  }
+
+  async approveVerification(id: string): Promise<any> {
+    return this.request(`/api/v1/verifications/${id}/approve`, {
+      method: 'POST'
+    })
+  }
+
+  async denyVerification(id: string): Promise<any> {
+    return this.request(`/api/v1/verifications/${id}/deny`, {
+      method: 'POST'
+    })
+  }
+
+  // Security
+  async getSecurityThreats(limit = 100, offset = 0): Promise<{
+    threats: Array<{
+      id: string
+      agent_id: string
+      threat_type: string
+      severity: 'low' | 'medium' | 'high' | 'critical'
+      description: string
+      status: 'active' | 'mitigated' | 'resolved'
+      detected_at: string
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/security/threats?limit=${limit}&offset=${offset}`)
+  }
+
+  async getSecurityAnomalies(limit = 100, offset = 0): Promise<{
+    anomalies: Array<{
+      id: string
+      agent_id: string
+      anomaly_type: string
+      severity: string
+      description: string
+      detected_at: string
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/security/anomalies?limit=${limit}&offset=${offset}`)
+  }
+
+  async getSecurityIncidents(limit = 100, offset = 0): Promise<{
+    incidents: Array<{
+      id: string
+      title: string
+      severity: 'low' | 'medium' | 'high' | 'critical'
+      status: 'open' | 'investigating' | 'resolved'
+      created_at: string
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/security/incidents?limit=${limit}&offset=${offset}`)
+  }
+
+  async getSecurityMetrics(): Promise<{
+    total_threats: number
+    active_threats: number
+    total_anomalies: number
+    total_incidents: number
+    threat_trend: Array<{ date: string; count: number }>
+    severity_distribution: Array<{ severity: string; count: number }>
+  }> {
+    return this.request('/api/v1/security/metrics')
+  }
+
+  // MCP Servers
+  async listMCPServers(limit = 100, offset = 0): Promise<{
+    mcp_servers: Array<{
+      id: string
+      name: string
+      url: string
+      status: 'active' | 'inactive' | 'pending'
+      verification_status: 'verified' | 'unverified' | 'failed'
+      last_verified_at?: string
+      created_at: string
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/mcp-servers?limit=${limit}&offset=${offset}`)
+  }
+
+  async createMCPServer(data: {
+    name: string
+    url: string
+    description?: string
+  }): Promise<any> {
+    return this.request('/api/v1/mcp-servers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getMCPServer(id: string): Promise<any> {
+    return this.request(`/api/v1/mcp-servers/${id}`)
+  }
+
+  async updateMCPServer(id: string, data: any): Promise<any> {
+    return this.request(`/api/v1/mcp-servers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteMCPServer(id: string): Promise<void> {
+    return this.request(`/api/v1/mcp-servers/${id}`, { method: 'DELETE' })
+  }
+
+  async verifyMCPServer(id: string): Promise<{ verified: boolean }> {
+    return this.request(`/api/v1/mcp-servers/${id}/verify`, { method: 'POST' })
+  }
+
+  // Verification Events (Real-time Monitoring)
+  async getRecentVerificationEvents(minutes = 15): Promise<{
+    events: Array<{
+      id: string
+      agentId: string
+      agentName: string
+      protocol: string
+      verificationType: string
+      status: string
+      confidence: number
+      trustScore: number
+      durationMs: number
+      initiatorType: string
+      startedAt: string
+      completedAt: string | null
+      createdAt: string
+    }>
+  }> {
+    return this.request(`/api/v1/verification-events/recent?minutes=${minutes}`)
+  }
+
+  async getVerificationStatistics(period: '24h' | '7d' | '30d' = '24h'): Promise<{
+    totalVerifications: number
+    successCount: number
+    failedCount: number
+    pendingCount: number
+    timeoutCount: number
+    successRate: number
+    avgDurationMs: number
+    avgConfidence: number
+    avgTrustScore: number
+    verificationsPerMinute: number
+    uniqueAgentsVerified: number
+    protocolDistribution: { [key: string]: number }
+    typeDistribution: { [key: string]: number }
+    initiatorDistribution: { [key: string]: number }
+  }> {
+    return this.request(`/api/v1/verification-events/statistics?period=${period}`)
+  }
+
+  // OAuth / SSO Registration
+  async listPendingRegistrations(limit = 50, offset = 0): Promise<{
+    requests: Array<{
+      id: string
+      email: string
+      firstName: string
+      lastName: string
+      oauthProvider: 'google' | 'microsoft' | 'okta'
+      oauthUserId: string
+      status: 'pending' | 'approved' | 'rejected'
+      requestedAt: string
+      reviewedAt?: string
+      reviewedBy?: string
+      rejectionReason?: string
+      profilePictureUrl?: string
+      oauthEmailVerified: boolean
+    }>
+    total: number
+    limit: number
+    offset: number
+  }> {
+    return this.request(`/api/v1/admin/registration-requests?limit=${limit}&offset=${offset}`)
+  }
+
+  async approveRegistration(id: string): Promise<{
+    message: string
+    user: {
+      id: string
+      email: string
+      role: string
+      status: string
+    }
+  }> {
+    return this.request(`/api/v1/admin/registration-requests/${id}/approve`, {
+      method: 'POST'
+    })
+  }
+
+  async rejectRegistration(id: string, reason: string): Promise<{
+    message: string
+  }> {
+    return this.request(`/api/v1/admin/registration-requests/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    })
+  }
+}
+
+export const api = new APIClient(API_URL)

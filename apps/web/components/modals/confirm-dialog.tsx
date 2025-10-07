@@ -1,0 +1,94 @@
+'use client';
+
+import { X, AlertTriangle } from 'lucide-react';
+
+interface ConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'warning' | 'info';
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export function ConfirmDialog({
+  isOpen,
+  title,
+  message,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  variant = 'warning',
+  onConfirm,
+  onCancel
+}: ConfirmDialogProps) {
+  if (!isOpen) return null;
+
+  const getVariantStyles = () => {
+    switch (variant) {
+      case 'danger':
+        return {
+          icon: 'text-red-600 dark:text-red-400',
+          button: 'bg-red-600 hover:bg-red-700'
+        };
+      case 'warning':
+        return {
+          icon: 'text-yellow-600 dark:text-yellow-400',
+          button: 'bg-yellow-600 hover:bg-yellow-700'
+        };
+      case 'info':
+        return {
+          icon: 'text-blue-600 dark:text-blue-400',
+          button: 'bg-blue-600 hover:bg-blue-700'
+        };
+    }
+  };
+
+  const styles = getVariantStyles();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className={`h-5 w-5 ${styles.icon}`} />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {title}
+            </h2>
+          </div>
+          <button
+            onClick={onCancel}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {message}
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${styles.button}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

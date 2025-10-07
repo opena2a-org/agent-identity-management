@@ -1,5 +1,15 @@
 # 🧠 Claude Code Workflow for Agent Identity Management
 
+## 🔧 CLI Tools
+
+### Google Cloud SDK
+**Location**: `/Users/decimai/Downloads/google-cloud-sdk/bin/gcloud`
+**Usage**: Use full path for all gcloud commands
+```bash
+/Users/decimai/Downloads/google-cloud-sdk/bin/gcloud config list
+/Users/decimai/Downloads/google-cloud-sdk/bin/gcloud projects list
+```
+
 ## 🚨 CRITICAL RULES - AVOID COMMON PITFALLS
 
 ### 1. **Naming Consistency is SACRED**
@@ -10,9 +20,18 @@
 - `auth_token` in backend, `authToken` in frontend ❌
 - `mcp_server_id` in database, `serverId` in TypeScript ❌
 
+**REAL-WORLD EXAMPLE (Fixed Oct 6, 2025)**:
+Dashboard page had a critical mismatch:
+- ❌ **Frontend expected**: `total_verifications`, `registered_agents`, `success_rate`
+- ✅ **Backend returned**: `total_agents`, `verified_agents`, `total_users`
+- **Result**: `TypeError: Cannot read properties of undefined (reading 'toLocaleString')`
+- **Fix**: Updated TypeScript interface and stats display to match backend exactly
+- **Lesson**: ALWAYS check backend response before writing frontend code!
+
 **SOLUTION**:
 - **Before creating any new field/variable, check ALL existing code for similar concepts**
 - **Use exact same naming across backend, frontend, and database**
+- **Test with Chrome DevTools MCP to catch console errors immediately**
 - **Document naming conventions in this file and follow them strictly**
 
 **NAMING CONVENTIONS FOR THIS PROJECT**:
@@ -465,6 +484,34 @@ docker compose up -d
 
 ---
 
-**Last Updated**: October 5, 2025
+**Last Updated**: October 6, 2025
 **Project**: Agent Identity Management (OpenA2A)
 **Repository**: https://github.com/opena2a-org/agent-identity-management
+
+---
+
+## 🚀 AIM Vision & Strategy
+
+### Mission Statement
+**AIM is a complete rebuild of AIVF** designed to be the **definitive open-source enterprise solution** for AI agent and MCP server identity management. Our goal is to build a product **so good that investors show up at our doors asking to invest** in a premium Enterprise version.
+
+### Investment-Ready Criteria
+To attract serious investors, AIM must demonstrate:
+1. **Complete Feature Set**: All 60+ endpoints from AIVF implemented and tested
+2. **MCP Registration**: Users can register MCP servers with cryptographic verification
+3. **Security Dashboard**: Comprehensive threat detection and security analytics
+4. **Enterprise Quality**: 100% test coverage, <100ms API response, 99.9% uptime
+5. **Market Validation**: Active user base with customer testimonials
+6. **Revenue Model**: Clear SaaS pricing (Community, Pro, Enterprise)
+7. **Scalability**: Proven ability to handle 1000+ concurrent users
+
+### Current Status (Phase 1 Complete)
+- ✅ **35/60 endpoints** implemented (58% complete)
+- ✅ **100% test coverage** (21/21 integration tests passing)
+- ✅ **Enterprise UI** redesigned with AIVF aesthetics
+- ✅ **Production-ready** Docker Compose + Kubernetes infrastructure
+- ⏳ **MCP registration** workflow (8 endpoints needed)
+- ⏳ **Security dashboard** (6 endpoints needed)
+- ⏳ **Compliance reporting** (5 endpoints needed)
+
+**SEE**: `AIM_VISION.md` for complete roadmap and investment strategy
