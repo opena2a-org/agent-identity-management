@@ -91,10 +91,10 @@ func main() {
 	oauthProviders := initOAuthProviders(cfg)
 
 	// Initialize application services
-	services := initServices(repos, cacheService, oauthRepo, oauthProviders)
+	services, keyVault := initServices(repos, cacheService, oauthRepo, oauthProviders)
 
 	// Initialize handlers
-	h := initHandlers(services, jwtService, legacyOAuthService)
+	h := initHandlers(services, jwtService, legacyOAuthService, keyVault)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -289,7 +289,7 @@ type Services struct {
 	OAuth             *application.OAuthService
 }
 
-func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) *Services {
+func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -381,7 +381,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
 		OAuth:             oauthService,
-	}
+	}, keyVault
 }
 
 type Handlers struct {
@@ -397,9 +397,10 @@ type Handlers struct {
 	Webhook           *handlers.WebhookHandler
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
+	PublicAgent       *handlers.PublicAgentHandler // ✅ NEW: Public self-registration
 }
 
-func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService) *Handlers {
+func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
 	return &Handlers{
 		Auth: handlers.NewAuthHandler(
 			services.Auth,
@@ -455,6 +456,11 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 		OAuth: handlers.NewOAuthHandler(
 			services.OAuth,
 			services.Auth,
+		),
+		PublicAgent: handlers.NewPublicAgentHandler(
+			services.Agent,
+			services.Auth,
+			keyVault,
 		),
 	}
 }
@@ -525,6 +531,10 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
+	// ✅ Public routes (NO authentication required) - Self-registration API
+	public := v1.Group("/public")
+	public.Post("/agents/register", h.PublicAgent.Register) // 🚀 ONE-LINE agent registration
+
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
 	auth.Post("/login/local", h.Auth.LocalLogin)      // Local email/password login
