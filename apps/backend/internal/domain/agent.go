@@ -45,9 +45,20 @@ type Agent struct {
 	LastCapabilityCheckAt    *time.Time  `json:"last_capability_check_at"`
 	CapabilityViolationCount int         `json:"capability_violation_count"`
 	IsCompromised            bool        `json:"is_compromised"`
+	// ✅ NEW: Capability-based access control (simple MVP)
+	TalksTo                  []string    `json:"talks_to"` // List of MCP server names/IDs this agent can communicate with (REQUIRED, always returns array)
+	Capabilities             []string    `json:"capabilities"` // Agent capabilities (e.g., ["file:read", "api:call"]) (REQUIRED, always returns array)
+	// ✅ NEW: Key rotation support
+	KeyCreatedAt             *time.Time  `json:"key_created_at"`
+	KeyExpiresAt             *time.Time  `json:"key_expires_at"`
+	KeyRotationGraceUntil    *time.Time  `json:"key_rotation_grace_until,omitempty"`
+	PreviousPublicKey        *string     `json:"-"` // Not exposed in API, used for grace period verification
+	RotationCount            int         `json:"rotation_count"`
 	CreatedAt                time.Time   `json:"created_at"`
 	UpdatedAt                time.Time   `json:"updated_at"`
 	CreatedBy                uuid.UUID   `json:"created_by"`
+	// ✅ NEW: Tags applied to this agent (populated by join)
+	Tags                     []Tag       `json:"tags"`
 }
 
 // AgentRepository defines the interface for agent persistence

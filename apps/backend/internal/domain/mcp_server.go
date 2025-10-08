@@ -31,10 +31,12 @@ type MCPServer struct {
 	VerificationURL   string          `json:"verification_url"`
 	Capabilities      []string        `json:"capabilities"` // e.g., ["tools", "prompts", "resources"]
 	TrustScore        float64         `json:"trust_score"`
-	VerificationCount int             `json:"verification_count,omitempty"` // Fetched via JOIN/COUNT
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	CreatedBy         uuid.UUID       `json:"created_by"`
+	VerificationCount  int             `json:"verification_count,omitempty"` // Fetched via JOIN/COUNT
+	RegisteredByAgent  uuid.UUID       `json:"registered_by_agent"`          // Agent that registered this server
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+	// ✅ NEW: Tags applied to this MCP server (populated by join)
+	Tags               []Tag           `json:"tags"`
 }
 
 // MCPServerRepository defines the interface for MCP server persistence
