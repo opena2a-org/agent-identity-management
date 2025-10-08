@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2 } from 'lucide-react';
-import { Agent } from '@/lib/api';
+import { Agent, Tag, api } from '@/lib/api';
+import { TagSelector } from '../ui/tag-selector';
 
 interface AgentDetailModalProps {
   isOpen: boolean;
@@ -18,6 +20,59 @@ export function AgentDetailModal({
   onEdit,
   onDelete
 }: AgentDetailModalProps) {
+  const [agentTags, setAgentTags] = useState<Tag[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [suggestedTags, setSuggestedTags] = useState<Tag[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && agent) {
+      loadTags();
+    }
+  }, [isOpen, agent]);
+
+  const loadTags = async () => {
+    if (!agent) return;
+    setLoadingTags(true);
+    try {
+      const [currentTags, allTags, suggestions] = await Promise.all([
+        api.getAgentTags(agent.id),
+        api.listTags(),
+        api.suggestTagsForAgent(agent.id),
+      ]);
+      setAgentTags(currentTags);
+      setAvailableTags(allTags);
+      setSuggestedTags(suggestions);
+    } catch (error) {
+      console.error('Failed to load tags:', error);
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  const handleTagsChange = async (newTags: Tag[]) => {
+    if (!agent) return;
+
+    const addedTags = newTags.filter(t => !agentTags.some(at => at.id === t.id));
+    const removedTags = agentTags.filter(t => !newTags.some(nt => nt.id === t.id));
+
+    try {
+      // Add new tags
+      if (addedTags.length > 0) {
+        await api.addTagsToAgent(agent.id, addedTags.map(t => t.id));
+      }
+
+      // Remove tags
+      for (const tag of removedTags) {
+        await api.removeTagFromAgent(agent.id, tag.id);
+      }
+
+      setAgentTags(newTags);
+    } catch (error) {
+      console.error('Failed to update tags:', error);
+    }
+  };
+
   if (!isOpen || !agent) return null;
 
   const formatDate = (dateString: string) => {
@@ -110,6 +165,22 @@ export function AgentDetailModal({
               <p className="text-sm text-gray-600 dark:text-gray-400">{agent.description}</p>
             </div>
           )}
+
+          {/* Tags */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Tags</h3>
+            {loadingTags ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400">Loading tags...</div>
+            ) : (
+              <TagSelector
+                selectedTags={agentTags}
+                availableTags={availableTags}
+                suggestedTags={suggestedTags}
+                maxTags={3}
+                onTagsChange={handleTagsChange}
+              />
+            )}
+          </div>
 
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-6">

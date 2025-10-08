@@ -35,6 +35,32 @@ export interface APIKey {
   created_at: string
 }
 
+export type TagCategory = 'resource_type' | 'environment' | 'agent_type' | 'data_classification' | 'custom'
+
+export interface Tag {
+  id: string
+  organization_id: string
+  key: string
+  value: string
+  category: TagCategory
+  description: string
+  color: string
+  created_at: string
+  created_by: string
+}
+
+export interface CreateTagInput {
+  key: string
+  value: string
+  category: TagCategory
+  description?: string
+  color?: string
+}
+
+export interface AddTagsInput {
+  tag_ids: string[]
+}
+
 class APIClient {
   private baseURL: string
   private token: string | null = null
@@ -472,6 +498,69 @@ class APIClient {
       method: 'POST',
       body: JSON.stringify({ reason })
     })
+  }
+
+  // Tags
+  async listTags(category?: TagCategory): Promise<Tag[]> {
+    const url = category
+      ? `/api/v1/tags?category=${category}`
+      : '/api/v1/tags'
+    return this.request(url)
+  }
+
+  async createTag(data: CreateTagInput): Promise<Tag> {
+    return this.request('/api/v1/tags', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteTag(id: string): Promise<void> {
+    return this.request(`/api/v1/tags/${id}`, { method: 'DELETE' })
+  }
+
+  // Agent Tags
+  async getAgentTags(agentId: string): Promise<Tag[]> {
+    return this.request(`/api/v1/agents/${agentId}/tags`)
+  }
+
+  async addTagsToAgent(agentId: string, tagIds: string[]): Promise<void> {
+    return this.request(`/api/v1/agents/${agentId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ tag_ids: tagIds }),
+    })
+  }
+
+  async removeTagFromAgent(agentId: string, tagId: string): Promise<void> {
+    return this.request(`/api/v1/agents/${agentId}/tags/${tagId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async suggestTagsForAgent(agentId: string): Promise<Tag[]> {
+    return this.request(`/api/v1/agents/${agentId}/tags/suggestions`)
+  }
+
+  // MCP Server Tags
+  async getMCPServerTags(mcpServerId: string): Promise<Tag[]> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`)
+  }
+
+  async addTagsToMCPServer(mcpServerId: string, tagIds: string[]): Promise<void> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ tag_ids: tagIds }),
+    })
+  }
+
+  async removeTagFromMCPServer(mcpServerId: string, tagId: string): Promise<void> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags/${tagId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async suggestTagsForMCPServer(mcpServerId: string): Promise<Tag[]> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags/suggestions`)
   }
 }
 
