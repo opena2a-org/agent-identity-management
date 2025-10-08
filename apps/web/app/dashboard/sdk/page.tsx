@@ -137,6 +137,43 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
+      {/* SECURITY REQUIREMENTS - CRITICAL */}
+      <div className="bg-red-50 border-2 border-red-300 rounded-lg p-5 mb-8">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-6 w-6 text-red-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-red-900 mb-2">⚠️ Required Security Packages</h3>
+            <p className="text-red-800 mb-3">
+              <strong>AIM SDK requires secure credential storage.</strong> The following packages are <strong>REQUIRED</strong> and must be installed before using the SDK:
+            </p>
+            <div className="bg-red-900 rounded-lg p-4 mb-3">
+              <code className="text-sm text-red-100 font-mono">
+                pip install cryptography keyring
+              </code>
+            </div>
+            <div className="space-y-2 text-sm text-red-800">
+              <div className="flex items-start gap-2">
+                <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <strong>cryptography</strong> - Encrypts your credentials using AES-128 CBC (Fernet)
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Shield className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <strong>keyring</strong> - Stores encryption keys in your system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-red-100 rounded border border-red-300">
+              <p className="text-sm text-red-900">
+                <strong>⛔ No Insecure Fallback:</strong> The SDK will <strong>refuse to run</strong> if these packages are missing. We do NOT support plaintext credential storage for security reasons.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Setup Instructions */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="p-6">
@@ -147,7 +184,20 @@ export default function SDKDownloadPage() {
 
           <div className="space-y-6">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">1. Extract & Install</h4>
+              <h4 className="font-medium text-gray-900 mb-2">1. Install Security Packages (Required)</h4>
+              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
+                <code className="text-sm text-green-400 font-mono">
+                  pip install cryptography keyring
+                </code>
+              </div>
+              <p className="text-sm text-gray-600 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span>These packages are <strong>required</strong> before installing the SDK. The SDK will fail without them.</span>
+              </p>
+            </div>
+
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">2. Extract & Install SDK</h4>
               <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
                 <code className="text-sm text-green-400 font-mono">
                   unzip aim-sdk-python.zip<br />
@@ -158,7 +208,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Register Your First Agent</h4>
+              <h4 className="font-medium text-gray-900 mb-2">3. Register Your First Agent</h4>
               <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
                 <code className="text-sm text-green-400 font-mono">
                   from aim_sdk import register_agent<br />
@@ -178,7 +228,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. View in Dashboard</h4>
+              <h4 className="font-medium text-gray-900 mb-2">4. View in Dashboard</h4>
               <p className="text-gray-700 mb-3">
                 Your agent will appear in the dashboard automatically, linked to your account.
               </p>

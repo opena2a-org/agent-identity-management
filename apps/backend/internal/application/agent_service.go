@@ -41,9 +41,11 @@ type CreateAgentRequest struct {
 	AgentType        domain.AgentType `json:"agent_type"`
 	Version          string           `json:"version"`
 	// ✅ REMOVED: PublicKey - AIM generates this automatically
-	CertificateURL   string `json:"certificate_url"`
-	RepositoryURL    string `json:"repository_url"`
-	DocumentationURL string `json:"documentation_url"`
+	CertificateURL   string   `json:"certificate_url"`
+	RepositoryURL    string   `json:"repository_url"`
+	DocumentationURL string   `json:"documentation_url"`
+	TalksTo          []string `json:"talks_to,omitempty"`        // MCP servers this agent communicates with
+	Capabilities     []string `json:"capabilities,omitempty"`    // Agent capabilities
 }
 
 // CreateAgent creates a new agent
@@ -87,6 +89,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		CertificateURL:      req.CertificateURL,
 		RepositoryURL:       req.RepositoryURL,
 		DocumentationURL:    req.DocumentationURL,
+		TalksTo:             req.TalksTo, // MCP servers this agent communicates with
 		Status:              domain.AgentStatusPending,
 		CreatedBy:           userID,
 	}
@@ -149,6 +152,10 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	}
 	if req.DocumentationURL != "" {
 		agent.DocumentationURL = req.DocumentationURL
+	}
+	// Update talks_to configuration
+	if req.TalksTo != nil {
+		agent.TalksTo = req.TalksTo
 	}
 
 	if err := s.agentRepo.Update(agent); err != nil {

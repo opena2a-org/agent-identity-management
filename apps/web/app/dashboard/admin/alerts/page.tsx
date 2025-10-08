@@ -39,6 +39,23 @@ interface Alert {
 }
 
 const severityConfig = {
+  low: {
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    icon: Info,
+  },
+  medium: {
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
+    icon: Info,
+  },
+  high: {
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    icon: AlertTriangle,
+  },
+  critical: {
+    color: 'bg-red-100 text-red-800 border-red-200',
+    icon: ShieldAlert,
+  },
+  // Legacy aliases
   info: {
     color: 'bg-blue-100 text-blue-800 border-blue-200',
     icon: Info,
@@ -46,10 +63,6 @@ const severityConfig = {
   warning: {
     color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     icon: AlertTriangle,
-  },
-  critical: {
-    color: 'bg-red-100 text-red-800 border-red-200',
-    icon: ShieldAlert,
   },
 }
 
