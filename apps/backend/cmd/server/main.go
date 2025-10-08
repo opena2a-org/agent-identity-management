@@ -94,7 +94,7 @@ func main() {
 	services, keyVault := initServices(repos, cacheService, oauthRepo, oauthProviders)
 
 	// Initialize handlers
-	h := initHandlers(services, jwtService, legacyOAuthService, keyVault)
+	h := initHandlers(services, repos, jwtService, legacyOAuthService, keyVault)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -422,7 +422,7 @@ type Handlers struct {
 	AuthRefresh       *handlers.AuthRefreshHandler
 }
 
-func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
+func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
 	return &Handlers{
 		Auth: handlers.NewAuthHandler(
 			services.Auth,
@@ -489,7 +489,7 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 		),
 		SDK: handlers.NewSDKHandler(
 			jwtService,
-			services.SDKToken.(*application.SDKTokenService).(*application.SDKTokenService), // Access repo via service
+			repos.SDKToken,
 		),
 		SDKToken: handlers.NewSDKTokenHandler(
 			services.SDKToken,
@@ -585,6 +585,17 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	sdk := v1.Group("/sdk")
 	sdk.Use(middleware.AuthMiddleware(jwtService))
 	sdk.Get("/download", h.SDK.DownloadSDK) // Download Python SDK with embedded credentials
+
+	// Auth routes - Token refresh with rotation
+	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
+
+	// SDK Token Management routes (authentication required)
+	sdkTokens := v1.Group("/users/me/sdk-tokens")
+	sdkTokens.Use(middleware.AuthMiddleware(jwtService))
+	sdkTokens.Get("/", h.SDKToken.ListUserTokens)                // List all SDK tokens
+	sdkTokens.Get("/count", h.SDKToken.GetActiveTokenCount)      // Get active token count
+	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)        // Revoke specific token
+	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens)    // Revoke all tokens
 
 	// Agents routes (authentication required)
 	agents := v1.Group("/agents")
