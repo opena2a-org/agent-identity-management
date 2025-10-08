@@ -18,7 +18,9 @@ import {
   CheckCircle2,
   Clock,
   Key,
-  TrendingDown
+  TrendingDown,
+  GitBranch,
+  Check
 } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -58,6 +60,7 @@ const alertTypeIcons: Record<string, any> = {
   agent_offline: AlertTriangle,
   security_breach: ShieldAlert,
   unusual_activity: Info,
+  configuration_drift: GitBranch,
 }
 
 export default function AlertsPage() {
@@ -94,6 +97,48 @@ export default function AlertsPage() {
       console.error('Failed to acknowledge alert:', error)
       alert('Failed to acknowledge alert')
     }
+  }
+
+  const approveDrift = async (alertId: string, driftedServers: string[]) => {
+    try {
+      await api.approveDrift(alertId, driftedServers)
+      // Update local state - mark as acknowledged
+      setAlerts(alerts.map(a =>
+        a.id === alertId
+          ? { ...a, is_acknowledged: true, acknowledged_at: new Date().toISOString() }
+          : a
+      ))
+      alert('Configuration drift approved successfully. Agent registration has been updated.')
+    } catch (error) {
+      console.error('Failed to approve drift:', error)
+      alert('Failed to approve drift')
+    }
+  }
+
+  // Extract drifted MCP servers from alert description
+  const extractDriftedServers = (description: string): string[] => {
+    const servers: string[] = []
+    const lines = description.split('\n')
+    let inMCPSection = false
+
+    for (const line of lines) {
+      if (line.includes('Unauthorized MCP Server Communication:')) {
+        inMCPSection = true
+        continue
+      }
+      if (line.includes('Undeclared Capability Usage:') || line.includes('Registered Configuration:')) {
+        inMCPSection = false
+        continue
+      }
+      if (inMCPSection && line.includes('`') && line.includes('not registered')) {
+        // Extract server name between backticks
+        const match = line.match(/`([^`]+)`/)
+        if (match) {
+          servers.push(match[1])
+        }
+      }
+    }
+    return servers
   }
 
   const acknowledgeAll = async () => {
@@ -297,14 +342,35 @@ export default function AlertsPage() {
                       </div>
 
                       {!alert.is_acknowledged && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => acknowledgeAlert(alert.id)}
-                        >
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Acknowledge
-                        </Button>
+                        <div className="flex gap-2">
+                          {alert.alert_type === 'configuration_drift' && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => {
+                                const driftedServers = extractDriftedServers(alert.description)
+                                if (driftedServers.length > 0) {
+                                  if (confirm(`Approve drift and add these MCP servers to agent registration:\n\n${driftedServers.join('\n')}\n\nThis will update the agent's configuration.`)) {
+                                    approveDrift(alert.id, driftedServers)
+                                  }
+                                } else {
+                                  alert('Could not extract drifted servers from alert')
+                                }
+                              }}
+                            >
+                              <Check className="h-4 w-4 mr-2" />
+                              Approve Drift
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => acknowledgeAlert(alert.id)}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Acknowledge
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>

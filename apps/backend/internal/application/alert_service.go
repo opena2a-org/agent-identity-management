@@ -138,3 +138,68 @@ func (s *AlertService) ResolveAlert(
 	// TODO: Add a resolved status to the domain model
 	return s.alertRepo.Acknowledge(alertID, userID)
 }
+
+// ApproveDriftRequest contains the request data for approving drift
+type ApproveDriftRequest struct {
+	AlertID            uuid.UUID `json:"alertId"`
+	OrganizationID     uuid.UUID `json:"organizationId"`
+	UserID             uuid.UUID `json:"userId"`
+	ApprovedMCPServers []string  `json:"approvedMcpServers"`
+}
+
+// ApproveDrift approves configuration drift by updating the agent's registered configuration
+// This resolves the alert and updates the agent's talks_to array
+func (s *AlertService) ApproveDrift(ctx context.Context, req *ApproveDriftRequest) error {
+	// 1. Get the alert to find the agent
+	alert, err := s.alertRepo.GetByID(req.AlertID)
+	if err != nil {
+		return fmt.Errorf("failed to get alert: %w", err)
+	}
+
+	// 2. Verify alert is a configuration drift alert
+	if alert.AlertType != domain.AlertTypeConfigurationDrift {
+		return fmt.Errorf("alert is not a configuration drift alert")
+	}
+
+	// 3. Verify alert belongs to the organization
+	if alert.OrganizationID != req.OrganizationID {
+		return fmt.Errorf("alert does not belong to organization")
+	}
+
+	// 4. Get the agent
+	agent, err := s.agentRepo.GetByID(alert.ResourceID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent: %w", err)
+	}
+
+	// 5. Update agent's talks_to array (merge with approved MCP servers)
+	if len(req.ApprovedMCPServers) > 0 {
+		// Merge unique values
+		mcpServersMap := make(map[string]bool)
+		for _, mcp := range agent.TalksTo {
+			mcpServersMap[mcp] = true
+		}
+		for _, mcp := range req.ApprovedMCPServers {
+			mcpServersMap[mcp] = true
+		}
+
+		// Convert back to slice
+		newTalksTo := make([]string, 0, len(mcpServersMap))
+		for mcp := range mcpServersMap {
+			newTalksTo = append(newTalksTo, mcp)
+		}
+		agent.TalksTo = newTalksTo
+	}
+
+	// 6. Update agent in database
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to update agent: %w", err)
+	}
+
+	// 7. Acknowledge the alert
+	if err := s.alertRepo.Acknowledge(req.AlertID, req.UserID); err != nil {
+		return fmt.Errorf("failed to acknowledge alert: %w", err)
+	}
+
+	return nil
+}

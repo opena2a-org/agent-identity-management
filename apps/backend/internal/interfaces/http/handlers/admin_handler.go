@@ -739,3 +739,58 @@ func (h *AdminHandler) UpdateOrganizationSettings(c fiber.Ctx) error {
 		"auto_approve_sso": req.AutoApproveSSO,
 	})
 }
+
+// ApproveDrift approves configuration drift by updating agent's registered configuration
+func (h *AdminHandler) ApproveDrift(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	alertID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid alert ID",
+		})
+	}
+
+	var req struct {
+		ApprovedMCPServers []string `json:"approvedMcpServers"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Call alert service to approve drift
+	approveDriftReq := &application.ApproveDriftRequest{
+		AlertID:            alertID,
+		OrganizationID:     orgID,
+		UserID:             userID,
+		ApprovedMCPServers: req.ApprovedMCPServers,
+	}
+
+	if err := h.alertService.ApproveDrift(c.Context(), approveDriftReq); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"drift_approval",
+		alertID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"approved_mcp_servers": req.ApprovedMCPServers,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message": "Configuration drift approved successfully",
+	})
+}

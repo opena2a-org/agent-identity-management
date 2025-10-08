@@ -273,6 +273,13 @@ class APIClient {
     })
   }
 
+  async approveDrift(alertId: string, approvedMcpServers: string[]): Promise<{ message: string }> {
+    return this.request(`/api/v1/admin/alerts/${alertId}/approve-drift`, {
+      method: 'POST',
+      body: JSON.stringify({ approvedMcpServers })
+    })
+  }
+
   async getUnacknowledgedAlertCount(): Promise<number> {
     const alerts = await this.getAlerts(100, 0)
     return alerts.filter((a: any) => !a.is_acknowledged).length

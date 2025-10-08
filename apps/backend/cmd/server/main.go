@@ -661,6 +661,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	admin.Get("/alerts", h.Admin.GetAlerts)
 	admin.Post("/alerts/:id/acknowledge", h.Admin.AcknowledgeAlert)
 	admin.Post("/alerts/:id/resolve", h.Admin.ResolveAlert)
+	admin.Post("/alerts/:id/approve-drift", h.Admin.ApproveDrift)
 
 	// Dashboard stats
 	admin.Get("/dashboard/stats", h.Admin.GetDashboardStats)

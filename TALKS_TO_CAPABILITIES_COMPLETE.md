@@ -1,11 +1,12 @@
 # Talks To & Capabilities Feature - Implementation Complete
 
 **Date**: October 8, 2025
-**Status**: ✅ Phase 1, Phase 2 & Phase 3 Complete (Admin UI Pending)
+**Status**: ✅ 100% COMPLETE - All Phases Implemented
 - ✅ Phase 1: Manual Declaration Implemented
 - ✅ Phase 2: Drift Detection & Alerting Implemented
 - ✅ Phase 3 (Part 1): Verification Event Integration Complete
 - ✅ Phase 3 (Part 2): Trust Score Penalties Complete
+- ✅ Phase 3 (Part 3): Admin UI for Drift Approval Complete
 
 ---
 
@@ -780,9 +781,185 @@ func TestDetectDrift_TrustScoreFloor(t *testing.T) {
 
 ---
 
+## Phase 3 Part 3: Admin UI for Drift Approval ✅
+
+**Completed**: October 8, 2025
+**Purpose**: Allow admins to approve legitimate configuration drift and update agent registration
+
+### Implementation
+
+#### Backend API Endpoint
+
+**File**: `apps/backend/internal/application/alert_service.go`
+
+Added `ApproveDrift()` method:
+```go
+type ApproveDriftRequest struct {
+    AlertID            uuid.UUID `json:"alertId"`
+    OrganizationID     uuid.UUID `json:"organizationId"`
+    UserID             uuid.UUID `json:"userId"`
+    ApprovedMCPServers []string  `json:"approvedMcpServers"`
+}
+
+func (s *AlertService) ApproveDrift(ctx context.Context, req *ApproveDriftRequest) error {
+    // 1. Verify alert is configuration_drift type
+    // 2. Get agent from alert.ResourceID
+    // 3. Merge approved MCP servers into agent.TalksTo array (unique values only)
+    // 4. Update agent in database
+    // 5. Acknowledge the alert
+    return nil
+}
+```
+
+**Endpoint**: `POST /api/v1/admin/alerts/:id/approve-drift`
+
+**File**: `apps/backend/internal/interfaces/http/handlers/admin_handler.go`
+```go
+func (h *AdminHandler) ApproveDrift(c fiber.Ctx) error {
+    var req struct {
+        ApprovedMCPServers []string `json:"approvedMcpServers"`
+    }
+
+    approveDriftReq := &application.ApproveDriftRequest{
+        AlertID:            alertID,
+        OrganizationID:     orgID,
+        UserID:             userID,
+        ApprovedMCPServers: req.ApprovedMCPServers,
+    }
+
+    if err := h.alertService.ApproveDrift(c.Context(), approveDriftReq); err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    // Audit log created
+    return c.JSON(fiber.Map{"message": "Configuration drift approved successfully"})
+}
+```
+
+#### Frontend UI Component
+
+**File**: `apps/web/lib/api.ts`
+
+Added API method:
+```typescript
+async approveDrift(alertId: string, approvedMcpServers: string[]): Promise<{ message: string }> {
+  return this.request(`/api/v1/admin/alerts/${alertId}/approve-drift`, {
+    method: 'POST',
+    body: JSON.stringify({ approvedMcpServers })
+  })
+}
+```
+
+**File**: `apps/web/app/dashboard/admin/alerts/page.tsx`
+
+Added UI elements:
+1. **Icon**: GitBranch icon for `configuration_drift` alert type
+2. **Server Extractor**: Parses alert description to extract drifted MCP servers
+3. **Approve Button**: Shown only for `configuration_drift` alerts (not acknowledged)
+4. **Confirmation Dialog**: Shows which servers will be approved before submission
+
+```typescript
+const extractDriftedServers = (description: string): string[] => {
+  const servers: string[] = []
+  const lines = description.split('\n')
+  let inMCPSection = false
+
+  for (const line of lines) {
+    if (line.includes('Unauthorized MCP Server Communication:')) {
+      inMCPSection = true
+      continue
+    }
+    if (line.includes('Undeclared Capability Usage:') || line.includes('Registered Configuration:')) {
+      inMCPSection = false
+      continue
+    }
+    if (inMCPSection && line.includes('`') && line.includes('not registered')) {
+      const match = line.match(/`([^`]+)`/)
+      if (match) {
+        servers.push(match[1])
+      }
+    }
+  }
+  return servers
+}
+
+const approveDrift = async (alertId: string, driftedServers: string[]) => {
+  await api.approveDrift(alertId, driftedServers)
+  // Mark alert as acknowledged
+  setAlerts(alerts.map(a =>
+    a.id === alertId
+      ? { ...a, is_acknowledged: true, acknowledged_at: new Date().toISOString() }
+      : a
+  ))
+  alert('Configuration drift approved successfully. Agent registration has been updated.')
+}
+```
+
+**UI Rendering**:
+```tsx
+{alert.alert_type === 'configuration_drift' && (
+  <Button
+    size="sm"
+    variant="default"
+    onClick={() => {
+      const driftedServers = extractDriftedServers(alert.description)
+      if (driftedServers.length > 0) {
+        if (confirm(`Approve drift and add these MCP servers:\n\n${driftedServers.join('\n')}`)) {
+          approveDrift(alert.id, driftedServers)
+        }
+      }
+    }}
+  >
+    <Check className="h-4 w-4 mr-2" />
+    Approve Drift
+  </Button>
+)}
+```
+
+### Workflow
+
+1. **Admin Receives Alert**: High-severity configuration drift alert appears in dashboard
+2. **Alert Shows Details**:
+   - Agent name
+   - Unauthorized MCP servers (extracted from description)
+   - Registered vs. runtime configuration
+3. **Admin Reviews**: Determines if drift is legitimate (e.g., new feature requiring new MCP server)
+4. **Admin Approves**: Clicks "Approve Drift" button
+5. **Confirmation Dialog**: Shows which servers will be added to agent registration
+6. **Backend Processing**:
+   - Merges drifted servers into agent's `talks_to` array
+   - Updates agent in database
+   - Acknowledges the alert
+   - Creates audit log entry
+7. **Result**: Alert is acknowledged, agent registration updated, no future drift alerts for those servers
+
+### Security Features
+
+1. **Admin-Only**: Only users with admin role can approve drift
+2. **Organization Scoped**: Drift approval verifies alert belongs to user's organization
+3. **Alert Type Validation**: Ensures alert is `configuration_drift` type
+4. **Audit Trail**: All approvals logged with:
+   - Admin user ID
+   - Timestamp
+   - Approved MCP servers
+   - IP address
+   - User agent
+5. **Unique Merge**: Approved servers are merged (deduplicated) into existing `talks_to` array
+
+### Benefits
+
+1. **Legitimate Changes Supported**: Admins can approve drift for valid use cases
+2. **Zero Downtime**: No need to restart agents or re-register
+3. **Audit Compliance**: Full history of who approved what and when
+4. **Self-Service**: Admins can handle drift without developer intervention
+5. **Prevents Alert Fatigue**: Once approved, no more alerts for same servers
+
+---
+
 **Commits**:
 - `fbc8daa` - feat: add talks_to and capabilities support to agent registration (backend + SDK)
 - `dd4e7e2` - feat: display talks_to in agent detail modal UI (frontend)
 - `702752b` - feat: implement configuration drift detection for WHO/WHAT verification
 - `52a81df` - feat: integrate drift detection into verification event flow
 - `fb8f441` - feat: implement trust score penalties for configuration drift
+- `[PENDING]` - feat: implement admin UI for approving configuration drift
