@@ -529,6 +529,7 @@ def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
 def register_agent(
     name: str,
     aim_url: str,
+    api_key: str,
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     agent_type: str = "ai_agent",
@@ -547,6 +548,7 @@ def register_agent(
     Args:
         name: Agent name (unique identifier)
         aim_url: AIM server URL (e.g., "https://aim.example.com")
+        api_key: Your AIM API key (required for user identity mapping)
         display_name: Human-readable display name (defaults to name)
         description: Agent description (defaults to auto-generated)
         agent_type: "ai_agent" or "mcp_server" (default: "ai_agent")
@@ -561,15 +563,20 @@ def register_agent(
 
     Example:
         >>> from aim_sdk import register_agent
-        >>> agent = register_agent("my-agent", "https://aim.example.com")
+        >>> api_key = "aim_1234567890abcdef"  # Get from AIM dashboard
+        >>> agent = register_agent("my-agent", "https://aim.example.com", api_key)
         >>> @agent.perform_action("send_email")
         ... def send_notification():
         ...     send_email("admin@example.com", "Hello from AIM!")
 
     Raises:
-        ConfigurationError: If registration fails
-        AuthenticationError: If credentials are invalid
+        ConfigurationError: If registration fails or API key is missing
+        AuthenticationError: If API key is invalid
     """
+    # Validate API key
+    if not api_key:
+        raise ConfigurationError("api_key is required for agent registration")
+
     # Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
@@ -604,14 +611,17 @@ def register_agent(
     if organization_domain:
         registration_data["organization_domain"] = organization_domain
 
-    # Call public registration endpoint (no auth required!)
+    # Call public registration endpoint with API key for user identity
     url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
 
     try:
         response = requests.post(
             url,
             json=registration_data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-AIM-API-Key": api_key
+            },
             timeout=30
         )
 
