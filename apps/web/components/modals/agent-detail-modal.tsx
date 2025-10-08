@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2 } from 'lucide-react';
-import { Agent, Tag, api } from '@/lib/api';
+import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key } from 'lucide-react';
+import { Agent, Tag, AgentCapability, api } from '@/lib/api';
 import { TagSelector } from '../ui/tag-selector';
 
 interface AgentDetailModalProps {
@@ -24,10 +24,13 @@ export function AgentDetailModal({
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [suggestedTags, setSuggestedTags] = useState<Tag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+  const [capabilities, setCapabilities] = useState<AgentCapability[]>([]);
+  const [loadingCapabilities, setLoadingCapabilities] = useState(false);
 
   useEffect(() => {
     if (isOpen && agent) {
       loadTags();
+      loadCapabilities();
     }
   }, [isOpen, agent]);
 
@@ -47,6 +50,19 @@ export function AgentDetailModal({
       console.error('Failed to load tags:', error);
     } finally {
       setLoadingTags(false);
+    }
+  };
+
+  const loadCapabilities = async () => {
+    if (!agent) return;
+    setLoadingCapabilities(true);
+    try {
+      const caps = await api.getAgentCapabilities(agent.id, true);
+      setCapabilities(caps);
+    } catch (error) {
+      console.error('Failed to load capabilities:', error);
+    } finally {
+      setLoadingCapabilities(false);
     }
   };
 
@@ -179,6 +195,44 @@ export function AgentDetailModal({
                 maxTags={3}
                 onTagsChange={handleTagsChange}
               />
+            )}
+          </div>
+
+          {/* Capabilities */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <Key className="h-4 w-4" />
+              Capabilities
+            </h3>
+            {loadingCapabilities ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400">Loading capabilities...</div>
+            ) : capabilities.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {capabilities.map((capability) => (
+                  <div
+                    key={capability.id}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
+                  >
+                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100 truncate">
+                        {capability.capabilityType}
+                      </p>
+                      {capability.capabilityScope && Object.keys(capability.capabilityScope).length > 0 && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 truncate">
+                          {Object.entries(capability.capabilityScope)
+                            .map(([key, value]) => `${key}: ${value}`)
+                            .join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                No capabilities registered
+              </div>
             )}
           </div>
 

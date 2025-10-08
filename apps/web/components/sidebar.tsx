@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Activity,
+  Download,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -50,6 +51,12 @@ const navigationBase: NavSection[] = [
         name: 'API Keys',
         href: '/dashboard/api-keys',
         icon: Key,
+        roles: ['admin', 'manager', 'member'],
+      },
+      {
+        name: 'Download SDK',
+        href: '/dashboard/sdk',
+        icon: Download,
         roles: ['admin', 'manager', 'member'],
       },
       // Manager+ can access monitoring and security

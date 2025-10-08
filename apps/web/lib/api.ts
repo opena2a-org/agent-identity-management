@@ -553,6 +553,11 @@ class APIClient {
     return this.request(`/api/v1/agents/${agentId}/tags/suggestions`)
   }
 
+  // Agent Capabilities
+  async getAgentCapabilities(agentId: string, activeOnly: boolean = true): Promise<AgentCapability[]> {
+    return this.request(`/api/v1/agents/${agentId}/capabilities?activeOnly=${activeOnly}`)
+  }
+
   // MCP Server Tags
   async getMCPServerTags(mcpServerId: string): Promise<Tag[]> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`)
@@ -573,6 +578,23 @@ class APIClient {
 
   async suggestTagsForMCPServer(mcpServerId: string): Promise<Tag[]> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags/suggestions`)
+  }
+
+  // SDK Download
+  async downloadSDK(): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/api/v1/sdk/download`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${this.getToken()}`,
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to download SDK')
+    }
+
+    return response.blob()
   }
 }
 
