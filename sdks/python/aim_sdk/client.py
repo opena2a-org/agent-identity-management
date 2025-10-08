@@ -537,6 +537,8 @@ def register_agent(
     repository_url: Optional[str] = None,
     documentation_url: Optional[str] = None,
     organization_domain: Optional[str] = None,
+    talks_to: Optional[list] = None,
+    capabilities: Optional[list] = None,
     force_new: bool = False
 ) -> AIMClient:
     """
@@ -559,6 +561,10 @@ def register_agent(
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
         organization_domain: Organization domain for auto-approval
+        talks_to: List of MCP server IDs/names this agent communicates with
+                  Example: ["filesystem-mcp", "github-mcp", "database-mcp"]
+        capabilities: List of capabilities this agent has
+                      Example: ["read_files", "write_files", "execute_code"]
         force_new: Force new registration even if credentials exist
 
     Returns:
@@ -568,6 +574,13 @@ def register_agent(
         Using downloaded SDK (zero config):
         >>> from aim_sdk import register_agent
         >>> agent = register_agent("my-agent")  # URL auto-detected!
+
+        With capabilities and MCP servers:
+        >>> agent = register_agent(
+        ...     "my-agent",
+        ...     talks_to=["filesystem-mcp", "github-mcp"],
+        ...     capabilities=["read_files", "create_pull_requests"]
+        ... )
 
         Manual usage:
         >>> agent = register_agent("my-agent", "https://aim.example.com")
@@ -626,6 +639,10 @@ def register_agent(
         registration_data["documentation_url"] = documentation_url
     if organization_domain:
         registration_data["organization_domain"] = organization_domain
+    if talks_to:
+        registration_data["talks_to"] = talks_to
+    if capabilities:
+        registration_data["capabilities"] = capabilities
 
     # Try to use OAuth authentication if SDK credentials available
     oauth_manager = OAuthTokenManager()
