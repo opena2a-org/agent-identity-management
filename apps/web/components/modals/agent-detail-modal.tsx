@@ -43,9 +43,9 @@ export function AgentDetailModal({
         api.listTags(),
         api.suggestTagsForAgent(agent.id),
       ]);
-      setAgentTags(currentTags);
-      setAvailableTags(allTags);
-      setSuggestedTags(suggestions);
+      setAgentTags(currentTags || []);
+      setAvailableTags(allTags || []);
+      setSuggestedTags(suggestions || []);
     } catch (error) {
       console.error('Failed to load tags:', error);
     } finally {
@@ -58,7 +58,7 @@ export function AgentDetailModal({
     setLoadingCapabilities(true);
     try {
       const caps = await api.getAgentCapabilities(agent.id, true);
-      setCapabilities(caps);
+      setCapabilities(caps || []);
     } catch (error) {
       console.error('Failed to load capabilities:', error);
     } finally {
@@ -206,7 +206,7 @@ export function AgentDetailModal({
             </h3>
             {loadingCapabilities ? (
               <div className="text-sm text-gray-500 dark:text-gray-400">Loading capabilities...</div>
-            ) : capabilities.length > 0 ? (
+            ) : capabilities && capabilities.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {capabilities.map((capability) => (
                   <div
