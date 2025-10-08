@@ -8,6 +8,18 @@ import (
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
+// Trust score penalty constants
+const (
+	// FirstViolationPenalty is the penalty for first-time drift violation (-5 points)
+	FirstViolationPenalty = 5.0
+
+	// RepeatedViolationPenalty is the penalty for repeated drift violations (-10 points)
+	RepeatedViolationPenalty = 10.0
+
+	// MinimumTrustScore is the lowest trust score allowed
+	MinimumTrustScore = 0.0
+)
+
 // DriftDetectionService handles configuration drift detection for agents
 type DriftDetectionService struct {
 	agentRepo domain.AgentRepository
@@ -63,6 +75,12 @@ func (s *DriftDetectionService) DetectDrift(
 	if err != nil {
 		// Log error but don't fail the drift detection
 		fmt.Printf("Failed to create drift alert: %v\n", err)
+	}
+
+	// 6. Apply trust score penalty
+	if err := s.applyTrustScorePenalty(agent, mcpDrift, capabilityDrift); err != nil {
+		// Log error but don't fail the drift detection
+		fmt.Printf("Failed to apply trust score penalty: %v\n", err)
 	}
 
 	return &DriftResult{
@@ -135,6 +153,40 @@ func (s *DriftDetectionService) createDriftAlert(
 	}
 
 	return alert, nil
+}
+
+// applyTrustScorePenalty reduces agent trust score based on drift severity
+func (s *DriftDetectionService) applyTrustScorePenalty(
+	agent *domain.Agent,
+	mcpDrift []string,
+	capabilityDrift []string,
+) error {
+	// Calculate penalty based on violation history
+	// capability_violation_count is incremented by UpdateTrustScore
+	penalty := FirstViolationPenalty
+
+	// If agent already has violations, use higher penalty
+	if agent.CapabilityViolationCount > 0 {
+		penalty = RepeatedViolationPenalty
+	}
+
+	// Calculate new trust score
+	newScore := agent.TrustScore - penalty
+
+	// Ensure score doesn't go below minimum
+	if newScore < MinimumTrustScore {
+		newScore = MinimumTrustScore
+	}
+
+	// Update agent trust score
+	if err := s.agentRepo.UpdateTrustScore(agent.ID, newScore); err != nil {
+		return fmt.Errorf("failed to update trust score: %w", err)
+	}
+
+	fmt.Printf("✅ Applied trust score penalty to agent %s: %.2f -> %.2f (-%0.f points)\n",
+		agent.Name, agent.TrustScore, newScore, penalty)
+
+	return nil
 }
 
 // detectArrayDrift finds items in 'runtime' that are not in 'registered'

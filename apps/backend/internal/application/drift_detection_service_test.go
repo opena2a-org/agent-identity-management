@@ -167,16 +167,20 @@ func TestDetectDrift_MCPServerDrift(t *testing.T) {
 	agentID := uuid.New()
 	orgID := uuid.New()
 
-	// Agent with registered MCP servers
+	// Agent with registered MCP servers (first violation)
 	agent := &domain.Agent{
-		ID:             agentID,
-		OrganizationID: orgID,
-		Name:           "test-agent",
-		TalksTo:        []string{"filesystem-mcp"},
+		ID:                        agentID,
+		OrganizationID:            orgID,
+		Name:                      "test-agent",
+		TalksTo:                   []string{"filesystem-mcp"},
+		TrustScore:                85.0,
+		CapabilityViolationCount:  0, // First violation
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
 	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	// Expect first violation penalty: 85.0 - 5.0 = 80.0
+	mockAgentRepo.On("UpdateTrustScore", agentID, 80.0).Return(nil)
 
 	// Test: Runtime includes unregistered MCP server
 	result, err := service.DetectDrift(
@@ -215,14 +219,18 @@ func TestDetectDrift_MultipleUnauthorizedServers(t *testing.T) {
 
 	// Agent with NO registered MCP servers
 	agent := &domain.Agent{
-		ID:             agentID,
-		OrganizationID: orgID,
-		Name:           "rogue-agent",
-		TalksTo:        []string{},
+		ID:                       agentID,
+		OrganizationID:           orgID,
+		Name:                     "rogue-agent",
+		TalksTo:                  []string{},
+		TrustScore:               90.0,
+		CapabilityViolationCount: 0,
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
 	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	// First violation penalty: 90.0 - 5.0 = 85.0
+	mockAgentRepo.On("UpdateTrustScore", agentID, 85.0).Return(nil)
 
 	// Test: Runtime includes multiple unregistered MCP servers
 	result, err := service.DetectDrift(
@@ -242,6 +250,86 @@ func TestDetectDrift_MultipleUnauthorizedServers(t *testing.T) {
 	assert.Contains(t, result.Alert.Description, "unauthorized-mcp-1")
 	assert.Contains(t, result.Alert.Description, "unauthorized-mcp-2")
 	assert.Contains(t, result.Alert.Description, "malicious-mcp")
+
+	mockAgentRepo.AssertExpectations(t)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestDetectDrift_RepeatedViolation(t *testing.T) {
+	// Setup
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+	service := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	// Agent with previous violations
+	agent := &domain.Agent{
+		ID:                       agentID,
+		OrganizationID:           orgID,
+		Name:                     "repeat-offender",
+		TalksTo:                  []string{"filesystem-mcp"},
+		TrustScore:               70.0,
+		CapabilityViolationCount: 2, // Already has violations
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	// Repeated violation penalty: 70.0 - 10.0 = 60.0
+	mockAgentRepo.On("UpdateTrustScore", agentID, 60.0).Return(nil)
+
+	// Test: Repeated drift violation
+	result, err := service.DetectDrift(
+		agentID,
+		[]string{"filesystem-mcp", "malicious-mcp"},
+		[]string{},
+	)
+
+	// Verify
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.DriftDetected)
+	assert.Equal(t, []string{"malicious-mcp"}, result.MCPServerDrift)
+
+	mockAgentRepo.AssertExpectations(t)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestDetectDrift_TrustScoreFloor(t *testing.T) {
+	// Setup
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+	service := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	// Agent with very low trust score
+	agent := &domain.Agent{
+		ID:                       agentID,
+		OrganizationID:           orgID,
+		Name:                     "low-trust-agent",
+		TalksTo:                  []string{"filesystem-mcp"},
+		TrustScore:               3.0, // Very low
+		CapabilityViolationCount: 5,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	// Should hit floor: 3.0 - 10.0 = -7.0 -> 0.0 (minimum)
+	mockAgentRepo.On("UpdateTrustScore", agentID, 0.0).Return(nil)
+
+	// Test: Drift violation should not go below 0
+	result, err := service.DetectDrift(
+		agentID,
+		[]string{"filesystem-mcp", "evil-mcp"},
+		[]string{},
+	)
+
+	// Verify
+	assert.NoError(t, err)
+	assert.True(t, result.DriftDetected)
 
 	mockAgentRepo.AssertExpectations(t)
 	mockAlertRepo.AssertExpectations(t)
