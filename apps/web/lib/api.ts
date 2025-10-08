@@ -73,6 +73,25 @@ export interface AgentCapability {
   updatedAt: string
 }
 
+export interface SDKToken {
+  id: string
+  userId: string
+  organizationId: string
+  tokenId: string
+  deviceName?: string
+  deviceFingerprint?: string
+  ipAddress?: string
+  userAgent?: string
+  lastUsedAt?: string
+  lastIpAddress?: string
+  usageCount: number
+  createdAt: string
+  expiresAt: string
+  revokedAt?: string
+  revokeReason?: string
+  metadata?: Record<string, any>
+}
+
 class APIClient {
   private baseURL: string
   private token: string | null = null
@@ -578,6 +597,29 @@ class APIClient {
 
   async suggestTagsForMCPServer(mcpServerId: string): Promise<Tag[]> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags/suggestions`)
+  }
+
+  // SDK Tokens
+  async listSDKTokens(includeRevoked = false): Promise<{ tokens: SDKToken[] }> {
+    return this.request(`/api/v1/users/me/sdk-tokens?include_revoked=${includeRevoked}`)
+  }
+
+  async getActiveSDKTokenCount(): Promise<{ count: number }> {
+    return this.request('/api/v1/users/me/sdk-tokens/count')
+  }
+
+  async revokeSDKToken(tokenId: string, reason: string): Promise<void> {
+    return this.request(`/api/v1/users/me/sdk-tokens/${tokenId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    })
+  }
+
+  async revokeAllSDKTokens(reason: string): Promise<void> {
+    return this.request('/api/v1/users/me/sdk-tokens/revoke-all', {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    })
   }
 
   // SDK Download

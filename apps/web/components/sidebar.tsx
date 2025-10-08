@@ -18,6 +18,7 @@ import {
   X,
   Activity,
   Download,
+  Lock,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -57,6 +58,12 @@ const navigationBase: NavSection[] = [
         name: 'Download SDK',
         href: '/dashboard/sdk',
         icon: Download,
+        roles: ['admin', 'manager', 'member'],
+      },
+      {
+        name: 'SDK Tokens',
+        href: '/dashboard/sdk-tokens',
+        icon: Lock,
         roles: ['admin', 'manager', 'member'],
       },
       // Manager+ can access monitoring and security

@@ -45,6 +45,7 @@ type Agent struct {
 	LastCapabilityCheckAt    *time.Time  `json:"last_capability_check_at"`
 	CapabilityViolationCount int         `json:"capability_violation_count"`
 	IsCompromised            bool        `json:"is_compromised"`
+	TalksTo                  []string    `json:"talks_to,omitempty"` // List of MCP server IDs/names this agent can communicate with
 	CreatedAt                time.Time   `json:"created_at"`
 	UpdatedAt                time.Time   `json:"updated_at"`
 	CreatedBy                uuid.UUID   `json:"created_by"`
