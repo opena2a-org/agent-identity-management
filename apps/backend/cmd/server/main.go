@@ -255,6 +255,7 @@ type Repositories struct {
 	Security          *repository.SecurityRepository
 	Webhook           *repository.WebhookRepository
 	VerificationEvent *repository.VerificationEventRepositorySimple
+	Tag               *repository.TagRepository
 }
 
 func initRepositories(db *sql.DB) *Repositories {
@@ -270,6 +271,7 @@ func initRepositories(db *sql.DB) *Repositories {
 		Security:          repository.NewSecurityRepository(db),
 		Webhook:           repository.NewWebhookRepository(db),
 		VerificationEvent: repository.NewVerificationEventRepository(db),
+		Tag:               repository.NewTagRepository(db),
 	}
 }
 
@@ -287,6 +289,7 @@ type Services struct {
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
 	OAuth             *application.OAuthService
+	Tag               *application.TagService
 }
 
 func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
@@ -367,6 +370,12 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		oauthProviders,
 	)
 
+	tagService := application.NewTagService(
+		repos.Tag,
+		repos.Agent,
+		repos.MCPServer,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -381,6 +390,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
 		OAuth:             oauthService,
+		Tag:               tagService,
 	}, keyVault
 }
 
@@ -397,7 +407,8 @@ type Handlers struct {
 	Webhook           *handlers.WebhookHandler
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
-	PublicAgent       *handlers.PublicAgentHandler // ✅ NEW: Public self-registration
+	PublicAgent       *handlers.PublicAgentHandler
+	Tag               *handlers.TagHandler
 }
 
 func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -461,6 +472,9 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 			services.Agent,
 			services.Auth,
 			keyVault,
+		),
+		Tag: handlers.NewTagHandler(
+			services.Tag,
 		),
 	}
 }
@@ -694,6 +708,26 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	adminRegistrations.Get("/", h.OAuth.ListPendingRegistrationRequests)
 	adminRegistrations.Post("/:id/approve", h.OAuth.ApproveRegistrationRequest)
 	adminRegistrations.Post("/:id/reject", h.OAuth.RejectRegistrationRequest)
+
+	// Tag routes (authentication required)
+	tags := v1.Group("/tags")
+	tags.Use(middleware.AuthMiddleware(jwtService))
+	tags.Use(middleware.RateLimitMiddleware())
+	tags.Get("/", h.Tag.GetTags)
+	tags.Post("/", middleware.MemberMiddleware(), h.Tag.CreateTag)
+	tags.Delete("/:id", middleware.ManagerMiddleware(), h.Tag.DeleteTag)
+
+	// Agent tag routes (under /agents/:id/tags)
+	agents.Get("/:id/tags", h.Tag.GetAgentTags)
+	agents.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToAgent)
+	agents.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromAgent)
+	agents.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForAgent)
+
+	// MCP server tag routes (under /mcp-servers/:id/tags)
+	mcpServers.Get("/:id/tags", h.Tag.GetMCPServerTags)
+	mcpServers.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToMCPServer)
+	mcpServers.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromMCPServer)
+	mcpServers.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForMCPServer)
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {
