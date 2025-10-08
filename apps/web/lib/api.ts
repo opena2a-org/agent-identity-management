@@ -10,6 +10,7 @@ export interface Agent {
   status: 'pending' | 'verified' | 'suspended' | 'revoked'
   version: string
   trust_score: number
+  talks_to?: string[]
   created_at: string
   updated_at: string
 }

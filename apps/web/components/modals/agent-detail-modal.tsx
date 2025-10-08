@@ -236,6 +236,32 @@ export function AgentDetailModal({
             )}
           </div>
 
+          {/* Talks To (MCP Servers) */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Talks To (MCP Servers)
+            </h3>
+            {agent.talks_to && agent.talks_to.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {agent.talks_to.map((mcpServer, index) => (
+                  <div
+                    key={index}
+                    className="px-3 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md text-sm font-medium text-purple-900 dark:text-purple-100"
+                  >
+                    {mcpServer}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                No MCP servers configured
+              </div>
+            )}
+          </div>
+
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-6">
             <div>
