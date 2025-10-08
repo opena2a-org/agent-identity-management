@@ -20,6 +20,7 @@ from .exceptions import (
     ActionDeniedError,
     ConfigurationError
 )
+from .oauth import OAuthTokenManager, load_sdk_credentials
 
 
 class AIMClient:
@@ -528,7 +529,7 @@ def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
 
 def register_agent(
     name: str,
-    aim_url: str,
+    aim_url: Optional[str] = None,
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     agent_type: str = "ai_agent",
@@ -544,9 +545,13 @@ def register_agent(
     This is the magic function that makes AIM "Stripe for AI Agent Identity".
     Call this once and your agent is registered, verified, and ready to use.
 
+    When using the downloaded SDK, aim_url is optional - it will be auto-detected
+    from your embedded credentials!
+
     Args:
         name: Agent name (unique identifier)
         aim_url: AIM server URL (e.g., "https://aim.example.com")
+                 Optional if using downloaded SDK with embedded credentials
         display_name: Human-readable display name (defaults to name)
         description: Agent description (defaults to auto-generated)
         agent_type: "ai_agent" or "mcp_server" (default: "ai_agent")
@@ -559,17 +564,35 @@ def register_agent(
     Returns:
         AIMClient instance ready to use
 
-    Example:
+    Examples:
+        Using downloaded SDK (zero config):
         >>> from aim_sdk import register_agent
+        >>> agent = register_agent("my-agent")  # URL auto-detected!
+
+        Manual usage:
         >>> agent = register_agent("my-agent", "https://aim.example.com")
+
+        With decorator:
         >>> @agent.perform_action("send_email")
         ... def send_notification():
         ...     send_email("admin@example.com", "Hello from AIM!")
 
     Raises:
-        ConfigurationError: If registration fails
+        ConfigurationError: If registration fails or aim_url not provided/detected
         AuthenticationError: If credentials are invalid
     """
+    # Auto-detect AIM URL from SDK credentials if not provided
+    if not aim_url:
+        sdk_creds = load_sdk_credentials()
+        if sdk_creds and 'aim_url' in sdk_creds:
+            aim_url = sdk_creds['aim_url']
+            print(f"✨ Auto-detected AIM URL: {aim_url}")
+        else:
+            raise ConfigurationError(
+                "aim_url parameter is required. "
+                "Either provide it explicitly or download the SDK from AIM dashboard "
+                "which includes auto-configuration."
+            )
     # Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
@@ -604,14 +627,24 @@ def register_agent(
     if organization_domain:
         registration_data["organization_domain"] = organization_domain
 
-    # Call public registration endpoint (no auth required!)
+    # Try to use OAuth authentication if SDK credentials available
+    oauth_manager = OAuthTokenManager()
+    headers = {"Content-Type": "application/json"}
+
+    if oauth_manager.has_credentials():
+        # SDK was downloaded with embedded credentials - use OAuth auth
+        auth_headers = oauth_manager.get_auth_header()
+        headers.update(auth_headers)
+        print("🔐 Using OAuth authentication from SDK credentials")
+
+    # Call public registration endpoint
     url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
 
     try:
         response = requests.post(
             url,
             json=registration_data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             timeout=30
         )
 
