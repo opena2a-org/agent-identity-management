@@ -12,10 +12,11 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Search, Shield, Users, Mail, Check, X, Clock, Ban, UserX, Settings } from 'lucide-react'
+import { Search, Shield, Users, Mail, Check, X, Clock, Ban, UserX, Settings, Key, Bot, Server, ArrowRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import Link from 'next/link'
 
 interface User {
   id: string
@@ -69,10 +70,12 @@ export default function UsersPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [autoApproveSSO, setAutoApproveSSO] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [apiKeysCount, setApiKeysCount] = useState(0)
 
   useEffect(() => {
     fetchUsers()
     fetchSettings()
+    fetchAPIKeysCount()
   }, [])
 
   const fetchUsers = async () => {
@@ -92,6 +95,15 @@ export default function UsersPage() {
       setAutoApproveSSO(settings.auto_approve_sso)
     } catch (error) {
       console.error('Failed to fetch settings:', error)
+    }
+  }
+
+  const fetchAPIKeysCount = async () => {
+    try {
+      const { api_keys } = await api.listAPIKeys()
+      setApiKeysCount(api_keys?.length || 0)
+    } catch (error) {
+      console.error('Failed to fetch API keys count:', error)
     }
   }
 
@@ -178,12 +190,32 @@ export default function UsersPage() {
       <div>
         <h1 className="text-3xl font-bold">User Management</h1>
         <p className="text-muted-foreground mt-1">
-          Manage user accounts and permissions
+          Manage <strong>human users</strong> who access the AIM dashboard
         </p>
+        <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+          <span>Also manage programmatic identities:</span>
+          <Link
+            href="/dashboard/agents"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            <Bot className="h-4 w-4" />
+            AI Agents
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+          <span className="text-muted-foreground">•</span>
+          <Link
+            href="/dashboard/mcp"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            <Server className="h-4 w-4" />
+            MCP Servers
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -214,6 +246,23 @@ export default function UsersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{organizations?.length || 0}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Key className="h-4 w-4 text-blue-600" />
+              API Keys Issued
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{apiKeysCount}</div>
+            <Link
+              href="/dashboard/api-keys"
+              className="text-xs text-blue-600 hover:text-blue-700 hover:underline mt-1 inline-block"
+            >
+              Manage API Keys →
+            </Link>
           </CardContent>
         </Card>
       </div>
