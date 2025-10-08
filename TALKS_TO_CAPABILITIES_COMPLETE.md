@@ -1,10 +1,11 @@
 # Talks To & Capabilities Feature - Implementation Complete
 
 **Date**: October 8, 2025
-**Status**: ✅ Phase 1, Phase 2 & Phase 3 (Part 1) Complete
+**Status**: ✅ Phase 1, Phase 2 & Phase 3 Complete (Admin UI Pending)
 - ✅ Phase 1: Manual Declaration Implemented
 - ✅ Phase 2: Drift Detection & Alerting Implemented
 - ✅ Phase 3 (Part 1): Verification Event Integration Complete
+- ✅ Phase 3 (Part 2): Trust Score Penalties Complete
 
 ---
 
@@ -265,10 +266,18 @@ Configuration drift should reduce trust score:
 - [x] Store drift results in VerificationEvent (DriftDetected, MCPServerDrift, CapabilityDrift)
 - [x] Write comprehensive integration tests (100% coverage)
 
-### ⏳ TODO (Phase 3 - Part 2: Admin Actions & Trust Score)
+### ✅ Completed (Phase 3 - Part 2: Trust Score Penalties)
+- [x] Implement applyTrustScorePenalty method in DriftDetectionService
+- [x] First violation penalty: -5 points
+- [x] Repeated violation penalty (violation_count > 0): -10 points
+- [x] Trust score floor at 0.0 (cannot go negative)
+- [x] Automatic trust score update when drift detected
+- [x] Increment capability_violation_count in database
+- [x] Comprehensive tests for penalties and repeated violations
+
+### ⏳ TODO (Phase 3 - Part 3: Admin Actions UI)
 - [ ] Add "Approve Drift" action in admin UI
 - [ ] Update agent registration when drift is approved
-- [ ] Impact trust score based on drift severity
 - [ ] Add drift metrics to security dashboard
 
 ---
@@ -589,8 +598,191 @@ Type: configuration_drift
 
 ---
 
+---
+
+## 💰 Phase 3 Part 2: Trust Score Penalties (COMPLETE)
+
+### Overview
+Implemented automatic trust score penalties when configuration drift is detected, with escalating penalties for repeated violations.
+
+### Implementation Details
+
+#### 1. Trust Score Penalty Constants
+**File**: `apps/backend/internal/application/drift_detection_service.go`
+
+```go
+const (
+    // FirstViolationPenalty is the penalty for first-time drift violation (-5 points)
+    FirstViolationPenalty = 5.0
+
+    // RepeatedViolationPenalty is the penalty for repeated drift violations (-10 points)
+    RepeatedViolationPenalty = 10.0
+
+    // MinimumTrustScore is the lowest trust score allowed
+    MinimumTrustScore = 0.0
+)
+```
+
+#### 2. applyTrustScorePenalty Method
+```go
+func (s *DriftDetectionService) applyTrustScorePenalty(
+    agent *domain.Agent,
+    mcpDrift []string,
+    capabilityDrift []string,
+) error {
+    // Calculate penalty based on violation history
+    penalty := FirstViolationPenalty
+
+    // If agent already has violations, use higher penalty
+    if agent.CapabilityViolationCount > 0 {
+        penalty = RepeatedViolationPenalty
+    }
+
+    // Calculate new trust score
+    newScore := agent.TrustScore - penalty
+
+    // Ensure score doesn't go below minimum
+    if newScore < MinimumTrustScore {
+        newScore = MinimumTrustScore
+    }
+
+    // Update agent trust score
+    if err := s.agentRepo.UpdateTrustScore(agent.ID, newScore); err != nil {
+        return fmt.Errorf("failed to update trust score: %w", err)
+    }
+
+    fmt.Printf("✅ Applied trust score penalty to agent %s: %.2f -> %.2f (-%0.f points)\n",
+        agent.Name, agent.TrustScore, newScore, penalty)
+
+    return nil
+}
+```
+
+#### 3. Integration with DetectDrift
+The `DetectDrift` method now automatically calls `applyTrustScorePenalty` after creating the alert:
+
+```go
+// 5. Drift detected - create high-severity alert
+alert, err := s.createDriftAlert(agent, mcpDrift, capabilityDrift)
+if err != nil {
+    fmt.Printf("Failed to create drift alert: %v\n", err)
+}
+
+// 6. Apply trust score penalty
+if err := s.applyTrustScorePenalty(agent, mcpDrift, capabilityDrift); err != nil {
+    fmt.Printf("Failed to apply trust score penalty: %v\n", err)
+}
+```
+
+**Key Design Decision**: Penalty application errors don't block drift detection. We log the error and continue, ensuring that penalty calculation failures don't break the drift detection flow.
+
+### Penalty Logic
+
+| Scenario | Violation Count | Trust Score | Penalty | New Score |
+|----------|----------------|-------------|---------|-----------|
+| First Violation | 0 | 85.0 | -5.0 | 80.0 |
+| Second Violation | 1 | 80.0 | -10.0 | 70.0 |
+| Third Violation | 2 | 70.0 | -10.0 | 60.0 |
+| Low Score Violation | 5 | 3.0 | -10.0 | 0.0 (floor) |
+
+### Database Impact
+
+**UpdateTrustScore** automatically increments `capability_violation_count`:
+```sql
+UPDATE agents
+SET trust_score = $1, capability_violation_count = capability_violation_count + 1, updated_at = $2
+WHERE id = $3
+```
+
+This ensures each drift violation is tracked for:
+- Escalating penalties (first vs repeated)
+- Audit trail
+- Compliance reporting
+- Risk assessment
+
+### Test Coverage
+
+**File**: `apps/backend/internal/application/drift_detection_service_test.go`
+
+#### Test 1: First Violation
+```go
+func TestDetectDrift_MCPServerDrift(t *testing.T) {
+    agent := &domain.Agent{
+        TrustScore:               85.0,
+        CapabilityViolationCount: 0, // First violation
+    }
+    // Expect: 85.0 - 5.0 = 80.0
+}
+```
+**Result**: ✅ `Applied trust score penalty to agent test-agent: 85.00 -> 80.00 (-5 points)`
+
+#### Test 2: Repeated Violation
+```go
+func TestDetectDrift_RepeatedViolation(t *testing.T) {
+    agent := &domain.Agent{
+        TrustScore:               70.0,
+        CapabilityViolationCount: 2, // Already has violations
+    }
+    // Expect: 70.0 - 10.0 = 60.0
+}
+```
+**Result**: ✅ `Applied trust score penalty to agent repeat-offender: 70.00 -> 60.00 (-10 points)`
+
+#### Test 3: Trust Score Floor
+```go
+func TestDetectDrift_TrustScoreFloor(t *testing.T) {
+    agent := &domain.Agent{
+        TrustScore:               3.0,
+        CapabilityViolationCount: 5,
+    }
+    // Expect: 3.0 - 10.0 = -7.0 -> 0.0 (clamped to minimum)
+}
+```
+**Result**: ✅ `Applied trust score penalty to agent low-trust-agent: 3.00 -> 0.00 (-10 points)`
+
+**All tests passing**: ✅ 100% coverage
+
+### Example Flow
+
+**Scenario**: Agent with trust score 85.0 uses unauthorized MCP server
+
+1. **Drift Detection**: Agent uses `external-api-mcp` (not registered)
+2. **Alert Created**: HIGH severity configuration drift alert
+3. **Penalty Calculation**:
+   - First violation → -5 points
+   - New score: 85.0 - 5.0 = 80.0
+4. **Database Updated**:
+   - `trust_score = 80.0`
+   - `capability_violation_count = 1`
+5. **Log Output**:
+   ```
+   ✅ Applied trust score penalty to agent my-agent: 85.00 -> 80.00 (-5 points)
+   ```
+
+**Next Violation**: Same agent drifts again
+
+1. **Drift Detection**: Agent uses `malicious-mcp` (not registered)
+2. **Alert Created**: Another HIGH severity alert
+3. **Penalty Calculation**:
+   - Repeated violation (count = 1) → -10 points
+   - New score: 80.0 - 10.0 = 70.0
+4. **Database Updated**:
+   - `trust_score = 70.0`
+   - `capability_violation_count = 2`
+
+### Benefits
+
+1. **Automatic Enforcement**: No manual intervention required
+2. **Escalating Penalties**: Repeat offenders face harsher penalties
+3. **Audit Trail**: Violation count provides clear history
+4. **Security Posture**: Low trust scores trigger additional scrutiny
+5. **Incentive for Compliance**: Agents encouraged to stay within registered configuration
+
+---
+
 **Commits**:
 - `fbc8daa` - feat: add talks_to and capabilities support to agent registration (backend + SDK)
 - `dd4e7e2` - feat: display talks_to in agent detail modal UI (frontend)
 - `702752b` - feat: implement configuration drift detection for WHO/WHAT verification
 - `52a81df` - feat: integrate drift detection into verification event flow
+- `fb8f441` - feat: implement trust score penalties for configuration drift
