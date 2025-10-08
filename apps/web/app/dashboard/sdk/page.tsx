@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Code, Terminal, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
+import Link from 'next/link'
 
 export default function SDKDownloadPage() {
   const [downloading, setDownloading] = useState(false)
@@ -109,12 +110,30 @@ export default function SDKDownloadPage() {
         <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <CheckCircle className="h-4 w-4 text-green-600" />
-            <span>Credentials valid for 1 year</span>
+            <span>Credentials valid for 90 days</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <span>Auto-authentication included</span>
           </div>
+        </div>
+      </div>
+
+      {/* Security Notice */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 flex items-start gap-3">
+        <Shield className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="font-medium text-blue-900">Security Best Practices</p>
+          <p className="text-sm text-blue-700 mt-1">
+            Each SDK download generates a unique authentication token. You can monitor and revoke tokens anytime.
+          </p>
+          <Link
+            href="/dashboard/sdk-tokens"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium mt-2"
+          >
+            <Lock className="h-4 w-4" />
+            Manage SDK Tokens →
+          </Link>
         </div>
       </div>
 
