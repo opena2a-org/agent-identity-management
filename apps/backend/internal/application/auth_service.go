@@ -2,8 +2,11 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/domain"
@@ -12,18 +15,21 @@ import (
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo domain.UserRepository
-	orgRepo  domain.OrganizationRepository
+	userRepo   domain.UserRepository
+	orgRepo    domain.OrganizationRepository
+	apiKeyRepo domain.APIKeyRepository
 }
 
 // NewAuthService creates a new auth service
 func NewAuthService(
 	userRepo domain.UserRepository,
 	orgRepo domain.OrganizationRepository,
+	apiKeyRepo domain.APIKeyRepository,
 ) *AuthService {
 	return &AuthService{
-		userRepo: userRepo,
-		orgRepo:  orgRepo,
+		userRepo:   userRepo,
+		orgRepo:    orgRepo,
+		apiKeyRepo: apiKeyRepo,
 	}
 }
 
@@ -280,4 +286,71 @@ func (s *AuthService) ChangePassword(
 	}
 
 	return nil
+}
+
+// ValidateAPIKeyResponse contains API key validation result
+type ValidateAPIKeyResponse struct {
+	User         *domain.User
+	Organization *domain.Organization
+	APIKey       *domain.APIKey
+}
+
+// ValidateAPIKey validates an API key and returns the associated user and organization
+func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*ValidateAPIKeyResponse, error) {
+	// Hash the API key using SHA-256
+	hash := sha256.Sum256([]byte(apiKey))
+	hashedKey := hex.EncodeToString(hash[:])
+
+	// Retrieve API key from database
+	key, err := s.apiKeyRepo.GetByHash(hashedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve API key: %w", err)
+	}
+
+	if key == nil {
+		return nil, fmt.Errorf("invalid API key")
+	}
+
+	// Validate API key is active
+	if !key.IsActive {
+		return nil, fmt.Errorf("API key is inactive")
+	}
+
+	// Validate API key has not expired
+	if key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("API key has expired")
+	}
+
+	// Retrieve the user who owns the API key
+	user, err := s.userRepo.GetByID(key.CreatedBy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve user: %w", err)
+	}
+
+	if user == nil {
+		return nil, fmt.Errorf("user not found for API key")
+	}
+
+	// Retrieve the organization
+	org, err := s.orgRepo.GetByID(key.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve organization: %w", err)
+	}
+
+	if org == nil {
+		return nil, fmt.Errorf("organization not found for API key")
+	}
+
+	// Update last_used_at timestamp
+	if err := s.apiKeyRepo.UpdateLastUsed(key.ID, time.Now()); err != nil {
+		// Log error but don't fail the request
+		// This is non-critical
+		fmt.Printf("Warning: failed to update last_used_at for API key %s: %v\n", key.ID, err)
+	}
+
+	return &ValidateAPIKeyResponse{
+		User:         user,
+		Organization: org,
+		APIKey:       key,
+	}, nil
 }

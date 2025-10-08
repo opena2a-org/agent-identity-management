@@ -307,6 +307,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 	authService := application.NewAuthService(
 		repos.User,
 		repos.Organization,
+		repos.APIKey,
 	)
 
 	adminService := application.NewAdminService(

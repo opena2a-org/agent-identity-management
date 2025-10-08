@@ -58,7 +58,7 @@ func (s *TagService) CreateTag(ctx context.Context, input CreateTagInput) (*doma
 		CreatedBy:      input.CreatedBy,
 	}
 
-	if err := s.tagRepo.Create(tag); err != nil {
+	if err := s.tagRepo.Create(ctx, tag); err != nil {
 		return nil, fmt.Errorf("failed to create tag: %w", err)
 	}
 
@@ -66,26 +66,17 @@ func (s *TagService) CreateTag(ctx context.Context, input CreateTagInput) (*doma
 }
 
 // GetTagsByOrganization retrieves all tags for an organization
-func (s *TagService) GetTagsByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.Tag, error) {
-	tags, err := s.tagRepo.GetByOrganization(orgID)
+func (s *TagService) GetTagsByOrganization(ctx context.Context, orgID uuid.UUID, category *domain.TagCategory) ([]*domain.Tag, error) {
+	tags, err := s.tagRepo.List(ctx, orgID, category)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tags: %w", err)
 	}
 	return tags, nil
 }
 
-// GetTagsByCategory retrieves tags by category for an organization
-func (s *TagService) GetTagsByCategory(ctx context.Context, orgID uuid.UUID, category domain.TagCategory) ([]*domain.Tag, error) {
-	tags, err := s.tagRepo.GetByCategory(orgID, category)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tags by category: %w", err)
-	}
-	return tags, nil
-}
-
 // DeleteTag deletes a tag (only if not in use)
 func (s *TagService) DeleteTag(ctx context.Context, tagID uuid.UUID) error {
-	if err := s.tagRepo.Delete(tagID); err != nil {
+	if err := s.tagRepo.Delete(ctx, tagID); err != nil {
 		return fmt.Errorf("failed to delete tag: %w", err)
 	}
 	return nil
@@ -101,7 +92,7 @@ func (s *TagService) AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagI
 
 	// Verify all tags exist and belong to same organization
 	for _, tagID := range tagIDs {
-		tag, err := s.tagRepo.GetByID(tagID)
+		tag, err := s.tagRepo.GetByID(ctx, tagID)
 		if err != nil {
 			return fmt.Errorf("tag %s not found: %w", tagID, err)
 		}
@@ -111,7 +102,7 @@ func (s *TagService) AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagI
 	}
 
 	// Add tags (database trigger enforces Community Edition 3-tag limit)
-	if err := s.tagRepo.AddTagsToAgent(agentID, tagIDs, appliedBy); err != nil {
+	if err := s.tagRepo.AddTagsToAgent(ctx, agentID, tagIDs); err != nil {
 		return fmt.Errorf("failed to add tags to agent: %w", err)
 	}
 
@@ -120,7 +111,7 @@ func (s *TagService) AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagI
 
 // RemoveTagFromAgent removes a tag from an agent
 func (s *TagService) RemoveTagFromAgent(ctx context.Context, agentID, tagID uuid.UUID) error {
-	if err := s.tagRepo.RemoveTagFromAgent(agentID, tagID); err != nil {
+	if err := s.tagRepo.RemoveTagFromAgent(ctx, agentID, tagID); err != nil {
 		return fmt.Errorf("failed to remove tag from agent: %w", err)
 	}
 	return nil
@@ -128,7 +119,7 @@ func (s *TagService) RemoveTagFromAgent(ctx context.Context, agentID, tagID uuid
 
 // GetAgentTags retrieves all tags for an agent
 func (s *TagService) GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
-	tags, err := s.tagRepo.GetAgentTags(agentID)
+	tags, err := s.tagRepo.GetAgentTags(ctx, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent tags: %w", err)
 	}
@@ -145,7 +136,7 @@ func (s *TagService) AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UU
 
 	// Verify all tags exist and belong to same organization
 	for _, tagID := range tagIDs {
-		tag, err := s.tagRepo.GetByID(tagID)
+		tag, err := s.tagRepo.GetByID(ctx, tagID)
 		if err != nil {
 			return fmt.Errorf("tag %s not found: %w", tagID, err)
 		}
@@ -155,7 +146,7 @@ func (s *TagService) AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UU
 	}
 
 	// Add tags (database trigger enforces Community Edition 3-tag limit)
-	if err := s.tagRepo.AddTagsToMCPServer(mcpServerID, tagIDs, appliedBy); err != nil {
+	if err := s.tagRepo.AddTagsToMCPServer(ctx, mcpServerID, tagIDs); err != nil {
 		return fmt.Errorf("failed to add tags to mcp server: %w", err)
 	}
 
@@ -164,7 +155,7 @@ func (s *TagService) AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UU
 
 // RemoveTagFromMCPServer removes a tag from an MCP server
 func (s *TagService) RemoveTagFromMCPServer(ctx context.Context, mcpServerID, tagID uuid.UUID) error {
-	if err := s.tagRepo.RemoveTagFromMCPServer(mcpServerID, tagID); err != nil {
+	if err := s.tagRepo.RemoveTagFromMCPServer(ctx, mcpServerID, tagID); err != nil {
 		return fmt.Errorf("failed to remove tag from mcp server: %w", err)
 	}
 	return nil
@@ -172,106 +163,37 @@ func (s *TagService) RemoveTagFromMCPServer(ctx context.Context, mcpServerID, ta
 
 // GetMCPServerTags retrieves all tags for an MCP server
 func (s *TagService) GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error) {
-	tags, err := s.tagRepo.GetMCPServerTags(mcpServerID)
+	tags, err := s.tagRepo.GetMCPServerTags(ctx, mcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mcp server tags: %w", err)
 	}
 	return tags, nil
 }
 
-// SuggestTagsForAgent suggests tags based on agent capabilities
+// SuggestTagsForAgent suggests tags based on agent metadata
+// TODO: Implement smart suggestions when capabilities tracking is added
 func (s *TagService) SuggestTagsForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
 	_, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
 
-	// TODO: Capabilities field not yet in Agent domain - need to add in Phase 4
-	// Get all existing tags for organization
-	// allTags, err := s.tagRepo.GetByOrganization(agent.OrganizationID)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to get organization tags: %w", err)
-	// }
-
-	// For now, return empty suggestions
-	var suggestions []*domain.Tag
-	// suggestions := s.detectResourceTypesFromCapabilities(agent.Capabilities, allTags)
-
-	return suggestions, nil
+	// Return empty suggestions for now
+	// Future: Analyze agent type, version, metadata for smart suggestions
+	return []*domain.Tag{}, nil
 }
 
-// SuggestTagsForMCPServer suggests tags based on MCP server capabilities
+// SuggestTagsForMCPServer suggests tags based on MCP server metadata
+// TODO: Implement smart suggestions when capabilities tracking is added
 func (s *TagService) SuggestTagsForMCPServer(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error) {
 	_, err := s.mcpRepo.GetByID(mcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("mcp server not found: %w", err)
 	}
 
-	// TODO: Capabilities field not yet in MCPServer domain - need to add in Phase 4
-	// Get all existing tags for organization
-	// allTags, err := s.tagRepo.GetByOrganization(mcpServer.OrganizationID)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to get organization tags: %w", err)
-	// }
-
-	// For now, return empty suggestions
-	var suggestions []*domain.Tag
-	// suggestions := s.detectResourceTypesFromCapabilities(mcpServer.Capabilities, allTags)
-
-	return suggestions, nil
-}
-
-// detectResourceTypesFromCapabilities analyzes capabilities and suggests resource type tags
-func (s *TagService) detectResourceTypesFromCapabilities(capabilities []string, allTags []*domain.Tag) []*domain.Tag {
-	suggestions := make([]*domain.Tag, 0)
-	suggestedValues := make(map[string]bool)
-
-	// Capability patterns to tag mappings
-	patterns := map[string]string{
-		"file":       "filesystem",
-		"read_file":  "filesystem",
-		"write_file": "filesystem",
-		"database":   "database",
-		"db":         "database",
-		"sql":        "database",
-		"api":        "api",
-		"http":       "api",
-		"rest":       "api",
-		"network":    "network",
-		"socket":     "network",
-		"ai":         "ai_model",
-		"ml":         "ai_model",
-		"model":      "ai_model",
-		"crypto":     "cryptography",
-		"encrypt":    "cryptography",
-		"hash":       "cryptography",
-		"auth":       "authentication",
-		"login":      "authentication",
-	}
-
-	// Analyze capabilities
-	for _, capability := range capabilities {
-		capLower := strings.ToLower(capability)
-		for pattern, tagValue := range patterns {
-			if strings.Contains(capLower, pattern) {
-				// Avoid duplicates
-				if suggestedValues[tagValue] {
-					continue
-				}
-				suggestedValues[tagValue] = true
-
-				// Find matching tag in organization's tags
-				for _, tag := range allTags {
-					if tag.Category == domain.TagCategoryResourceType && tag.Value == tagValue {
-						suggestions = append(suggestions, tag)
-						break
-					}
-				}
-			}
-		}
-	}
-
-	return suggestions
+	// Return empty suggestions for now
+	// Future: Analyze MCP server type, version, metadata for smart suggestions
+	return []*domain.Tag{}, nil
 }
 
 // validateTagInput validates tag creation input

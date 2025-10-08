@@ -192,8 +192,8 @@ func (r *APIKeyRepository) Revoke(id uuid.UUID) error {
 	return err
 }
 
-func (r *APIKeyRepository) UpdateLastUsed(id uuid.UUID) error {
+func (r *APIKeyRepository) UpdateLastUsed(id uuid.UUID, lastUsedAt time.Time) error {
 	query := `UPDATE api_keys SET last_used_at = $1 WHERE id = $2`
-	_, err := r.db.Exec(query, time.Now(), id)
+	_, err := r.db.Exec(query, lastUsedAt, id)
 	return err
 }

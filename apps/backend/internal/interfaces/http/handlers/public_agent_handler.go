@@ -89,25 +89,25 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	// Get authenticated user from JWT token (set by OptionalAuthMiddleware)
-	// If no JWT token, fall back to default (for backward compatibility during transition)
-	var organizationID uuid.UUID
-	var userID uuid.UUID
-
-	// Try to get from JWT token first (preferred)
-	if orgID, ok := c.Locals("organization_id").(uuid.UUID); ok && orgID != uuid.Nil {
-		organizationID = orgID
-	} else {
-		// Fallback to default organization (for backward compatibility)
-		organizationID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	// Extract API key from header
+	apiKey := c.Get("X-AIM-API-Key")
+	if apiKey == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "X-AIM-API-Key header is required for agent registration",
+		})
 	}
 
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok && uid != uuid.Nil {
-		userID = uid
-	} else {
-		// Fallback to default user (for backward compatibility)
-		userID = uuid.MustParse("7661f186-1de3-4898-bcbd-11bc9490ece7")
+	// Validate API key and extract user identity
+	validation, err := h.authService.ValidateAPIKey(c.Context(), apiKey)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": fmt.Sprintf("Invalid API key: %v", err),
+		})
 	}
+
+	// Use real user and organization from API key
+	userID := validation.User.ID
+	orgID := validation.Organization.ID
 
 	// Create agent (keys generated automatically by AgentService)
 	agent, err := h.agentService.CreateAgent(c.Context(), &application.CreateAgentRequest{
@@ -118,7 +118,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		Version:          req.Version,
 		RepositoryURL:    req.RepositoryURL,
 		DocumentationURL: req.DocumentationURL,
-	}, organizationID, userID)
+	}, orgID, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create agent: %v", err),

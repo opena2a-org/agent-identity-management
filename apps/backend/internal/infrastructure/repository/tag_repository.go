@@ -1,49 +1,46 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
+// TagRepository implements domain.TagRepository
 type TagRepository struct {
 	db *sql.DB
 }
 
+// NewTagRepository creates a new tag repository
 func NewTagRepository(db *sql.DB) *TagRepository {
 	return &TagRepository{db: db}
 }
 
 // Create creates a new tag
-func (r *TagRepository) Create(tag *domain.Tag) error {
+func (r *TagRepository) Create(ctx context.Context, tag *domain.Tag) error {
 	query := `
-		INSERT INTO tags (id, organization_id, key, value, category, description, color, created_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO tags (organization_id, key, value, category, description, color, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, created_at
 	`
-
-	tag.ID = uuid.New()
-	tag.CreatedAt = time.Now()
-
-	_, err := r.db.Exec(query,
-		tag.ID,
+	return r.db.QueryRowContext(
+		ctx,
+		query,
 		tag.OrganizationID,
 		tag.Key,
 		tag.Value,
 		tag.Category,
 		tag.Description,
 		tag.Color,
-		tag.CreatedAt,
 		tag.CreatedBy,
-	)
-
-	return err
+	).Scan(&tag.ID, &tag.CreatedAt)
 }
 
 // GetByID retrieves a tag by ID
-func (r *TagRepository) GetByID(id uuid.UUID) (*domain.Tag, error) {
+func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tag, error) {
 	query := `
 		SELECT id, organization_id, key, value, category, description, color, created_at, created_by
 		FROM tags
@@ -51,7 +48,7 @@ func (r *TagRepository) GetByID(id uuid.UUID) (*domain.Tag, error) {
 	`
 
 	tag := &domain.Tag{}
-	err := r.db.QueryRow(query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&tag.ID,
 		&tag.OrganizationID,
 		&tag.Key,
@@ -66,26 +63,43 @@ func (r *TagRepository) GetByID(id uuid.UUID) (*domain.Tag, error) {
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("tag not found")
 	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tag: %w", err)
+	}
 
-	return tag, err
+	return tag, nil
 }
 
-// GetByOrganization retrieves all tags for an organization
-func (r *TagRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Tag, error) {
-	query := `
-		SELECT id, organization_id, key, value, category, description, color, created_at, created_by
-		FROM tags
-		WHERE organization_id = $1
-		ORDER BY category, key, value
-	`
+// List retrieves all tags for an organization, optionally filtered by category
+func (r *TagRepository) List(ctx context.Context, organizationID uuid.UUID, category *domain.TagCategory) ([]*domain.Tag, error) {
+	var query string
+	var args []interface{}
 
-	rows, err := r.db.Query(query, orgID)
+	if category != nil {
+		query = `
+			SELECT id, organization_id, key, value, category, description, color, created_at, created_by
+			FROM tags
+			WHERE organization_id = $1 AND category = $2
+			ORDER BY category, key, value
+		`
+		args = []interface{}{organizationID, *category}
+	} else {
+		query = `
+			SELECT id, organization_id, key, value, category, description, color, created_at, created_by
+			FROM tags
+			WHERE organization_id = $1
+			ORDER BY category, key, value
+		`
+		args = []interface{}{organizationID}
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list tags: %w", err)
 	}
 	defer rows.Close()
 
-	var tags []*domain.Tag
+	tags := make([]*domain.Tag, 0)
 	for rows.Next() {
 		tag := &domain.Tag{}
 		err := rows.Scan(
@@ -100,122 +114,84 @@ func (r *TagRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Tag, error
 			&tag.CreatedBy,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
 		}
 		tags = append(tags, tag)
-	}
-
-	// Always return empty slice, not nil
-	if tags == nil {
-		tags = []*domain.Tag{}
 	}
 
 	return tags, nil
 }
 
-// GetByCategory retrieves tags by category for an organization
-func (r *TagRepository) GetByCategory(orgID uuid.UUID, category domain.TagCategory) ([]*domain.Tag, error) {
-	query := `
-		SELECT id, organization_id, key, value, category, description, color, created_at, created_by
-		FROM tags
-		WHERE organization_id = $1 AND category = $2
-		ORDER BY key, value
-	`
-
-	rows, err := r.db.Query(query, orgID, category)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tags []*domain.Tag
-	for rows.Next() {
-		tag := &domain.Tag{}
-		err := rows.Scan(
-			&tag.ID,
-			&tag.OrganizationID,
-			&tag.Key,
-			&tag.Value,
-			&tag.Category,
-			&tag.Description,
-			&tag.Color,
-			&tag.CreatedAt,
-			&tag.CreatedBy,
-		)
-		if err != nil {
-			return nil, err
-		}
-		tags = append(tags, tag)
-	}
-
-	// Always return empty slice, not nil
-	if tags == nil {
-		tags = []*domain.Tag{}
-	}
-
-	return tags, nil
-}
-
-// Delete deletes a tag (only if not in use)
-func (r *TagRepository) Delete(id uuid.UUID) error {
-	// Check if tag is in use
-	var count int
-	checkQuery := `
-		SELECT COUNT(*) FROM (
-			SELECT agent_id FROM agent_tags WHERE tag_id = $1
-			UNION ALL
-			SELECT mcp_server_id FROM mcp_server_tags WHERE tag_id = $1
-		) AS usage
-	`
-	err := r.db.QueryRow(checkQuery, id).Scan(&count)
-	if err != nil {
-		return err
-	}
-
-	if count > 0 {
-		return fmt.Errorf("cannot delete tag: in use by %d assets", count)
-	}
-
-	// Delete tag
+// Delete deletes a tag
+func (r *TagRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM tags WHERE id = $1`
-	_, err = r.db.Exec(query, id)
-	return err
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete tag: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("tag not found")
+	}
+
+	return nil
 }
 
 // AddTagsToAgent adds tags to an agent
-func (r *TagRepository) AddTagsToAgent(agentID uuid.UUID, tagIDs []uuid.UUID, appliedBy uuid.UUID) error {
-	tx, err := r.db.Begin()
+func (r *TagRepository) AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagIDs []uuid.UUID) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	query := `
-		INSERT INTO agent_tags (agent_id, tag_id, applied_at, applied_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO agent_tags (agent_id, tag_id)
+		VALUES ($1, $2)
 		ON CONFLICT (agent_id, tag_id) DO NOTHING
 	`
 
-	now := time.Now()
 	for _, tagID := range tagIDs {
-		_, err := tx.Exec(query, agentID, tagID, now, appliedBy)
+		_, err := tx.ExecContext(ctx, query, agentID, tagID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to add tag %s to agent: %w", tagID, err)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // RemoveTagFromAgent removes a tag from an agent
-func (r *TagRepository) RemoveTagFromAgent(agentID uuid.UUID, tagID uuid.UUID) error {
+func (r *TagRepository) RemoveTagFromAgent(ctx context.Context, agentID uuid.UUID, tagID uuid.UUID) error {
 	query := `DELETE FROM agent_tags WHERE agent_id = $1 AND tag_id = $2`
-	_, err := r.db.Exec(query, agentID, tagID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, agentID, tagID)
+	if err != nil {
+		return fmt.Errorf("failed to remove tag from agent: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("tag not found on agent")
+	}
+
+	return nil
 }
 
 // GetAgentTags retrieves all tags for an agent
-func (r *TagRepository) GetAgentTags(agentID uuid.UUID) ([]*domain.Tag, error) {
+func (r *TagRepository) GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
 	query := `
 		SELECT t.id, t.organization_id, t.key, t.value, t.category, t.description, t.color, t.created_at, t.created_by
 		FROM tags t
@@ -224,13 +200,13 @@ func (r *TagRepository) GetAgentTags(agentID uuid.UUID) ([]*domain.Tag, error) {
 		ORDER BY t.category, t.key, t.value
 	`
 
-	rows, err := r.db.Query(query, agentID)
+	rows, err := r.db.QueryContext(ctx, query, agentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get agent tags: %w", err)
 	}
 	defer rows.Close()
 
-	var tags []*domain.Tag
+	tags := make([]*domain.Tag, 0)
 	for rows.Next() {
 		tag := &domain.Tag{}
 		err := rows.Scan(
@@ -245,75 +221,64 @@ func (r *TagRepository) GetAgentTags(agentID uuid.UUID) ([]*domain.Tag, error) {
 			&tag.CreatedBy,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
 		}
 		tags = append(tags, tag)
-	}
-
-	// Always return empty slice, not nil
-	if tags == nil {
-		tags = []*domain.Tag{}
 	}
 
 	return tags, nil
 }
 
-// GetAgentsByTag retrieves agent IDs that have a specific tag
-func (r *TagRepository) GetAgentsByTag(tagID uuid.UUID) ([]uuid.UUID, error) {
-	query := `SELECT agent_id FROM agent_tags WHERE tag_id = $1`
-
-	rows, err := r.db.Query(query, tagID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var agentIDs []uuid.UUID
-	for rows.Next() {
-		var agentID uuid.UUID
-		if err := rows.Scan(&agentID); err != nil {
-			return nil, err
-		}
-		agentIDs = append(agentIDs, agentID)
-	}
-
-	return agentIDs, nil
-}
-
 // AddTagsToMCPServer adds tags to an MCP server
-func (r *TagRepository) AddTagsToMCPServer(mcpServerID uuid.UUID, tagIDs []uuid.UUID, appliedBy uuid.UUID) error {
-	tx, err := r.db.Begin()
+func (r *TagRepository) AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UUID, tagIDs []uuid.UUID) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	query := `
-		INSERT INTO mcp_server_tags (mcp_server_id, tag_id, applied_at, applied_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO mcp_server_tags (mcp_server_id, tag_id)
+		VALUES ($1, $2)
 		ON CONFLICT (mcp_server_id, tag_id) DO NOTHING
 	`
 
-	now := time.Now()
 	for _, tagID := range tagIDs {
-		_, err := tx.Exec(query, mcpServerID, tagID, now, appliedBy)
+		_, err := tx.ExecContext(ctx, query, mcpServerID, tagID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to add tag %s to mcp server: %w", tagID, err)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // RemoveTagFromMCPServer removes a tag from an MCP server
-func (r *TagRepository) RemoveTagFromMCPServer(mcpServerID uuid.UUID, tagID uuid.UUID) error {
+func (r *TagRepository) RemoveTagFromMCPServer(ctx context.Context, mcpServerID uuid.UUID, tagID uuid.UUID) error {
 	query := `DELETE FROM mcp_server_tags WHERE mcp_server_id = $1 AND tag_id = $2`
-	_, err := r.db.Exec(query, mcpServerID, tagID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, mcpServerID, tagID)
+	if err != nil {
+		return fmt.Errorf("failed to remove tag from mcp server: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("tag not found on mcp server")
+	}
+
+	return nil
 }
 
 // GetMCPServerTags retrieves all tags for an MCP server
-func (r *TagRepository) GetMCPServerTags(mcpServerID uuid.UUID) ([]*domain.Tag, error) {
+func (r *TagRepository) GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error) {
 	query := `
 		SELECT t.id, t.organization_id, t.key, t.value, t.category, t.description, t.color, t.created_at, t.created_by
 		FROM tags t
@@ -322,13 +287,13 @@ func (r *TagRepository) GetMCPServerTags(mcpServerID uuid.UUID) ([]*domain.Tag, 
 		ORDER BY t.category, t.key, t.value
 	`
 
-	rows, err := r.db.Query(query, mcpServerID)
+	rows, err := r.db.QueryContext(ctx, query, mcpServerID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get mcp server tags: %w", err)
 	}
 	defer rows.Close()
 
-	var tags []*domain.Tag
+	tags := make([]*domain.Tag, 0)
 	for rows.Next() {
 		tag := &domain.Tag{}
 		err := rows.Scan(
@@ -343,37 +308,10 @@ func (r *TagRepository) GetMCPServerTags(mcpServerID uuid.UUID) ([]*domain.Tag, 
 			&tag.CreatedBy,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
 		}
 		tags = append(tags, tag)
 	}
 
-	// Always return empty slice, not nil
-	if tags == nil {
-		tags = []*domain.Tag{}
-	}
-
 	return tags, nil
-}
-
-// GetMCPServersByTag retrieves MCP server IDs that have a specific tag
-func (r *TagRepository) GetMCPServersByTag(tagID uuid.UUID) ([]uuid.UUID, error) {
-	query := `SELECT mcp_server_id FROM mcp_server_tags WHERE tag_id = $1`
-
-	rows, err := r.db.Query(query, tagID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var mcpServerIDs []uuid.UUID
-	for rows.Next() {
-		var mcpServerID uuid.UUID
-		if err := rows.Scan(&mcpServerID); err != nil {
-			return nil, err
-		}
-		mcpServerIDs = append(mcpServerIDs, mcpServerID)
-	}
-
-	return mcpServerIDs, nil
 }
