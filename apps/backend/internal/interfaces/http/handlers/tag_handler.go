@@ -108,15 +108,14 @@ func (h *TagHandler) GetTags(c fiber.Ctx) error {
 	}
 
 	// Check if filtering by category
-	category := c.Query("category")
-	var tags []*domain.Tag
-	var err error
-
-	if category != "" {
-		tags, err = h.tagService.GetTagsByCategory(c.Context(), orgID, domain.TagCategory(category))
-	} else {
-		tags, err = h.tagService.GetTagsByOrganization(c.Context(), orgID)
+	categoryParam := c.Query("category")
+	var categoryFilter *domain.TagCategory
+	if categoryParam != "" {
+		cat := domain.TagCategory(categoryParam)
+		categoryFilter = &cat
 	}
+
+	tags, err := h.tagService.GetTagsByOrganization(c.Context(), orgID, categoryFilter)
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{

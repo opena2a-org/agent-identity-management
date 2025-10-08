@@ -12,18 +12,21 @@ import (
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo domain.UserRepository
-	orgRepo  domain.OrganizationRepository
+	userRepo   domain.UserRepository
+	orgRepo    domain.OrganizationRepository
+	apiKeyRepo domain.APIKeyRepository
 }
 
 // NewAuthService creates a new auth service
 func NewAuthService(
 	userRepo domain.UserRepository,
 	orgRepo domain.OrganizationRepository,
+	apiKeyRepo domain.APIKeyRepository,
 ) *AuthService {
 	return &AuthService{
-		userRepo: userRepo,
-		orgRepo:  orgRepo,
+		userRepo:   userRepo,
+		orgRepo:    orgRepo,
+		apiKeyRepo: apiKeyRepo,
 	}
 }
 
