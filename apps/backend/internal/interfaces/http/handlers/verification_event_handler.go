@@ -176,6 +176,10 @@ type CreateVerificationEventRequest struct {
 	CompletedAt      *time.Time                       `json:"completedAt,omitempty"`
 	Details          *string                          `json:"details,omitempty"`
 	Metadata         map[string]interface{}           `json:"metadata,omitempty"`
+
+	// Configuration Drift Detection (WHO and WHAT)
+	CurrentMCPServers   []string `json:"currentMcpServers,omitempty"`   // Runtime: MCP servers being communicated with
+	CurrentCapabilities []string `json:"currentCapabilities,omitempty"` // Runtime: Capabilities being used
 }
 
 // CreateVerificationEvent creates a new verification event
@@ -255,6 +259,10 @@ func (h *VerificationEventHandler) CreateVerificationEvent(c fiber.Ctx) error {
 		CompletedAt:      req.CompletedAt,
 		Details:          req.Details,
 		Metadata:         req.Metadata,
+
+		// Configuration Drift Detection
+		CurrentMCPServers:   req.CurrentMCPServers,
+		CurrentCapabilities: req.CurrentCapabilities,
 	}
 
 	// Create event

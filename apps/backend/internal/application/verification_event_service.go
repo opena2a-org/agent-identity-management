@@ -11,18 +11,21 @@ import (
 
 // VerificationEventService handles verification event business logic
 type VerificationEventService struct {
-	eventRepo domain.VerificationEventRepository
-	agentRepo domain.AgentRepository
+	eventRepo         domain.VerificationEventRepository
+	agentRepo         domain.AgentRepository
+	driftDetection    *DriftDetectionService
 }
 
 // NewVerificationEventService creates a new verification event service
 func NewVerificationEventService(
 	eventRepo domain.VerificationEventRepository,
 	agentRepo domain.AgentRepository,
+	driftDetection *DriftDetectionService,
 ) *VerificationEventService {
 	return &VerificationEventService{
-		eventRepo: eventRepo,
-		agentRepo: agentRepo,
+		eventRepo:      eventRepo,
+		agentRepo:      agentRepo,
+		driftDetection: driftDetection,
 	}
 }
 
@@ -117,6 +120,29 @@ func (s *VerificationEventService) CreateVerificationEvent(
 		CompletedAt:      req.CompletedAt,
 		Details:          req.Details,
 		Metadata:         req.Metadata,
+
+		// Store runtime configuration for drift tracking
+		CurrentMCPServers:   req.CurrentMCPServers,
+		CurrentCapabilities: req.CurrentCapabilities,
+	}
+
+	// Perform drift detection if runtime configuration provided
+	if len(req.CurrentMCPServers) > 0 || len(req.CurrentCapabilities) > 0 {
+		driftResult, err := s.driftDetection.DetectDrift(
+			req.AgentID,
+			req.CurrentMCPServers,
+			req.CurrentCapabilities,
+		)
+
+		if err != nil {
+			// Log error but don't fail the verification event creation
+			fmt.Printf("Drift detection failed: %v\n", err)
+		} else if driftResult != nil {
+			// Store drift detection results in the event
+			event.DriftDetected = driftResult.DriftDetected
+			event.MCPServerDrift = driftResult.MCPServerDrift
+			event.CapabilityDrift = driftResult.CapabilityDrift
+		}
 	}
 
 	if err := s.eventRepo.Create(event); err != nil {
@@ -203,6 +229,10 @@ type CreateVerificationEventRequest struct {
 	CompletedAt      *time.Time
 	Details          *string
 	Metadata         map[string]interface{}
+
+	// Configuration Drift Detection (WHO and WHAT)
+	CurrentMCPServers    []string // Runtime: MCP servers being communicated with
+	CurrentCapabilities  []string // Runtime: Capabilities being used
 }
 
 // calculateConfidence calculates confidence based on status and trust score

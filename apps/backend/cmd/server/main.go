@@ -360,9 +360,16 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.Webhook,
 	)
 
+	// Initialize drift detection service for WHO/WHAT verification
+	driftDetectionService := application.NewDriftDetectionService(
+		repos.Agent,
+		repos.Alert,
+	)
+
 	verificationEventService := application.NewVerificationEventService(
 		repos.VerificationEvent,
 		repos.Agent,
+		driftDetectionService,
 	)
 
 	oauthService := application.NewOAuthService(
