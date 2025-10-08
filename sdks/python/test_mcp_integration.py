@@ -2,11 +2,18 @@
 """
 Integration tests for AIM + MCP (Model Context Protocol)
 
-Tests MCP server registration and action verification:
-1. MCP server registration
-2. MCP server listing
-3. MCP action verification
-4. MCPActionWrapper
+Tests MCP SDK API design and integration patterns.
+
+NOTE: Full integration tests require JWT authentication (user login).
+      See test_mcp_with_auth.py for authenticated tests.
+
+This test validates:
+1. SDK API design and function signatures
+2. Error handling and validation
+3. Integration patterns (registration, verification, wrapper)
+4. Documentation and examples
+
+For full end-to-end tests with backend, run: test_mcp_with_auth.py
 """
 
 import sys
