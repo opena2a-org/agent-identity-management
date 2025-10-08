@@ -10,12 +10,13 @@ import (
 type AlertType string
 
 const (
-	AlertCertificateExpiring AlertType = "certificate_expiring"
-	AlertAPIKeyExpiring      AlertType = "api_key_expiring"
-	AlertTrustScoreLow       AlertType = "trust_score_low"
-	AlertAgentOffline        AlertType = "agent_offline"
-	AlertSecurityBreach      AlertType = "security_breach"
-	AlertUnusualActivity     AlertType = "unusual_activity"
+	AlertCertificateExpiring  AlertType = "certificate_expiring"
+	AlertAPIKeyExpiring       AlertType = "api_key_expiring"
+	AlertTrustScoreLow        AlertType = "trust_score_low"
+	AlertAgentOffline         AlertType = "agent_offline"
+	AlertSecurityBreach       AlertType = "security_breach"
+	AlertUnusualActivity      AlertType = "unusual_activity"
+	AlertTypeConfigurationDrift AlertType = "configuration_drift"
 )
 
 // AlertSeverity represents alert severity level
@@ -24,6 +25,7 @@ type AlertSeverity string
 const (
 	AlertSeverityInfo     AlertSeverity = "info"
 	AlertSeverityWarning  AlertSeverity = "warning"
+	AlertSeverityHigh     AlertSeverity = "high"
 	AlertSeverityCritical AlertSeverity = "critical"
 
 	// Legacy constants for backward compatibility

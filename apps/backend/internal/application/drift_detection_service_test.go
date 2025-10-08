@@ -1,0 +1,301 @@
+package application
+
+import (
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+// MockAgentRepository mocks the AgentRepository interface
+type MockAgentRepository struct {
+	mock.Mock
+}
+
+func (m *MockAgentRepository) Create(agent *domain.Agent) error {
+	args := m.Called(agent)
+	return args.Error(0)
+}
+
+func (m *MockAgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepository) GetByName(name string) (*domain.Agent, error) {
+	args := m.Called(name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepository) Update(agent *domain.Agent) error {
+	args := m.Called(agent)
+	return args.Error(0)
+}
+
+func (m *MockAgentRepository) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockAgentRepository) UpdatePublicKey(agentID uuid.UUID, publicKey string) error {
+	args := m.Called(agentID, publicKey)
+	return args.Error(0)
+}
+
+func (m *MockAgentRepository) UpdateTrustScore(agentID uuid.UUID, score float64) error {
+	args := m.Called(agentID, score)
+	return args.Error(0)
+}
+
+func (m *MockAgentRepository) MarkAsCompromised(agentID uuid.UUID) error {
+	args := m.Called(agentID)
+	return args.Error(0)
+}
+
+// MockAlertRepository mocks the AlertRepository interface
+type MockAlertRepository struct {
+	mock.Mock
+}
+
+func (m *MockAlertRepository) Create(alert *domain.Alert) error {
+	args := m.Called(alert)
+	return args.Error(0)
+}
+
+func (m *MockAlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	args := m.Called(orgID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) GetUnacknowledged(orgID uuid.UUID) ([]*domain.Alert, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) Acknowledge(id, userID uuid.UUID) error {
+	args := m.Called(id, userID)
+	return args.Error(0)
+}
+
+func (m *MockAlertRepository) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func TestDetectDrift_NoDrift(t *testing.T) {
+	// Setup
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+	service := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	// Agent with registered MCP servers
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		TalksTo:        []string{"filesystem-mcp", "github-mcp"},
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	// Test: Runtime matches registered configuration
+	result, err := service.DetectDrift(
+		agentID,
+		[]string{"filesystem-mcp", "github-mcp"},
+		[]string{},
+	)
+
+	// Verify
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.DriftDetected)
+	assert.Empty(t, result.MCPServerDrift)
+	assert.Empty(t, result.CapabilityDrift)
+	assert.Nil(t, result.Alert)
+
+	mockAgentRepo.AssertExpectations(t)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestDetectDrift_MCPServerDrift(t *testing.T) {
+	// Setup
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+	service := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	// Agent with registered MCP servers
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		TalksTo:        []string{"filesystem-mcp"},
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+
+	// Test: Runtime includes unregistered MCP server
+	result, err := service.DetectDrift(
+		agentID,
+		[]string{"filesystem-mcp", "external-api-mcp"},
+		[]string{},
+	)
+
+	// Verify
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.DriftDetected)
+	assert.Equal(t, []string{"external-api-mcp"}, result.MCPServerDrift)
+	assert.Empty(t, result.CapabilityDrift)
+	assert.NotNil(t, result.Alert)
+
+	// Verify alert details
+	assert.Equal(t, domain.AlertTypeConfigurationDrift, result.Alert.AlertType)
+	assert.Equal(t, domain.AlertSeverityHigh, result.Alert.Severity)
+	assert.Equal(t, "Configuration Drift Detected: test-agent", result.Alert.Title)
+	assert.Contains(t, result.Alert.Description, "external-api-mcp")
+	assert.Contains(t, result.Alert.Description, "not registered")
+
+	mockAgentRepo.AssertExpectations(t)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestDetectDrift_MultipleUnauthorizedServers(t *testing.T) {
+	// Setup
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+	service := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	// Agent with NO registered MCP servers
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "rogue-agent",
+		TalksTo:        []string{},
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+
+	// Test: Runtime includes multiple unregistered MCP servers
+	result, err := service.DetectDrift(
+		agentID,
+		[]string{"unauthorized-mcp-1", "unauthorized-mcp-2", "malicious-mcp"},
+		[]string{},
+	)
+
+	// Verify
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.DriftDetected)
+	assert.ElementsMatch(t, []string{"unauthorized-mcp-1", "unauthorized-mcp-2", "malicious-mcp"}, result.MCPServerDrift)
+	assert.NotNil(t, result.Alert)
+
+	// Verify alert includes all unauthorized servers
+	assert.Contains(t, result.Alert.Description, "unauthorized-mcp-1")
+	assert.Contains(t, result.Alert.Description, "unauthorized-mcp-2")
+	assert.Contains(t, result.Alert.Description, "malicious-mcp")
+
+	mockAgentRepo.AssertExpectations(t)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestDetectArrayDrift(t *testing.T) {
+	tests := []struct {
+		name       string
+		registered []string
+		runtime    []string
+		expected   []string
+	}{
+		{
+			name:       "no drift - exact match",
+			registered: []string{"a", "b", "c"},
+			runtime:    []string{"a", "b", "c"},
+			expected:   []string{},
+		},
+		{
+			name:       "no drift - runtime subset of registered",
+			registered: []string{"a", "b", "c"},
+			runtime:    []string{"a", "b"},
+			expected:   []string{},
+		},
+		{
+			name:       "drift detected - one unregistered item",
+			registered: []string{"a", "b"},
+			runtime:    []string{"a", "b", "c"},
+			expected:   []string{"c"},
+		},
+		{
+			name:       "drift detected - multiple unregistered items",
+			registered: []string{"a"},
+			runtime:    []string{"a", "b", "c", "d"},
+			expected:   []string{"b", "c", "d"},
+		},
+		{
+			name:       "drift detected - all unregistered",
+			registered: []string{},
+			runtime:    []string{"a", "b", "c"},
+			expected:   []string{"a", "b", "c"},
+		},
+		{
+			name:       "no drift - empty runtime",
+			registered: []string{"a", "b"},
+			runtime:    []string{},
+			expected:   []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectArrayDrift(tt.registered, tt.runtime)
+			assert.ElementsMatch(t, tt.expected, result)
+		})
+	}
+}

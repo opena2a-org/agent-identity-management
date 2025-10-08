@@ -101,6 +101,13 @@ type VerificationEvent struct {
 	ResourceID   *string `json:"resourceId,omitempty"`
 	Location     *string `json:"location,omitempty"`
 
+	// Configuration Drift Detection (WHO and WHAT)
+	CurrentMCPServers    []string `json:"currentMcpServers,omitempty"`    // Runtime: MCP servers being communicated with
+	CurrentCapabilities  []string `json:"currentCapabilities,omitempty"`  // Runtime: Capabilities being used
+	DriftDetected        bool     `json:"driftDetected"`                  // Whether configuration drift was detected
+	MCPServerDrift       []string `json:"mcpServerDrift,omitempty"`       // Unregistered MCP servers detected
+	CapabilityDrift      []string `json:"capabilityDrift,omitempty"`      // Undeclared capabilities detected
+
 	// Timestamps
 	StartedAt   time.Time  `json:"startedAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
