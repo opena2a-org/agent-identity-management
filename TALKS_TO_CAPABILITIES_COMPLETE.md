@@ -954,6 +954,32 @@ const approveDrift = async (alertId: string, driftedServers: string[]) => {
 4. **Self-Service**: Admins can handle drift without developer intervention
 5. **Prevents Alert Fatigue**: Once approved, no more alerts for same servers
 
+### Testing
+
+**Code-Level Tests**: ✅ All unit and integration tests passing
+
+**E2E Test Procedure**: See `E2E_DRIFT_APPROVAL_TEST.md`
+
+**Manual Test Steps**:
+1. Create agent with `talks_to: ["filesystem-mcp", "github-mcp"]`
+2. Create verification event with `current_mcp_servers: ["filesystem-mcp", "github-mcp", "external-api-mcp"]`
+3. Verify drift alert created (HIGH severity, configuration_drift type)
+4. Navigate to Admin > Alerts page
+5. Verify "Approve Drift" button visible (blue, primary)
+6. Click "Approve Drift" → Confirm dialog shows "external-api-mcp"
+7. Verify alert acknowledged and success message displayed
+8. Verify agent registration updated with all three MCP servers
+9. Create second verification event with same servers
+10. Verify NO new drift alert (servers now registered)
+
+**Test Results**: ✅
+- Backend builds successfully
+- Frontend compiles without errors
+- UI components render correctly
+- API endpoint registered and accessible
+- Alert parsing logic works
+- Confirmation dialog displays correctly
+
 ---
 
 **Commits**:
