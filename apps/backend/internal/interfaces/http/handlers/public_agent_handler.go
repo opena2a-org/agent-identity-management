@@ -89,10 +89,25 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	// For MVP: Use default organization and admin user
-	// TODO: Implement proper organization auto-detection from domain
-	defaultOrgID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	defaultUserID := uuid.MustParse("7661f186-1de3-4898-bcbd-11bc9490ece7")
+	// Extract API key from header
+	apiKey := c.Get("X-AIM-API-Key")
+	if apiKey == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "X-AIM-API-Key header is required for agent registration",
+		})
+	}
+
+	// Validate API key and extract user identity
+	validation, err := h.authService.ValidateAPIKey(c.Context(), apiKey)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": fmt.Sprintf("Invalid API key: %v", err),
+		})
+	}
+
+	// Use real user and organization from API key
+	userID := validation.User.ID
+	orgID := validation.Organization.ID
 
 	// Create agent (keys generated automatically by AgentService)
 	agent, err := h.agentService.CreateAgent(c.Context(), &application.CreateAgentRequest{
@@ -103,7 +118,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		Version:          req.Version,
 		RepositoryURL:    req.RepositoryURL,
 		DocumentationURL: req.DocumentationURL,
-	}, defaultOrgID, defaultUserID)
+	}, orgID, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create agent: %v", err),
