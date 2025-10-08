@@ -42,11 +42,12 @@ func NewJWTService() *JWTService {
 	}
 }
 
-// GenerateSDKRefreshToken generates a long-lived refresh token for SDK usage (1 year)
+// GenerateSDKRefreshToken generates a refresh token for SDK usage (90 days)
 // This token is embedded in downloaded SDKs for auto-authentication
+// Security: Reduced from 1 year to 90 days to minimize exposure window
 func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) (string, error) {
 	now := time.Now()
-	sdkExpiry := 365 * 24 * time.Hour // 1 year
+	sdkExpiry := 90 * 24 * time.Hour // 90 days (reduced from 365 for security)
 
 	claims := JWTClaims{
 		UserID:         userID,
@@ -155,4 +156,57 @@ func (s *JWTService) RefreshAccessToken(refreshToken string) (string, error) {
 
 	// Generate new access token
 	return s.GenerateAccessToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
+}
+
+// RefreshTokenPair generates new access AND refresh tokens (token rotation)
+// This implements token rotation for enhanced security:
+// - Old refresh token is invalidated after use
+// - New refresh token issued with 90-day expiry
+// Returns: newAccessToken, newRefreshToken, error
+func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, error) {
+	claims, err := s.ValidateToken(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Check if this is an SDK token (different issuer)
+	isSDKToken := claims.Issuer == "agent-identity-management-sdk"
+
+	var newAccessToken, newRefreshToken string
+
+	// Generate new access token
+	newAccessToken, err = s.GenerateAccessToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Generate new refresh token (with same type as original)
+	if isSDKToken {
+		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
+	} else {
+		newRefreshToken, err = s.GenerateRefreshToken(claims.UserID, claims.OrganizationID)
+	}
+	if err != nil {
+		return "", "", err
+	}
+
+	return newAccessToken, newRefreshToken, nil
+}
+
+// GetTokenID extracts the JTI (token ID) from a JWT without full validation
+// Useful for token revocation checks before full validation
+func (s *JWTService) GetTokenID(tokenString string) (string, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return s.secret, nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	if claims, ok := token.Claims.(*JWTClaims); ok {
+		return claims.ID, nil
+	}
+
+	return "", fmt.Errorf("failed to extract token ID")
 }

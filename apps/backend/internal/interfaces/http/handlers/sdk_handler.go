@@ -3,25 +3,31 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/domain"
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 )
 
 // SDKHandler handles SDK download operations
 type SDKHandler struct {
-	jwtService *auth.JWTService
+	jwtService      *auth.JWTService
+	sdkTokenRepo    domain.SDKTokenRepository
 }
 
 // NewSDKHandler creates a new SDK handler
-func NewSDKHandler(jwtService *auth.JWTService) *SDKHandler {
+func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository) *SDKHandler {
 	return &SDKHandler{
-		jwtService: jwtService,
+		jwtService:   jwtService,
+		sdkTokenRepo: sdkTokenRepo,
 	}
 }
 
@@ -69,7 +75,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		role = "member"
 	}
 
-	// Generate long-lived SDK refresh token (1 year)
+	// Generate SDK refresh token (90 days)
 	refreshToken, err := h.jwtService.GenerateSDKRefreshToken(
 		userID.String(),
 		organizationID.String(),
@@ -80,6 +86,45 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to generate SDK token: %v", err),
 		})
+	}
+
+	// Extract token ID (JTI) from JWT for tracking
+	tokenID, err := h.jwtService.GetTokenID(refreshToken)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to extract token ID: %v", err),
+		})
+	}
+
+	// Hash the token for secure storage (SHA-256)
+	hasher := sha256.New()
+	hasher.Write([]byte(refreshToken))
+	tokenHash := hex.EncodeToString(hasher.Sum(nil))
+
+	// Get client IP and user agent
+	ipAddress := c.IP()
+	userAgent := c.Get("User-Agent")
+
+	// Track SDK token in database for security (revocation, monitoring)
+	sdkToken := &domain.SDKToken{
+		ID:             uuid.New(),
+		UserID:         userID,
+		OrganizationID: organizationID,
+		TokenHash:      tokenHash,
+		TokenID:        tokenID,
+		IPAddress:      &ipAddress,
+		UserAgent:      &userAgent,
+		CreatedAt:      time.Now(),
+		ExpiresAt:      time.Now().Add(90 * 24 * time.Hour), // 90 days
+		Metadata:       map[string]interface{}{
+			"source": "sdk_download",
+		},
+	}
+
+	err = h.sdkTokenRepo.Create(sdkToken)
+	if err != nil {
+		// Log error but don't fail download (tracking is not critical for download)
+		fmt.Printf("Warning: Failed to track SDK token: %v\n", err)
 	}
 
 	// Get AIM URL from environment or use request base URL
@@ -226,11 +271,17 @@ Your SDK contains embedded OAuth credentials that automatically:
 - ✅ Authenticate your agent registrations
 - ✅ Link agents to your user account
 - ✅ Refresh tokens when they expire
-- ✅ Work for 1 year without re-authentication
+- ✅ Work for 90 days without re-authentication
 
 ## Security
 
 Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+
+⚠️ **Important Security Notes:**
+- Credentials are valid for 90 days
+- Never commit credentials to Git
+- Revoke tokens from dashboard if compromised
+- Tokens can be revoked at any time from your dashboard
 
 For more examples, see the included test files.
 `

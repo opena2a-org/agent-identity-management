@@ -101,17 +101,12 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPServer, error) {
 	query := `
 		SELECT
-			m.id, m.organization_id, m.name, m.description, m.url, m.version,
-			m.public_key, m.status, m.is_verified, m.last_verified_at, m.verification_url,
-			m.capabilities, m.trust_score, m.created_by, m.created_at, m.updated_at,
-			COALESCE(COUNT(v.id), 0) AS verification_count
-		FROM mcp_servers m
-		LEFT JOIN verification_events v ON v.mcp_server_id = m.id
-		WHERE m.organization_id = $1
-		GROUP BY m.id, m.organization_id, m.name, m.description, m.url, m.version,
-			m.public_key, m.status, m.is_verified, m.last_verified_at, m.verification_url,
-			m.capabilities, m.trust_score, m.created_by, m.created_at, m.updated_at
-		ORDER BY m.created_at DESC
+			id, organization_id, name, description, url, version,
+			public_key, status, is_verified, last_verified_at, verification_url,
+			capabilities, trust_score, created_by, created_at, updated_at
+		FROM mcp_servers
+		WHERE organization_id = $1
+		ORDER BY created_at DESC
 	`
 
 	rows, err := r.db.Query(query, orgID)
@@ -142,7 +137,6 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 			&server.CreatedBy,
 			&server.CreatedAt,
 			&server.UpdatedAt,
-			&server.VerificationCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
