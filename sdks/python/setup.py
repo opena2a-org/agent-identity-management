@@ -34,6 +34,8 @@ setup(
     install_requires=[
         "requests>=2.28.0",
         "PyNaCl>=1.5.0",  # Ed25519 signing
+        "cryptography>=41.0.0",  # REQUIRED: Secure credential encryption
+        "keyring>=24.0.0",  # REQUIRED: System keyring for encryption keys
     ],
     extras_require={
         "dev": [

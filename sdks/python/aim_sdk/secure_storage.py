@@ -15,16 +15,12 @@ try:
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
-    print("⚠️  Warning: cryptography package not installed. Credentials will be stored in plaintext.")
-    print("   Install with: pip install cryptography")
 
 try:
     import keyring
     KEYRING_AVAILABLE = True
 except ImportError:
     KEYRING_AVAILABLE = False
-    print("⚠️  Warning: keyring package not installed. Using less secure storage.")
-    print("   Install with: pip install keyring")
 
 
 class SecureCredentialStorage:
@@ -35,7 +31,10 @@ class SecureCredentialStorage:
     - Encryption key stored in system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
     - Credentials encrypted with Fernet (AES-128 CBC)
     - Automatic key generation and rotation
-    - Falls back to plaintext with warning if dependencies unavailable
+    - REQUIRES cryptography and keyring packages (no insecure fallback)
+
+    Raises:
+        RuntimeError: If required security packages are not installed
     """
 
     SERVICE_NAME = "aim-sdk"
@@ -48,27 +47,43 @@ class SecureCredentialStorage:
         Args:
             credentials_path: Optional custom path to credentials file.
                             Defaults to ~/.aim/credentials.json
+
+        Raises:
+            RuntimeError: If cryptography or keyring packages are not installed
         """
+        # SECURITY: Require secure storage packages - NO FALLBACK
+        if not CRYPTOGRAPHY_AVAILABLE or not KEYRING_AVAILABLE:
+            missing = []
+            if not CRYPTOGRAPHY_AVAILABLE:
+                missing.append("cryptography")
+            if not KEYRING_AVAILABLE:
+                missing.append("keyring")
+
+            raise RuntimeError(
+                f"❌ SECURITY ERROR: Required packages not installed: {', '.join(missing)}\n"
+                f"   AIM SDK REQUIRES secure credential storage.\n"
+                f"   Install with: pip install {' '.join(missing)}\n"
+                f"   We do NOT support insecure plaintext storage."
+            )
+
         if credentials_path:
             self.credentials_path = Path(credentials_path)
         else:
             self.credentials_path = Path.home() / ".aim" / "credentials.json"
 
         self.encrypted_path = self.credentials_path.with_suffix('.encrypted')
+        self.cipher = self._get_cipher()
 
-        # Check if we can use encryption
-        self.encryption_available = CRYPTOGRAPHY_AVAILABLE and KEYRING_AVAILABLE
+    def _get_cipher(self) -> Fernet:
+        """
+        Get or create encryption cipher using key from system keyring.
 
-        if self.encryption_available:
-            self.cipher = self._get_cipher()
-        else:
-            self.cipher = None
+        Returns:
+            Fernet cipher for encryption/decryption
 
-    def _get_cipher(self) -> Optional[Fernet]:
-        """Get or create encryption cipher using key from system keyring."""
-        if not self.encryption_available:
-            return None
-
+        Raises:
+            RuntimeError: If keyring access fails
+        """
         try:
             # Try to get existing key from keyring
             key = keyring.get_password(self.SERVICE_NAME, self.KEY_NAME)
@@ -82,13 +97,15 @@ class SecureCredentialStorage:
             return Fernet(key.encode('utf-8'))
 
         except Exception as e:
-            print(f"⚠️  Warning: Failed to access system keyring: {e}")
-            print("   Falling back to plaintext storage")
-            return None
+            raise RuntimeError(
+                f"❌ SECURITY ERROR: Failed to access system keyring: {e}\n"
+                f"   AIM SDK requires secure credential storage.\n"
+                f"   Please check your system keyring configuration."
+            )
 
     def save_credentials(self, credentials: Dict[str, Any]) -> None:
         """
-        Save credentials securely.
+        Save credentials securely (ALWAYS encrypted).
 
         Args:
             credentials: Dictionary containing AIM credentials
@@ -99,55 +116,51 @@ class SecureCredentialStorage:
         # Serialize credentials
         credentials_json = json.dumps(credentials, indent=2)
 
-        if self.cipher:
-            # Encrypt and save
-            encrypted_data = self.cipher.encrypt(credentials_json.encode('utf-8'))
-            self.encrypted_path.write_bytes(encrypted_data)
+        # Encrypt and save (NO plaintext fallback)
+        encrypted_data = self.cipher.encrypt(credentials_json.encode('utf-8'))
+        self.encrypted_path.write_bytes(encrypted_data)
 
-            # Set restrictive permissions (owner read/write only)
-            os.chmod(self.encrypted_path, 0o600)
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(self.encrypted_path, 0o600)
 
-            # Remove plaintext file if it exists
-            if self.credentials_path.exists():
-                self.credentials_path.unlink()
+        # Remove plaintext file if it exists
+        if self.credentials_path.exists():
+            self.credentials_path.unlink()
+            print("🗑️  Removed old plaintext credentials")
 
-            print(f"✅ Credentials saved securely at {self.encrypted_path}")
-        else:
-            # Fall back to plaintext (with warning)
-            self.credentials_path.write_text(credentials_json)
-
-            # Set restrictive permissions
-            os.chmod(self.credentials_path, 0o600)
-
-            print(f"⚠️  Credentials saved in plaintext at {self.credentials_path}")
-            print("   For better security, install: pip install cryptography keyring")
+        print(f"✅ Credentials saved securely (encrypted) at {self.encrypted_path}")
 
     def load_credentials(self) -> Optional[Dict[str, Any]]:
         """
-        Load credentials from secure storage.
+        Load credentials from secure storage (ALWAYS encrypted).
 
         Returns:
             Dictionary containing credentials, or None if not found
+
+        Raises:
+            RuntimeError: If decryption fails
         """
-        # Try encrypted file first
-        if self.cipher and self.encrypted_path.exists():
+        # Load encrypted credentials only
+        if self.encrypted_path.exists():
             try:
                 encrypted_data = self.encrypted_path.read_bytes()
                 decrypted_data = self.cipher.decrypt(encrypted_data)
                 credentials = json.loads(decrypted_data.decode('utf-8'))
                 return credentials
             except Exception as e:
-                print(f"⚠️  Warning: Failed to decrypt credentials: {e}")
-                print("   Trying plaintext fallback...")
+                raise RuntimeError(
+                    f"❌ SECURITY ERROR: Failed to decrypt credentials: {e}\n"
+                    f"   Credentials may be corrupted or encryption key changed.\n"
+                    f"   You may need to re-register with AIM."
+                )
 
-        # Fall back to plaintext
+        # Check for old plaintext file and warn user
         if self.credentials_path.exists():
-            try:
-                credentials_json = self.credentials_path.read_text()
-                return json.loads(credentials_json)
-            except Exception as e:
-                print(f"❌ Error loading credentials: {e}")
-                return None
+            raise RuntimeError(
+                f"❌ SECURITY ERROR: Found plaintext credentials at {self.credentials_path}\n"
+                f"   AIM SDK no longer supports plaintext storage.\n"
+                f"   Please delete this file and re-register with AIM for secure storage."
+            )
 
         return None
 
