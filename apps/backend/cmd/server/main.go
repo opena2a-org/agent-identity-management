@@ -256,6 +256,7 @@ type Repositories struct {
 	Webhook           *repository.WebhookRepository
 	VerificationEvent *repository.VerificationEventRepositorySimple
 	Tag               *repository.TagRepository
+	SDKToken          domain.SDKTokenRepository
 }
 
 func initRepositories(db *sql.DB) *Repositories {
@@ -272,6 +273,7 @@ func initRepositories(db *sql.DB) *Repositories {
 		Webhook:           repository.NewWebhookRepository(db),
 		VerificationEvent: repository.NewVerificationEventRepository(db),
 		Tag:               repository.NewTagRepository(db),
+		SDKToken:          repository.NewSDKTokenRepository(db),
 	}
 }
 
@@ -290,6 +292,7 @@ type Services struct {
 	VerificationEvent *application.VerificationEventService
 	OAuth             *application.OAuthService
 	Tag               *application.TagService
+	SDKToken          *application.SDKTokenService
 }
 
 func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
@@ -376,6 +379,10 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.MCPServer,
 	)
 
+	sdkTokenService := application.NewSDKTokenService(
+		repos.SDKToken,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -391,6 +398,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		VerificationEvent: verificationEventService,
 		OAuth:             oauthService,
 		Tag:               tagService,
+		SDKToken:          sdkTokenService,
 	}, keyVault
 }
 
@@ -410,6 +418,8 @@ type Handlers struct {
 	PublicAgent       *handlers.PublicAgentHandler
 	Tag               *handlers.TagHandler
 	SDK               *handlers.SDKHandler
+	SDKToken          *handlers.SDKTokenHandler
+	AuthRefresh       *handlers.AuthRefreshHandler
 }
 
 func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -479,6 +489,14 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 		),
 		SDK: handlers.NewSDKHandler(
 			jwtService,
+			services.SDKToken.(*application.SDKTokenService).(*application.SDKTokenService), // Access repo via service
+		),
+		SDKToken: handlers.NewSDKTokenHandler(
+			services.SDKToken,
+		),
+		AuthRefresh: handlers.NewAuthRefreshHandler(
+			jwtService,
+			services.SDKToken,
 		),
 	}
 }

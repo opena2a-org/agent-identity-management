@@ -24,7 +24,7 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		INSERT INTO mcp_servers (
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, verification_url,
-			capabilities, trust_score, created_by, created_at, updated_at
+			capabilities, trust_score, registered_by_agent, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at
 	`
@@ -60,7 +60,7 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 		SELECT
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, last_verified_at, verification_url,
-			capabilities, trust_score, created_by, created_at, updated_at
+			capabilities, trust_score, registered_by_agent, created_at, updated_at
 		FROM mcp_servers
 		WHERE id = $1
 	`
@@ -101,12 +101,17 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPServer, error) {
 	query := `
 		SELECT
-			id, organization_id, name, description, url, version,
-			public_key, status, is_verified, last_verified_at, verification_url,
-			capabilities, trust_score, created_by, created_at, updated_at
-		FROM mcp_servers
-		WHERE organization_id = $1
-		ORDER BY created_at DESC
+			m.id, m.organization_id, m.name, m.description, m.url, m.version,
+			m.public_key, m.status, m.is_verified, m.last_verified_at, m.verification_url,
+			m.capabilities, m.trust_score, m.registered_by_agent, m.created_at, m.updated_at,
+			COALESCE(COUNT(v.id), 0) AS verification_count
+		FROM mcp_servers m
+		LEFT JOIN verification_events v ON v.mcp_server_id = m.id
+		WHERE m.organization_id = $1
+		GROUP BY m.id, m.organization_id, m.name, m.description, m.url, m.version,
+			m.public_key, m.status, m.is_verified, m.last_verified_at, m.verification_url,
+			m.capabilities, m.trust_score, m.registered_by_agent, m.created_at, m.updated_at
+		ORDER BY m.created_at DESC
 	`
 
 	rows, err := r.db.Query(query, orgID)
@@ -137,6 +142,7 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 			&server.CreatedBy,
 			&server.CreatedAt,
 			&server.UpdatedAt,
+			&server.VerificationCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
@@ -154,7 +160,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 		SELECT
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, last_verified_at, verification_url,
-			capabilities, trust_score, created_by, created_at, updated_at
+			capabilities, trust_score, registered_by_agent, created_at, updated_at
 		FROM mcp_servers
 		WHERE url = $1
 	`
@@ -257,7 +263,7 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 		SELECT
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, last_verified_at, verification_url,
-			capabilities, trust_score, created_by, created_at, updated_at
+			capabilities, trust_score, registered_by_agent, created_at, updated_at
 		FROM mcp_servers
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
