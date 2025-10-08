@@ -409,6 +409,7 @@ type Handlers struct {
 	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
 	Tag               *handlers.TagHandler
+	SDK               *handlers.SDKHandler
 }
 
 func initHandlers(services *Services, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -475,6 +476,9 @@ func initHandlers(services *Services, jwtService *auth.JWTService, oauthService 
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,
+		),
+		SDK: handlers.NewSDKHandler(
+			jwtService,
 		),
 	}
 }
@@ -547,6 +551,7 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
+	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register) // 🚀 ONE-LINE agent registration
 
 	// Auth routes (no authentication required)
@@ -557,6 +562,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/change-password", middleware.AuthMiddleware(jwtService), h.Auth.ChangePassword) // Change password
 	auth.Get("/me", middleware.AuthMiddleware(jwtService), h.Auth.Me)
+
+	// SDK routes (authentication required) - Download pre-configured SDK
+	sdk := v1.Group("/sdk")
+	sdk.Use(middleware.AuthMiddleware(jwtService))
+	sdk.Get("/download", h.SDK.DownloadSDK) // Download Python SDK with embedded credentials
 
 	// Agents routes (authentication required)
 	agents := v1.Group("/agents")

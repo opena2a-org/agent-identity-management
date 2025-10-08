@@ -181,38 +181,42 @@ func (s *TagService) GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID
 
 // SuggestTagsForAgent suggests tags based on agent capabilities
 func (s *TagService) SuggestTagsForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
-	agent, err := s.agentRepo.GetByID(agentID)
+	_, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
 
+	// TODO: Capabilities field not yet in Agent domain - need to add in Phase 4
 	// Get all existing tags for organization
-	allTags, err := s.tagRepo.GetByOrganization(agent.OrganizationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get organization tags: %w", err)
-	}
+	// allTags, err := s.tagRepo.GetByOrganization(agent.OrganizationID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to get organization tags: %w", err)
+	// }
 
-	// Detect resource types from capabilities
-	suggestions := s.detectResourceTypesFromCapabilities(agent.Capabilities, allTags)
+	// For now, return empty suggestions
+	var suggestions []*domain.Tag
+	// suggestions := s.detectResourceTypesFromCapabilities(agent.Capabilities, allTags)
 
 	return suggestions, nil
 }
 
 // SuggestTagsForMCPServer suggests tags based on MCP server capabilities
 func (s *TagService) SuggestTagsForMCPServer(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error) {
-	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	_, err := s.mcpRepo.GetByID(mcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("mcp server not found: %w", err)
 	}
 
+	// TODO: Capabilities field not yet in MCPServer domain - need to add in Phase 4
 	// Get all existing tags for organization
-	allTags, err := s.tagRepo.GetByOrganization(mcpServer.OrganizationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get organization tags: %w", err)
-	}
+	// allTags, err := s.tagRepo.GetByOrganization(mcpServer.OrganizationID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to get organization tags: %w", err)
+	// }
 
-	// Detect resource types from capabilities
-	suggestions := s.detectResourceTypesFromCapabilities(mcpServer.Capabilities, allTags)
+	// For now, return empty suggestions
+	var suggestions []*domain.Tag
+	// suggestions := s.detectResourceTypesFromCapabilities(mcpServer.Capabilities, allTags)
 
 	return suggestions, nil
 }

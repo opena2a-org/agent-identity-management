@@ -61,6 +61,18 @@ export interface AddTagsInput {
   tag_ids: string[]
 }
 
+export interface AgentCapability {
+  id: string
+  agentId: string
+  capabilityType: string
+  capabilityScope?: Record<string, any>
+  grantedBy?: string
+  grantedAt: string
+  revokedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 class APIClient {
   private baseURL: string
   private token: string | null = null

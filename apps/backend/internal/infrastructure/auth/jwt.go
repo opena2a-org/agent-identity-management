@@ -42,6 +42,31 @@ func NewJWTService() *JWTService {
 	}
 }
 
+// GenerateSDKRefreshToken generates a long-lived refresh token for SDK usage (1 year)
+// This token is embedded in downloaded SDKs for auto-authentication
+func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) (string, error) {
+	now := time.Now()
+	sdkExpiry := 365 * 24 * time.Hour // 1 year
+
+	claims := JWTClaims{
+		UserID:         userID,
+		OrganizationID: orgID,
+		Email:          email,
+		Role:           role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(sdkExpiry)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    "agent-identity-management-sdk",
+			Subject:   userID,
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secret)
+}
+
 // GenerateTokenPair generates access and refresh tokens
 func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (accessToken, refreshToken string, err error) {
 	// Generate access token
