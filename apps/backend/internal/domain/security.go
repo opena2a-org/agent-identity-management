@@ -50,6 +50,7 @@ type Threat struct {
 	Source         string     `json:"source"` // IP address, agent ID, etc.
 	TargetType     string     `json:"target_type"` // "agent", "user", "api_key"
 	TargetID       uuid.UUID  `json:"target_id"`
+	TargetName     *string    `json:"target_name"` // Agent or MCP server name (joined from agents/mcp_servers table)
 	IsBlocked      bool       `json:"is_blocked"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ResolvedAt     *time.Time `json:"resolved_at"`

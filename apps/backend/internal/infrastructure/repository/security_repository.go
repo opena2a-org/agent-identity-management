@@ -53,11 +53,14 @@ func (r *SecurityRepository) CreateThreat(threat *domain.Threat) error {
 func (r *SecurityRepository) GetThreats(orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error) {
 	query := `
 		SELECT
-			id, organization_id, threat_type, severity, title, description,
-			source, target_type, target_id, is_blocked, created_at, resolved_at
-		FROM security_threats
-		WHERE organization_id = $1
-		ORDER BY created_at DESC
+			st.id, st.organization_id, st.threat_type, st.severity, st.title, st.description,
+			st.source, st.target_type, st.target_id, st.is_blocked, st.created_at, st.resolved_at,
+			COALESCE(a.display_name, a.name, mcp.name) as target_name
+		FROM security_threats st
+		LEFT JOIN agents a ON st.target_type = 'agent' AND st.target_id = a.id
+		LEFT JOIN mcp_servers mcp ON st.target_type = 'mcp_server' AND st.target_id = mcp.id
+		WHERE st.organization_id = $1
+		ORDER BY st.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -70,6 +73,7 @@ func (r *SecurityRepository) GetThreats(orgID uuid.UUID, limit, offset int) ([]*
 	var threats []*domain.Threat
 	for rows.Next() {
 		threat := &domain.Threat{}
+		var targetName sql.NullString
 		err := rows.Scan(
 			&threat.ID,
 			&threat.OrganizationID,
@@ -83,10 +87,17 @@ func (r *SecurityRepository) GetThreats(orgID uuid.UUID, limit, offset int) ([]*
 			&threat.IsBlocked,
 			&threat.CreatedAt,
 			&threat.ResolvedAt,
+			&targetName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan threat: %w", err)
 		}
+
+		// Set target name if available
+		if targetName.Valid {
+			threat.TargetName = &targetName.String
+		}
+
 		threats = append(threats, threat)
 	}
 
