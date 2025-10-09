@@ -259,7 +259,34 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 		})
 	}
 
-	// Log this audit log query
+	// Log this audit log query with enhanced metadata
+	metadata := map[string]interface{}{
+		"results_returned": len(logs),
+		"total_available":  total,
+		"page_number":      (filters.Offset / filters.Limit) + 1,
+		"page_size":        filters.Limit,
+	}
+
+	// Only include non-empty filters
+	if filters.Action != "" {
+		metadata["filter_action"] = filters.Action
+	}
+	if filters.EntityType != "" {
+		metadata["filter_resource_type"] = filters.EntityType
+	}
+	if filters.EntityID != "" {
+		metadata["filter_resource_id"] = filters.EntityID
+	}
+	if filters.UserID != "" {
+		metadata["filter_user_id"] = filters.UserID
+	}
+	if filters.StartDate != "" {
+		metadata["filter_start_date"] = filters.StartDate
+	}
+	if filters.EndDate != "" {
+		metadata["filter_end_date"] = filters.EndDate
+	}
+
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -269,10 +296,7 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 		uuid.Nil,
 		c.IP(),
 		c.Get("User-Agent"),
-		map[string]interface{}{
-			"filters": filters,
-			"total":   total,
-		},
+		metadata,
 	)
 
 	return c.JSON(fiber.Map{
@@ -322,7 +346,22 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		})
 	}
 
-	// Log audit
+	// Log audit with enhanced metadata
+	metadata := map[string]interface{}{
+		"results_returned": len(alerts),
+		"total_available":  total,
+		"page_number":      (offset / limit) + 1,
+		"page_size":        limit,
+	}
+
+	// Only include non-empty filters
+	if severity != "" {
+		metadata["filter_severity"] = severity
+	}
+	if status != "" {
+		metadata["filter_status"] = status
+	}
+
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -332,11 +371,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		uuid.Nil,
 		c.IP(),
 		c.Get("User-Agent"),
-		map[string]interface{}{
-			"severity": severity,
-			"status":   status,
-			"total":    total,
-		},
+		metadata,
 	)
 
 	return c.JSON(fiber.Map{
@@ -505,7 +540,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		verificationRate = float64(verifiedAgents) / float64(len(agents)) * 100
 	}
 
-	// Log audit
+	// Log audit with dashboard metrics
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -515,7 +550,14 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		uuid.Nil,
 		c.IP(),
 		c.Get("User-Agent"),
-		nil,
+		map[string]interface{}{
+			"total_agents":      len(agents),
+			"verified_agents":   verifiedAgents,
+			"total_mcp_servers": len(mcpServersList),
+			"total_users":       len(users),
+			"active_alerts":     total,
+			"critical_alerts":   criticalAlerts,
+		},
 	)
 
 	return c.JSON(fiber.Map{
@@ -673,7 +715,7 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		})
 	}
 
-	// Log audit
+	// Log audit with settings viewed
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -683,7 +725,11 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		orgID,
 		c.IP(),
 		c.Get("User-Agent"),
-		nil,
+		map[string]interface{}{
+			"organization_name": org.Name,
+			"plan_type":         org.PlanType,
+			"is_active":         org.IsActive,
+		},
 	)
 
 	return c.JSON(fiber.Map{

@@ -34,6 +34,7 @@ export function AgentDetailModal({
   const [agentKeys, setAgentKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [downloadingSDK, setDownloadingSDK] = useState(false);
+  const [showCredentialsSection, setShowCredentialsSection] = useState(false);
 
   useEffect(() => {
     if (isOpen && agent) {
@@ -283,7 +284,6 @@ export function AgentDetailModal({
                 selectedTags={agentTags}
                 availableTags={availableTags}
                 suggestedTags={suggestedTags}
-                maxTags={3}
                 onTagsChange={handleTagsChange}
               />
             )}
@@ -355,12 +355,25 @@ export function AgentDetailModal({
 
           {/* Download SDK / View Credentials */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <Download className="h-4 w-4" />
-              Download SDK / View Credentials
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Download SDK / View Credentials
+              </h3>
+              <button
+                onClick={() => setShowCredentialsSection(!showCredentialsSection)}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                title={showCredentialsSection ? "Hide details" : "Show details"}
+              >
+                {showCredentialsSection ? (
+                  <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                )}
+              </button>
+            </div>
 
-            {!integrationMethod && (
+            {showCredentialsSection && !integrationMethod && (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                   Access your agent's SDK or view credentials for manual integration
@@ -405,7 +418,7 @@ export function AgentDetailModal({
             )}
 
             {/* SDK Download UI */}
-            {integrationMethod === 'sdk' && (
+            {showCredentialsSection && integrationMethod === 'sdk' && (
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
                 <div className="flex items-start gap-3">
                   <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
@@ -459,7 +472,7 @@ export function AgentDetailModal({
             )}
 
             {/* Manual Integration Credentials Display */}
-            {integrationMethod === 'manual' && (
+            {showCredentialsSection && integrationMethod === 'manual' && (
               <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4">
                 <div className="flex items-start gap-3">
                   <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />

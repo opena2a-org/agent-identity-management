@@ -167,7 +167,6 @@ export default function SecurityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [threats, setThreats] = useState<SecurityThreat[]>([]);
-  const [incidents, setIncidents] = useState<SecurityIncident[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
 
   // Modal states
@@ -178,13 +177,11 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       setError(null);
-      const [threatsData, incidentsData, metricsData] = await Promise.all([
+      const [threatsData, metricsData] = await Promise.all([
         api.getSecurityThreats(),
-        api.getSecurityIncidents(),
         api.getSecurityMetrics()
       ]);
       setThreats(threatsData.threats || []);
-      setIncidents(incidentsData.incidents || []);
       setMetrics(metricsData);
     } catch (err) {
       console.error('Failed to fetch security data:', err);
@@ -229,11 +226,11 @@ export default function SecurityPage() {
       icon: AlertOctagon,
     },
     {
-      name: 'Critical Incidents',
-      value: incidents.filter(i => i.severity === 'critical').length.toLocaleString(),
-      change: '+5.1%',
-      changeType: 'negative',
-      icon: XCircle,
+      name: 'Blocked Threats',
+      value: metrics?.blocked_threats?.toLocaleString() || '0',
+      change: '+12.3%',
+      changeType: 'positive',
+      icon: CheckCircle,
     },
     {
       name: 'Anomalies Detected',
@@ -250,7 +247,7 @@ export default function SecurityPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Monitor security threats, incidents, and anomalies across all agents.
+          Monitor security threats and anomalies across all agents.
         </p>
         {error && (
           <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -426,7 +423,8 @@ export default function SecurityPage() {
         </div>
       </div>
 
-      {/* Recent Incidents */}
+      {/* Recent Incidents - Hidden until incident management workflow is implemented */}
+      {/*
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
@@ -477,6 +475,7 @@ export default function SecurityPage() {
           </table>
         </div>
       </div>
+      */}
 
       {/* Modals */}
       <ThreatDetailModal

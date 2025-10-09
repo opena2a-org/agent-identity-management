@@ -21,7 +21,7 @@ export function TagSelector({
   selectedTags,
   availableTags,
   suggestedTags = [],
-  maxTags = 3,
+  maxTags,
   onTagsChange,
   onCreateTag,
   className,
@@ -42,7 +42,7 @@ export function TagSelector({
     (tag) => !selectedTags.some((t) => t.id === tag.id)
   )
 
-  const canAddMore = selectedTags.length < maxTags
+  const canAddMore = maxTags ? selectedTags.length < maxTags : true
 
   const handleAddTag = (tag: Tag) => {
     if (canAddMore) {
@@ -76,11 +76,6 @@ export function TagSelector({
             <Plus className="h-3 w-3 mr-1" />
             Add Tag
           </Button>
-        )}
-        {!canAddMore && (
-          <span className="text-xs text-muted-foreground self-center ml-2">
-            Community Edition: {maxTags} tags max
-          </span>
         )}
       </div>
 
