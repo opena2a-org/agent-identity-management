@@ -17,6 +17,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { api } from '@/lib/api';
 import { getDashboardPermissions, type UserRole } from '@/lib/permissions';
+import { TimezoneIndicator } from '@/components/timezone-indicator';
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -255,10 +256,15 @@ function DashboardContent() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Monitor agent verification activities and system performance across all protocols.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Monitor agent verification activities and system performance across all protocols.
+            </p>
+          </div>
+          <TimezoneIndicator />
+        </div>
         {error && (
           <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <p className="text-sm text-yellow-800 dark:text-yellow-300">

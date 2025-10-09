@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { formatTime, formatDateTime } from '@/lib/date-utils';
 
 interface VerificationEvent {
   id: string;
@@ -443,7 +444,7 @@ export default function MonitoringPage() {
                   </div>
 
                   <div className="text-right text-sm text-gray-500">
-                    {new Date(event.createdAt).toLocaleTimeString()}
+                    {formatTime(event.createdAt)}
                   </div>
                 </div>
               </div>

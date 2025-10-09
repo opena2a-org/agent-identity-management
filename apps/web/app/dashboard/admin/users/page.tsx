@@ -17,6 +17,7 @@ import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+import { formatDate } from '@/lib/date-utils'
 
 interface User {
   id: string
@@ -396,7 +397,7 @@ export default function UsersPage() {
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Joined</p>
                       <p className="text-sm">
-                        {new Date(user.created_at).toLocaleDateString()}
+                        {formatDate(user.created_at)}
                       </p>
                     </div>
 

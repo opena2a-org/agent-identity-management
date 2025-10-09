@@ -23,6 +23,7 @@ import {
   Check
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { formatDateTime } from '@/lib/date-utils'
 
 interface Alert {
   id: string
@@ -339,7 +340,7 @@ export default function AlertsPage() {
                           </span>
                           <span>•</span>
                           <span>
-                            {new Date(alert.created_at).toLocaleString()}
+                            {formatDateTime(alert.created_at)}
                           </span>
                         </div>
 
@@ -348,7 +349,7 @@ export default function AlertsPage() {
                             <CheckCircle2 className="h-3 w-3" />
                             <span>
                               Acknowledged {alert.acknowledged_at &&
-                                new Date(alert.acknowledged_at).toLocaleString()}
+                                formatDateTime(alert.acknowledged_at)}
                             </span>
                           </div>
                         )}

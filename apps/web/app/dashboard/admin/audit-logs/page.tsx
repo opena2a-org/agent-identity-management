@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { Search, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
+import { formatTime, formatDate } from '@/lib/date-utils'
 
 interface AuditLog {
   id: string
@@ -362,10 +363,10 @@ export default function AuditLogsPage() {
 
                   <div className="text-right">
                     <p className="text-sm font-medium">
-                      {new Date(log.timestamp).toLocaleTimeString()}
+                      {formatTime(log.timestamp)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(log.timestamp).toLocaleDateString()}
+                      {formatDate(log.timestamp)}
                     </p>
                   </div>
                 </div>
