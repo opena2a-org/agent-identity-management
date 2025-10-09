@@ -3,7 +3,7 @@ package application
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -297,9 +297,9 @@ type ValidateAPIKeyResponse struct {
 
 // ValidateAPIKey validates an API key and returns the associated user and organization
 func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*ValidateAPIKeyResponse, error) {
-	// Hash the API key using SHA-256
+	// Hash the API key using SHA-256 (must match api_key_service.go encoding)
 	hash := sha256.Sum256([]byte(apiKey))
-	hashedKey := hex.EncodeToString(hash[:])
+	hashedKey := base64.StdEncoding.EncodeToString(hash[:])
 
 	// Retrieve API key from database
 	key, err := s.apiKeyRepo.GetByHash(hashedKey)
@@ -342,7 +342,7 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*Valid
 	}
 
 	// Update last_used_at timestamp
-	if err := s.apiKeyRepo.UpdateLastUsed(key.ID, time.Now()); err != nil {
+	if err := s.apiKeyRepo.UpdateLastUsed(key.ID); err != nil {
 		// Log error but don't fail the request
 		// This is non-critical
 		fmt.Printf("Warning: failed to update last_used_at for API key %s: %v\n", key.ID, err)

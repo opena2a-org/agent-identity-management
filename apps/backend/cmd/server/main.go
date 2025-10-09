@@ -91,7 +91,7 @@ func main() {
 	oauthProviders := initOAuthProviders(cfg)
 
 	// Initialize application services
-	services, keyVault := initServices(repos, cacheService, oauthRepo, oauthProviders)
+	services, keyVault := initServices(repos, cacheService, oauthRepo, jwtService, oauthProviders)
 
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, legacyOAuthService, keyVault)
@@ -295,7 +295,7 @@ type Services struct {
 	SDKToken          *application.SDKTokenService
 }
 
-func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
+func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -378,6 +378,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.User,
 		authService,
 		auditService,
+		jwtService,
 		oauthProviders,
 	)
 
@@ -620,6 +621,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	agents.Post("/:id/log-action/:audit_id", h.Agent.LogActionResult)
 	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
 	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
+	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
+	agents.Get("/:id/credentials", h.Agent.GetCredentials)
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -627,7 +630,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService) {
 	apiKeys.Use(middleware.RateLimitMiddleware())
 	apiKeys.Get("/", h.APIKey.ListAPIKeys)
 	apiKeys.Post("/", middleware.MemberMiddleware(), h.APIKey.CreateAPIKey)
-	apiKeys.Delete("/:id", middleware.MemberMiddleware(), h.APIKey.RevokeAPIKey)
+	apiKeys.Patch("/:id/disable", middleware.MemberMiddleware(), h.APIKey.DisableAPIKey)
+	apiKeys.Delete("/:id", middleware.MemberMiddleware(), h.APIKey.DeleteAPIKey)
 
 	// Trust score routes (authentication required)
 	trust := v1.Group("/trust-score")

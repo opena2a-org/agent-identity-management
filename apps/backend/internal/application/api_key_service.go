@@ -91,7 +91,7 @@ func (s *APIKeyService) ListAPIKeys(ctx context.Context, orgID uuid.UUID) ([]*do
 	return s.apiKeyRepo.GetByOrganization(orgID)
 }
 
-// RevokeAPIKey revokes an API key
+// RevokeAPIKey revokes an API key (sets is_active=false)
 func (s *APIKeyService) RevokeAPIKey(ctx context.Context, keyID, orgID uuid.UUID) error {
 	// Verify key belongs to organization
 	key, err := s.apiKeyRepo.GetByID(keyID)
@@ -104,6 +104,26 @@ func (s *APIKeyService) RevokeAPIKey(ctx context.Context, keyID, orgID uuid.UUID
 	}
 
 	return s.apiKeyRepo.Revoke(keyID)
+}
+
+// DeleteAPIKey permanently deletes an API key (only if disabled)
+func (s *APIKeyService) DeleteAPIKey(ctx context.Context, keyID, orgID uuid.UUID) error {
+	// Verify key belongs to organization
+	key, err := s.apiKeyRepo.GetByID(keyID)
+	if err != nil {
+		return err
+	}
+
+	if key.OrganizationID != orgID {
+		return fmt.Errorf("API key does not belong to organization")
+	}
+
+	// Check if key is disabled (is_active=false)
+	if key.IsActive {
+		return fmt.Errorf("API key must be disabled before deletion")
+	}
+
+	return s.apiKeyRepo.Delete(keyID)
 }
 
 // ValidateAPIKey validates an API key and returns the associated API key record

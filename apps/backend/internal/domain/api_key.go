@@ -30,5 +30,6 @@ type APIKeyRepository interface {
 	GetByAgent(agentID uuid.UUID) ([]*APIKey, error)
 	GetByOrganization(orgID uuid.UUID) ([]*APIKey, error)
 	Revoke(id uuid.UUID) error
+	Delete(id uuid.UUID) error
 	UpdateLastUsed(id uuid.UUID) error
 }

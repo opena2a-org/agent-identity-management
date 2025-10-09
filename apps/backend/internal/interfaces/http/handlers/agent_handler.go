@@ -487,6 +487,70 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	return c.Send(sdkBytes)
 }
 
+// GetCredentials returns the agent's cryptographic credentials (public and private keys)
+// @Summary Get agent credentials
+// @Description Retrieve Ed25519 public and private keys for an agent
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} CredentialsResponse
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/credentials [get]
+func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Get agent credentials (decrypts private key)
+	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve agent credentials",
+		})
+	}
+
+	// Log audit - viewing credentials is a sensitive action
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"agent_credentials",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"agent_name": agent.Name,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"agentId":    agentID.String(),
+		"publicKey":  publicKey,
+		"privateKey": privateKey,
+	})
+}
+
 // getAIMBaseURL extracts the base URL from the request
 func getAIMBaseURL(c fiber.Ctx) string {
 	// Get protocol (http or https)

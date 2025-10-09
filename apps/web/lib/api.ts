@@ -104,14 +104,14 @@ class APIClient {
   setToken(token: string) {
     this.token = token
     if (typeof window !== 'undefined') {
-      localStorage.setItem('aim_token', token)
+      localStorage.setItem('auth_token', token)
     }
   }
 
   getToken(): string | null {
     if (this.token) return this.token
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('aim_token')
+      return localStorage.getItem('auth_token')
     }
     return null
   }
@@ -119,7 +119,7 @@ class APIClient {
   clearToken() {
     this.token = null
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('aim_token')
+      localStorage.removeItem('auth_token')
     }
   }
 
@@ -146,6 +146,11 @@ class APIClient {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Request failed' }))
       throw new Error(error.message || `HTTP ${response.status}`)
+    }
+
+    // Handle 204 No Content responses (e.g., DELETE operations)
+    if (response.status === 204) {
+      return undefined as T
     }
 
     return response.json()
@@ -208,7 +213,13 @@ class APIClient {
     })
   }
 
-  async revokeAPIKey(id: string): Promise<void> {
+  // Disable API key (sets is_active=false)
+  async disableAPIKey(id: string): Promise<void> {
+    return this.request(`/api/v1/api-keys/${id}/disable`, { method: 'PATCH' })
+  }
+
+  // Delete API key (only works if already disabled)
+  async deleteAPIKey(id: string): Promise<void> {
     return this.request(`/api/v1/api-keys/${id}`, { method: 'DELETE' })
   }
 

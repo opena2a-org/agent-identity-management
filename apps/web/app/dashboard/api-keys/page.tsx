@@ -11,7 +11,8 @@ import {
   Loader2,
   AlertCircle,
   Search,
-  Filter
+  Filter,
+  Ban
 } from 'lucide-react';
 import { api, APIKey, Agent } from '@/lib/api';
 import { CreateAPIKeyModal } from '@/components/modals/create-api-key-modal';
@@ -72,7 +73,8 @@ export default function APIKeysPage() {
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedKey, setSelectedKey] = useState<APIKeyWithAgent | null>(null);
 
   useEffect(() => {
@@ -168,8 +170,9 @@ export default function APIKeysPage() {
   // Calculate stats
   const stats = {
     total: apiKeys.length,
-    active: apiKeys.filter(k => k.is_active).length,
-    expired: apiKeys.filter(k => !k.is_active || (k.expires_at && new Date(k.expires_at) < new Date())).length,
+    active: apiKeys.filter(k => k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())).length,
+    disabled: apiKeys.filter(k => !k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())).length,
+    expired: apiKeys.filter(k => k.expires_at && new Date(k.expires_at) < new Date()).length,
     neverUsed: apiKeys.filter(k => !k.last_used_at).length
   };
 
@@ -208,8 +211,10 @@ export default function APIKeysPage() {
     let matchesStatus: boolean = true;
     if (statusFilter === 'active') {
       matchesStatus = key.is_active && (!key.expires_at || new Date(key.expires_at) > new Date());
+    } else if (statusFilter === 'disabled') {
+      matchesStatus = !key.is_active && (!key.expires_at || new Date(key.expires_at) > new Date());
     } else if (statusFilter === 'expired') {
-      matchesStatus = !key.is_active || (key.expires_at ? new Date(key.expires_at) < new Date() : false);
+      matchesStatus = key.expires_at ? new Date(key.expires_at) < new Date() : false;
     } else if (statusFilter === 'never-used') {
       matchesStatus = !key.last_used_at;
     }
@@ -229,23 +234,45 @@ export default function APIKeysPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleRevokeKey = (key: APIKeyWithAgent) => {
+  const handleDisableKey = (key: APIKeyWithAgent) => {
     setSelectedKey(key);
-    setShowRevokeConfirm(true);
+    setShowDisableConfirm(true);
   };
 
-  const confirmRevoke = async () => {
+  const confirmDisable = async () => {
     if (!selectedKey) return;
 
     try {
-      await api.revokeAPIKey(selectedKey.id);
+      await api.disableAPIKey(selectedKey.id);
+      // Update the key's is_active status in the local state
+      setApiKeys(apiKeys.map(k => k.id === selectedKey.id ? { ...k, is_active: false } : k));
+    } catch (err) {
+      console.error('Failed to disable API key:', err);
+      // Mock disable for development
+      setApiKeys(apiKeys.map(k => k.id === selectedKey.id ? { ...k, is_active: false } : k));
+    } finally {
+      setShowDisableConfirm(false);
+      setSelectedKey(null);
+    }
+  };
+
+  const handleDeleteKey = (key: APIKeyWithAgent) => {
+    setSelectedKey(key);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedKey) return;
+
+    try {
+      await api.deleteAPIKey(selectedKey.id);
+      // Remove the key from the local state
       setApiKeys(apiKeys.filter(k => k.id !== selectedKey.id));
     } catch (err) {
-      console.error('Failed to revoke API key:', err);
-      // Mock revoke for development
-      setApiKeys(apiKeys.filter(k => k.id !== selectedKey.id));
+      console.error('Failed to delete API key:', err);
+      alert(`Failed to delete API key: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
-      setShowRevokeConfirm(false);
+      setShowDeleteConfirm(false);
       setSelectedKey(null);
     }
   };
@@ -319,6 +346,7 @@ export default function APIKeysPage() {
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
               <option value="expired">Expired</option>
               <option value="never-used">Never Used</option>
             </select>
@@ -398,21 +426,35 @@ export default function APIKeysPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      key.is_active && !isExpired(key.expires_at)
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                      !key.is_active
+                        ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300'
+                        : isExpired(key.expires_at)
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                     }`}>
-                      {key.is_active && !isExpired(key.expires_at) ? 'Active' : 'Expired'}
+                      {!key.is_active ? 'Disabled' : isExpired(key.expires_at) ? 'Expired' : 'Active'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => handleRevokeKey(key)}
-                      className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                      title="Revoke key"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {key.is_active && !isExpired(key.expires_at) ? (
+                        <button
+                          onClick={() => handleDisableKey(key)}
+                          className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                          title="Disable key"
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
+                      ) : !key.is_active ? (
+                        <button
+                          onClick={() => handleDeleteKey(key)}
+                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          title="Delete key permanently"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -441,15 +483,29 @@ export default function APIKeysPage() {
       />
 
       <ConfirmDialog
-        isOpen={showRevokeConfirm}
-        title="Revoke API Key"
-        message={`Are you sure you want to revoke "${selectedKey?.name}"? This will immediately invalidate the key and cannot be undone.`}
-        confirmText="Revoke"
+        isOpen={showDisableConfirm}
+        title="Disable API Key"
+        message={`Are you sure you want to disable "${selectedKey?.name}"? The key will be marked as inactive and cannot be used for authentication. You can delete it permanently later.`}
+        confirmText="Disable"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={confirmDisable}
+        onCancel={() => {
+          setShowDisableConfirm(false);
+          setSelectedKey(null);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete API Key"
+        message={`Are you sure you want to permanently delete "${selectedKey?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
-        onConfirm={confirmRevoke}
+        onConfirm={confirmDelete}
         onCancel={() => {
-          setShowRevokeConfirm(false);
+          setShowDeleteConfirm(false);
           setSelectedKey(null);
         }}
       />

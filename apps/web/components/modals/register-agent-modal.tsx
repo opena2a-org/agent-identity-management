@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Loader2, CheckCircle, AlertCircle, Plus, Trash2, Download, ShieldAlert } from 'lucide-react';
+import { X, Loader2, CheckCircle, AlertCircle, Plus, Trash2, Download, ShieldAlert, Code, Package, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { api, Agent } from '@/lib/api';
 
 interface RegisterAgentModalProps {
@@ -49,6 +49,11 @@ export function RegisterAgentModal({
   const [success, setSuccess] = useState(false);
   const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
   const [downloadingSDK, setDownloadingSDK] = useState(false);
+  const [integrationMethod, setIntegrationMethod] = useState<'sdk' | 'manual' | null>(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [agentKeys, setAgentKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
+  const [loadingKeys, setLoadingKeys] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     name: initialData?.name || '',
@@ -112,27 +117,27 @@ export function RegisterAgentModal({
     setError(null);
 
     try {
-      // Convert snake_case to camelCase for backend API
+      // Send snake_case to match backend JSON tags
       const agentData: any = {
         name: formData.name,
-        displayName: formData.display_name,
+        display_name: formData.display_name,
         description: formData.description,
-        agentType: formData.agent_type,
+        agent_type: formData.agent_type,
         version: formData.version
       };
 
       // Add optional fields only if they have values
       if (formData.certificate_url) {
-        agentData.certificateUrl = formData.certificate_url;
+        agentData.certificate_url = formData.certificate_url;
       }
       if (formData.repository_url) {
-        agentData.repositoryUrl = formData.repository_url;
+        agentData.repository_url = formData.repository_url;
       }
       if (formData.documentation_url) {
-        agentData.documentationUrl = formData.documentation_url;
+        agentData.documentation_url = formData.documentation_url;
       }
       if (formData.talks_to.length > 0) {
-        agentData.talksTo = formData.talks_to;
+        agentData.talks_to = formData.talks_to;
       }
       if (formData.capabilities.length > 0) {
         agentData.capabilities = formData.capabilities;
@@ -156,29 +161,6 @@ export function RegisterAgentModal({
     } catch (err) {
       console.error('Failed to save agent:', err);
       setError(err instanceof Error ? err.message : 'Failed to save agent');
-
-      // Mock success for development
-      setTimeout(() => {
-        setSuccess(true);
-        setTimeout(() => {
-          const mockAgent: Agent = {
-            id: `agt_${Date.now()}`,
-            organization_id: 'org_123',
-            name: formData.name,
-            display_name: formData.display_name,
-            description: formData.description,
-            agent_type: formData.agent_type,
-            version: formData.version,
-            status: 'pending',
-            trust_score: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-          onSuccess?.(mockAgent);
-          onClose();
-          resetForm();
-        }, 1500);
-      }, 500);
     } finally {
       setLoading(false);
     }
@@ -232,6 +214,52 @@ export function RegisterAgentModal({
     }
   };
 
+  const fetchAgentKeys = async () => {
+    if (!createdAgent) return;
+
+    setLoadingKeys(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/credentials`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch agent keys');
+      }
+
+      const data = await response.json();
+      setAgentKeys({
+        publicKey: data.publicKey,
+        privateKey: data.privateKey
+      });
+    } catch (err) {
+      console.error('Failed to fetch agent keys:', err);
+      alert('Failed to fetch credentials. Please try again from the agent details page.');
+      setIntegrationMethod(null); // Reset to selection screen
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  const handleManualIntegration = () => {
+    setIntegrationMethod('manual');
+    fetchAgentKeys();
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -251,6 +279,11 @@ export function RegisterAgentModal({
     setSuccess(false);
     setCreatedAgent(null);
     setDownloadingSDK(false);
+    setIntegrationMethod(null);
+    setShowPrivateKey(false);
+    setCopiedField(null);
+    setAgentKeys(null);
+    setLoadingKeys(false);
   };
 
   const handleClose = () => {
@@ -319,64 +352,266 @@ export function RegisterAgentModal({
                 </p>
               </div>
 
-              {/* Security Warning + SDK Download */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
-                <div className="flex items-start gap-3">
-                  <Download className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                      Download Python SDK
-                    </h4>
-                    <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
-                      Get started immediately with automatic identity verification. The SDK includes your agent's cryptographic keys for seamless authentication.
-                    </p>
+              {/* Integration Method Selection - Show if no method chosen yet */}
+              {!integrationMethod && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    🎯 Choose Your Integration Method
+                  </h4>
+
+                  {/* SDK Integration Option */}
+                  <button
+                    onClick={() => setIntegrationMethod('sdk')}
+                    className="w-full p-4 border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                          📦 SDK Integration (Recommended)
+                        </h5>
+                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                          Download ready-to-use SDK for <strong>Python, Node.js, or Go</strong>. Includes cryptographic keys and automatic verification.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Manual Integration Option */}
+                  <button
+                    onClick={handleManualIntegration}
+                    className="w-full p-4 border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                          🔧 Manual Integration
+                        </h5>
+                        <p className="text-xs text-gray-700 dark:text-gray-300">
+                          Use <strong>any programming language</strong> (Rust, Ruby, PHP, Java, etc.). Get your credentials and API documentation.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* SDK Download Section - Show if SDK method chosen */}
+              {integrationMethod === 'sdk' && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Download className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                        Download Python SDK
+                      </h4>
+                      <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
+                        Get started immediately with automatic identity verification. The SDK includes your agent's cryptographic keys for seamless authentication.
+                      </p>
+                      <button
+                        onClick={downloadSDK}
+                        disabled={downloadingSDK}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {downloadingSDK ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" />
+                            Download SDK (.zip)
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Security Warning */}
+                  <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+                    <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h5 className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
+                        ⚠️ Security Notice: Contains Private Key
+                      </h5>
+                      <ul className="text-xs text-red-800 dark:text-red-200 space-y-1">
+                        <li>• This SDK contains your agent's <strong>private cryptographic key</strong></li>
+                        <li>• <strong>Never</strong> commit this SDK to version control (Git, GitHub, etc.)</li>
+                        <li>• <strong>Never</strong> share this SDK publicly or with untrusted parties</li>
+                        <li>• Store it securely and use environment variables in production</li>
+                        <li>• Regenerate keys immediately if compromised</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Change Method */}
+                  <div className="text-center">
                     <button
-                      onClick={downloadSDK}
-                      disabled={downloadingSDK}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                      onClick={() => setIntegrationMethod(null)}
+                      className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
                     >
-                      {downloadingSDK ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4" />
-                          Download SDK (.zip)
-                        </>
-                      )}
+                      ← Choose a different integration method
                     </button>
                   </div>
                 </div>
+              )}
 
-                {/* Security Warning */}
-                <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
-                  <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h5 className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
-                      ⚠️ Security Notice: Contains Private Key
-                    </h5>
-                    <ul className="text-xs text-red-800 dark:text-red-200 space-y-1">
-                      <li>• This SDK contains your agent's <strong>private cryptographic key</strong></li>
-                      <li>• <strong>Never</strong> commit this SDK to version control (Git, GitHub, etc.)</li>
-                      <li>• <strong>Never</strong> share this SDK publicly or with untrusted parties</li>
-                      <li>• Store it securely and use environment variables in production</li>
-                      <li>• Regenerate keys immediately if compromised</li>
-                    </ul>
+              {/* Manual Integration Section - Show if manual method chosen */}
+              {integrationMethod === 'manual' && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                        🔑 Agent Credentials & API Access
+                      </h4>
+                      <p className="text-xs text-gray-700 dark:text-gray-300 mb-4">
+                        Use these credentials to integrate AIM with any programming language. Keep your private key secure.
+                      </p>
+
+                      {loadingKeys ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading credentials...
+                        </div>
+                      ) : agentKeys ? (
+                        <div className="space-y-3">
+                          {/* Agent ID */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Agent ID
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={createdAgent.id}
+                                readOnly
+                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                              />
+                              <button
+                                onClick={() => copyToClipboard(createdAgent.id, 'agent_id')}
+                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                              >
+                                {copiedField === 'agent_id' ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Public Key */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Public Key (Ed25519)
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={agentKeys.publicKey}
+                                readOnly
+                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                              />
+                              <button
+                                onClick={() => copyToClipboard(agentKeys.publicKey, 'public_key')}
+                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                              >
+                                {copiedField === 'public_key' ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Private Key */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Private Key (Ed25519) - ⚠️ Keep Secret!
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type={showPrivateKey ? "text" : "password"}
+                                value={agentKeys.privateKey}
+                                readOnly
+                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
+                              />
+                              <button
+                                onClick={() => setShowPrivateKey(!showPrivateKey)}
+                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                              >
+                                {showPrivateKey ? (
+                                  <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                ) : (
+                                  <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => copyToClipboard(agentKeys.privateKey, 'private_key')}
+                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                              >
+                                {copiedField === 'private_key' ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                              Never commit this to version control or share publicly
+                            </p>
+                          </div>
+
+                          {/* API Documentation Link */}
+                          <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <a
+                              href="https://docs.aim.dev/api/authentication"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              View Full API Documentation →
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          Failed to load credentials. Please try again from the agent details page.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Change Method */}
+                  <div className="text-center">
+                    <button
+                      onClick={() => setIntegrationMethod(null)}
+                      className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                    >
+                      ← Choose a different integration method
+                    </button>
                   </div>
                 </div>
+              )}
 
-                {/* Skip Option */}
+              {/* Skip/Close Option - Show for both methods */}
+              {integrationMethod && (
                 <div className="text-center">
                   <button
                     onClick={handleSkipSDK}
                     className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
                   >
-                    Skip for now (you can download SDK later from agent details)
+                    {integrationMethod === 'sdk'
+                      ? 'Skip for now (you can download SDK later from agent details)'
+                      : 'Done (you can access credentials later from agent details)'}
                   </button>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -392,11 +627,11 @@ export function RegisterAgentModal({
 
           {/* Error Message */}
           {error && (
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
               <div className="flex-1">
-                <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                  {error} (Using mock mode)
+                <p className="text-sm text-red-800 dark:text-red-300">
+                  {error}
                 </p>
               </div>
             </div>

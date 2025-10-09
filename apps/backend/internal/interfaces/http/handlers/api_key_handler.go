@@ -140,8 +140,8 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 	})
 }
 
-// RevokeAPIKey revokes an API key
-func (h *APIKeyHandler) RevokeAPIKey(c fiber.Ctx) error {
+// DisableAPIKey disables an API key (sets is_active=false)
+func (h *APIKeyHandler) DisableAPIKey(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 	keyID, err := uuid.Parse(c.Params("id"))
@@ -163,6 +163,41 @@ func (h *APIKeyHandler) RevokeAPIKey(c fiber.Ctx) error {
 		orgID,
 		userID,
 		domain.AuditActionRevoke,
+		"api_key",
+		keyID,
+		c.IP(),
+		c.Get("User-Agent"),
+		nil,
+	)
+
+	return c.JSON(fiber.Map{
+		"message": "API key disabled successfully",
+	})
+}
+
+// DeleteAPIKey permanently deletes an API key (only if disabled)
+func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	keyID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid API key ID",
+		})
+	}
+
+	if err := h.apiKeyService.DeleteAPIKey(c.Context(), keyID, orgID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionDelete,
 		"api_key",
 		keyID,
 		c.IP(),

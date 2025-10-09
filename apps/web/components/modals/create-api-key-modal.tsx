@@ -71,19 +71,6 @@ export function CreateAPIKeyModal({
     } catch (err) {
       console.error('Failed to create API key:', err);
       setError(err instanceof Error ? err.message : 'Failed to create API key');
-
-      // Mock success for development
-      setTimeout(() => {
-        const mockApiKey = `aim_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-        setApiKey(mockApiKey);
-        setSuccess(true);
-        onSuccess?.({
-          id: `key_${Date.now()}`,
-          api_key: mockApiKey,
-          name: formData.name,
-          agent_id: formData.agent_id
-        });
-      }, 500);
     } finally {
       setLoading(false);
     }
@@ -216,11 +203,11 @@ export function CreateAPIKeyModal({
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Error Message */}
               {error && (
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
                   <div className="flex-1">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                      {error} (Using mock mode)
+                    <p className="text-sm text-red-800 dark:text-red-300">
+                      {error}
                     </p>
                   </div>
                 </div>

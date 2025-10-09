@@ -164,7 +164,7 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
 	zipWriter := zip.NewWriter(buf)
 
 	// Get SDK root directory (relative to backend)
-	sdkRoot := "../../../sdks/python"
+	sdkRoot := "../../sdks/python"
 
 	// Add SDK files to zip
 	err := filepath.Walk(sdkRoot, func(path string, info os.FileInfo, err error) error {

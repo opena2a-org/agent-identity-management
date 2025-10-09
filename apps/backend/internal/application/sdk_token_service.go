@@ -47,6 +47,11 @@ func (s *SDKTokenService) RevokeToken(ctx context.Context, tokenID uuid.UUID, us
 	return s.sdkTokenRepo.Revoke(tokenID, reason)
 }
 
+// RevokeByTokenHash revokes a token using its hash (for token rotation)
+func (s *SDKTokenService) RevokeByTokenHash(ctx context.Context, tokenHash string, reason string) error {
+	return s.sdkTokenRepo.RevokeByTokenHash(tokenHash, reason)
+}
+
 // RevokeAllUserTokens revokes all SDK tokens for a user
 func (s *SDKTokenService) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID, reason string) error {
 	return s.sdkTokenRepo.RevokeAllForUser(userID, reason)

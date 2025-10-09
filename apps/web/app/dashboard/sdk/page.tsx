@@ -18,7 +18,7 @@ export default function SDKDownloadPage() {
       const response = await fetch('http://localhost:8080/api/v1/sdk/download', {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+          Authorization: `Bearer ${localStorage.getItem('aim_token')}`,
         },
       })
 

@@ -79,6 +79,9 @@ type SDKTokenRepository interface {
 	// Revoke marks a token as revoked
 	Revoke(id uuid.UUID, reason string) error
 
+	// RevokeByTokenHash marks a token as revoked using its hash
+	RevokeByTokenHash(tokenHash string, reason string) error
+
 	// RevokeAllForUser revokes all tokens for a user
 	RevokeAllForUser(userID uuid.UUID, reason string) error
 

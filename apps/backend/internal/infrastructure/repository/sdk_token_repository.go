@@ -395,6 +395,30 @@ func (r *sdkTokenRepository) Revoke(id uuid.UUID, reason string) error {
 	return nil
 }
 
+func (r *sdkTokenRepository) RevokeByTokenHash(tokenHash string, reason string) error {
+	query := `
+		UPDATE sdk_tokens
+		SET revoked_at = $1, revoke_reason = $2
+		WHERE token_hash = $3 AND revoked_at IS NULL
+	`
+
+	result, err := r.db.Exec(query, time.Now(), reason, tokenHash)
+	if err != nil {
+		return fmt.Errorf("failed to revoke SDK token by hash: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("SDK token not found or already revoked")
+	}
+
+	return nil
+}
+
 func (r *sdkTokenRepository) RevokeAllForUser(userID uuid.UUID, reason string) error {
 	query := `
 		UPDATE sdk_tokens

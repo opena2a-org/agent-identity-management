@@ -14,45 +14,39 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Get the authorization code from URL
-        const code = searchParams.get('code')
-        const state = searchParams.get('state')
-        const error = searchParams.get('error')
-
-        if (error) {
-          throw new Error(error || 'OAuth authorization failed')
-        }
-
-        if (!code) {
-          throw new Error('No authorization code received')
-        }
-
-        // Exchange code for token via backend
-        const response = await fetch(
-          `http://localhost:8080/api/v1/auth/callback/google?code=${code}&state=${state || ''}`
-        )
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.message || 'Authentication failed')
-        }
-
-        const data = await response.json()
-
-        // Store the token
-        if (data.token || data.access_token) {
-          const token = data.token || data.access_token
-          api.setToken(token)
-
+        // Check if token is directly in query params (from backend redirect for existing users)
+        const tokenFromQuery = searchParams.get('token')
+        if (tokenFromQuery) {
+          // User already exists - token provided directly
+          api.setToken(tokenFromQuery)
           setStatus('success')
 
           // Redirect to dashboard after short delay
           setTimeout(() => {
             router.push('/dashboard')
           }, 1500)
-        } else {
-          throw new Error('No token received from server')
+          return
         }
+
+        // Check if this is a registration pending redirect (for new users)
+        const requestId = searchParams.get('request_id')
+        if (requestId) {
+          // New user - registration pending approval
+          setStatus('success')
+          setTimeout(() => {
+            router.push(`/auth/registration-pending?request_id=${requestId}`)
+          }, 1500)
+          return
+        }
+
+        // OAuth error from provider
+        const error = searchParams.get('error')
+        if (error) {
+          throw new Error(error || 'OAuth authorization failed')
+        }
+
+        // If we get here, something unexpected happened
+        throw new Error('Invalid callback: no token or registration request received')
       } catch (err) {
         console.error('Auth callback error:', err)
         setStatus('error')
@@ -60,7 +54,7 @@ export default function AuthCallbackPage() {
 
         // Redirect to login after delay
         setTimeout(() => {
-          router.push('/login')
+          router.push('/auth/login')
         }, 3000)
       }
     }

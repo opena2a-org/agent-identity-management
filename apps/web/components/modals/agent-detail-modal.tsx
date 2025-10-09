@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key } from 'lucide-react';
+import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key, Package, Code, Download, Copy, Eye, EyeOff, ExternalLink, Loader2 } from 'lucide-react';
 import { Agent, Tag, AgentCapability, api } from '@/lib/api';
 import { TagSelector } from '../ui/tag-selector';
 
@@ -26,6 +26,14 @@ export function AgentDetailModal({
   const [loadingTags, setLoadingTags] = useState(false);
   const [capabilities, setCapabilities] = useState<AgentCapability[]>([]);
   const [loadingCapabilities, setLoadingCapabilities] = useState(false);
+
+  // Dual-path download state
+  const [integrationMethod, setIntegrationMethod] = useState<'sdk' | 'manual' | null>(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [agentKeys, setAgentKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [downloadingSDK, setDownloadingSDK] = useState(false);
 
   useEffect(() => {
     if (isOpen && agent) {
@@ -87,6 +95,89 @@ export function AgentDetailModal({
     } catch (error) {
       console.error('Failed to update tags:', error);
     }
+  };
+
+  const handleDownloadSDK = async (language: 'python' | 'node' | 'go') => {
+    if (!agent) return;
+
+    setDownloadingSDK(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${agent.id}/sdk?language=${language}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to download SDK');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${agent.name}-${language}-sdk.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Failed to download SDK:', err);
+      alert('Failed to download SDK. Please try again or use Manual Integration.');
+    } finally {
+      setDownloadingSDK(false);
+    }
+  };
+
+  const fetchAgentKeys = async () => {
+    if (!agent) return;
+
+    setLoadingKeys(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${agent.id}/credentials`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch agent keys: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      setAgentKeys({
+        publicKey: data.publicKey,
+        privateKey: data.privateKey
+      });
+    } catch (err) {
+      console.error('Failed to fetch agent keys:', err);
+      alert('Failed to fetch agent credentials. Please try again or contact support.');
+      setIntegrationMethod(null); // Reset to main selection
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  const handleManualIntegration = () => {
+    setIntegrationMethod('manual');
+    fetchAgentKeys();
   };
 
   if (!isOpen || !agent) return null;
@@ -258,6 +349,253 @@ export function AgentDetailModal({
             ) : (
               <div className="text-sm text-gray-500 dark:text-gray-400 italic">
                 No MCP servers configured
+              </div>
+            )}
+          </div>
+
+          {/* Download SDK / View Credentials */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Download SDK / View Credentials
+            </h3>
+
+            {!integrationMethod && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  Access your agent's SDK or view credentials for manual integration
+                </p>
+
+                {/* SDK Integration Option */}
+                <button
+                  onClick={() => setIntegrationMethod('sdk')}
+                  className="w-full p-4 border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
+                >
+                  <div className="flex items-start gap-3">
+                    <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                        📦 Download SDK (Recommended)
+                      </h4>
+                      <p className="text-xs text-blue-800 dark:text-blue-200">
+                        Download ready-to-use SDK for <strong>Python, Node.js, or Go</strong>. Includes cryptographic keys and automatic verification.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Manual Integration Option */}
+                <button
+                  onClick={handleManualIntegration}
+                  className="w-full p-4 border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors text-left"
+                >
+                  <div className="flex items-start gap-3">
+                    <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                        🔧 View Credentials (Manual Integration)
+                      </h4>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        Use <strong>any programming language</strong> (Rust, Ruby, PHP, Java, etc.). Get your credentials and API documentation.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {/* SDK Download UI */}
+            {integrationMethod === 'sdk' && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
+                <div className="flex items-start gap-3">
+                  <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      📦 Download SDK
+                    </h4>
+                    <p className="text-xs text-blue-800 dark:text-blue-200 mb-4">
+                      Choose your preferred language. The SDK includes cryptographic keys and automatic verification.
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleDownloadSDK('python')}
+                        disabled={downloadingSDK}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        Python SDK
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSDK('node')}
+                        disabled={downloadingSDK}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        Node.js SDK
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSDK('go')}
+                        disabled={downloadingSDK}
+                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        Go SDK
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Change Method */}
+                <div className="text-center pt-3 border-t border-blue-200 dark:border-blue-800">
+                  <button
+                    onClick={() => setIntegrationMethod(null)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 underline"
+                  >
+                    ← Choose a different option
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Manual Integration Credentials Display */}
+            {integrationMethod === 'manual' && (
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4">
+                <div className="flex items-start gap-3">
+                  <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                      🔑 Agent Credentials & API Access
+                    </h4>
+                    <p className="text-xs text-gray-700 dark:text-gray-300 mb-4">
+                      Use these credentials to integrate AIM with any programming language. Keep your private key secure.
+                    </p>
+
+                    {loadingKeys ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading credentials...
+                      </div>
+                    ) : agentKeys ? (
+                      <div className="space-y-3">
+                        {/* Agent ID with Copy Button */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Agent ID
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={agent.id}
+                              readOnly
+                              className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                            />
+                            <button
+                              onClick={() => copyToClipboard(agent.id, 'agent_id')}
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                            >
+                              {copiedField === 'agent_id' ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Public Key with Copy Button */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Public Key (Ed25519)
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={agentKeys.publicKey}
+                              readOnly
+                              className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                            />
+                            <button
+                              onClick={() => copyToClipboard(agentKeys.publicKey, 'public_key')}
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                            >
+                              {copiedField === 'public_key' ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Private Key with Reveal/Hide and Copy */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Private Key (Ed25519) - ⚠️ Keep Secret!
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type={showPrivateKey ? "text" : "password"}
+                              value={agentKeys.privateKey}
+                              readOnly
+                              className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
+                            />
+                            <button
+                              onClick={() => setShowPrivateKey(!showPrivateKey)}
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                            >
+                              {showPrivateKey ? (
+                                <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => copyToClipboard(agentKeys.privateKey, 'private_key')}
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                            >
+                              {copiedField === 'private_key' ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            Never commit this to version control or share publicly
+                          </p>
+                        </div>
+
+                        {/* API Documentation Link */}
+                        <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <a
+                            href="https://docs.aim.dev/api/authentication"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            View Full API Documentation →
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        Failed to load credentials. Please try again.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Change Method */}
+                <div className="text-center pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => setIntegrationMethod(null)}
+                    className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                  >
+                    ← Choose a different option
+                  </button>
+                </div>
               </div>
             )}
           </div>

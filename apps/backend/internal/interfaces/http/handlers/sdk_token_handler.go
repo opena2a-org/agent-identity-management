@@ -38,7 +38,7 @@ func (h *SDKTokenHandler) ListUserTokens(c fiber.Ctx) error {
 		})
 	}
 
-	includeRevoked := c.Query("includeRevoked", "false") == "true"
+	includeRevoked := c.Query("include_revoked", "false") == "true"
 
 	tokens, err := h.sdkTokenService.GetUserTokens(c.Context(), userID, includeRevoked)
 	if err != nil {
@@ -47,7 +47,9 @@ func (h *SDKTokenHandler) ListUserTokens(c fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(tokens)
+	return c.JSON(fiber.Map{
+		"tokens": tokens,
+	})
 }
 
 // GetActiveTokenCount godoc

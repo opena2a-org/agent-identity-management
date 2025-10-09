@@ -49,6 +49,24 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
+	// Check if this is an SDK token and verify it's not revoked BEFORE rotating
+	tokenID, err := h.jwtService.GetTokenID(req.RefreshToken)
+	if err == nil && tokenID != "" {
+		// Hash the token to check if it's tracked and revoked
+		hasher := sha256.New()
+		hasher.Write([]byte(req.RefreshToken))
+		tokenHash := hex.EncodeToString(hasher.Sum(nil))
+
+		// Check if token is tracked and not revoked
+		_, err := h.sdkTokenService.ValidateToken(c.Context(), tokenHash)
+		if err != nil {
+			// Token is revoked or invalid in database
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
+		}
+	}
+
 	// Validate refresh token and generate new tokens (with rotation)
 	newAccessToken, newRefreshToken, err := h.jwtService.RefreshTokenPair(req.RefreshToken)
 	if err != nil {
@@ -57,25 +75,21 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if this is an SDK token (for tracking)
-	tokenID, err := h.jwtService.GetTokenID(req.RefreshToken)
-	if err == nil && tokenID != "" {
-		// Hash the old token to check if it's tracked
+	// If this is a tracked SDK token, revoke the old one and track usage
+	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
 		oldTokenHash := hex.EncodeToString(hasher.Sum(nil))
 
-		// Check if token is tracked in SDK tokens table
-		sdkToken, err := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
-		if err == nil && sdkToken != nil {
-			// This is a tracked SDK token - record usage
-			ipAddress := c.IP()
-			_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
+		// Record usage
+		ipAddress := c.IP()
+		_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
 
-			// TODO: If token rotation is enabled, we should:
-			// 1. Revoke the old token in database
-			// 2. Track the new refresh token
-			// For now, we'll just update usage stats
+		// Revoke the old token to prevent reuse (security: token rotation)
+		err = h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "Token rotated")
+		if err != nil {
+			// Log error but don't fail the request (new tokens already issued)
+			_ = err
 		}
 	}
 

@@ -123,14 +123,20 @@ func (h *OAuthHandler) HandleOAuthCallback(c fiber.Ctx) error {
 		HTTPOnly: true,
 	})
 
-	// Handle OAuth callback
+	// Try to log in existing user first
+	token, _, err := h.oauthService.HandleOAuthLogin(c.Context(), provider, code)
+	if err == nil {
+		// User exists - return JWT token for login
+		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?token=%s", token))
+	}
+
+	// User doesn't exist - proceed with registration flow
 	req, err := h.oauthService.HandleOAuthCallback(c.Context(), provider, code)
 	if err != nil {
 		if err == application.ErrUserAlreadyExists {
-			// User already exists - log them in instead
-			// TODO: Implement OAuth login flow for existing users
+			// This shouldn't happen since we tried login first, but handle it anyway
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "User already exists. Please log in instead.",
+				"error": "User already exists. Please try logging in again.",
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -140,7 +146,7 @@ func (h *OAuthHandler) HandleOAuthCallback(c fiber.Ctx) error {
 
 	// Registration request created successfully
 	// Redirect to success page
-	return c.Redirect().To(fmt.Sprintf("/auth/registration-pending?request_id=%s", req.ID))
+	return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/registration-pending?request_id=%s", req.ID))
 }
 
 // ListPendingRegistrationRequests returns all pending registration requests

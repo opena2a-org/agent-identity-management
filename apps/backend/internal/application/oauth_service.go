@@ -44,12 +44,18 @@ type OAuthRepository interface {
 	DeleteOAuthConnection(ctx context.Context, id uuid.UUID) error
 }
 
+// JWTService interface for JWT token generation
+type JWTService interface {
+	GenerateAccessToken(userID, orgID, email, role string) (string, error)
+}
+
 // OAuthService handles OAuth authentication and user registration
 type OAuthService struct {
 	oauthRepo    OAuthRepository
 	userRepo     domain.UserRepository
 	authService  *AuthService
 	auditService *AuditService
+	jwtService   JWTService
 	providers    map[domain.OAuthProvider]OAuthProvider
 }
 
@@ -58,6 +64,7 @@ func NewOAuthService(
 	userRepo domain.UserRepository,
 	authService *AuthService,
 	auditService *AuditService,
+	jwtService JWTService,
 	providers map[domain.OAuthProvider]OAuthProvider,
 ) *OAuthService {
 	return &OAuthService{
@@ -65,6 +72,7 @@ func NewOAuthService(
 		userRepo:     userRepo,
 		authService:  authService,
 		auditService: auditService,
+		jwtService:   jwtService,
 		providers:    providers,
 	}
 }
@@ -77,6 +85,69 @@ func (s *OAuthService) GetAuthURL(provider domain.OAuthProvider, state string) (
 	}
 
 	return p.GetAuthURL(state), nil
+}
+
+// HandleOAuthLogin processes OAuth callback for existing users and returns JWT token
+func (s *OAuthService) HandleOAuthLogin(
+	ctx context.Context,
+	provider domain.OAuthProvider,
+	code string,
+) (string, *domain.User, error) {
+	// Get provider
+	p, ok := s.providers[provider]
+	if !ok {
+		return "", nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+
+	// Exchange code for tokens
+	accessToken, _, _, err := p.ExchangeCode(ctx, code)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	// Get user profile from OAuth provider
+	profile, err := p.GetUserProfile(ctx, accessToken)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get user profile: %w", err)
+	}
+
+	// Check if user exists
+	existingUser, err := s.userRepo.GetByEmail(profile.Email)
+	if err != nil || existingUser == nil {
+		return "", nil, fmt.Errorf("user not found: please register first")
+	}
+
+	// Generate JWT token for existing user
+	token, err := s.jwtService.GenerateAccessToken(
+		existingUser.ID.String(),
+		existingUser.OrganizationID.String(),
+		existingUser.Email,
+		string(existingUser.Role),
+	)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	// Update user's OAuth connection (refresh tokens, etc.)
+	// TODO: Store/update OAuth connection with new access token
+
+	// Log audit trail
+	s.auditService.LogAction(
+		ctx,
+		existingUser.OrganizationID,
+		existingUser.ID,
+		domain.AuditActionLogin,
+		"user",
+		existingUser.ID,
+		"", // IP address
+		"", // User agent
+		map[string]interface{}{
+			"oauth_provider": provider,
+			"login_method":   "oauth",
+		},
+	)
+
+	return token, existingUser, nil
 }
 
 // HandleOAuthCallback processes the OAuth callback and creates a registration request
