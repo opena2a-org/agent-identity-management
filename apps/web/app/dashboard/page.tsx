@@ -124,12 +124,22 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
   );
 }
 
+interface AuditLog {
+  id: string;
+  action: string;
+  resource_type: string;
+  metadata: any;
+  timestamp: string;
+}
+
 function DashboardContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
   const [userRole, setUserRole] = useState<UserRole>('viewer');
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   // Extract user role from JWT token
   useEffect(() => {
@@ -160,6 +170,32 @@ function DashboardContent() {
     }
   };
 
+  const fetchAuditLogs = async () => {
+    try {
+      setLogsLoading(true);
+      // Fetch more logs to filter out excessive "view" actions
+      const logs = await api.getAuditLogs(50, 0);
+
+      // Filter out excessive "view" + "alerts" entries (there are 4,226 of them)
+      // Keep more interesting activities like create, verify, update, delete
+      const filtered = logs.filter((log: AuditLog) => {
+        // Exclude view + alerts (automated polling)
+        if (log.action === 'view' && log.resource_type === 'alerts') return false;
+        // Exclude view + dashboard_stats (also automated)
+        if (log.action === 'view' && log.resource_type === 'dashboard_stats') return false;
+        return true;
+      });
+
+      // Take first 10 interesting activities
+      setAuditLogs(filtered.slice(0, 10));
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err);
+      // Fail silently - keep empty array
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Check if OAuth returned with a token
     const token = searchParams.get('token');
@@ -170,6 +206,7 @@ function DashboardContent() {
     }
 
     fetchDashboardData();
+    fetchAuditLogs();
   }, [searchParams]);
 
   // Mock data fallback matching backend response structure
@@ -212,6 +249,69 @@ function DashboardContent() {
 
   // Get role-based permissions
   const permissions = getDashboardPermissions(userRole);
+
+  // Helper function to format audit log event name
+  const formatEventName = (log: AuditLog): string => {
+    const action = log.action.charAt(0).toUpperCase() + log.action.slice(1);
+    const resource = log.resource_type.replace(/_/g, ' ');
+
+    // Special handling for specific action types
+    if (log.action === 'view') {
+      return `Viewed ${resource}`;
+    } else if (log.action === 'create') {
+      return `Created ${resource}`;
+    } else if (log.action === 'verify') {
+      return `Verified ${resource}`;
+    } else if (log.action === 'update') {
+      return `Updated ${resource}`;
+    } else if (log.action === 'delete') {
+      return `Deleted ${resource}`;
+    } else if (log.resource_type === 'agent_action') {
+      // For agent actions, use the action name as the event
+      return action.replace(/_/g, ' ');
+    }
+
+    return `${action} ${resource}`;
+  };
+
+  // Helper function to categorize the event type
+  const getEventType = (log: AuditLog): string => {
+    if (log.resource_type.includes('agent')) {
+      return 'Agent Management';
+    } else if (log.resource_type.includes('mcp')) {
+      return 'MCP Servers';
+    } else if (log.resource_type.includes('auth') || log.action === 'login') {
+      return 'Authentication';
+    } else if (log.resource_type.includes('alert') || log.resource_type.includes('security')) {
+      return 'Security';
+    } else if (log.resource_type.includes('api_key')) {
+      return 'API Keys';
+    } else if (log.resource_type.includes('user')) {
+      return 'User Management';
+    } else if (log.action === 'view') {
+      return 'View';
+    }
+    return 'System';
+  };
+
+  // Helper function to format relative time
+  const formatRelativeTime = (timestamp: string): string => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now.getTime() - then.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 10) return 'Just now';
+    if (diffSecs < 60) return `${diffSecs} seconds ago`;
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+    return then.toLocaleDateString();
+  };
 
   // Prepare stats for display using actual backend field names
   const allStats = [
@@ -501,49 +601,45 @@ function DashboardContent() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {[
-                {
-                  event: 'User logged in',
-                  type: 'Authentication',
-                  status: 'success',
-                  time: 'Just now'
-                },
-                {
-                  event: 'Dashboard stats viewed',
-                  type: 'View',
-                  status: 'success',
-                  time: '2 minutes ago'
-                },
-                {
-                  event: 'OAuth authentication',
-                  type: 'Authentication',
-                  status: 'success',
-                  time: '1 hour ago'
-                },
-              ].map((activity, idx) => (
-                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {activity.event}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                      {activity.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                      ✓ {activity.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {activity.time}
-                    </div>
+              {logsLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center">
+                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto" />
+                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading recent activity...</p>
                   </td>
                 </tr>
-              ))}
+              ) : auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity found</p>
+                  </td>
+                </tr>
+              ) : (
+                auditLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {formatEventName(log)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                        {getEventType(log)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                        ✓ success
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {formatRelativeTime(log.timestamp)}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
