@@ -60,7 +60,8 @@ class AIMClient:
         aim_url: str,
         timeout: int = 30,
         auto_retry: bool = True,
-        max_retries: int = 3
+        max_retries: int = 3,
+        sdk_token_id: Optional[str] = None
     ):
         # Validate required parameters
         if not agent_id:
@@ -105,12 +106,26 @@ class AIMClient:
 
         self.public_key = public_key
 
+        # Load SDK token ID from credentials if not provided
+        if not sdk_token_id:
+            sdk_creds = load_sdk_credentials()
+            if sdk_creds and 'sdk_token_id' in sdk_creds:
+                sdk_token_id = sdk_creds['sdk_token_id']
+
+        self.sdk_token_id = sdk_token_id
+
         # Session for connection pooling
         self.session = requests.Session()
-        self.session.headers.update({
+        headers = {
             'User-Agent': f'AIM-Python-SDK/1.0.0',
             'Content-Type': 'application/json'
-        })
+        }
+
+        # Add SDK token header for usage tracking if available
+        if sdk_token_id:
+            headers['X-SDK-Token'] = sdk_token_id
+
+        self.session.headers.update(headers)
 
     def _sign_message(self, message: str) -> str:
         """
@@ -540,7 +555,8 @@ def register_agent(
     organization_domain: Optional[str] = None,
     talks_to: Optional[list] = None,
     capabilities: Optional[list] = None,
-    force_new: bool = False
+    force_new: bool = False,
+    sdk_token_id: Optional[str] = None
 ) -> AIMClient:
     """
     ONE-LINE agent registration with AIM.
@@ -588,6 +604,12 @@ def register_agent(
     if not api_key:
         raise ConfigurationError("api_key is required for agent registration")
 
+    # Load SDK token ID from downloaded SDK credentials if not provided
+    if not sdk_token_id:
+        sdk_creds = load_sdk_credentials()
+        if sdk_creds and 'sdk_token_id' in sdk_creds:
+            sdk_token_id = sdk_creds['sdk_token_id']
+
     # Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
@@ -629,14 +651,21 @@ def register_agent(
     # Call public registration endpoint with API key for user identity
     url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
 
+    # Prepare headers
+    headers = {
+        "Content-Type": "application/json",
+        "X-AIM-API-Key": api_key
+    }
+
+    # Add SDK token header for usage tracking if available
+    if sdk_token_id:
+        headers["X-SDK-Token"] = sdk_token_id
+
     try:
         response = requests.post(
             url,
             json=registration_data,
-            headers={
-                "Content-Type": "application/json",
-                "X-AIM-API-Key": api_key
-            },
+            headers=headers,
             timeout=30
         )
 

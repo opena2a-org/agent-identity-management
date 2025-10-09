@@ -35,6 +35,7 @@ func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepo
 type SDKCredentials struct {
 	AIMUrl       string `json:"aim_url"`
 	RefreshToken string `json:"refresh_token"`
+	SDKTokenID   string `json:"sdk_token_id"` // For usage tracking via X-SDK-Token header
 	UserID       string `json:"user_id"`
 	Email        string `json:"email"`
 }
@@ -137,6 +138,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	credentials := SDKCredentials{
 		AIMUrl:       aimURL,
 		RefreshToken: refreshToken,
+		SDKTokenID:   tokenID, // Include SDK token ID for usage tracking
 		UserID:       userID.String(),
 		Email:        email,
 	}
