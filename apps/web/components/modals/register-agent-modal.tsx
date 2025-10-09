@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Loader2, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { X, Loader2, CheckCircle, AlertCircle, Plus, Trash2, Download, ShieldAlert } from 'lucide-react';
 import { api, Agent } from '@/lib/api';
 
 interface RegisterAgentModalProps {
@@ -47,6 +47,8 @@ export function RegisterAgentModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
+  const [downloadingSDK, setDownloadingSDK] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     name: initialData?.name || '',
@@ -141,12 +143,16 @@ export function RegisterAgentModal({
         : await api.createAgent(agentData);
 
       setSuccess(true);
+      setCreatedAgent(result);
 
-      setTimeout(() => {
-        onSuccess?.(result);
-        onClose();
-        resetForm();
-      }, 1500);
+      // Don't auto-close for new registrations - let user download SDK first
+      if (editMode) {
+        setTimeout(() => {
+          onSuccess?.(result);
+          onClose();
+          resetForm();
+        }, 1500);
+      }
     } catch (err) {
       console.error('Failed to save agent:', err);
       setError(err instanceof Error ? err.message : 'Failed to save agent');
@@ -178,6 +184,54 @@ export function RegisterAgentModal({
     }
   };
 
+  const downloadSDK = async () => {
+    if (!createdAgent) return;
+
+    setDownloadingSDK(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/sdk?lang=python`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download SDK');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aim-sdk-${createdAgent.name}-python.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // After successful download, close modal
+      setTimeout(() => {
+        onSuccess?.(createdAgent);
+        onClose();
+        resetForm();
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to download SDK:', err);
+      alert('Failed to download SDK. Please try again from the agent details page.');
+    } finally {
+      setDownloadingSDK(false);
+    }
+  };
+
+  const handleSkipSDK = () => {
+    if (createdAgent) {
+      onSuccess?.(createdAgent);
+      onClose();
+      resetForm();
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -195,6 +249,8 @@ export function RegisterAgentModal({
     setErrors({});
     setError(null);
     setSuccess(false);
+    setCreatedAgent(null);
+    setDownloadingSDK(false);
   };
 
   const handleClose = () => {
@@ -253,11 +309,83 @@ export function RegisterAgentModal({
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Success Message */}
-          {success && (
+          {success && !editMode && createdAgent && (
+            <div className="space-y-4">
+              {/* Success Banner */}
+              <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <p className="text-sm text-green-800 dark:text-green-300">
+                  Agent registered successfully! Cryptographic keys generated automatically.
+                </p>
+              </div>
+
+              {/* Security Warning + SDK Download */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
+                <div className="flex items-start gap-3">
+                  <Download className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      Download Python SDK
+                    </h4>
+                    <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
+                      Get started immediately with automatic identity verification. The SDK includes your agent's cryptographic keys for seamless authentication.
+                    </p>
+                    <button
+                      onClick={downloadSDK}
+                      disabled={downloadingSDK}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {downloadingSDK ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          Download SDK (.zip)
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Security Warning */}
+                <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+                  <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h5 className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
+                      ⚠️ Security Notice: Contains Private Key
+                    </h5>
+                    <ul className="text-xs text-red-800 dark:text-red-200 space-y-1">
+                      <li>• This SDK contains your agent's <strong>private cryptographic key</strong></li>
+                      <li>• <strong>Never</strong> commit this SDK to version control (Git, GitHub, etc.)</li>
+                      <li>• <strong>Never</strong> share this SDK publicly or with untrusted parties</li>
+                      <li>• Store it securely and use environment variables in production</li>
+                      <li>• Regenerate keys immediately if compromised</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Skip Option */}
+                <div className="text-center">
+                  <button
+                    onClick={handleSkipSDK}
+                    className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                  >
+                    Skip for now (you can download SDK later from agent details)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Mode Success Message */}
+          {success && editMode && (
             <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
               <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
               <p className="text-sm text-green-800 dark:text-green-300">
-                Agent {editMode ? 'updated' : 'registered'} successfully!
+                Agent updated successfully!
               </p>
             </div>
           )}
@@ -274,6 +402,9 @@ export function RegisterAgentModal({
             </div>
           )}
 
+          {/* Hide form fields when showing SDK download */}
+          {!(success && !editMode) && (
+          <>
           {/* Basic Information */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
@@ -516,6 +647,8 @@ export function RegisterAgentModal({
               </div>
             )}
           </div>
+          </>
+          )}
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
