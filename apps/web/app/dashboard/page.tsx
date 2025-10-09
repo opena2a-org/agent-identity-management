@@ -173,8 +173,10 @@ function DashboardContent() {
   const fetchAuditLogs = async () => {
     try {
       setLogsLoading(true);
-      // Fetch more logs to filter out excessive "view" actions
-      const logs = await api.getAuditLogs(50, 0);
+      // Fetch more logs to get past the excessive "view" actions
+      // Most recent 50 logs are mostly "view + alerts" (automated polling)
+      // Need to fetch 500+ to get interesting integration test data (create, verify, etc.)
+      const logs = await api.getAuditLogs(500, 0);
 
       // Filter out excessive "view" + "alerts" entries (there are 4,226 of them)
       // Keep more interesting activities like create, verify, update, delete
@@ -183,10 +185,14 @@ function DashboardContent() {
         if (log.action === 'view' && log.resource_type === 'alerts') return false;
         // Exclude view + dashboard_stats (also automated)
         if (log.action === 'view' && log.resource_type === 'dashboard_stats') return false;
+        // Exclude view + users (less interesting)
+        if (log.action === 'view' && log.resource_type === 'users') return false;
+        // Exclude view + audit_logs (less interesting)
+        if (log.action === 'view' && log.resource_type === 'audit_logs') return false;
         return true;
       });
 
-      // Take first 10 interesting activities
+      // Take first 10 interesting activities (create, verify, delete, etc.)
       setAuditLogs(filtered.slice(0, 10));
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
