@@ -576,6 +576,10 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository) {
+	// SDK Token Tracking Middleware - MUST be first to track all API requests
+	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
+	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
+
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
@@ -589,10 +593,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/change-password", middleware.AuthMiddleware(jwtService), h.Auth.ChangePassword) // Change password
 	auth.Get("/me", middleware.AuthMiddleware(jwtService), h.Auth.Me)
-
-	// SDK Token Tracking Middleware - Track usage automatically from X-SDK-Token header
-	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
-	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
 
 	// SDK routes (authentication required) - Download pre-configured SDK
 	sdk := v1.Group("/sdk")
