@@ -96,15 +96,20 @@ export interface SDKToken {
 class APIClient {
   private baseURL: string
   private token: string | null = null
+  private refreshToken: string | null = null
 
   constructor(baseURL: string) {
     this.baseURL = baseURL
   }
 
-  setToken(token: string) {
+  setToken(token: string, refreshToken?: string) {
     this.token = token
     if (typeof window !== 'undefined') {
       localStorage.setItem('auth_token', token)
+      if (refreshToken) {
+        this.refreshToken = refreshToken
+        localStorage.setItem('refresh_token', refreshToken)
+      }
     }
   }
 
@@ -116,10 +121,54 @@ class APIClient {
     return null
   }
 
+  getRefreshToken(): string | null {
+    if (this.refreshToken) return this.refreshToken
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('refresh_token')
+    }
+    return null
+  }
+
   clearToken() {
     this.token = null
+    this.refreshToken = null
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+    }
+  }
+
+  // Refresh access token using refresh token
+  async refreshAccessToken(): Promise<{ access_token: string; refresh_token: string } | null> {
+    const refreshToken = this.getRefreshToken()
+    if (!refreshToken) {
+      return null
+    }
+
+    try {
+      const response = await fetch(`${this.baseURL}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+
+      if (!response.ok) {
+        // Refresh token is invalid or expired
+        this.clearToken()
+        return null
+      }
+
+      const data = await response.json()
+      // Store new tokens (token rotation - old refresh token is now invalid)
+      this.setToken(data.access_token, data.refresh_token)
+      return data
+    } catch (error) {
+      // Network error or other issue
+      this.clearToken()
+      return null
     }
   }
 
@@ -641,17 +690,35 @@ class APIClient {
     })
   }
 
-  // SDK Download
+  // SDK Download with automatic token refresh on 401
   async downloadSDK(): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/api/v1/sdk/download`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.getToken()}`,
-      },
-    })
+    const attemptDownload = async (token: string | null): Promise<Response> => {
+      return fetch(`${this.baseURL}/api/v1/sdk/download`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+    }
+
+    // First attempt with current token
+    let response = await attemptDownload(this.getToken())
+
+    // If 401 Unauthorized, try to refresh token and retry
+    if (response.status === 401) {
+      const refreshed = await this.refreshAccessToken()
+
+      if (!refreshed) {
+        // Refresh failed - token is expired and can't be refreshed
+        throw new Error('Your session has expired. Please sign in again to download the SDK.')
+      }
+
+      // Retry with new token
+      response = await attemptDownload(this.getToken())
+    }
 
     if (!response.ok) {
-      const error = await response.json()
+      const error = await response.json().catch(() => ({ error: 'Failed to download SDK' }))
       throw new Error(error.error || 'Failed to download SDK')
     }
 

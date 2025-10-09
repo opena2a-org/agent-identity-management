@@ -38,7 +38,9 @@ export default function SDKTokensPage() {
   const loadTokens = async () => {
     try {
       setLoading(true)
-      const response = await api.listSDKTokens(includeRevoked)
+      // Always fetch ALL tokens (including revoked) for accurate stats
+      // We'll filter which ones to display based on includeRevoked state
+      const response = await api.listSDKTokens(true)
       setTokens(response.tokens || [])
       setError(null)
     } catch (err) {
@@ -197,7 +199,7 @@ export default function SDKTokensPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {tokens.map((token) => {
+          {(includeRevoked ? tokens : activeTokens).map((token) => {
             const status = getTokenStatus(token)
             return (
               <Card key={token.id} className={token.revokedAt ? 'opacity-60' : ''}>

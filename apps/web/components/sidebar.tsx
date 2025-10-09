@@ -214,7 +214,8 @@ export function Sidebar() {
     if (href === '/dashboard') {
       return pathname === '/dashboard';
     }
-    return pathname.startsWith(href);
+    // Exact match OR starts with href followed by '/' (to avoid partial matches like /dashboard/sdk matching /dashboard/sdk-tokens)
+    return pathname === href || pathname.startsWith(href + '/');
   };
 
   const SidebarContent = () => (

@@ -106,18 +106,24 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
 
+	// Parse User-Agent into friendly device name
+	deviceName := h.parseDeviceName(userAgent)
+	deviceFingerprint := h.generateDeviceFingerprint(userAgent, ipAddress)
+
 	// Track SDK token in database for security (revocation, monitoring)
 	sdkToken := &domain.SDKToken{
-		ID:             uuid.New(),
-		UserID:         userID,
-		OrganizationID: organizationID,
-		TokenHash:      tokenHash,
-		TokenID:        tokenID,
-		IPAddress:      &ipAddress,
-		UserAgent:      &userAgent,
-		CreatedAt:      time.Now(),
-		ExpiresAt:      time.Now().Add(90 * 24 * time.Hour), // 90 days
-		Metadata:       map[string]interface{}{
+		ID:                uuid.New(),
+		UserID:            userID,
+		OrganizationID:    organizationID,
+		TokenHash:         tokenHash,
+		TokenID:           tokenID,
+		DeviceName:        &deviceName,
+		DeviceFingerprint: &deviceFingerprint,
+		IPAddress:         &ipAddress,
+		UserAgent:         &userAgent,
+		CreatedAt:         time.Now(),
+		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
+		Metadata:          map[string]interface{}{
 			"source": "sdk_download",
 		},
 	}
@@ -305,4 +311,79 @@ For more examples, see the included test files.
 	}
 
 	return buf.Bytes(), nil
+}
+
+// parseDeviceName extracts a friendly device name from User-Agent string
+// Examples: "Chrome on macOS", "Firefox on Windows 11", "Safari on iPhone"
+func (h *SDKHandler) parseDeviceName(userAgent string) string {
+	if userAgent == "" {
+		return "Unknown Device"
+	}
+
+	browser := "Unknown Browser"
+	os := "Unknown OS"
+
+	// Detect browser
+	switch {
+	case containsUA(userAgent, "Chrome") && !containsUA(userAgent, "Edg"):
+		browser = "Chrome"
+	case containsUA(userAgent, "Firefox"):
+		browser = "Firefox"
+	case containsUA(userAgent, "Safari") && !containsUA(userAgent, "Chrome"):
+		browser = "Safari"
+	case containsUA(userAgent, "Edg"):
+		browser = "Edge"
+	case containsUA(userAgent, "Opera") || containsUA(userAgent, "OPR"):
+		browser = "Opera"
+	}
+
+	// Detect operating system
+	switch {
+	case containsUA(userAgent, "Windows NT 10.0"):
+		os = "Windows 10/11"
+	case containsUA(userAgent, "Windows NT 6.3"):
+		os = "Windows 8.1"
+	case containsUA(userAgent, "Windows NT 6.2"):
+		os = "Windows 8"
+	case containsUA(userAgent, "Windows NT 6.1"):
+		os = "Windows 7"
+	case containsUA(userAgent, "Windows"):
+		os = "Windows"
+	case containsUA(userAgent, "Mac OS X"):
+		os = "macOS"
+	case containsUA(userAgent, "Linux"):
+		os = "Linux"
+	case containsUA(userAgent, "iPhone"):
+		os = "iPhone"
+	case containsUA(userAgent, "iPad"):
+		os = "iPad"
+	case containsUA(userAgent, "Android"):
+		os = "Android"
+	}
+
+	return fmt.Sprintf("%s on %s", browser, os)
+}
+
+// generateDeviceFingerprint creates a unique fingerprint from User-Agent and IP
+// Used to detect when same device downloads SDK multiple times
+func (h *SDKHandler) generateDeviceFingerprint(userAgent, ipAddress string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(userAgent + "|" + ipAddress))
+	hash := hasher.Sum(nil)
+	// Return first 16 chars of hex hash for readability
+	return hex.EncodeToString(hash)[:16]
+}
+
+// Helper function to check if User-Agent string contains substring
+func containsUA(s, substr string) bool {
+	return len(s) >= len(substr) && stringContainsUA(s, substr)
+}
+
+func stringContainsUA(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
+import { api } from '@/lib/api'
 
 export default function SDKDownloadPage() {
   const [downloading, setDownloading] = useState(false)
@@ -15,20 +16,10 @@ export default function SDKDownloadPage() {
       setError(null)
       setSuccess(false)
 
-      const response = await fetch('http://localhost:8080/api/v1/sdk/download', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('aim_token')}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to download SDK')
-      }
+      // Use API client with automatic token refresh on 401
+      const blob = await api.downloadSDK()
 
       // Create blob and trigger download
-      const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

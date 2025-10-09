@@ -124,10 +124,10 @@ func (h *OAuthHandler) HandleOAuthCallback(c fiber.Ctx) error {
 	})
 
 	// Try to log in existing user first
-	token, _, err := h.oauthService.HandleOAuthLogin(c.Context(), provider, code)
+	accessToken, refreshToken, _, err := h.oauthService.HandleOAuthLogin(c.Context(), provider, code)
 	if err == nil {
-		// User exists - return JWT token for login
-		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?token=%s", token))
+		// User exists - return JWT tokens for login (access + refresh)
+		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?token=%s&refresh_token=%s", accessToken, refreshToken))
 	}
 
 	// User doesn't exist - proceed with registration flow

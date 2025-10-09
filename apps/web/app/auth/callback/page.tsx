@@ -14,11 +14,13 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Check if token is directly in query params (from backend redirect for existing users)
-        const tokenFromQuery = searchParams.get('token')
-        if (tokenFromQuery) {
-          // User already exists - token provided directly
-          api.setToken(tokenFromQuery)
+        // Check if tokens are directly in query params (from backend redirect for existing users)
+        const accessToken = searchParams.get('token')
+        const refreshToken = searchParams.get('refresh_token')
+
+        if (accessToken) {
+          // User already exists - tokens provided directly
+          api.setToken(accessToken, refreshToken || undefined)
           setStatus('success')
 
           // Redirect to dashboard after short delay
