@@ -293,6 +293,38 @@ export function RegisterAgentModal({
     }
   };
 
+  // Check if form has been modified
+  const isFormDirty = () => {
+    // If agent is already created successfully, no need to confirm
+    if (success) return false;
+
+    // Check if any field has been filled out
+    return (
+      formData.name.trim() !== '' ||
+      formData.display_name.trim() !== '' ||
+      formData.description.trim() !== '' ||
+      formData.version !== '1.0.0' ||
+      formData.certificate_url.trim() !== '' ||
+      formData.repository_url.trim() !== '' ||
+      formData.documentation_url.trim() !== '' ||
+      formData.talks_to.length > 0 ||
+      formData.capabilities.length > 0
+    );
+  };
+
+  // Handle click on overlay (outside modal)
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      if (isFormDirty()) {
+        if (confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+          handleClose();
+        }
+      } else {
+        handleClose();
+      }
+    }
+  };
+
   const toggleCapability = (capability: string) => {
     setFormData(prev => ({
       ...prev,
@@ -323,7 +355,10 @@ export function RegisterAgentModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={handleOverlayClick}
+    >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">

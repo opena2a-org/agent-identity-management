@@ -68,7 +68,7 @@ func main() {
 	defer redisClient.Close()
 
 	// Initialize repositories
-	repos := initRepositories(db)
+	repos := initRepositories(db, dbx)
 	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
 
 	// Initialize cache
@@ -257,9 +257,10 @@ type Repositories struct {
 	VerificationEvent *repository.VerificationEventRepositorySimple
 	Tag               *repository.TagRepository
 	SDKToken          domain.SDKTokenRepository
+	Capability        domain.CapabilityRepository
 }
 
-func initRepositories(db *sql.DB) *Repositories {
+func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 	return &Repositories{
 		User:              repository.NewUserRepository(db),
 		Organization:      repository.NewOrganizationRepository(db),
@@ -274,6 +275,7 @@ func initRepositories(db *sql.DB) *Repositories {
 		VerificationEvent: repository.NewVerificationEventRepository(db),
 		Tag:               repository.NewTagRepository(db),
 		SDKToken:          repository.NewSDKTokenRepository(db),
+		Capability:        repository.NewCapabilityRepository(dbx),
 	}
 }
 
@@ -293,6 +295,7 @@ type Services struct {
 	OAuth             *application.OAuthService
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
+	Capability        *application.CapabilityService
 }
 
 func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
@@ -392,6 +395,12 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.SDKToken,
 	)
 
+	capabilityService := application.NewCapabilityService(
+		repos.Capability,
+		repos.Agent,
+		repos.AuditLog,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -408,6 +417,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		OAuth:             oauthService,
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
+		Capability:        capabilityService,
 	}, keyVault
 }
 
@@ -429,6 +439,7 @@ type Handlers struct {
 	SDK               *handlers.SDKHandler
 	SDKToken          *handlers.SDKTokenHandler
 	AuthRefresh       *handlers.AuthRefreshHandler
+	Capability        *handlers.CapabilityHandler
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -506,6 +517,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		AuthRefresh: handlers.NewAuthRefreshHandler(
 			jwtService,
 			services.SDKToken,
+		),
+		Capability: handlers.NewCapabilityHandler(
+			services.Capability,
 		),
 	}
 }
@@ -778,6 +792,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToAgent)
 	agents.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromAgent)
 	agents.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForAgent)
+
+	// Agent capability routes (under /agents/:id/capabilities)
+	agents.Get("/:id/capabilities", h.Capability.GetAgentCapabilities)
+	agents.Post("/:id/capabilities", middleware.ManagerMiddleware(), h.Capability.GrantCapability)
+	agents.Delete("/:id/capabilities/:capabilityId", middleware.ManagerMiddleware(), h.Capability.RevokeCapability)
+
+	// Agent violation routes (under /agents/:id/violations)
+	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)
 
 	// MCP server tag routes (under /mcp-servers/:id/tags)
 	mcpServers.Get("/:id/tags", h.Tag.GetMCPServerTags)

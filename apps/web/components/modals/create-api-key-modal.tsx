@@ -105,6 +105,26 @@ export function CreateAPIKeyModal({
     }
   };
 
+  // Check if form has been modified
+  const isFormDirty = () => {
+    // If API key is already created, no confirmation needed
+    if (success) return false;
+    return formData.name.trim() !== '' || formData.agent_id !== '';
+  };
+
+  // Handle click on overlay (outside modal)
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      if (isFormDirty()) {
+        if (confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+          handleClose();
+        }
+      } else {
+        handleClose();
+      }
+    }
+  };
+
   const getExpirationDate = () => {
     const days = parseInt(formData.expires_in);
     if (days === 0) return 'Never';
@@ -116,7 +136,10 @@ export function CreateAPIKeyModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={handleOverlayClick}
+    >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">

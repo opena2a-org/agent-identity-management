@@ -35,6 +35,7 @@ export function AgentDetailModal({
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [downloadingSDK, setDownloadingSDK] = useState(false);
   const [showCredentialsSection, setShowCredentialsSection] = useState(false);
+  const [initialTags, setInitialTags] = useState<Tag[]>([]);
 
   useEffect(() => {
     if (isOpen && agent) {
@@ -53,6 +54,7 @@ export function AgentDetailModal({
         api.suggestTagsForAgent(agent.id),
       ]);
       setAgentTags(currentTags || []);
+      setInitialTags(currentTags || []); // Store initial state
       setAvailableTags(allTags || []);
       setSuggestedTags(suggestions || []);
     } catch (error) {
@@ -181,6 +183,28 @@ export function AgentDetailModal({
     fetchAgentKeys();
   };
 
+  // Check if tags have been modified
+  const hasUnsavedChanges = () => {
+    if (initialTags.length !== agentTags.length) return true;
+    const initialIds = initialTags.map(t => t.id).sort();
+    const currentIds = agentTags.map(t => t.id).sort();
+    return JSON.stringify(initialIds) !== JSON.stringify(currentIds);
+  };
+
+  // Handle click on overlay (outside modal)
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only close if clicking the overlay itself, not its children
+    if (e.target === e.currentTarget) {
+      if (hasUnsavedChanges()) {
+        if (confirm('You have unsaved tag changes. Are you sure you want to close without saving?')) {
+          onClose();
+        }
+      } else {
+        onClose();
+      }
+    }
+  };
+
   if (!isOpen || !agent) return null;
 
   const formatDate = (dateString: string) => {
@@ -215,7 +239,10 @@ export function AgentDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={handleOverlayClick}
+    >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -251,7 +278,7 @@ export function AgentDetailModal({
             <div>
               <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Trust Score</span>
               <span className={`text-2xl font-bold ${getTrustScoreColor(agent.trust_score)}`}>
-                {agent.trust_score}%
+                {agent.trust_score <= 1 ? Math.round(agent.trust_score * 100) : Math.round(agent.trust_score)}%
               </span>
             </div>
             <div>
@@ -298,19 +325,19 @@ export function AgentDetailModal({
             {loadingCapabilities ? (
               <div className="text-sm text-gray-500 dark:text-gray-400">Loading capabilities...</div>
             ) : capabilities && capabilities.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {capabilities.map((capability) => (
                   <div
                     key={capability.id}
-                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
                   >
                     <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100 truncate">
+                    <div>
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                         {capability.capabilityType}
                       </p>
                       {capability.capabilityScope && Object.keys(capability.capabilityScope).length > 0 && (
-                        <p className="text-xs text-blue-600 dark:text-blue-400 truncate">
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
                           {Object.entries(capability.capabilityScope)
                             .map(([key, value]) => `${key}: ${value}`)
                             .join(', ')}

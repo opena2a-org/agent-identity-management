@@ -51,9 +51,18 @@ export default function ThreatDetailModal({
       : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
   };
 
+  // Handle click on overlay (outside modal) - threat detail modal is read-only, so close immediately
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={handleOverlayClick}
+    >
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
