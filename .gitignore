@@ -54,3 +54,6 @@ tmp/
 # Logs
 logs/
 *.log
+
+# Sensitive Documentation (Strategy, Roadmaps, Premium Products)
+docs/

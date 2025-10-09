@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   Shield,
@@ -143,6 +144,7 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 }
 
 export default function AgentsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -350,8 +352,8 @@ export default function AgentsPage() {
   };
 
   const handleViewAgent = (agent: Agent) => {
-    setSelectedAgent(agent);
-    setShowDetailModal(true);
+    // Navigate to agent details page instead of opening modal
+    router.push(`/dashboard/agents/${agent.id}`);
   };
 
   const handleEditAgent = (agent: Agent) => {
@@ -484,7 +486,7 @@ export default function AgentsPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredAgents.map((agent) => (
-                <tr key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <tr key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => handleViewAgent(agent)}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
@@ -529,7 +531,7 @@ export default function AgentsPage() {
                       {formatDate(agent.updated_at)}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewAgent(agent)}

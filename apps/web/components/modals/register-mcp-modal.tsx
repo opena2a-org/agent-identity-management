@@ -348,11 +348,11 @@ export function RegisterMCPModal({
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                    Automatic Key Generation
+                    Automatic Key Generation & Verification
                   </h4>
                   <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
-                    If you don't provide a public key, AIM will automatically generate Ed25519 cryptographic keys for you.
-                    You can also provide your own public key if you've already generated one.
+                    AIM will automatically generate Ed25519 cryptographic keys and detect capabilities from your MCP server.
+                    You can optionally provide your own public key if you've already generated one.
                   </p>
                 </div>
               </div>
@@ -361,68 +361,37 @@ export function RegisterMCPModal({
             {/* Public Key */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Public Key
+                Public Key (Optional)
               </label>
               <textarea
                 value={formData.public_key}
                 onChange={(e) => setFormData({ ...formData, public_key: e.target.value })}
-                placeholder="Base64-encoded Ed25519 public key (optional - leave empty for automatic generation)"
+                placeholder="Base64-encoded Ed25519 public key (leave empty for automatic generation)"
                 rows={3}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 font-mono text-xs"
                 disabled={loading || success}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Leave empty to let AIM generate keys automatically
-              </p>
-            </div>
-
-            {/* Verification URL */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Verification URL
-              </label>
-              <input
-                type="url"
-                value={formData.verification_url}
-                onChange={(e) => setFormData({ ...formData, verification_url: e.target.value })}
-                placeholder="https://mcp.example.com/.well-known/aim-verification"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                  errors.verification_url ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
-                }`}
-                disabled={loading || success}
-              />
-              {errors.verification_url && (
-                <p className="mt-1 text-xs text-red-500">{errors.verification_url}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                URL endpoint for cryptographic challenge-response verification
+                If empty, AIM generates secure Ed25519 keys automatically
               </p>
             </div>
           </div>
 
-          {/* Capabilities */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Capabilities
-            </label>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              Select the MCP capabilities this server supports based on the Model Context Protocol specification.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {MCP_CAPABILITY_OPTIONS.map(capability => (
-                <label key={capability} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <input
-                    type="checkbox"
-                    checked={formData.capabilities.includes(capability)}
-                    onChange={() => toggleCapability(capability)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    disabled={loading || success}
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    {capability.charAt(0).toUpperCase() + capability.slice(1)}
-                  </span>
-                </label>
-              ))}
+          {/* Capabilities Auto-Detection Notice */}
+          <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Capabilities Auto-Detected
+                </h4>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                  After registration, AIM will automatically detect and register all capabilities (tools, resources, prompts)
+                  that your MCP server exposes. No manual configuration needed.
+                </p>
+              </div>
             </div>
           </div>
 

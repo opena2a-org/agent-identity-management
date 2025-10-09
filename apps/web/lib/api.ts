@@ -93,6 +93,47 @@ export interface SDKToken {
   metadata?: Record<string, any>
 }
 
+// MCP Detection Types
+export type DetectionMethod = 'manual' | 'claude_config' | 'sdk_import' | 'sdk_runtime' | 'direct_api'
+
+export interface DetectionEvent {
+  mcpServer: string
+  detectionMethod: DetectionMethod
+  confidence: number
+  details?: Record<string, any>
+  sdkVersion?: string
+  timestamp: string
+}
+
+export interface DetectionReportRequest {
+  detections: DetectionEvent[]
+}
+
+export interface DetectionReportResponse {
+  success: boolean
+  detectionsProcessed: number
+  newMCPs: string[]
+  existingMCPs: string[]
+  message: string
+}
+
+export interface DetectedMCPSummary {
+  name: string
+  confidenceScore: number
+  detectedBy: DetectionMethod[]
+  firstDetected: string
+  lastSeen: string
+}
+
+export interface DetectionStatusResponse {
+  agentId: string
+  sdkVersion?: string
+  sdkInstalled: boolean
+  autoDetectEnabled: boolean
+  detectedMCPs: DetectedMCPSummary[]
+  lastReportedAt?: string
+}
+
 class APIClient {
   private baseURL: string
   private token: string | null = null
@@ -512,6 +553,139 @@ class APIClient {
     return this.request(`/api/v1/mcp-servers/${id}/verify`, { method: 'POST' })
   }
 
+  async getMCPServerCapabilities(id: string): Promise<{
+    capabilities: Array<{
+      id: string
+      mcp_server_id: string
+      name: string
+      type: 'tool' | 'resource' | 'prompt'
+      description: string
+      schema: any
+      detected_at: string
+      last_verified_at?: string
+      is_active: boolean
+    }>
+    total: number
+    tools: any[]
+    resources: any[]
+    prompts: any[]
+    counts: {
+      tools: number
+      resources: number
+      prompts: number
+    }
+  }> {
+    return this.request(`/api/v1/mcp-servers/${id}/capabilities`)
+  }
+
+  async getMCPServerAgents(id: string): Promise<{
+    agents: Array<{
+      id: string
+      name: string
+      display_name: string
+      agent_type: string
+      status: string
+    }>
+    total: number
+  }> {
+    return this.request(`/api/v1/mcp-servers/${id}/agents`)
+  }
+
+  // ========================================
+  // Agent-MCP Relationship Management
+  // ========================================
+
+  // Get MCP servers an agent talks to
+  async getAgentMCPServers(agentId: string): Promise<{
+    agent_id: string
+    agent_name: string
+    talks_to: string[]
+    total: number
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/mcp-servers`)
+  }
+
+  // Add MCP servers to agent's talks_to list
+  async addMCPServersToAgent(
+    agentId: string,
+    data: {
+      mcp_server_ids: string[]
+      detected_method?: string
+      confidence?: number
+      metadata?: Record<string, any>
+    }
+  ): Promise<{
+    message: string
+    talks_to: string[]
+    added_servers: string[]
+    total_count: number
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/mcp-servers`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Remove a single MCP server from agent's talks_to list
+  async removeMCPServerFromAgent(
+    agentId: string,
+    mcpServerId: string
+  ): Promise<{
+    message: string
+    talks_to: string[]
+    total_count: number
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/mcp-servers/${mcpServerId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // Remove multiple MCP servers from agent's talks_to list (bulk)
+  async bulkRemoveMCPServersFromAgent(
+    agentId: string,
+    mcpServerIds: string[]
+  ): Promise<{
+    message: string
+    talks_to: string[]
+    removed_servers: string[]
+    total_count: number
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/mcp-servers/bulk`, {
+      method: 'DELETE',
+      body: JSON.stringify({ mcp_server_ids: mcpServerIds }),
+    })
+  }
+
+  // Auto-detect MCP servers from Claude Desktop config
+  async detectAndMapMCPServers(
+    agentId: string,
+    data: {
+      config_path: string
+      auto_register?: boolean
+      dry_run?: boolean
+    }
+  ): Promise<{
+    detected_servers: Array<{
+      name: string
+      command: string
+      args: string[]
+      env?: Record<string, string>
+      confidence: number
+      source: string
+      metadata?: Record<string, any>
+    }>
+    registered_count: number
+    mapped_count: number
+    total_talks_to: number
+    dry_run: boolean
+    errors_encountered?: string[]
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/mcp-servers/detect`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   // Verification Events (Real-time Monitoring)
   async getRecentVerificationEvents(minutes = 15): Promise<{
     events: Array<{
@@ -723,6 +897,26 @@ class APIClient {
     }
 
     return response.blob()
+  }
+
+  // ========================================
+  // MCP Detection (Phase 4: SDK + Direct API)
+  // ========================================
+
+  // Report MCP detections from SDK or Direct API
+  async reportDetection(
+    agentId: string,
+    data: DetectionReportRequest
+  ): Promise<DetectionReportResponse> {
+    return this.request(`/api/v1/agents/${agentId}/detection/report`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Get current detection status for an agent
+  async getDetectionStatus(agentId: string): Promise<DetectionStatusResponse> {
+    return this.request(`/api/v1/agents/${agentId}/detection/status`)
   }
 }
 

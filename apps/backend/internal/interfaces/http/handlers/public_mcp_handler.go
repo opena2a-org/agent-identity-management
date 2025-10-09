@@ -271,8 +271,8 @@ func (h *PublicMCPHandler) ListMCPServersForAgent(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"servers": servers,
-		"total":   len(servers),
+		"mcp_servers": servers,
+		"total":       len(servers),
 	})
 }
 

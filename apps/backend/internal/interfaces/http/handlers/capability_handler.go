@@ -29,15 +29,15 @@ func NewCapabilityHandler(capabilityService *application.CapabilityService) *Cap
 // @Tags capabilities
 // @Accept json
 // @Produce json
-// @Param agentId path string true "Agent ID"
+// @Param id path string true "Agent ID"
 // @Param capability body GrantCapabilityRequest true "Capability to grant"
 // @Success 201 {object} domain.AgentCapability
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /agents/{agentId}/capabilities [post]
+// @Router /agents/{id}/capabilities [post]
 func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
-	agentID, err := uuid.Parse(c.Params("agentId"))
+	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
@@ -80,15 +80,15 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 // @Description Retrieve all capabilities for an agent
 // @Tags capabilities
 // @Produce json
-// @Param agentId path string true "Agent ID"
+// @Param id path string true "Agent ID"
 // @Param activeOnly query boolean false "Only return active (non-revoked) capabilities"
 // @Success 200 {array} domain.AgentCapability
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /agents/{agentId}/capabilities [get]
+// @Router /agents/{id}/capabilities [get]
 func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
-	agentID, err := uuid.Parse(c.Params("agentId"))
+	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
@@ -222,16 +222,16 @@ func (h *CapabilityHandler) VerifyAction(c fiber.Ctx) error {
 // @Description Retrieve capability violations for a specific agent
 // @Tags capabilities
 // @Produce json
-// @Param agentId path string true "Agent ID"
+// @Param id path string true "Agent ID"
 // @Param limit query int false "Limit" default(20)
 // @Param offset query int false "Offset" default(0)
 // @Success 200 {object} ViolationsResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /agents/{agentId}/violations [get]
+// @Router /agents/{id}/violations [get]
 func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
-	agentID, err := uuid.Parse(c.Params("agentId"))
+	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",

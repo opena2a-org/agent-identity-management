@@ -341,3 +341,66 @@ func (r *AgentRepository) MarkAsCompromised(id uuid.UUID) error {
 	_, err := r.db.Exec(query, domain.AgentStatusSuspended, time.Now(), id)
 	return err
 }
+
+// GetByMCPServer retrieves all agents that talk to a specific MCP server
+func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID) ([]*domain.Agent, error) {
+	// Query agents where talks_to JSONB array contains the MCP server ID (as string)
+	query := `
+		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
+		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       talks_to, created_at, updated_at, created_by
+		FROM agents
+		WHERE organization_id = $1
+		  AND talks_to @> $2::jsonb
+		ORDER BY created_at DESC
+	`
+
+	// Convert MCP server ID to JSON string format for JSONB comparison
+	mcpServerJSON := fmt.Sprintf(`["%s"]`, mcpServerID.String())
+
+	rows, err := r.db.Query(query, orgID, mcpServerJSON)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*domain.Agent
+	for rows.Next() {
+		agent := &domain.Agent{}
+		var talksToJSON []byte
+		err := rows.Scan(
+			&agent.ID,
+			&agent.OrganizationID,
+			&agent.Name,
+			&agent.DisplayName,
+			&agent.Description,
+			&agent.AgentType,
+			&agent.Status,
+			&agent.Version,
+			&agent.PublicKey,
+			&agent.CertificateURL,
+			&agent.RepositoryURL,
+			&agent.DocumentationURL,
+			&agent.TrustScore,
+			&agent.VerifiedAt,
+			&talksToJSON,
+			&agent.CreatedAt,
+			&agent.UpdatedAt,
+			&agent.CreatedBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Unmarshal talks_to from JSONB
+		if len(talksToJSON) > 0 {
+			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+			}
+		}
+
+		agents = append(agents, agent)
+	}
+
+	return agents, nil
+}

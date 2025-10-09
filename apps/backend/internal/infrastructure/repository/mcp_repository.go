@@ -43,7 +43,7 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		server.VerificationURL,
 		pq.Array(server.Capabilities),
 		server.TrustScore,
-		server.CreatedBy,
+		server.RegisteredByAgent, // Can be nil for user-registered servers
 		time.Now().UTC(),
 		time.Now().UTC(),
 	).Scan(&server.ID, &server.CreatedAt, &server.UpdatedAt)
@@ -82,7 +82,7 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 		&server.VerificationURL,
 		pq.Array(&capabilities),
 		&server.TrustScore,
-		&server.CreatedBy,
+		&server.RegisteredByAgent,
 		&server.CreatedAt,
 		&server.UpdatedAt,
 	)
@@ -139,7 +139,7 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 			&server.VerificationURL,
 			pq.Array(&capabilities),
 			&server.TrustScore,
-			&server.CreatedBy,
+			&server.RegisteredByAgent,
 			&server.CreatedAt,
 			&server.UpdatedAt,
 			&server.VerificationCount,
@@ -182,7 +182,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 		&server.VerificationURL,
 		pq.Array(&capabilities),
 		&server.TrustScore,
-		&server.CreatedBy,
+		&server.RegisteredByAgent,
 		&server.CreatedAt,
 		&server.UpdatedAt,
 	)
@@ -294,7 +294,7 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 			&server.VerificationURL,
 			pq.Array(&capabilities),
 			&server.TrustScore,
-			&server.CreatedBy,
+			&server.RegisteredByAgent,
 			&server.CreatedAt,
 			&server.UpdatedAt,
 		)

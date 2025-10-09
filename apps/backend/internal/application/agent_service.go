@@ -2,7 +2,9 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -303,4 +305,321 @@ func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUI
 	}
 
 	return *agent.PublicKey, privateKeyBase64, nil
+}
+
+// ========================================
+// MCP Server Relationship Management
+// ========================================
+
+// AddMCPServersRequest represents request to add MCP servers to agent's talks_to list
+type AddMCPServersRequest struct {
+	MCPServerIDs   []string               `json:"mcp_server_ids"`   // MCP server IDs or names
+	DetectedMethod string                 `json:"detected_method"`  // "manual", "auto_sdk", "auto_config", "cli"
+	Confidence     float64                `json:"confidence"`       // Detection confidence (0-100)
+	Metadata       map[string]interface{} `json:"metadata"`         // Additional context
+}
+
+// MCPServerDetail represents detailed MCP server information
+type MCPServerDetail struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	URL            string    `json:"url"`
+	Status         string    `json:"status"`
+	TrustScore     float64   `json:"trust_score"`
+	AddedAt        time.Time `json:"added_at"`
+	DetectedMethod string    `json:"detected_method"`
+}
+
+// AddMCPServers adds MCP servers to an agent's talks_to list
+func (s *AgentService) AddMCPServers(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerIdentifiers []string,
+) (*domain.Agent, []string, error) {
+	// 1. Fetch agent
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. Initialize talks_to if nil
+	if agent.TalksTo == nil {
+		agent.TalksTo = []string{}
+	}
+
+	// 3. Create a map to track existing entries (prevent duplicates)
+	existingMap := make(map[string]bool)
+	for _, existing := range agent.TalksTo {
+		existingMap[existing] = true
+	}
+
+	// 4. Add new MCP servers (only unique ones)
+	addedServers := []string{}
+	for _, identifier := range mcpServerIdentifiers {
+		if !existingMap[identifier] {
+			agent.TalksTo = append(agent.TalksTo, identifier)
+			existingMap[identifier] = true
+			addedServers = append(addedServers, identifier)
+		}
+	}
+
+	// 5. Update agent in database
+	if len(addedServers) > 0 {
+		if err := s.agentRepo.Update(agent); err != nil {
+			return nil, nil, fmt.Errorf("failed to update agent: %w", err)
+		}
+	}
+
+	return agent, addedServers, nil
+}
+
+// RemoveMCPServers removes MCP servers from an agent's talks_to list
+func (s *AgentService) RemoveMCPServers(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerIdentifiers []string,
+) (*domain.Agent, []string, error) {
+	// 1. Fetch agent
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. Initialize talks_to if nil
+	if agent.TalksTo == nil {
+		agent.TalksTo = []string{}
+		return agent, []string{}, nil
+	}
+
+	// 3. Create a map of servers to remove
+	removeMap := make(map[string]bool)
+	for _, identifier := range mcpServerIdentifiers {
+		removeMap[identifier] = true
+	}
+
+	// 4. Filter out removed servers
+	removedServers := []string{}
+	newTalksTo := []string{}
+	for _, existing := range agent.TalksTo {
+		if removeMap[existing] {
+			removedServers = append(removedServers, existing)
+		} else {
+			newTalksTo = append(newTalksTo, existing)
+		}
+	}
+
+	// 5. Update agent with new talks_to list
+	agent.TalksTo = newTalksTo
+	if len(removedServers) > 0 {
+		if err := s.agentRepo.Update(agent); err != nil {
+			return nil, nil, fmt.Errorf("failed to update agent: %w", err)
+		}
+	}
+
+	return agent, removedServers, nil
+}
+
+// RemoveMCPServer removes a single MCP server from an agent's talks_to list
+func (s *AgentService) RemoveMCPServer(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerIdentifier string,
+) (*domain.Agent, error) {
+	agent, _, err := s.RemoveMCPServers(ctx, agentID, []string{mcpServerIdentifier})
+	return agent, err
+}
+
+// GetAgentMCPServers retrieves detailed information about MCP servers an agent talks to
+// This returns the full MCP server details, not just the IDs/names in talks_to
+func (s *AgentService) GetAgentMCPServers(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpRepo domain.MCPServerRepository,
+) ([]*domain.MCPServer, error) {
+	// 1. Fetch agent
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. If no talks_to entries, return empty list
+	if agent.TalksTo == nil || len(agent.TalksTo) == 0 {
+		return []*domain.MCPServer{}, nil
+	}
+
+	// 3. Fetch all MCP servers for the organization
+	allMCPServers, err := mcpRepo.GetByOrganization(agent.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch MCP servers: %w", err)
+	}
+
+	// 4. Create a map of talks_to identifiers for fast lookup
+	talksToMap := make(map[string]bool)
+	for _, identifier := range agent.TalksTo {
+		talksToMap[identifier] = true
+	}
+
+	// 5. Filter MCP servers that match talks_to (by ID or name)
+	matchingServers := []*domain.MCPServer{}
+	for _, server := range allMCPServers {
+		// Match by ID or name
+		if talksToMap[server.ID.String()] || talksToMap[server.Name] {
+			matchingServers = append(matchingServers, server)
+		}
+	}
+
+	return matchingServers, nil
+}
+
+// ========================================
+// Auto-Detection of MCP Servers
+// ========================================
+
+// DetectMCPServersRequest represents request to auto-detect MCP servers from config
+type DetectMCPServersRequest struct {
+	ConfigPath   string `json:"config_path"`    // Path to Claude Desktop config file
+	AutoRegister bool   `json:"auto_register"`  // Whether to auto-register discovered MCPs
+	DryRun       bool   `json:"dry_run"`        // Preview changes without applying
+}
+
+// DetectedMCPServer represents an MCP server detected from config
+type DetectedMCPServer struct {
+	Name       string                 `json:"name"`
+	Command    string                 `json:"command"`
+	Args       []string               `json:"args"`
+	Env        map[string]string      `json:"env,omitempty"`
+	Confidence float64                `json:"confidence"` // 0-100
+	Source     string                 `json:"source"`     // "claude_desktop_config"
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// DetectMCPServersResult represents the result of auto-detection
+type DetectMCPServersResult struct {
+	DetectedServers  []DetectedMCPServer `json:"detected_servers"`
+	RegisteredCount  int                 `json:"registered_count"`
+	MappedCount      int                 `json:"mapped_count"`
+	TotalTalksTo     int                 `json:"total_talks_to"`
+	DryRun           bool                `json:"dry_run"`
+	ErrorsEncountered []string           `json:"errors_encountered,omitempty"`
+}
+
+// DetectMCPServersFromConfig auto-detects MCP servers from Claude Desktop config
+func (s *AgentService) DetectMCPServersFromConfig(
+	ctx context.Context,
+	agentID uuid.UUID,
+	req *DetectMCPServersRequest,
+	mcpService *MCPService,
+	orgID uuid.UUID,
+	userID uuid.UUID,
+) (*DetectMCPServersResult, error) {
+	// 1. Validate request
+	if req.ConfigPath == "" {
+		return nil, fmt.Errorf("config_path is required")
+	}
+
+	// 2. Parse Claude Desktop config file
+	detectedServers, err := s.parseClaudeDesktopConfig(req.ConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// 3. If dry run, return immediately with detected servers
+	if req.DryRun {
+		return &DetectMCPServersResult{
+			DetectedServers: detectedServers,
+			DryRun:          true,
+		}, nil
+	}
+
+	// 4. Auto-register new MCP servers if requested
+	registeredCount := 0
+	mcpServerIdentifiers := []string{}
+	errorsEncountered := []string{}
+
+	if req.AutoRegister {
+		for _, detected := range detectedServers {
+			// Try to register the MCP server
+			// Note: CreateMCPServerRequest expects URL, but Claude config uses command/args
+			// We'll use the name as a placeholder URL for now
+			registerReq := &CreateMCPServerRequest{
+				Name:        detected.Name,
+				Description: fmt.Sprintf("Auto-detected from Claude Desktop config. Command: %s", detected.Command),
+				URL:         fmt.Sprintf("mcp://%s", detected.Name), // Placeholder URL for local MCP servers
+			}
+
+			_, err := mcpService.CreateMCPServer(ctx, registerReq, orgID, userID)
+			if err != nil {
+				// If already exists, that's fine - we'll use existing
+				errorsEncountered = append(errorsEncountered,
+					fmt.Sprintf("MCP '%s': %v", detected.Name, err))
+			} else {
+				registeredCount++
+			}
+
+			mcpServerIdentifiers = append(mcpServerIdentifiers, detected.Name)
+		}
+	} else {
+		// Just extract names for mapping
+		for _, detected := range detectedServers {
+			mcpServerIdentifiers = append(mcpServerIdentifiers, detected.Name)
+		}
+	}
+
+	// 5. Add detected MCP servers to agent's talks_to list
+	agent, addedServers, err := s.AddMCPServers(ctx, agentID, mcpServerIdentifiers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to map MCP servers to agent: %w", err)
+	}
+
+	// 6. Return results
+	return &DetectMCPServersResult{
+		DetectedServers:   detectedServers,
+		RegisteredCount:   registeredCount,
+		MappedCount:       len(addedServers),
+		TotalTalksTo:      len(agent.TalksTo),
+		DryRun:            false,
+		ErrorsEncountered: errorsEncountered,
+	}, nil
+}
+
+// parseClaudeDesktopConfig parses Claude Desktop config JSON file
+func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMCPServer, error) {
+	// Read config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Parse JSON
+	var config struct {
+		MCPServers map[string]struct {
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+	}
+
+	// Convert to DetectedMCPServer structs
+	detectedServers := []DetectedMCPServer{}
+	for name, serverConfig := range config.MCPServers {
+		detected := DetectedMCPServer{
+			Name:       name,
+			Command:    serverConfig.Command,
+			Args:       serverConfig.Args,
+			Env:        serverConfig.Env,
+			Confidence: 100.0, // High confidence for config file detection
+			Source:     "claude_desktop_config",
+			Metadata: map[string]interface{}{
+				"config_path": configPath,
+			},
+		}
+		detectedServers = append(detectedServers, detected)
+	}
+
+	return detectedServers, nil
 }

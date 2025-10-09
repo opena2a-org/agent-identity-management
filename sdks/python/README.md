@@ -55,12 +55,41 @@ agent = register_agent(
 agent = register_agent(
     name="my-agent",
     aim_url="http://localhost:8080",
+    api_key="aim_1234567890abcdef",  # Get from AIM dashboard
     display_name="My Awesome Agent",
     description="Production agent for user management",
     version="1.0.0",
     repository_url="https://github.com/myorg/my-agent",
-    documentation_url="https://docs.myorg.com"
+    documentation_url="https://docs.myorg.com",
+    # Declare agent capabilities (what it can do)
+    capabilities=[
+        "read_files",
+        "write_files",
+        "execute_code",
+        "send_email",
+        "access_database"
+    ],
+    # Declare MCP servers it talks to (who it communicates with)
+    talks_to=[
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-github",
+        "@modelcontextprotocol/server-postgres"
+    ]
 )
+
+# OR use auto-detection for MCP servers (recommended!)
+from aim_sdk import register_agent, auto_detect_mcps
+
+agent = register_agent(
+    name="my-agent",
+    aim_url="http://localhost:8080",
+    api_key="aim_1234567890abcdef",
+    capabilities=["read_files", "write_files", "execute_code"]
+)
+
+# Auto-detect MCP servers (detects from Claude config & imports)
+detections = auto_detect_mcps()
+agent.report_detections(detections)
 ```
 
 ### Option 2: Manual Initialization (If you have existing credentials)
@@ -125,6 +154,83 @@ Credentials are automatically saved to `~/.aim/credentials.json` with secure per
   }
 }
 ```
+
+## Declaring Capabilities and MCP Servers
+
+### Manual Declaration (Current)
+
+You can manually declare your agent's capabilities and MCP servers during registration:
+
+```python
+agent = register_agent(
+    name="my-agent",
+    aim_url="http://localhost:8080",
+    api_key="aim_1234567890abcdef",
+    # What can your agent do?
+    capabilities=[
+        "read_files",        # Can read files from filesystem
+        "write_files",       # Can write/modify files
+        "execute_code",      # Can execute arbitrary code
+        "send_email",        # Can send emails
+        "access_database",   # Can query databases
+        "make_api_calls"     # Can call external APIs
+    ],
+    # Who does your agent talk to?
+    talks_to=[
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-github",
+        "@modelcontextprotocol/server-postgres"
+    ]
+)
+```
+
+### Auto-Detection (Current - MCPs Only)
+
+AIM can automatically detect MCP servers from:
+- **Claude Desktop config** (`~/.claude/claude_desktop_config.json`)
+- **Python imports** (scans for MCP packages)
+
+```python
+from aim_sdk import register_agent, auto_detect_mcps
+
+agent = register_agent(
+    name="my-agent",
+    aim_url="http://localhost:8080",
+    api_key="aim_1234567890abcdef",
+    capabilities=["read_files", "write_files"]  # Still manual
+)
+
+# Auto-detect MCP servers
+detections = auto_detect_mcps()
+result = agent.report_detections(detections)
+print(f"Detected {len(detections)} MCP servers: {result['newMCPs']}")
+```
+
+### Future: Full Auto-Detection (Vision)
+
+**The "Stripe Moment" - TRUE 1-line autonomy:**
+
+```python
+# FUTURE: AIM will auto-detect EVERYTHING
+agent = register_agent("my-agent", aim_url, api_key)
+
+# AIM automatically detects:
+# ✅ Agent capabilities (from code analysis)
+# ✅ MCP servers (from config & imports) ← Already working!
+# ✅ MCP capabilities (from MCP protocol's tools/list)
+# ✅ Security policies needed
+# ✅ Trust scoring factors
+```
+
+This is possible once:
+1. **Standard capability declarations** exist (e.g., MCP protocol's `tools/list`)
+2. **Industry standards** emerge for agent capability schemas
+3. **AIM implements** code analysis for capability detection
+
+**Current Status:**
+- ✅ **MCP Server Detection**: Fully automated
+- ⏳ **MCP Capability Detection**: Coming soon (MCP protocol supports `tools/list`)
+- ⏳ **Agent Capability Detection**: Future release (requires capability standards)
 
 ## Examples
 

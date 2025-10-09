@@ -3,6 +3,18 @@
 import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key, Download, TrendingUp } from 'lucide-react';
 import { formatDateTime } from '@/lib/date-utils';
 
+interface MCPCapability {
+  id: string;
+  mcp_server_id: string;
+  name: string;
+  type: 'tool' | 'resource' | 'prompt';
+  description: string;
+  schema: any;
+  detected_at: string;
+  last_verified_at?: string;
+  is_active: boolean;
+}
+
 interface MCPServer {
   id: string;
   name: string;
@@ -15,7 +27,7 @@ interface MCPServer {
   created_at: string;
   trust_score?: number;
   capability_count?: number;
-  capabilities?: string[]; // List of capabilities this MCP provides
+  capabilities?: MCPCapability[]; // List of capabilities this MCP provides
   talks_to?: string[]; // List of agents that communicate with this MCP
 }
 
@@ -151,18 +163,40 @@ export function MCPDetailModal({
               Capabilities
             </h3>
             {mcp.capabilities && mcp.capabilities.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {mcp.capabilities.map((capability, index) => (
-                  <div
-                    key={index}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
-                  >
-                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      {capability}
-                    </p>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {mcp.capabilities.map((capability) => {
+                  const typeColors = {
+                    tool: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100',
+                    resource: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-100',
+                    prompt: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-900 dark:text-green-100'
+                  };
+
+                  return (
+                    <div
+                      key={capability.id}
+                      className={`p-3 border rounded-md ${typeColors[capability.type]}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                            <p className="text-sm font-semibold">
+                              {capability.name}
+                            </p>
+                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-white/50 dark:bg-black/20">
+                              {capability.type}
+                            </span>
+                          </div>
+                          {capability.description && (
+                            <p className="text-xs opacity-80 ml-6">
+                              {capability.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-sm text-gray-500 dark:text-gray-400 italic">

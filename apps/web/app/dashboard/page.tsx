@@ -128,6 +128,8 @@ interface AuditLog {
   id: string;
   action: string;
   resource_type: string;
+  resource_id: string;
+  user_id: string;
   metadata: any;
   timestamp: string;
 }
@@ -256,28 +258,72 @@ function DashboardContent() {
   // Get role-based permissions
   const permissions = getDashboardPermissions(userRole);
 
-  // Helper function to format audit log event name
+  // Helper function to format audit log event name with entity details
   const formatEventName = (log: AuditLog): string => {
     const action = log.action.charAt(0).toUpperCase() + log.action.slice(1);
     const resource = log.resource_type.replace(/_/g, ' ');
 
+    // Extract entity name from metadata for more meaningful display
+    let entityName = '';
+    if (log.metadata) {
+      // Try to get specific entity name from metadata
+      entityName = log.metadata.agent_name ||
+                   log.metadata.server_name ||
+                   log.metadata.mcp_name ||
+                   log.metadata.key_name ||
+                   log.metadata.tag_name ||
+                   '';
+    }
+
+    // Format with entity name if available
+    const entityDisplay = entityName ? ` "${entityName}"` : '';
+
     // Special handling for specific action types
     if (log.action === 'view') {
-      return `Viewed ${resource}`;
+      return `Viewed ${resource}${entityDisplay}`;
     } else if (log.action === 'create') {
-      return `Created ${resource}`;
+      return `Created ${resource}${entityDisplay}`;
     } else if (log.action === 'verify') {
-      return `Verified ${resource}`;
+      return `Verified ${resource}${entityDisplay}`;
     } else if (log.action === 'update') {
-      return `Updated ${resource}`;
+      return `Updated ${resource}${entityDisplay}`;
     } else if (log.action === 'delete') {
-      return `Deleted ${resource}`;
+      return `Deleted ${resource}${entityDisplay}`;
+    } else if (log.action === 'grant') {
+      return `Granted ${resource}${entityDisplay}`;
+    } else if (log.action === 'revoke') {
+      return `Revoked ${resource}${entityDisplay}`;
+    } else if (log.action === 'suspend') {
+      return `Suspended ${resource}${entityDisplay}`;
+    } else if (log.action === 'acknowledge') {
+      return `Acknowledged ${resource}${entityDisplay}`;
     } else if (log.resource_type === 'agent_action') {
       // For agent actions, use the action name as the event
       return action.replace(/_/g, ' ');
     }
 
-    return `${action} ${resource}`;
+    return `${action} ${resource}${entityDisplay}`;
+  };
+
+  // Helper function to get WHO initiated the action (user, agent, or MCP)
+  const getInitiatedBy = (log: AuditLog): string => {
+    // Check metadata for agent or MCP context
+    if (log.metadata) {
+      // If action was initiated by an agent
+      if (log.metadata.registered_by_agent || log.metadata.acting_agent_name) {
+        return `Agent: ${log.metadata.registered_by_agent || log.metadata.acting_agent_name}`;
+      }
+      // If action was initiated by an MCP server
+      if (log.metadata.mcp_server || log.metadata.server_name) {
+        return `MCP: ${log.metadata.mcp_server || log.metadata.server_name}`;
+      }
+      // If we have user email in metadata
+      if (log.metadata.user_email) {
+        return `User: ${log.metadata.user_email}`;
+      }
+    }
+    // Default: assume it was a user action
+    return 'User';
   };
 
   // Helper function to categorize the event type
@@ -596,6 +642,9 @@ function DashboardContent() {
                   Event
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Initiated By
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -609,14 +658,14 @@ function DashboardContent() {
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {logsLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto" />
                     <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading recent activity...</p>
                   </td>
                 </tr>
               ) : auditLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity found</p>
                   </td>
                 </tr>
@@ -626,6 +675,11 @@ function DashboardContent() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {formatEventName(log)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        {getInitiatedBy(log)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

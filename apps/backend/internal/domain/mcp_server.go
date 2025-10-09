@@ -32,7 +32,7 @@ type MCPServer struct {
 	Capabilities      []string        `json:"capabilities"` // e.g., ["tools", "prompts", "resources"]
 	TrustScore        float64         `json:"trust_score"`
 	VerificationCount  int             `json:"verification_count,omitempty"` // Fetched via JOIN/COUNT
-	RegisteredByAgent  uuid.UUID       `json:"registered_by_agent"`          // Agent that registered this server
+	RegisteredByAgent  *uuid.UUID      `json:"registered_by_agent"`          // Agent that registered this server (nullable)
 	CreatedBy         uuid.UUID       `json:"created_by"`                   // User who created this server
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`

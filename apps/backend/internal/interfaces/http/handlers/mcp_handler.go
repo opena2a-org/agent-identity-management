@@ -1,24 +1,33 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 )
 
 type MCPHandler struct {
-	mcpService   *application.MCPService
-	auditService *application.AuditService
+	mcpService           *application.MCPService
+	mcpCapabilityService *application.MCPCapabilityService
+	auditService         *application.AuditService
+	agentRepository      *repository.AgentRepository
 }
 
 func NewMCPHandler(
 	mcpService *application.MCPService,
+	mcpCapabilityService *application.MCPCapabilityService,
 	auditService *application.AuditService,
+	agentRepository *repository.AgentRepository,
 ) *MCPHandler {
 	return &MCPHandler{
-		mcpService:   mcpService,
-		auditService: auditService,
+		mcpService:           mcpService,
+		mcpCapabilityService: mcpCapabilityService,
+		auditService:         auditService,
+		agentRepository:      agentRepository,
 	}
 }
 
@@ -46,6 +55,8 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 
 	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID)
 	if err != nil {
+		// Log the actual error for debugging
+		fmt.Printf("❌ Error creating MCP server: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -89,8 +100,8 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"servers": servers,
-		"total":   len(servers),
+		"mcp_servers": servers,
+		"total":       len(servers),
 	})
 }
 
@@ -439,6 +450,134 @@ func (h *MCPHandler) GetVerificationStatus(c fiber.Ctx) error {
 	}
 
 	return c.JSON(status)
+}
+
+// GetMCPServerCapabilities retrieves all capabilities for an MCP server
+// @Summary Get MCP server capabilities
+// @Description Get all detected capabilities for an MCP server (tools, resources, prompts)
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/{id}/capabilities [get]
+func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	serverID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Verify server belongs to organization first
+	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "MCP server not found",
+		})
+	}
+	if server.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Fetch capabilities
+	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch capabilities",
+		})
+	}
+
+	// Group capabilities by type for easier frontend consumption
+	tools := []*domain.MCPServerCapability{}
+	resources := []*domain.MCPServerCapability{}
+	prompts := []*domain.MCPServerCapability{}
+
+	for _, cap := range capabilities {
+		switch cap.CapabilityType {
+		case domain.MCPCapabilityTypeTool:
+			tools = append(tools, cap)
+		case domain.MCPCapabilityTypeResource:
+			resources = append(resources, cap)
+		case domain.MCPCapabilityTypePrompt:
+			prompts = append(prompts, cap)
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"capabilities": capabilities,
+		"total":        len(capabilities),
+		"tools":        tools,
+		"resources":    resources,
+		"prompts":      prompts,
+		"counts": fiber.Map{
+			"tools":     len(tools),
+			"resources": len(resources),
+			"prompts":   len(prompts),
+		},
+	})
+}
+
+// GetMCPServerAgents retrieves all agents that talk to an MCP server
+// @Summary Get agents for MCP server
+// @Description Get all agents that are configured to communicate with this MCP server
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/{id}/agents [get]
+func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	serverID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Verify server belongs to organization first
+	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "MCP server not found",
+		})
+	}
+	if server.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Fetch agents that have this MCP server in their talks_to array
+	agents, err := h.agentRepository.GetByMCPServer(serverID, orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch agents",
+		})
+	}
+
+	// Map to simple response with just the info needed for the modal
+	agentSummaries := make([]fiber.Map, 0, len(agents))
+	for _, agent := range agents {
+		agentSummaries = append(agentSummaries, fiber.Map{
+			"id":           agent.ID,
+			"name":         agent.Name,
+			"display_name": agent.DisplayName,
+			"agent_type":   agent.AgentType,
+			"status":       agent.Status,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agents": agentSummaries,
+		"total":  len(agentSummaries),
+	})
 }
 
 // VerifyMCPAction verifies if an MCP server can perform the requested action

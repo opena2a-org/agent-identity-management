@@ -91,7 +91,7 @@ func main() {
 	oauthProviders := initOAuthProviders(cfg)
 
 	// Initialize application services
-	services, keyVault := initServices(repos, cacheService, oauthRepo, jwtService, oauthProviders)
+	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, oauthProviders)
 
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, legacyOAuthService, keyVault)
@@ -252,6 +252,7 @@ type Repositories struct {
 	AuditLog          *repository.AuditLogRepository
 	Alert             *repository.AlertRepository
 	MCPServer         *repository.MCPServerRepository
+	MCPCapability     *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
 	Security          *repository.SecurityRepository
 	Webhook           *repository.WebhookRepository
 	VerificationEvent *repository.VerificationEventRepositorySimple
@@ -270,6 +271,7 @@ func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 		AuditLog:          repository.NewAuditLogRepository(db),
 		Alert:             repository.NewAlertRepository(db),
 		MCPServer:         repository.NewMCPServerRepository(db),
+		MCPCapability:     repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
 		Security:          repository.NewSecurityRepository(db),
 		Webhook:           repository.NewWebhookRepository(db),
 		VerificationEvent: repository.NewVerificationEventRepository(db),
@@ -289,6 +291,7 @@ type Services struct {
 	Alert             *application.AlertService
 	Compliance        *application.ComplianceService
 	MCP               *application.MCPService
+	MCPCapability     *application.MCPCapabilityService // ✅ For MCP server capability management
 	Security          *application.SecurityService
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
@@ -296,9 +299,10 @@ type Services struct {
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
 	Capability        *application.CapabilityService
+	Detection         *application.DetectionService // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
-func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
+func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -349,10 +353,18 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.User,
 	)
 
+	// ✅ Initialize MCP capability service BEFORE MCP service
+	mcpCapabilityService := application.NewMCPCapabilityService(
+		repos.MCPCapability,
+		repos.MCPServer,
+	)
+
 	mcpService := application.NewMCPService(
 		repos.MCPServer,
 		repos.VerificationEvent,
 		repos.User,
+		keyVault,             // ✅ For automatic key generation
+		mcpCapabilityService, // ✅ For automatic capability detection
 	)
 
 	securityService := application.NewSecurityService(
@@ -401,6 +413,8 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		repos.AuditLog,
 	)
 
+	detectionService := application.NewDetectionService(db)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -411,6 +425,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		Alert:             alertService,
 		Compliance:        complianceService,
 		MCP:               mcpService,
+		MCPCapability:     mcpCapabilityService, // ✅ For MCP server capability management
 		Security:          securityService,
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
@@ -418,6 +433,7 @@ func initServices(repos *Repositories, cacheService *cache.RedisCache, oauthRepo
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
 		Capability:        capabilityService,
+		Detection:         detectionService, // ✅ For MCP auto-detection (SDK + Direct API)
 	}, keyVault
 }
 
@@ -440,6 +456,7 @@ type Handlers struct {
 	SDKToken          *handlers.SDKTokenHandler
 	AuthRefresh       *handlers.AuthRefreshHandler
 	Capability        *handlers.CapabilityHandler
+	Detection         *handlers.DetectionHandler // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -476,7 +493,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		MCP: handlers.NewMCPHandler(
 			services.MCP,
+			services.MCPCapability, // ✅ For capability endpoint
 			services.Audit,
+			repos.Agent, // ✅ For agent relationships ("Talks To")
 		),
 		Security: handlers.NewSecurityHandler(
 			services.Security,
@@ -520,6 +539,10 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
+		),
+		Detection: handlers.NewDetectionHandler(
+			services.Detection,
+			services.Audit,
 		),
 	}
 }
@@ -641,6 +664,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
 	agents.Get("/:id/credentials", h.Agent.GetCredentials)
+	// MCP Server relationship management - "talks_to" endpoints
+	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                // Get MCP servers agent talks to
+	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)         // Add MCP servers (bulk)
+	agents.Delete("/:id/mcp-servers/bulk", middleware.MemberMiddleware(), h.Agent.BulkRemoveMCPServersFromAgent) // Remove multiple MCPs
+	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)  // Remove single MCP
+	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)       // Auto-detect MCPs from config
+	// MCP Detection endpoints - Report detections from SDK or Direct API
+	agents.Post("/:id/detection/report", middleware.MemberMiddleware(), h.Detection.ReportDetection)   // Report MCP detections
+	agents.Get("/:id/detection/status", h.Detection.GetDetectionStatus)                                 // Get detection status
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -720,6 +752,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	mcpServers.Post("/:id/verify", middleware.ManagerMiddleware(), h.MCP.VerifyMCPServer)
 	mcpServers.Post("/:id/keys", middleware.MemberMiddleware(), h.MCP.AddPublicKey)
 	mcpServers.Get("/:id/verification-status", h.MCP.GetVerificationStatus)
+	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities) // ✅ Get detected capabilities
+	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)             // ✅ Get agents that talk to this MCP server
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
 

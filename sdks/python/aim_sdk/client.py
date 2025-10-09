@@ -379,6 +379,68 @@ class AIMClient:
             # Don't fail the action if logging fails
             pass
 
+    def report_detections(
+        self,
+        detections: list
+    ) -> Dict:
+        """
+        Report detected MCP servers to AIM.
+
+        This allows agents to automatically report MCP servers they discover
+        through various detection methods (SDK imports, Claude config parsing, etc.).
+
+        Args:
+            detections: List of detection events, each containing:
+                - mcpServer: str - Name/identifier of the MCP server
+                - detectionMethod: str - Method used to detect (sdk_import, claude_config, etc.)
+                - confidence: float - Confidence score (0-100)
+                - details: Dict - Optional additional details
+                - sdkVersion: str - Optional SDK version
+                - timestamp: str - ISO timestamp of detection
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - detectionsProcessed: int
+                - newMCPs: List[str] - New MCP servers added
+                - existingMCPs: List[str] - Previously detected MCP servers
+                - message: str
+
+        Example:
+            detections = [
+                {
+                    "mcpServer": "@modelcontextprotocol/server-filesystem",
+                    "detectionMethod": "sdk_import",
+                    "confidence": 95.0,
+                    "details": {
+                        "packageName": "@modelcontextprotocol/server-filesystem",
+                        "version": "0.1.0"
+                    },
+                    "sdkVersion": "aim-sdk-python@1.0.0",
+                    "timestamp": "2025-10-09T12:00:00Z"
+                }
+            ]
+            result = client.report_detections(detections)
+            print(f"Processed {result['detectionsProcessed']} detections")
+            print(f"New MCPs: {result['newMCPs']}")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        try:
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/agents/{self.agent_id}/detection/report",
+                data={"detections": detections}
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Detection report failed: {e}")
+
     def perform_action(
         self,
         action_type: str,

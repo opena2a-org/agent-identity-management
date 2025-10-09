@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Server,
   CheckCircle2,
@@ -32,6 +33,18 @@ interface MCPServer {
   created_at: string;
   trust_score?: number;
   capability_count?: number;
+  capabilities?: Array<{
+    id: string;
+    mcp_server_id: string;
+    name: string;
+    type: 'tool' | 'resource' | 'prompt';
+    description: string;
+    schema: any;
+    detected_at: string;
+    last_verified_at?: string;
+    is_active: boolean;
+  }>;
+  talks_to?: string[];
 }
 
 function StatCard({ stat }: { stat: any }) {
@@ -113,6 +126,7 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 }
 
 export default function MCPServersPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
@@ -128,8 +142,7 @@ export default function MCPServersPage() {
       setLoading(true);
       setError(null);
       const data = await api.listMCPServers();
-      // Backend returns "servers" not "mcp_servers"
-      setMcpServers(data.servers || data.mcp_servers || []);
+      setMcpServers(data.mcp_servers || []);
     } catch (err) {
       console.error('Failed to fetch MCP servers:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -272,9 +285,9 @@ export default function MCPServersPage() {
     setShowRegisterModal(false);
   };
 
-  const handleViewMCP = (mcp: MCPServer) => {
-    setSelectedMCP(mcp);
-    setShowDetailModal(true);
+  const handleViewMCP = async (mcp: MCPServer) => {
+    // Navigate to MCP server details page instead of opening modal
+    router.push(`/dashboard/mcp/${mcp.id}`);
   };
 
   const handleEditMCP = (mcp: MCPServer) => {
@@ -369,7 +382,7 @@ export default function MCPServersPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {mcpServers.map((server) => (
-                <tr key={server.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <tr key={server.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => handleViewMCP(server)}>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-8 w-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
@@ -417,7 +430,7 @@ export default function MCPServersPage() {
                       {server.last_verified_at ? formatDateTime(server.last_verified_at) : 'Never'}
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewMCP(server)}

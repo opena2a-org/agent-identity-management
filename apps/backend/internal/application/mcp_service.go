@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/crypto"
 	"github.com/opena2a/identity/backend/internal/domain"
-	"github.com/opena2a/identity/backend/internal/infrastructure/crypto"
+	infracrypto "github.com/opena2a/identity/backend/internal/infrastructure/crypto"
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 )
 
@@ -15,7 +16,9 @@ type MCPService struct {
 	mcpRepo               *repository.MCPServerRepository
 	verificationEventRepo domain.VerificationEventRepository
 	userRepo              *repository.UserRepository
-	cryptoService         *crypto.ED25519Service
+	cryptoService         *infracrypto.ED25519Service
+	keyVault              *crypto.KeyVault       // ✅ For secure private key storage
+	capabilityService     *MCPCapabilityService  // ✅ For automatic capability detection
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
 }
@@ -28,12 +31,14 @@ type ChallengeData struct {
 	ExpiresAt time.Time
 }
 
-func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository) *MCPService {
+func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService) *MCPService {
 	return &MCPService{
 		mcpRepo:               mcpRepo,
 		verificationEventRepo: verificationEventRepo,
 		userRepo:              userRepo,
-		cryptoService:         crypto.NewED25519Service(),
+		cryptoService:         infracrypto.NewED25519Service(),
+		keyVault:              keyVault,
+		capabilityService:     capabilityService,
 		challenges:            make(map[string]ChallengeData),
 	}
 }
@@ -74,6 +79,26 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		return nil, fmt.Errorf("mcp server with this URL already exists")
 	}
 
+	// ✅ AUTOMATIC KEY GENERATION - Zero effort for developers
+	// If no public key provided, generate Ed25519 key pair automatically
+	publicKey := req.PublicKey
+	if publicKey == "" && s.keyVault != nil {
+		// Generate Ed25519 key pair automatically
+		keyPair, err := crypto.GenerateEd25519KeyPair()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate cryptographic keys: %w", err)
+		}
+
+		// Encode keys to base64 for storage
+		encodedKeys := crypto.EncodeKeyPair(keyPair)
+		publicKey = encodedKeys.PublicKeyBase64
+
+		// Note: For MCP servers, we don't store the private key since the actual MCP server
+		// will have its own private key. We just use this for initial verification testing.
+		// In production, the real MCP server would sign challenges with its own private key.
+		fmt.Printf("✅ Generated Ed25519 keys for MCP server %s\n", req.Name)
+	}
+
 	server := &domain.MCPServer{
 		ID:              uuid.New(),
 		OrganizationID:  orgID,
@@ -81,7 +106,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		Description:     req.Description,
 		URL:             req.URL,
 		Version:         req.Version,
-		PublicKey:       req.PublicKey,
+		PublicKey:       publicKey, // ✅ Auto-generated if not provided
 		Status:          domain.MCPServerStatusPending,
 		IsVerified:      false,
 		VerificationURL: req.VerificationURL,
@@ -226,6 +251,18 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 
 		if err := s.mcpRepo.Update(server); err != nil {
 			return err
+		}
+
+		// ✅ AUTOMATIC CAPABILITY DETECTION
+		// After successful verification, automatically detect MCP server capabilities
+		if s.capabilityService != nil {
+			go func() {
+				// Run asynchronously to avoid blocking verification
+				bgCtx := context.Background()
+				if err := s.capabilityService.DetectCapabilities(bgCtx, id); err != nil {
+					fmt.Printf("⚠️  Failed to detect capabilities for MCP server %s: %v\n", server.Name, err)
+				}
+			}()
 		}
 
 		verificationStatus = domain.VerificationEventStatusSuccess

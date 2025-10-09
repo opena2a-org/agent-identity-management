@@ -564,3 +564,400 @@ func getAIMBaseURL(c fiber.Ctx) string {
 
 	return fmt.Sprintf("%s://%s", protocol, host)
 }
+
+// ========================================
+// MCP Server Relationship Management
+// ========================================
+
+// AddMCPServersToAgent adds MCP servers to an agent's talks_to list
+// @Summary Add MCP servers to agent
+// @Description Add MCP servers to an agent's allowed communication list (talks_to)
+// @Tags agents
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body application.AddMCPServersRequest true "MCP servers to add"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /api/v1/agents/{id}/mcp-servers [put]
+func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req application.AddMCPServersRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate input
+	if len(req.MCPServerIDs) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "mcp_server_ids is required and must not be empty",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Add MCP servers to agent's talks_to list
+	updatedAgent, addedServers, err := h.agentService.AddMCPServers(
+		c.Context(),
+		agentID,
+		req.MCPServerIDs,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":            "add_mcp_servers",
+			"added_servers":     addedServers,
+			"detected_method":   req.DetectedMethod,
+			"total_talks_to":    len(updatedAgent.TalksTo),
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message":        fmt.Sprintf("Successfully added %d MCP server(s)", len(addedServers)),
+		"talks_to":       updatedAgent.TalksTo,
+		"added_servers":  addedServers,
+		"total_count":    len(updatedAgent.TalksTo),
+	})
+}
+
+// RemoveMCPServerFromAgent removes a single MCP server from an agent's talks_to list
+// @Summary Remove MCP server from agent
+// @Description Remove a specific MCP server from an agent's allowed communication list
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param mcp_id path string true "MCP Server ID or name"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /api/v1/agents/{id}/mcp-servers/{mcp_id} [delete]
+func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	mcpServerID := c.Params("mcp_id")
+	if mcpServerID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "MCP server ID is required",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Remove MCP server from agent's talks_to list
+	updatedAgent, err := h.agentService.RemoveMCPServer(
+		c.Context(),
+		agentID,
+		mcpServerID,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":          "remove_mcp_server",
+			"removed_server":  mcpServerID,
+			"total_talks_to":  len(updatedAgent.TalksTo),
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message":       "Successfully removed MCP server",
+		"talks_to":      updatedAgent.TalksTo,
+		"total_count":   len(updatedAgent.TalksTo),
+	})
+}
+
+// BulkRemoveMCPServersFromAgent removes multiple MCP servers from an agent's talks_to list
+// @Summary Remove multiple MCP servers from agent
+// @Description Remove multiple MCP servers from an agent's allowed communication list
+// @Tags agents
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body map[string][]string true "MCP server IDs to remove"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /api/v1/agents/{id}/mcp-servers/bulk [delete]
+func (h *AgentHandler) BulkRemoveMCPServersFromAgent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		MCPServerIDs []string `json:"mcp_server_ids"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if len(req.MCPServerIDs) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "mcp_server_ids is required and must not be empty",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Remove MCP servers from agent's talks_to list
+	updatedAgent, removedServers, err := h.agentService.RemoveMCPServers(
+		c.Context(),
+		agentID,
+		req.MCPServerIDs,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":           "bulk_remove_mcp_servers",
+			"removed_servers":  removedServers,
+			"total_talks_to":   len(updatedAgent.TalksTo),
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message":          fmt.Sprintf("Successfully removed %d MCP server(s)", len(removedServers)),
+		"talks_to":         updatedAgent.TalksTo,
+		"removed_servers":  removedServers,
+		"total_count":      len(updatedAgent.TalksTo),
+	})
+}
+
+// GetAgentMCPServers retrieves detailed information about MCP servers an agent talks to
+// @Summary Get agent's MCP servers
+// @Description Get detailed information about MCP servers this agent is allowed to communicate with
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /api/v1/agents/{id}/mcp-servers [get]
+func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Get MCP servers (need to pass MCP repository - we'll handle this in routing)
+	// For now, return the talks_to array
+	// TODO: Implement full server details lookup
+
+	return c.JSON(fiber.Map{
+		"agent_id":     agentID.String(),
+		"agent_name":   agent.Name,
+		"talks_to":     agent.TalksTo,
+		"total":        len(agent.TalksTo),
+	})
+}
+
+// ========================================
+// Auto-Detection of MCP Servers
+// ========================================
+
+// DetectAndMapMCPServers auto-detects MCP servers from Claude Desktop config and maps them to agent
+// @Summary Auto-detect and map MCP servers
+// @Description Automatically detect MCP servers from Claude Desktop config file and map them to agent's talks_to list
+// @Tags agents
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body application.DetectMCPServersRequest true "Auto-detection configuration"
+// @Success 200 {object} application.DetectMCPServersResult
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /api/v1/agents/{id}/mcp-servers/detect [post]
+func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req application.DetectMCPServersRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate input
+	if req.ConfigPath == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "config_path is required",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Note: We need MCPService instance for auto-registration
+	// For now, we'll pass nil and handle registration separately
+	// TODO: Inject MCPService into AgentHandler
+	result, err := h.agentService.DetectMCPServersFromConfig(
+		c.Context(),
+		agentID,
+		&req,
+		nil, // mcpService - TODO: inject this dependency
+		orgID,
+		userID,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	if !req.DryRun {
+		h.auditService.LogAction(
+			c.Context(),
+			orgID,
+			userID,
+			domain.AuditActionUpdate,
+			"agent",
+			agentID,
+			c.IP(),
+			c.Get("User-Agent"),
+			map[string]interface{}{
+				"action":             "auto_detect_mcps",
+				"detected_count":     len(result.DetectedServers),
+				"registered_count":   result.RegisteredCount,
+				"mapped_count":       result.MappedCount,
+				"config_path":        req.ConfigPath,
+				"auto_register":      req.AutoRegister,
+			},
+		)
+	}
+
+	return c.JSON(result)
+}
