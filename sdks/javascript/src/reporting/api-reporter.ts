@@ -4,7 +4,6 @@ export class APIReporter {
   private apiUrl: string;
   private apiKey: string;
   private agentId: string;
-  private lastReport: Record<string, number> = {}; // MCP name -> timestamp
 
   constructor(apiUrl: string, apiKey: string, agentId: string) {
     this.apiUrl = apiUrl;
@@ -13,17 +12,8 @@ export class APIReporter {
   }
 
   async report(data: DetectionReportRequest): Promise<void> {
-    // Deduplicate: Only report if MCP not reported in last 60 seconds
-    const now = Date.now();
-    const newDetections = data.detections.filter(detection => {
-      const lastReported = this.lastReport[detection.mcpServer];
-      return !lastReported || now - lastReported > 60000; // 60 seconds
-    });
-
-    if (newDetections.length === 0) {
-      return;
-    }
-
+    // Always report detections - let server decide if they're significant
+    // This ensures full audit trail and allows server-side analytics
     try {
       const response = await fetch(
         `${this.apiUrl}/api/v1/detection/agents/${this.agentId}/report`,
@@ -34,7 +24,7 @@ export class APIReporter {
             'Authorization': `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify({
-            detections: newDetections,
+            detections: data.detections,
           }),
         }
       );
@@ -46,12 +36,6 @@ export class APIReporter {
       }
 
       const result = await response.json() as DetectionReportResponse;
-
-      // Update last report timestamps
-      newDetections.forEach(detection => {
-        this.lastReport[detection.mcpServer] = now;
-      });
-
       console.log(`[AIM SDK] Reported ${result.detectionsProcessed} detections successfully`);
 
     } catch (error) {

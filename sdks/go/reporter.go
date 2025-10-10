@@ -15,7 +15,6 @@ type APIReporter struct {
 	apiKey     string
 	agentID    string
 	httpClient *http.Client
-	lastReport map[string]time.Time // MCP name -> last reported time
 }
 
 // NewAPIReporter creates a new API reporter
@@ -25,29 +24,13 @@ func NewAPIReporter(apiURL, apiKey, agentID string) *APIReporter {
 		apiKey:     apiKey,
 		agentID:    agentID,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
-		lastReport: make(map[string]time.Time),
 	}
 }
 
 // Report sends detection report to AIM API
+// Always reports detections - server decides if they're significant
+// This ensures full audit trail and allows server-side analytics
 func (r *APIReporter) Report(ctx context.Context, report DetectionReportRequest) error {
-	// Deduplicate: Only report if not reported in last 60 seconds
-	now := time.Now()
-	var newDetections []DetectionEvent
-
-	for _, detection := range report.Detections {
-		lastReported, exists := r.lastReport[detection.MCPServer]
-		if !exists || now.Sub(lastReported) > 60*time.Second {
-			newDetections = append(newDetections, detection)
-		}
-	}
-
-	if len(newDetections) == 0 {
-		return nil
-	}
-
-	report.Detections = newDetections
-
 	// Marshal request body
 	body, err := json.Marshal(report)
 	if err != nil {
@@ -79,11 +62,6 @@ func (r *APIReporter) Report(ctx context.Context, report DetectionReportRequest)
 	var response DetectionReportResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Update last report timestamps
-	for _, detection := range newDetections {
-		r.lastReport[detection.MCPServer] = now
 	}
 
 	return nil

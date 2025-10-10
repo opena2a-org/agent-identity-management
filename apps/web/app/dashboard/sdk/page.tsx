@@ -5,31 +5,43 @@ import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from
 import Link from 'next/link'
 import { api } from '@/lib/api'
 
+type SDKLanguage = 'python' | 'go' | 'javascript'
+
 export default function SDKDownloadPage() {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [selectedSDK, setSelectedSDK] = useState<SDKLanguage>('python')
 
-  const handleDownload = async () => {
+  const handleDownload = async (sdk: SDKLanguage) => {
     try {
       setDownloading(true)
       setError(null)
       setSuccess(false)
+      setSelectedSDK(sdk)
 
-      // Use API client with automatic token refresh on 401
-      const blob = await api.downloadSDK()
+      if (sdk === 'python') {
+        // Use API client with automatic token refresh on 401
+        const blob = await api.downloadSDK()
 
-      // Create blob and trigger download
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'aim-sdk-python.zip'
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+        // Create blob and trigger download
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'aim-sdk-python.zip'
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
 
-      setSuccess(true)
+        setSuccess(true)
+      } else {
+        // For Go and JavaScript, download from GitHub releases
+        const repoUrl = 'https://github.com/opena2a-org/agent-identity-management'
+        const sdkPath = sdk === 'go' ? 'sdks/go' : 'sdks/javascript'
+        window.open(`${repoUrl}/tree/main/${sdkPath}`, '_blank')
+        setSuccess(true)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to download SDK')
     } finally {
@@ -70,42 +82,143 @@ export default function SDKDownloadPage() {
         </div>
       )}
 
-      {/* Download Card */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden mb-8">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Code className="h-6 w-6 text-blue-600" />
+      {/* SDK Cards */}
+      <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {/* Python SDK - Full Featured */}
+        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-blue-50 px-4 py-2 border-b border-blue-200">
+            <span className="text-xs font-semibold text-blue-700">✨ RECOMMENDED</span>
+          </div>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Code className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Python SDK</h2>
+                <p className="text-xs text-gray-500">Full featured</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Python SDK</h2>
-              <p className="text-sm text-gray-500">Pre-configured with your credentials</p>
-            </div>
+
+            <p className="text-sm text-gray-700 mb-4 h-12">
+              Zero config, OAuth, auto-detection, Ed25519 signing, keyring support.
+            </p>
+
+            <button
+              onClick={() => handleDownload('python')}
+              disabled={downloading && selectedSDK === 'python'}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+            >
+              <Download className="h-4 w-4" />
+              {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download SDK'}
+            </button>
           </div>
 
-          <p className="text-gray-700 mb-6">
-            This SDK is already configured with your identity. Just download, install, and start
-            registering agents. No API keys or configuration needed!
-          </p>
-
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
-          >
-            <Download className="h-5 w-5" />
-            {downloading ? 'Downloading...' : 'Download SDK'}
-          </button>
+          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>OAuth auto-configured</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>Auto-detect MCPs & capabilities</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>Ed25519 crypto signing</span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <span>Credentials valid for 90 days</span>
+        {/* Go SDK - Feature Parity Coming */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
+            <span className="text-xs font-semibold text-orange-700">🚧 BASIC (Feature parity soon)</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <span>Auto-authentication included</span>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 bg-cyan-100 rounded-lg flex items-center justify-center">
+                <Code className="h-6 w-6 text-cyan-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Go SDK</h2>
+                <p className="text-xs text-gray-500">API key mode only</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-700 mb-4 h-12">
+              Manual setup required. Full feature parity (OAuth, auto-detection) coming soon!
+            </p>
+
+            <button
+              onClick={() => handleDownload('go')}
+              disabled={downloading && selectedSDK === 'go'}
+              className="w-full bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 disabled:bg-cyan-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+            >
+              <Download className="h-4 w-4" />
+              {downloading && selectedSDK === 'go' ? 'Opening...' : 'View on GitHub →'}
+            </button>
+          </div>
+
+          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>API key authentication</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <AlertCircle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+              <span>Manual MCP reporting</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <AlertCircle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+              <span>No OAuth (yet)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* JavaScript SDK - Feature Parity Coming */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
+            <span className="text-xs font-semibold text-orange-700">🚧 BASIC (Feature parity soon)</span>
+          </div>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Code className="h-6 w-6 text-yellow-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">JavaScript SDK</h2>
+                <p className="text-xs text-gray-500">API key mode only</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-700 mb-4 h-12">
+              Manual setup required. Full feature parity (OAuth, auto-detection) coming soon!
+            </p>
+
+            <button
+              onClick={() => handleDownload('javascript')}
+              disabled={downloading && selectedSDK === 'javascript'}
+              className="w-full bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+            >
+              <Download className="h-4 w-4" />
+              {downloading && selectedSDK === 'javascript' ? 'Opening...' : 'View on GitHub →'}
+            </button>
+          </div>
+
+          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>API key authentication</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <AlertCircle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+              <span>Manual MCP reporting</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <AlertCircle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+              <span>No OAuth (yet)</span>
+            </div>
           </div>
         </div>
       </div>
