@@ -3,7 +3,7 @@ package middleware
 import (
 	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
+	"encoding/base64"
 	"strings"
 	"time"
 
@@ -39,7 +39,7 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 
 		// Hash the API key
 		hash := sha256.Sum256([]byte(apiKey))
-		keyHash := hex.EncodeToString(hash[:])
+		keyHash := base64.StdEncoding.EncodeToString(hash[:])
 
 		// Look up API key in database
 		var keyData struct {
@@ -128,7 +128,7 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 
 		// Hash the API key
 		hash := sha256.Sum256([]byte(apiKey))
-		keyHash := hex.EncodeToString(hash[:])
+		keyHash := base64.StdEncoding.EncodeToString(hash[:])
 
 		// Look up API key
 		var keyData struct {
