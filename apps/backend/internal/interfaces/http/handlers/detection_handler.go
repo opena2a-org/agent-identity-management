@@ -47,7 +47,7 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 		})
 	}
 
-	// Get organization ID from auth context
+	// Get organization ID from auth context (set by either JWT or API key middleware)
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -55,11 +55,22 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 		})
 	}
 
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+	// Check authentication method
+	authMethod := c.Locals("auth_method")
+	var userID uuid.UUID
+
+	if authMethod == "api_key" {
+		// For API key auth, use a nil UUID to indicate system/agent action
+		userID = uuid.Nil
+	} else {
+		// For JWT auth, require user_id
+		var ok bool
+		userID, ok = c.Locals("user_id").(uuid.UUID)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		}
 	}
 
 	// Parse request body

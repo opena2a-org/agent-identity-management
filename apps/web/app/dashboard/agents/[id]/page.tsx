@@ -13,6 +13,7 @@ import { MCPServerSelector } from '@/components/agents/mcp-server-selector'
 import { MCPServerList } from '@/components/agents/mcp-server-list'
 import { AgentMCPGraph } from '@/components/agents/agent-mcp-graph'
 import { DetectionStatus } from '@/components/agents/detection-status'
+import { SDKSetupGuide } from '@/components/agents/sdk-setup-guide'
 import { api } from '@/lib/api'
 
 interface Agent {
@@ -278,6 +279,10 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
             <Bot className="h-4 w-4 mr-2" />
             Detection
           </TabsTrigger>
+          <TabsTrigger value="sdk">
+            <Shield className="h-4 w-4 mr-2" />
+            SDK Setup
+          </TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
@@ -324,6 +329,10 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
 
         <TabsContent value="detection">
           <DetectionStatus agentId={agent.id} />
+        </TabsContent>
+
+        <TabsContent value="sdk">
+          <SDKSetupGuide agentId={agent.id} apiKey="your-api-key-placeholder" />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">

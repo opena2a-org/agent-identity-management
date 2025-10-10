@@ -34,6 +34,7 @@ Manual Registration:
 from .client import AIMClient, register_agent
 from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError
 from .detection import MCPDetector, auto_detect_mcps
+from .capability_detection import CapabilityDetector, auto_detect_capabilities
 
 __version__ = "1.0.0"
 __all__ = [
@@ -44,5 +45,7 @@ __all__ = [
     "VerificationError",
     "ActionDeniedError",
     "MCPDetector",
-    "auto_detect_mcps"
+    "auto_detect_mcps",
+    "CapabilityDetector",
+    "auto_detect_capabilities"
 ]

@@ -128,38 +128,34 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* SECURITY REQUIREMENTS - CRITICAL */}
-      <div className="bg-red-50 border-2 border-red-300 rounded-lg p-5 mb-8">
+      {/* Auto-Detection Features */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-5 mb-8">
         <div className="flex items-start gap-3">
-          <AlertCircle className="h-6 w-6 text-red-600 mt-0.5 flex-shrink-0" />
+          <CheckCircle className="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-red-900 mb-2">⚠️ Required Security Packages</h3>
-            <p className="text-red-800 mb-3">
-              <strong>AIM SDK requires secure credential storage.</strong> The following packages are <strong>REQUIRED</strong> and must be installed before using the SDK:
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 Zero-Config Auto-Detection</h3>
+            <p className="text-gray-700 mb-3">
+              The SDK automatically detects <strong>everything</strong> - no manual configuration needed!
             </p>
-            <div className="bg-red-900 rounded-lg p-4 mb-3">
-              <code className="text-sm text-red-100 font-mono">
-                pip install cryptography keyring
-              </code>
-            </div>
-            <div className="space-y-2 text-sm text-red-800">
+            <div className="space-y-2 text-sm text-gray-700">
               <div className="flex items-start gap-2">
-                <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
                 <div>
-                  <strong>cryptography</strong> - Encrypts your credentials using AES-128 CBC (Fernet)
+                  <strong>Capabilities</strong> - Auto-detected from imports, decorators, and config files
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <Shield className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
                 <div>
-                  <strong>keyring</strong> - Stores encryption keys in your system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+                  <strong>MCP Servers</strong> - Auto-detected from Claude Desktop config and Python imports
                 </div>
               </div>
-            </div>
-            <div className="mt-4 p-3 bg-red-100 rounded border border-red-300">
-              <p className="text-sm text-red-900">
-                <strong>⛔ No Insecure Fallback:</strong> The SDK will <strong>refuse to run</strong> if these packages are missing. We do NOT support plaintext credential storage for security reasons.
-              </p>
+              <div className="flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
+                <div>
+                  <strong>Security Packages</strong> - Cryptography and keyring auto-install with dependencies
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -175,53 +171,48 @@ export default function SDKDownloadPage() {
 
           <div className="space-y-6">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">1. Install Security Packages (Required)</h4>
+              <h4 className="font-medium text-gray-900 mb-2">1. Extract & Install SDK</h4>
               <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
-                <code className="text-sm text-green-400 font-mono">
-                  pip install cryptography keyring
-                </code>
-              </div>
-              <p className="text-sm text-gray-600 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span>These packages are <strong>required</strong> before installing the SDK. The SDK will fail without them.</span>
-              </p>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Extract & Install SDK</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
                 <code className="text-sm text-green-400 font-mono">
                   unzip aim-sdk-python.zip<br />
                   cd aim-sdk-python<br />
                   pip install -e .
                 </code>
               </div>
+              <p className="text-sm text-gray-600 flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <span>All security dependencies (cryptography, keyring) auto-install automatically!</span>
+              </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. Register Your First Agent</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+              <h4 className="font-medium text-gray-900 mb-2">2. Register Your First Agent - ONE LINE!</h4>
+              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
                 <code className="text-sm text-green-400 font-mono">
                   from aim_sdk import register_agent<br />
                   <br />
-                  # Zero configuration - credentials already embedded!<br />
-                  agent = register_agent(<br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;name="my-awesome-agent",<br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;display_name="My Awesome Agent",<br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;description="Does amazing things",<br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;agent_type="ai_agent"<br />
-                  )<br />
+                  # ONE LINE - Everything auto-detected! 🚀<br />
+                  agent = register_agent("my-awesome-agent")<br />
+                  <br />
+                  # ✅ Credentials: Auto-loaded from SDK<br />
+                  # ✅ Capabilities: Auto-detected from imports<br />
+                  # ✅ MCP Servers: Auto-detected from Claude config<br />
+                  # ✅ Verification: Auto-completed via challenge-response<br />
                   <br />
                   print(f"Agent ID: {'{'}agent.agent_id{'}'}")<br />
-                  print(f"Dashboard: {'{'}agent.aim_url{'}'}/dashboard/agents")
+                  print(f"Trust Score: {'{'}agent.trust_score{'}'}")
                 </code>
               </div>
+              <p className="text-sm text-gray-600 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <span>That&apos;s it! One line. Zero configuration. The &quot;Stripe Moment&quot; for AI agents.</span>
+              </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">4. View in Dashboard</h4>
+              <h4 className="font-medium text-gray-900 mb-2">3. View in Dashboard</h4>
               <p className="text-gray-700 mb-3">
-                Your agent will appear in the dashboard automatically, linked to your account.
+                Your agent appears automatically with full trust score, capabilities, and MCP server connections.
               </p>
               <a
                 href="/dashboard/agents"
@@ -242,7 +233,7 @@ export default function SDKDownloadPage() {
           </div>
           <h4 className="font-medium text-gray-900 mb-1">Zero Config</h4>
           <p className="text-sm text-gray-600">
-            Your credentials are embedded. Just install and use!
+            Credentials embedded. Dependencies auto-install. One line to register!
           </p>
         </div>
 
@@ -250,19 +241,19 @@ export default function SDKDownloadPage() {
           <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
             <Code className="h-5 w-5 text-blue-600" />
           </div>
-          <h4 className="font-medium text-gray-900 mb-1">Auto-Auth</h4>
+          <h4 className="font-medium text-gray-900 mb-1">Auto-Detection</h4>
           <p className="text-sm text-gray-600">
-            SDK automatically refreshes tokens when needed.
+            Capabilities and MCP servers detected automatically from your code.
           </p>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-            <Terminal className="h-5 w-5 text-purple-600" />
+            <Shield className="h-5 w-5 text-purple-600" />
           </div>
-          <h4 className="font-medium text-gray-900 mb-1">One-Line</h4>
+          <h4 className="font-medium text-gray-900 mb-1">Auto-Verification</h4>
           <p className="text-sm text-gray-600">
-            Register agents with a single function call.
+            Challenge-response verification completes automatically with auto-approval.
           </p>
         </div>
       </div>

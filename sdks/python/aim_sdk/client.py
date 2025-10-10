@@ -7,7 +7,7 @@ import functools
 import hashlib
 import json
 import time
-from typing import Any, Callable, Optional, Dict
+from typing import Any, Callable, Optional, Dict, List
 from datetime import datetime, timezone
 
 import requests
@@ -21,6 +21,7 @@ from .exceptions import (
     ConfigurationError
 )
 from .oauth import OAuthTokenManager, load_sdk_credentials
+from .capability_detection import auto_detect_capabilities
 
 
 class AIMClient:
@@ -606,8 +607,8 @@ def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
 
 def register_agent(
     name: str,
-    aim_url: str,
-    api_key: str,
+    aim_url: Optional[str] = None,
+    api_key: Optional[str] = None,
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     agent_type: str = "ai_agent",
@@ -617,22 +618,28 @@ def register_agent(
     organization_domain: Optional[str] = None,
     talks_to: Optional[list] = None,
     capabilities: Optional[list] = None,
+    auto_detect: bool = True,
     force_new: bool = False,
     sdk_token_id: Optional[str] = None
 ) -> AIMClient:
     """
-    ONE-LINE agent registration with AIM.
+    ONE-LINE agent registration with AIM - "The Stripe Moment"
 
     This is the magic function that makes AIM "Stripe for AI Agent Identity".
     Call this once and your agent is registered, verified, and ready to use.
 
-    When using the downloaded SDK, aim_url is optional - it will be auto-detected
-    from your embedded credentials!
+    **ZERO CONFIG MODE** (SDK Download):
+        agent = register_agent("my-agent")
+        # That's it! Everything auto-detected.
+
+    **MANUAL MODE** (pip install):
+        agent = register_agent("my-agent", api_key="aim_abc123")
+        # Still auto-detects capabilities + MCPs
 
     Args:
         name: Agent name (unique identifier)
-        aim_url: AIM server URL (e.g., "https://aim.example.com")
-        api_key: Your AIM API key (required for user identity mapping)
+        aim_url: AIM server URL (auto-detected from SDK credentials if available)
+        api_key: AIM API key (only required if no SDK credentials found)
         display_name: Human-readable display name (defaults to name)
         description: Agent description (defaults to auto-generated)
         agent_type: "ai_agent" or "mcp_server" (default: "ai_agent")
@@ -640,39 +647,36 @@ def register_agent(
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
         organization_domain: Organization domain for auto-approval
-        talks_to: List of MCP server IDs/names this agent communicates with
-                  Example: ["filesystem-mcp", "github-mcp", "database-mcp"]
-        capabilities: List of capabilities this agent has
-                      Example: ["read_files", "write_files", "execute_code"]
+        talks_to: Override auto-detected MCP servers (manual specification)
+        capabilities: Override auto-detected capabilities (manual specification)
+        auto_detect: Auto-detect capabilities and MCPs (default: True)
         force_new: Force new registration even if credentials exist
+        sdk_token_id: SDK token for usage tracking (auto-loaded if available)
 
     Returns:
         AIMClient instance ready to use
 
     Examples:
-        Using downloaded SDK (zero config):
-        >>> from aim_sdk import register_agent
-        >>> api_key = "aim_1234567890abcdef"  # Get from AIM dashboard
-        >>> agent = register_agent("my-agent", "https://aim.example.com", api_key)
-        >>> @agent.perform_action("send_email")
-        ... def send_notification():
-        ...     send_email("admin@example.com", "Hello from AIM!")
+        # SDK Download Mode (ZERO CONFIG):
+        >>> agent = register_agent("my-agent")
+
+        # Manual Install Mode:
+        >>> agent = register_agent("my-agent", api_key="aim_abc123")
+
+        # Power User Mode (disable auto-detection):
+        >>> agent = register_agent(
+        ...     "my-agent",
+        ...     api_key="aim_abc123",
+        ...     auto_detect=False,
+        ...     capabilities=["custom_capability"],
+        ...     talks_to=["custom-mcp-server"]
+        ... )
 
     Raises:
-        ConfigurationError: If registration fails or API key is missing
-        AuthenticationError: If API key is invalid
+        ConfigurationError: If registration fails or required credentials missing
+        AuthenticationError: If authentication fails
     """
-    # Validate API key
-    if not api_key:
-        raise ConfigurationError("api_key is required for agent registration")
-
-    # Load SDK token ID from downloaded SDK credentials if not provided
-    if not sdk_token_id:
-        sdk_creds = load_sdk_credentials()
-        if sdk_creds and 'sdk_token_id' in sdk_creds:
-            sdk_token_id = sdk_creds['sdk_token_id']
-
-    # Check for existing credentials (unless force_new)
+    # 1. Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
         if existing_creds:
@@ -689,7 +693,63 @@ def register_agent(
                 aim_url=existing_creds["aim_url"]
             )
 
-    # Prepare registration request
+    # 2. Detect authentication mode (SDK vs Manual)
+    sdk_creds = load_sdk_credentials()
+
+    if sdk_creds:
+        # SDK MODE: Use embedded OAuth credentials
+        auth_mode = "oauth"
+        aim_url = aim_url or sdk_creds.get("aim_url")
+        sdk_token_id = sdk_token_id or sdk_creds.get("sdk_token_id")
+
+        if not aim_url:
+            raise ConfigurationError("aim_url not found in SDK credentials")
+
+        print(f"🔐 SDK Mode: Using embedded OAuth credentials")
+
+    elif api_key:
+        # MANUAL MODE: Use API key
+        auth_mode = "api_key"
+
+        if not aim_url:
+            raise ConfigurationError("aim_url is required when using API key mode")
+
+        print(f"🔑 Manual Mode: Using API key authentication")
+
+    else:
+        # No authentication found
+        raise ConfigurationError(
+            "No authentication credentials found.\n"
+            "Either download SDK from dashboard (OAuth mode) or provide api_key parameter (Manual mode)."
+        )
+
+    # 3. Auto-detect capabilities and MCPs (unless manually specified)
+    if auto_detect:
+        print(f"🔍 Auto-detecting agent capabilities and MCP servers...")
+
+        # Auto-detect capabilities (unless manually provided)
+        if not capabilities:
+            from .detection import auto_detect_mcps
+
+            detected_caps = auto_detect_capabilities()
+            if detected_caps:
+                capabilities = detected_caps
+                print(f"   ✅ Detected {len(capabilities)} capabilities: {', '.join(capabilities[:5])}{' ...' if len(capabilities) > 5 else ''}")
+            else:
+                print(f"   ℹ️  No capabilities auto-detected (you can specify manually)")
+
+        # Auto-detect MCP servers (unless manually provided)
+        if not talks_to:
+            from .detection import auto_detect_mcps
+
+            mcp_detections = auto_detect_mcps()
+            if mcp_detections:
+                talks_to = [d["mcpServer"] for d in mcp_detections]
+                print(f"   ✅ Detected {len(talks_to)} MCP servers: {', '.join(talks_to[:3])}{' ...' if len(talks_to) > 3 else ''}")
+            else:
+                print(f"   ℹ️  No MCP servers auto-detected")
+
+    # 4. Prepare registration request
     registration_data = {
         "name": name,
         "display_name": display_name or name,
@@ -710,54 +770,165 @@ def register_agent(
     if capabilities:
         registration_data["capabilities"] = capabilities
 
-    # Call public registration endpoint with API key for user identity
-    url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
-
-    # Prepare headers
-    headers = {
-        "Content-Type": "application/json",
-        "X-AIM-API-Key": api_key
-    }
-
-    # Add SDK token header for usage tracking if available
-    if sdk_token_id:
-        headers["X-SDK-Token"] = sdk_token_id
-
+    # 5. Register agent (mode-specific endpoint)
     try:
-        response = requests.post(
-            url,
-            json=registration_data,
-            headers=headers,
-            timeout=30
-        )
-
-        if response.status_code != 201:
-            error_msg = response.json().get("error", "Unknown error")
-            raise ConfigurationError(f"Registration failed: {error_msg}")
-
-        credentials = response.json()
-
-        # Save credentials locally
-        _save_credentials(name, credentials)
-
-        print(f"\n🎉 Agent registered successfully!")
-        print(f"   Agent ID: {credentials['agent_id']}")
-        print(f"   Name: {credentials['name']}")
-        print(f"   Status: {credentials['status']}")
-        print(f"   Trust Score: {credentials['trust_score']}")
-        print(f"   Message: {credentials['message']}")
-        print(f"\n   ⚠️  Credentials saved to: {_get_credentials_path()}")
-        print(f"   🔐 Private key will NOT be retrievable again - keep it safe!\n")
-
-        # Return ready-to-use client
-        return AIMClient(
-            agent_id=credentials["agent_id"],
-            public_key=credentials["public_key"],
-            private_key=credentials["private_key"],
-            aim_url=credentials["aim_url"]
-        )
+        if auth_mode == "oauth":
+            # OAuth Mode: Use authenticated endpoint with OAuth token
+            return _register_via_oauth(
+                name=name,
+                aim_url=aim_url,
+                sdk_creds=sdk_creds,
+                registration_data=registration_data,
+                sdk_token_id=sdk_token_id,
+                talks_to=talks_to
+            )
+        else:
+            # API Key Mode: Use public endpoint with API key header
+            return _register_via_api_key(
+                name=name,
+                aim_url=aim_url,
+                api_key=api_key,
+                registration_data=registration_data,
+                sdk_token_id=sdk_token_id,
+                talks_to=talks_to
+            )
 
     except requests.RequestException as e:
         raise ConfigurationError(f"Failed to connect to AIM server: {e}")
     except Exception as e:
         raise ConfigurationError(f"Registration failed: {e}")
+
+
+def _register_via_oauth(
+    name: str,
+    aim_url: str,
+    sdk_creds: Dict[str, Any],
+    registration_data: Dict[str, Any],
+    sdk_token_id: Optional[str],
+    talks_to: Optional[List[str]]
+) -> AIMClient:
+    """Register agent using OAuth token from SDK credentials"""
+    # Initialize OAuth token manager
+    token_manager = OAuthTokenManager(sdk_creds)
+    access_token = token_manager.get_access_token()
+
+    if not access_token:
+        raise ConfigurationError("Failed to obtain OAuth access token")
+
+    # Call authenticated endpoint
+    url = f"{aim_url.rstrip('/')}/api/v1/agents"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    if sdk_token_id:
+        headers["X-SDK-Token"] = sdk_token_id
+
+    response = requests.post(
+        url,
+        json=registration_data,
+        headers=headers,
+        timeout=30
+    )
+
+    if response.status_code not in [200, 201]:
+        error_msg = response.json().get("error", "Unknown error")
+        raise ConfigurationError(f"Registration failed: {error_msg}")
+
+    credentials = response.json()
+
+    # Save credentials locally
+    _save_credentials(name, credentials)
+
+    # Report MCP detections if any
+    client = AIMClient(
+        agent_id=credentials["agent_id"],
+        public_key=credentials["public_key"],
+        private_key=credentials["private_key"],
+        aim_url=credentials["aim_url"]
+    )
+
+    if talks_to:
+        from .detection import auto_detect_mcps
+        mcp_detections = auto_detect_mcps()
+        if mcp_detections:
+            try:
+                result = client.report_detections(mcp_detections)
+                print(f"   📡 Reported {result.get('detectionsProcessed', 0)} MCP detections")
+            except Exception:
+                pass  # Don't fail registration if reporting fails
+
+    _print_registration_success(credentials)
+    return client
+
+
+def _register_via_api_key(
+    name: str,
+    aim_url: str,
+    api_key: str,
+    registration_data: Dict[str, Any],
+    sdk_token_id: Optional[str],
+    talks_to: Optional[List[str]]
+) -> AIMClient:
+    """Register agent using API key (manual mode)"""
+    # Call public registration endpoint
+    url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-AIM-API-Key": api_key
+    }
+
+    if sdk_token_id:
+        headers["X-SDK-Token"] = sdk_token_id
+
+    response = requests.post(
+        url,
+        json=registration_data,
+        headers=headers,
+        timeout=30
+    )
+
+    if response.status_code != 201:
+        error_msg = response.json().get("error", "Unknown error")
+        raise ConfigurationError(f"Registration failed: {error_msg}")
+
+    credentials = response.json()
+
+    # Save credentials locally
+    _save_credentials(name, credentials)
+
+    # Report MCP detections if any
+    client = AIMClient(
+        agent_id=credentials["agent_id"],
+        public_key=credentials["public_key"],
+        private_key=credentials["private_key"],
+        aim_url=credentials["aim_url"]
+    )
+
+    if talks_to:
+        from .detection import auto_detect_mcps
+        mcp_detections = auto_detect_mcps()
+        if mcp_detections:
+            try:
+                result = client.report_detections(mcp_detections)
+                print(f"   📡 Reported {result.get('detectionsProcessed', 0)} MCP detections")
+            except Exception:
+                pass  # Don't fail registration if reporting fails
+
+    _print_registration_success(credentials)
+    return client
+
+
+def _print_registration_success(credentials: Dict[str, Any]):
+    """Print success message after registration"""
+    print(f"\n🎉 Agent registered successfully!")
+    print(f"   Agent ID: {credentials['agent_id']}")
+    print(f"   Name: {credentials['name']}")
+    print(f"   Status: {credentials['status']}")
+    print(f"   Trust Score: {credentials.get('trust_score', 'N/A')}")
+    print(f"   Message: {credentials.get('message', 'Agent created')}")
+    print(f"\n   ⚠️  Credentials saved to: {_get_credentials_path()}")
+    print(f"   🔐 Private key will NOT be retrievable again - keep it safe!\n")

@@ -4,104 +4,126 @@
 
 One-line agent registration with automatic cryptographic verification.
 
-## Quick Start (ONE LINE!)
+## Quick Start - The "Stripe Moment" 🚀
+
+### SDK Download Mode (ZERO CONFIG!)
 
 ```python
 from aim_sdk import register_agent
 
-# That's it! Agent is registered, verified, and ready to use
-agent = register_agent("my-agent", "http://localhost:8080")
+# ONE LINE - That's it! Everything auto-detected.
+agent = register_agent("my-agent")
 
-# Use decorator-based verification for sensitive actions
+# ✅ Auto-detected: OAuth credentials, capabilities, MCP servers
+# ✅ Auto-verified: Challenge-response verification
+# ✅ Ready to use!
+
 @agent.perform_action("send_email", resource="admin@example.com")
 def send_critical_notification(message):
-    # AIM automatically verifies this action before execution
     send_email("admin@example.com", message)
-    
-# Call the function - AIM handles verification automatically
-send_critical_notification("System alert!")
+```
+
+### Manual Install Mode (Still Easy!)
+
+```python
+from aim_sdk import register_agent
+
+# Requires API key, but still auto-detects capabilities + MCPs
+agent = register_agent("my-agent", api_key="aim_abc123")
+
+# ✅ Auto-detected: Capabilities, MCP servers
+# ✅ Auto-verified: Challenge-response verification
 ```
 
 ## Installation
 
+**Option 1: Download SDK from Dashboard (Recommended)**
+- Visit your AIM dashboard
+- Click "Download SDK" → Includes embedded OAuth credentials
+- Extract and you're ready to go!
+
+**Option 2: Manual Install via pip**
 ```bash
+pip install aim-sdk
+# or
 pip install -r requirements.txt
 ```
 
 ## Features
 
-- ✅ **One-line registration**: No manual key generation needed
+- ✅ **Zero-config registration**: One line, everything auto-detected (SDK mode)
+- ✅ **Automatic capability detection**: Scans imports, decorators, config files
+- ✅ **Automatic MCP detection**: Finds MCP servers from Claude config & imports
 - ✅ **Automatic key management**: Ed25519 keys generated and stored securely
-- ✅ **Local credential storage**: Credentials saved to `~/.aim/credentials.json`
+- ✅ **Automatic verification**: Challenge-response auth, auto-approval
 - ✅ **Decorator-based verification**: Simple `@agent.perform_action()` decorator
-- ✅ **Challenge-response auth**: Cryptographic proof without exposing private keys
 - ✅ **Trust scoring**: ML-powered risk assessment
 - ✅ **Audit logging**: Complete action history
+- ✅ **Secure storage**: Credentials saved to `~/.aim/credentials.json` (0600 permissions)
 
-## Usage
+## Usage Modes
 
-### Option 1: One-Line Registration (Recommended)
+### Mode 1: SDK Download (ZERO CONFIG) ⭐ Recommended
 
 ```python
 from aim_sdk import register_agent
 
-# Register agent with minimal configuration
-agent = register_agent(
-    name="my-agent",
-    aim_url="http://localhost:8080"
-)
+# ONE LINE - Everything auto-detected!
+agent = register_agent("my-agent")
 
-# Advanced registration with metadata
-agent = register_agent(
-    name="my-agent",
-    aim_url="http://localhost:8080",
-    api_key="aim_1234567890abcdef",  # Get from AIM dashboard
-    display_name="My Awesome Agent",
-    description="Production agent for user management",
-    version="1.0.0",
-    repository_url="https://github.com/myorg/my-agent",
-    documentation_url="https://docs.myorg.com",
-    # Declare agent capabilities (what it can do)
-    capabilities=[
-        "read_files",
-        "write_files",
-        "execute_code",
-        "send_email",
-        "access_database"
-    ],
-    # Declare MCP servers it talks to (who it communicates with)
-    talks_to=[
-        "@modelcontextprotocol/server-filesystem",
-        "@modelcontextprotocol/server-github",
-        "@modelcontextprotocol/server-postgres"
-    ]
-)
-
-# OR use auto-detection for MCP servers (recommended!)
-from aim_sdk import register_agent, auto_detect_mcps
-
-agent = register_agent(
-    name="my-agent",
-    aim_url="http://localhost:8080",
-    api_key="aim_1234567890abcdef",
-    capabilities=["read_files", "write_files", "execute_code"]
-)
-
-# Auto-detect MCP servers (detects from Claude config & imports)
-detections = auto_detect_mcps()
-agent.report_detections(detections)
+# What happens behind the scenes:
+# ✅ OAuth credentials loaded from .aim/credentials.json
+# ✅ Capabilities auto-detected (imports, decorators, config)
+# ✅ MCP servers auto-detected (Claude config, imports)
+# ✅ Agent registered with AIM
+# ✅ Challenge-response verification completed
+# ✅ Auto-approved (if trust score ≥70)
 ```
 
-### Option 2: Manual Initialization (If you have existing credentials)
+### Mode 2: Manual Install (API Key)
+
+```python
+from aim_sdk import register_agent
+
+# Requires API key, but still auto-detects capabilities + MCPs
+agent = register_agent("my-agent", api_key="aim_abc123")
+
+# What happens:
+# ✅ Capabilities auto-detected
+# ✅ MCP servers auto-detected
+# ✅ Agent registered
+# ✅ Auto-verified
+```
+
+### Mode 3: Power User (Full Control)
+
+```python
+from aim_sdk import register_agent
+
+# Disable auto-detection, specify everything manually
+agent = register_agent(
+    name="my-agent",
+    api_key="aim_abc123",
+    auto_detect=False,  # Disable auto-detection
+    capabilities=["custom_capability"],
+    talks_to=["custom-mcp-server"],
+    display_name="My Custom Agent",
+    version="1.0.0",
+    repository_url="https://github.com/myorg/my-agent"
+)
+```
+
+### Mode 4: Existing Credentials
 
 ```python
 from aim_sdk import AIMClient
 
+# If you already have credentials from previous registration
 client = AIMClient(
     agent_id="your-agent-id",
     public_key="base64-public-key",
     private_key="base64-private-key",
-    aim_url="http://localhost:8080"
+    aim_url="https://aim.example.com"
 )
 ```
 
@@ -155,96 +177,132 @@ Credentials are automatically saved to `~/.aim/credentials.json` with secure per
 }
 ```
 
-## Declaring Capabilities and MCP Servers
+## Auto-Detection: The "Stripe Moment" is HERE! 🎉
 
-### Manual Declaration (Current)
+### Full Auto-Detection (NOW AVAILABLE!)
 
-You can manually declare your agent's capabilities and MCP servers during registration:
-
-```python
-agent = register_agent(
-    name="my-agent",
-    aim_url="http://localhost:8080",
-    api_key="aim_1234567890abcdef",
-    # What can your agent do?
-    capabilities=[
-        "read_files",        # Can read files from filesystem
-        "write_files",       # Can write/modify files
-        "execute_code",      # Can execute arbitrary code
-        "send_email",        # Can send emails
-        "access_database",   # Can query databases
-        "make_api_calls"     # Can call external APIs
-    ],
-    # Who does your agent talk to?
-    talks_to=[
-        "@modelcontextprotocol/server-filesystem",
-        "@modelcontextprotocol/server-github",
-        "@modelcontextprotocol/server-postgres"
-    ]
-)
-```
-
-### Auto-Detection (Current - MCPs Only)
-
-AIM can automatically detect MCP servers from:
-- **Claude Desktop config** (`~/.claude/claude_desktop_config.json`)
-- **Python imports** (scans for MCP packages)
+AIM now automatically detects **EVERYTHING**:
 
 ```python
-from aim_sdk import register_agent, auto_detect_mcps
+from aim_sdk import register_agent
 
-agent = register_agent(
-    name="my-agent",
-    aim_url="http://localhost:8080",
-    api_key="aim_1234567890abcdef",
-    capabilities=["read_files", "write_files"]  # Still manual
-)
-
-# Auto-detect MCP servers
-detections = auto_detect_mcps()
-result = agent.report_detections(detections)
-print(f"Detected {len(detections)} MCP servers: {result['newMCPs']}")
-```
-
-### Future: Full Auto-Detection (Vision)
-
-**The "Stripe Moment" - TRUE 1-line autonomy:**
-
-```python
-# FUTURE: AIM will auto-detect EVERYTHING
-agent = register_agent("my-agent", aim_url, api_key)
+# ONE LINE - Zero configuration!
+agent = register_agent("my-agent")
 
 # AIM automatically detects:
-# ✅ Agent capabilities (from code analysis)
-# ✅ MCP servers (from config & imports) ← Already working!
-# ✅ MCP capabilities (from MCP protocol's tools/list)
-# ✅ Security policies needed
+# ✅ Agent capabilities (from imports, decorators, config files)
+# ✅ MCP servers (from Claude config & Python imports)
+# ✅ Authentication (OAuth from SDK download or API key)
 # ✅ Trust scoring factors
 ```
 
-This is possible once:
-1. **Standard capability declarations** exist (e.g., MCP protocol's `tools/list`)
-2. **Industry standards** emerge for agent capability schemas
-3. **AIM implements** code analysis for capability detection
+### Capability Auto-Detection
 
-**Current Status:**
-- ✅ **MCP Server Detection**: Fully automated
-- ⏳ **MCP Capability Detection**: Coming soon (MCP protocol supports `tools/list`)
-- ⏳ **Agent Capability Detection**: Future release (requires capability standards)
+**AIM detects capabilities from:**
+
+1. **Import Analysis** - Infers capabilities from Python packages:
+   ```python
+   import requests      # → "make_api_calls"
+   import smtplib       # → "send_email"
+   import psycopg2      # → "access_database"
+   import subprocess    # → "execute_code"
+   ```
+
+2. **Decorator Analysis** - Scans `@agent.perform_action()` calls:
+   ```python
+   @agent.perform_action("read_database")
+   def get_users():       # → "access_database"
+       pass
+   ```
+
+3. **Config File** - Explicit declarations in `~/.aim/capabilities.json`:
+   ```json
+   {
+     "capabilities": ["custom_capability"],
+     "version": "1.0.0"
+   }
+   ```
+
+### MCP Server Auto-Detection
+
+**AIM detects MCP servers from:**
+
+1. **Claude Desktop Config** (`~/.claude/claude_desktop_config.json`):
+   - 100% confidence for configured servers
+   - Extracts command, args, and environment variables
+
+2. **Python Imports** (module scanning):
+   - Detects MCP packages in sys.modules
+   - 90% confidence for imported packages
+
+### Manual Override (Power Users)
+
+You can always override auto-detection:
+
+```python
+from aim_sdk import register_agent
+
+# Disable auto-detection entirely
+agent = register_agent(
+    "my-agent",
+    api_key="aim_abc123",
+    auto_detect=False,
+    capabilities=["custom_capability"],
+    talks_to=["custom-mcp-server"]
+)
+
+# Or mix auto-detection with manual specification
+agent = register_agent(
+    "my-agent",
+    api_key="aim_abc123",
+    capabilities=["read_files", "write_files"],  # Manual
+    # talks_to will be auto-detected
+)
+```
+
+### Convenience Functions
+
+```python
+from aim_sdk import auto_detect_capabilities, auto_detect_mcps
+
+# Detect capabilities separately
+capabilities = auto_detect_capabilities()
+print(f"Your agent has: {capabilities}")
+
+# Detect MCP servers separately
+mcps = auto_detect_mcps()
+print(f"Your agent talks to: {[m['mcpServer'] for m in mcps]}")
+```
 
 ## Examples
 
-See `example.py` for a complete working example.
+### Quick Auto-Detection Demo (No Backend Required)
+```bash
+python example_auto_detection.py
+```
+Demonstrates automatic capability and MCP server detection.
 
+### Full "Stripe Moment" Demo
+```bash
+python example_stripe_moment.py
+```
+Shows zero-config registration and verified actions (requires backend running).
+
+### Classic Example
 ```bash
 python example.py
 ```
+Traditional example with decorator-based verification.
 
 ## Requirements
 
+All dependencies auto-install with pip:
+
 - Python 3.8+
-- requests
-- pynacl (for Ed25519 cryptography)
+- requests (HTTP client)
+- PyNaCl (Ed25519 cryptography)
+- cryptography (secure encryption)
+- keyring (system keyring integration) - **Now auto-installs!**
 
 ## License
 
