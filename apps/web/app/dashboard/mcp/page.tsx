@@ -26,7 +26,7 @@ interface MCPServer {
   name: string;
   url: string;
   description?: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'pending';
   public_key?: string;
   key_type?: string;
   last_verified_at?: string;
@@ -81,6 +81,8 @@ function StatusBadge({ status }: { status: string }) {
     switch (status) {
       case 'active':
         return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+      case 'pending':
+        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
       case 'inactive':
         return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
       default:

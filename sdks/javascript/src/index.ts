@@ -18,6 +18,24 @@ export {
   IntelligentDetectionResult,
 } from './detection/intelligent-detection';
 
+// Agent Capability Detection
+export {
+  detectAgentCapabilities,
+  AgentCapabilityDetectionConfig,
+  AgentCapabilityDetectionResult,
+  RiskLevel,
+  RiskAssessment,
+  SecurityAlert,
+  ProgrammingEnvironment,
+  AIModelUsage,
+  FileSystemCapability,
+  DatabaseCapability,
+  NetworkCapability,
+  CodeExecutionCapability,
+  CredentialAccessCapability,
+  BrowserAutomationCapability,
+} from './detection/agent-capability-detection';
+
 // Signing
 export * from './signing';
 

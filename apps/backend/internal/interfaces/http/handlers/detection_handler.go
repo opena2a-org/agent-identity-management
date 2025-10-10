@@ -157,3 +157,109 @@ func (h *DetectionHandler) GetDetectionStatus(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(status)
 }
+
+// ReportCapabilities handles agent capability detection reports from SDKs
+// POST /api/v1/agents/:id/capabilities/report
+// @Summary Report agent capabilities
+// @Description Report detected agent capabilities (file system, database, code execution, etc.)
+// @Tags detection
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body domain.AgentCapabilityReport true "Agent capability detection results"
+// @Success 200 {object} domain.CapabilityReportResponse
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/capabilities/report [post]
+func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
+	// Get agent ID from URL
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Get organization ID from auth context (set by either JWT or API key middleware)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Check authentication method
+	authMethod := c.Locals("auth_method")
+	var userID uuid.UUID
+
+	if authMethod == "api_key" {
+		// For API key auth, use a nil UUID to indicate system/agent action
+		userID = uuid.Nil
+	} else {
+		// For JWT auth, require user_id
+		var ok bool
+		userID, ok = c.Locals("user_id").(uuid.UUID)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		}
+	}
+
+	// Parse request body
+	var req domain.AgentCapabilityReport
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate request
+	if req.DetectedAt == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "detectedAt is required",
+		})
+	}
+
+	// Process capability report
+	response, err := h.detectionService.ReportCapabilities(
+		c.Context(), agentID, orgID, &req)
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit with security alert details if present
+	auditData := map[string]interface{}{
+		"detected_at":       req.DetectedAt,
+		"risk_level":        req.RiskAssessment.RiskLevel,
+		"risk_score":        req.RiskAssessment.OverallRiskScore,
+		"trust_impact":      req.RiskAssessment.TrustScoreImpact,
+		"security_alerts":   len(req.RiskAssessment.Alerts),
+	}
+
+	// Add critical alerts to audit log
+	for _, alert := range req.RiskAssessment.Alerts {
+		if alert.Severity == "CRITICAL" {
+			auditData["critical_alert"] = alert.Message
+			break
+		}
+	}
+
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"agent_capability_detection",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		auditData,
+	)
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}

@@ -12,7 +12,7 @@ interface Agent {
   name: string;
   display_name: string;
   description: string;
-  public_key: string;
+  public_key?: string;
   agent_type: string;
   status: string;
   created_at: string;
@@ -187,25 +187,27 @@ export default function AgentSuccessPage() {
           </div>
 
           {/* Public Key */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Public Key (Ed25519)</p>
-              <p className="text-sm text-gray-600 font-mono break-all truncate max-w-[500px]">
-                {agent.public_key}
-              </p>
+          {agent.public_key && (
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700">Public Key (Ed25519)</p>
+                <p className="text-sm text-gray-600 font-mono break-all truncate max-w-[500px]">
+                  {agent.public_key}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => copyToClipboard(agent.public_key!, 'public_key')}
+              >
+                {copiedField === 'public_key' ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => copyToClipboard(agent.public_key, 'public_key')}
-            >
-              {copiedField === 'public_key' ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+          )}
 
           {/* Status */}
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">

@@ -34,6 +34,7 @@ export interface APIKey {
   expires_at?: string
   is_active: boolean
   created_at: string
+  agent_name?: string  // Optional - may be included by backend in some responses
 }
 
 export type TagCategory = 'resource_type' | 'environment' | 'agent_type' | 'data_classification' | 'custom'
@@ -320,7 +321,7 @@ class APIClient {
 
   // User management
   async getUsers(limit = 100, offset = 0): Promise<any[]> {
-    const response = await this.request(`/api/v1/admin/users?limit=${limit}&offset=${offset}`)
+    const response = await this.request<{ users: any[] }>(`/api/v1/admin/users?limit=${limit}&offset=${offset}`)
     return response.users || []
   }
 
@@ -457,12 +458,17 @@ class APIClient {
   async getSecurityThreats(limit = 100, offset = 0): Promise<{
     threats: Array<{
       id: string
-      agent_id: string
+      target_id: string
+      target_name?: string
       threat_type: string
       severity: 'low' | 'medium' | 'high' | 'critical'
+      title?: string
       description: string
-      status: 'active' | 'mitigated' | 'resolved'
-      detected_at: string
+      source?: string
+      target_type?: string
+      is_blocked: boolean
+      created_at: string
+      resolved_at?: string
     }>
     total: number
   }> {

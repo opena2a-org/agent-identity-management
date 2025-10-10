@@ -188,7 +188,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-3xl font-bold">{server.name}</h1>
                 {isVerified && (
-                  <Shield className="h-6 w-6 text-green-600" title="Verified" />
+                  <span title="Verified">
+                    <Shield className="h-6 w-6 text-green-600" />
+                  </span>
                 )}
               </div>
               {server.description && (

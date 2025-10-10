@@ -16,6 +16,7 @@ type TrustScoreFactors struct {
 	SecurityAudit       float64 `json:"security_audit"`       // 0-1
 	UpdateFrequency     float64 `json:"update_frequency"`     // 0-1
 	AgeScore            float64 `json:"age_score"`            // 0-1
+	CapabilityRisk      float64 `json:"capability_risk"`      // 0-1 (1 = low risk, 0 = high risk)
 }
 
 // TrustScore represents a calculated trust score for an agent

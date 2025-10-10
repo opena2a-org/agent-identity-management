@@ -109,7 +109,7 @@ export default function AlertsPage() {
       ))
     } catch (error) {
       console.error('Failed to acknowledge alert:', error)
-      alert('Failed to acknowledge alert')
+      window.alert('Failed to acknowledge alert')
     }
   }
 
@@ -122,10 +122,10 @@ export default function AlertsPage() {
           ? { ...a, is_acknowledged: true, acknowledged_at: new Date().toISOString() }
           : a
       ))
-      alert('Configuration drift approved successfully. Agent registration has been updated.')
+      window.alert('Configuration drift approved successfully. Agent registration has been updated.')
     } catch (error) {
       console.error('Failed to approve drift:', error)
-      alert('Failed to approve drift')
+      window.alert('Failed to approve drift')
     }
   }
 
@@ -166,7 +166,7 @@ export default function AlertsPage() {
       ))
     } catch (error) {
       console.error('Failed to acknowledge all alerts:', error)
-      alert('Failed to acknowledge all alerts')
+      window.alert('Failed to acknowledge all alerts')
     }
   }
 
@@ -368,7 +368,7 @@ export default function AlertsPage() {
                                     approveDrift(alert.id, driftedServers)
                                   }
                                 } else {
-                                  alert('Could not extract drifted servers from alert')
+                                  window.alert('Could not extract drifted servers from alert')
                                 }
                               }}
                             >

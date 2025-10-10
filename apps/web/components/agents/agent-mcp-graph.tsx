@@ -154,7 +154,9 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-semibold truncate">{agent.name}</h4>
                       {agent.isVerified && (
-                        <Shield className="h-4 w-4 text-green-600" title="Verified" />
+                        <span title="Verified">
+                          <Shield className="h-4 w-4 text-green-600" />
+                        </span>
                       )}
                       <Badge variant="outline" className="text-xs">
                         {agent.type}

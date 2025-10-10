@@ -16,9 +16,10 @@ import (
 
 // TrustCalculator implements domain.TrustScoreCalculator
 type TrustCalculator struct {
-	trustScoreRepo domain.TrustScoreRepository
-	apiKeyRepo     domain.APIKeyRepository
-	auditRepo      domain.AuditLogRepository
+	trustScoreRepo   domain.TrustScoreRepository
+	apiKeyRepo       domain.APIKeyRepository
+	auditRepo        domain.AuditLogRepository
+	capabilityRepo   domain.CapabilityRepository
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -26,11 +27,13 @@ func NewTrustCalculator(
 	trustScoreRepo domain.TrustScoreRepository,
 	apiKeyRepo domain.APIKeyRepository,
 	auditRepo domain.AuditLogRepository,
+	capabilityRepo domain.CapabilityRepository,
 ) *TrustCalculator {
 	return &TrustCalculator{
-		trustScoreRepo: trustScoreRepo,
-		apiKeyRepo:     apiKeyRepo,
-		auditRepo:      auditRepo,
+		trustScoreRepo:   trustScoreRepo,
+		apiKeyRepo:       apiKeyRepo,
+		auditRepo:        auditRepo,
+		capabilityRepo:   capabilityRepo,
 	}
 }
 
@@ -41,16 +44,17 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		return nil, err
 	}
 
-	// Weighted average of factors
+	// Weighted average of factors (9 factors totaling 100%)
 	weights := map[string]float64{
-		"verification":  0.20,
-		"certificate":   0.15,
-		"repository":    0.15,
-		"documentation": 0.10,
-		"community":     0.10,
-		"security":      0.15,
-		"updates":       0.10,
-		"age":           0.05,
+		"verification":    0.18, // Identity verification (reduced from 0.20)
+		"certificate":     0.12, // Certificate validity (reduced from 0.15)
+		"repository":      0.12, // Repository quality (reduced from 0.15)
+		"documentation":   0.08, // Documentation score (reduced from 0.10)
+		"community":       0.08, // Community trust (reduced from 0.10)
+		"security":        0.12, // Security audit (reduced from 0.15)
+		"updates":         0.08, // Update frequency (reduced from 0.10)
+		"age":             0.05, // Agent age (unchanged)
+		"capability_risk": 0.17, // Capability risk (NEW - high importance)
 	}
 
 	score := factors.VerificationStatus*weights["verification"] +
@@ -60,7 +64,8 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		factors.CommunityTrust*weights["community"] +
 		factors.SecurityAudit*weights["security"] +
 		factors.UpdateFrequency*weights["updates"] +
-		factors.AgeScore*weights["age"]
+		factors.AgeScore*weights["age"] +
+		factors.CapabilityRisk*weights["capability_risk"]
 
 	// Calculate confidence based on available data
 	confidence := c.calculateConfidence(agent, factors)
@@ -103,6 +108,9 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 
 	// 8. Age Score (0-1)
 	factors.AgeScore = c.calculateAgeScore(agent)
+
+	// 9. Capability Risk (0-1, where 1 = low risk, 0 = high risk)
+	factors.CapabilityRisk = c.calculateCapabilityRisk(agent)
 
 	return factors, nil
 }
@@ -249,6 +257,92 @@ func (c *TrustCalculator) calculateAgeScore(agent *domain.Agent) float64 {
 		return 0.8
 	}
 	return 1.0
+}
+
+func (c *TrustCalculator) calculateCapabilityRisk(agent *domain.Agent) float64 {
+	// Start with baseline score (no capabilities detected = neutral risk)
+	score := 0.7 // Neutral baseline
+
+	// Get active capabilities for the agent
+	capabilities, err := c.capabilityRepo.GetActiveCapabilitiesByAgentID(agent.ID)
+	if err != nil || len(capabilities) == 0 {
+		return score // No capabilities data = neutral score
+	}
+
+	// Define high-risk capability types
+	highRiskCapabilities := map[string]float64{
+		domain.CapabilityFileDelete:      -0.15, // File deletion is high risk
+		domain.CapabilitySystemAdmin:     -0.20, // System admin is very high risk
+		domain.CapabilityUserImpersonate: -0.20, // Impersonation is very high risk
+		domain.CapabilityDataExport:      -0.10, // Data export is moderate risk
+	}
+
+	mediumRiskCapabilities := map[string]float64{
+		domain.CapabilityFileWrite:   -0.08,
+		domain.CapabilityDBWrite:     -0.08,
+		domain.CapabilityAPICall:     -0.05,
+	}
+
+	lowRiskCapabilities := map[string]float64{
+		domain.CapabilityFileRead:    -0.03,
+		domain.CapabilityDBQuery:     -0.03,
+		domain.CapabilityMCPToolUse:  -0.02,
+	}
+
+	// Calculate risk based on capabilities
+	for _, cap := range capabilities {
+		// Check high-risk capabilities
+		if penalty, exists := highRiskCapabilities[cap.CapabilityType]; exists {
+			score += penalty
+		} else if penalty, exists := mediumRiskCapabilities[cap.CapabilityType]; exists {
+			score += penalty
+		} else if penalty, exists := lowRiskCapabilities[cap.CapabilityType]; exists {
+			score += penalty
+		}
+	}
+
+	// Get recent violations (last 30 days)
+	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
+	if err == nil && len(violations) > 0 {
+		// Recent violations significantly impact trust
+		recentViolations := 0
+		thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+
+		for _, violation := range violations {
+			if violation.CreatedAt.After(thirtyDaysAgo) {
+				recentViolations++
+
+				// Additional penalty based on violation severity
+				switch violation.Severity {
+				case domain.ViolationSeverityCritical:
+					score -= 0.15
+				case domain.ViolationSeverityHigh:
+					score -= 0.10
+				case domain.ViolationSeverityMedium:
+					score -= 0.05
+				case domain.ViolationSeverityLow:
+					score -= 0.02
+				}
+			}
+		}
+
+		// Cap violations penalty
+		if recentViolations > 10 {
+			score -= 0.20 // Significant violation history
+		} else if recentViolations > 5 {
+			score -= 0.10
+		}
+	}
+
+	// Ensure score stays within bounds [0, 1]
+	if score < 0 {
+		score = 0
+	}
+	if score > 1 {
+		score = 1
+	}
+
+	return score
 }
 
 func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors) float64 {

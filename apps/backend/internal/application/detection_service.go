@@ -16,11 +16,17 @@ import (
 // DetectionService handles MCP detection business logic
 type DetectionService struct {
 	db                    *sql.DB
+	trustCalculator       domain.TrustScoreCalculator // ✅ NEW: For proper trust score calculation
+	agentRepo             domain.AgentRepository      // ✅ NEW: For fetching agent data
 	deduplicationWindow   time.Duration
 }
 
 // NewDetectionService creates a new detection service
-func NewDetectionService(db *sql.DB) *DetectionService {
+func NewDetectionService(
+	db *sql.DB,
+	trustCalculator domain.TrustScoreCalculator,
+	agentRepo domain.AgentRepository,
+) *DetectionService {
 	// Configure server-side deduplication window based on environment
 	// Production: 24 hours (avoid spam, focus on significant changes)
 	// Development: 5 minutes (rapid testing and iteration)
@@ -31,6 +37,8 @@ func NewDetectionService(db *sql.DB) *DetectionService {
 
 	return &DetectionService{
 		db:                    db,
+		trustCalculator:       trustCalculator,
+		agentRepo:             agentRepo,
 		deduplicationWindow:   deduplicationWindow,
 	}
 }
@@ -341,6 +349,120 @@ func (s *DetectionService) GetDetectionStatus(
 	}
 
 	return response, nil
+}
+
+// ReportCapabilities processes agent capability detection reports from SDK
+func (s *DetectionService) ReportCapabilities(
+	ctx context.Context,
+	agentID uuid.UUID,
+	orgID uuid.UUID,
+	req *domain.AgentCapabilityReport,
+) (*domain.CapabilityReportResponse, error) {
+	// 1. Validate agent belongs to organization
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM agents WHERE id = $1 AND organization_id = $2)`,
+		agentID, orgID,
+	).Scan(&exists)
+
+	if err != nil || !exists {
+		return nil, fmt.Errorf("agent not found or unauthorized")
+	}
+
+	// 2. Fetch full agent entity for comprehensive trust calculation
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch agent: %v", err)
+	}
+
+	// 3. Calculate trust score using proper 9-factor algorithm (includes capability risk)
+	// This replaces the naive addition/subtraction with comprehensive risk assessment
+	trustScore, err := s.trustCalculator.Calculate(agent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate trust score: %v", err)
+	}
+
+	// Convert from 0-1 scale to 0-100 scale for storage
+	newTrustScore := trustScore.Score * 100
+
+	// 4. Convert capability report to JSON
+	envJSON, _ := json.Marshal(req.Environment)
+	aiModelsJSON, _ := json.Marshal(req.AIModels)
+	capabilitiesJSON, _ := json.Marshal(req.Capabilities)
+	riskAssessmentJSON, _ := json.Marshal(req.RiskAssessment)
+
+	// 5. Store capability report in database
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO agent_capability_reports (
+			agent_id, detected_at, environment, ai_models,
+			capabilities, risk_assessment, risk_level,
+			overall_risk_score, trust_score_impact
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, agentID, req.DetectedAt, envJSON, aiModelsJSON,
+		capabilitiesJSON, riskAssessmentJSON, req.RiskAssessment.RiskLevel,
+		req.RiskAssessment.OverallRiskScore, req.RiskAssessment.TrustScoreImpact)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to store capability report: %v", err)
+	}
+
+	// 6. Store trust score in trust_scores table for historical tracking
+	factorsJSON, _ := json.Marshal(trustScore.Factors)
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO trust_scores (
+			agent_id, score, factors, confidence, last_calculated
+		) VALUES ($1, $2, $3, $4, NOW())
+	`, agentID, trustScore.Score, factorsJSON, trustScore.Confidence)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to store trust score: %v", err)
+	}
+
+	// 7. Update agent trust score (keep agents table in sync)
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE agents
+		SET trust_score = $1, updated_at = NOW()
+		WHERE id = $2
+	`, newTrustScore, agentID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update agent trust score: %v", err)
+	}
+
+	// 8. Create security alerts for CRITICAL and HIGH severity issues
+	for _, alert := range req.RiskAssessment.Alerts {
+		if alert.Severity == "CRITICAL" || alert.Severity == "HIGH" {
+			// Store alert in database
+			s.db.ExecContext(ctx, `
+				INSERT INTO security_alerts (
+					organization_id, agent_id, severity,
+					alert_type, message, metadata, acknowledged
+				) VALUES ($1, $2, $3, $4, $5, $6, FALSE)
+			`, orgID, agentID, alert.Severity, "capability_risk",
+				alert.Message, fmt.Sprintf(`{"capability": "%s", "recommendation": "%s"}`, alert.Capability, alert.Recommendation))
+		}
+	}
+
+	return &domain.CapabilityReportResponse{
+		Success:            true,
+		AgentID:            agentID,
+		RiskLevel:          req.RiskAssessment.RiskLevel,
+		TrustScoreImpact:   req.RiskAssessment.TrustScoreImpact,
+		NewTrustScore:      newTrustScore,
+		SecurityAlertsCount: countHighSeverityAlerts(req.RiskAssessment.Alerts),
+		Message:            fmt.Sprintf("Capability report processed. Risk: %s, Trust impact: %d", req.RiskAssessment.RiskLevel, req.RiskAssessment.TrustScoreImpact),
+	}, nil
+}
+
+// countHighSeverityAlerts counts CRITICAL and HIGH severity alerts
+func countHighSeverityAlerts(alerts []domain.SecurityAlert) int {
+	count := 0
+	for _, alert := range alerts {
+		if alert.Severity == "CRITICAL" || alert.Severity == "HIGH" {
+			count++
+		}
+	}
+	return count
 }
 
 // Helper functions

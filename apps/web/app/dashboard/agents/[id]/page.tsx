@@ -14,6 +14,7 @@ import { MCPServerList } from '@/components/agents/mcp-server-list'
 import { AgentMCPGraph } from '@/components/agents/agent-mcp-graph'
 import { DetectionStatus } from '@/components/agents/detection-status'
 import { SDKSetupGuide } from '@/components/agents/sdk-setup-guide'
+import { AgentCapabilities } from '@/components/agents/agent-capabilities'
 import { api } from '@/lib/api'
 
 interface Agent {
@@ -25,7 +26,7 @@ interface Agent {
   status: string
   version: string
   trust_score: number
-  talks_to: string[] | null
+  talks_to?: string[]
   created_at: string
   updated_at: string
   organization_id: string
@@ -34,11 +35,16 @@ interface Agent {
 interface MCPServer {
   id: string
   name: string
-  description: string
-  command: string
-  args: string[]
-  isActive: boolean
-  trustScore: number
+  url?: string
+  description?: string
+  command?: string
+  args?: string[]
+  status?: string
+  verification_status?: string
+  isActive?: boolean
+  trustScore?: number
+  last_verified_at?: string
+  created_at: string
 }
 
 export default function AgentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -170,7 +176,9 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-3xl font-bold">{agent.name}</h1>
                 {isVerified && (
-                  <Shield className="h-6 w-6 text-green-600" title="Verified" />
+                  <span title="Verified">
+                    <Shield className="h-6 w-6 text-green-600" />
+                  </span>
                 )}
               </div>
               <p className="text-muted-foreground mb-2">{agent.description}</p>
@@ -271,6 +279,10 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
             <ExternalLink className="h-4 w-4 mr-2" />
             Connections
           </TabsTrigger>
+          <TabsTrigger value="capabilities">
+            <Shield className="h-4 w-4 mr-2" />
+            Capabilities
+          </TabsTrigger>
           <TabsTrigger value="graph">
             <Network className="h-4 w-4 mr-2" />
             Graph View
@@ -307,6 +319,10 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
           </Card>
         </TabsContent>
 
+        <TabsContent value="capabilities">
+          <AgentCapabilities agentId={agent.id} />
+        </TabsContent>
+
         <TabsContent value="graph">
           <AgentMCPGraph
             agents={allAgents.map(a => ({
@@ -320,7 +336,7 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
             mcpServers={allMCPServers.map(m => ({
               id: m.id,
               name: m.name,
-              isActive: m.isActive,
+              isActive: m.isActive ?? m.status === 'active',
               trustScore: m.trustScore ?? 0
             }))}
             highlightAgentId={agent.id}

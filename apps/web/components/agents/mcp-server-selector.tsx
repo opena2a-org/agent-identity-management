@@ -20,11 +20,12 @@ import { api } from '@/lib/api'
 interface MCPServer {
   id: string
   name: string
-  description: string
-  command: string
-  args: string[]
-  isActive: boolean
-  trustScore: number
+  url: string
+  status: 'active' | 'inactive' | 'pending'
+  verification_status: 'verified' | 'unverified' | 'failed'
+  description?: string
+  last_verified_at?: string
+  created_at: string
 }
 
 interface MCPServerSelectorProps {
@@ -59,7 +60,7 @@ export function MCPServerSelector({
       (server) =>
         server.name.toLowerCase().includes(query) ||
         server.description?.toLowerCase().includes(query) ||
-        server.command.toLowerCase().includes(query)
+        server.url.toLowerCase().includes(query)
     )
   }, [mcpServers, searchQuery])
 
@@ -85,11 +86,8 @@ export function MCPServerSelector({
     setIsLoading(true)
     setError(null)
     try {
-      const response = await api.getMCPServers({
-        page: 1,
-        perPage: 100, // Get all servers for selection
-      })
-      setMCPServers(response.mcpServers || [])
+      const response = await api.listMCPServers(100, 0) // limit, offset
+      setMCPServers(response.mcp_servers || [])
     } catch (err: any) {
       console.error('Failed to fetch MCP servers:', err)
       setError('Failed to load MCP servers')
@@ -131,7 +129,7 @@ export function MCPServerSelector({
 
     try {
       await api.addMCPServersToAgent(agentId, {
-        mcp_server_identifiers: Array.from(selectedServers),
+        mcp_server_ids: Array.from(selectedServers),
       })
 
       // Close dialog and notify parent
@@ -309,7 +307,7 @@ export function MCPServerSelector({
                                     <h5 className="font-semibold text-sm truncate">
                                       {server.name}
                                     </h5>
-                                    {server.isActive ? (
+                                    {server.status === 'active' ? (
                                       <Badge
                                         variant="secondary"
                                         className="text-xs bg-green-500/10 text-green-600"
@@ -318,7 +316,7 @@ export function MCPServerSelector({
                                       </Badge>
                                     ) : (
                                       <Badge variant="secondary" className="text-xs">
-                                        Inactive
+                                        {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
                                       </Badge>
                                     )}
                                   </div>
@@ -327,12 +325,12 @@ export function MCPServerSelector({
                                   </p>
                                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                     <span>
-                                      <span className="font-medium">Command:</span>{' '}
-                                      {server.command}
+                                      <span className="font-medium">URL:</span>{' '}
+                                      <span className="truncate">{server.url}</span>
                                     </span>
                                     <span>
-                                      <span className="font-medium">Trust:</span>{' '}
-                                      {server.trustScore.toFixed(1)}%
+                                      <span className="font-medium">Status:</span>{' '}
+                                      {server.verification_status}
                                     </span>
                                   </div>
                                 </div>

@@ -328,6 +328,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.TrustScore,
 		repos.APIKey,
 		repos.AuditLog,
+		repos.Capability, // ✅ NEW: Add capability repository for risk scoring
 	)
 
 	agentService := application.NewAgentService(
@@ -413,7 +414,11 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.AuditLog,
 	)
 
-	detectionService := application.NewDetectionService(db)
+	detectionService := application.NewDetectionService(
+		db,
+		trustCalculator,  // ✅ NEW: Inject trust calculator for proper risk assessment
+		repos.Agent,      // ✅ NEW: Inject agent repository to fetch agent data
+	)
 
 	return &Services{
 		Auth:              authService,
@@ -656,6 +661,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	detection.Use(middleware.APIKeyMiddleware(db)) // Apply middleware using Use() instead of inline
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
 	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus)
+	// ⭐ Agent Capability Detection endpoints - Report detected agent capabilities
+	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 
 	// Agents routes - All other agent endpoints with JWT authentication
 	agents := v1.Group("/agents")

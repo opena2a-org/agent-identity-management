@@ -6,9 +6,19 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
+interface AgentFormData {
+  name: string;
+  display_name: string;
+  description: string;
+  agent_type: 'ai_agent' | 'mcp_server';
+  version: string;
+  repository_url: string;
+  documentation_url: string;
+}
+
 export default function NewAgentPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     display_name: '',
     description: '',

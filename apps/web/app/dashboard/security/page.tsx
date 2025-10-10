@@ -21,15 +21,17 @@ import { formatDateTime } from '@/lib/date-utils';
 interface SecurityThreat {
   id: string;
   target_id: string;  // Agent or MCP server ID
-  target_name?: string;  // Agent or MCP server name
+  target_name?: string;  // Agent or MCP server name (optional, populated by backend)
   threat_type: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
   is_blocked: boolean;
   created_at: string;
+  resolved_at?: string;
   // Additional fields for enhanced detail view
-  source_ip?: string;
-  metadata?: Record<string, any>;
+  source?: string;
+  target_type?: string;
+  title?: string;
 }
 
 interface SecurityIncident {
