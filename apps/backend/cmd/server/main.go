@@ -156,7 +156,7 @@ func main() {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
-	setupRoutes(v1, h, jwtService, repos.SDKToken)
+	setupRoutes(v1, h, jwtService, repos.SDKToken, db)
 
 	// Start server
 	port := cfg.Server.Port
@@ -612,7 +612,7 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 	return providers
 }
 
-func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository) {
+func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
 	// SDK Token Tracking Middleware - MUST be first to track all API requests
 	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
 	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
@@ -628,16 +628,18 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	auth.Get("/login/:provider", h.Auth.Login)        // OAuth login
 	auth.Get("/callback/:provider", h.Auth.Callback)  // OAuth callback
 	auth.Post("/logout", h.Auth.Logout)
-	auth.Post("/change-password", middleware.AuthMiddleware(jwtService), h.Auth.ChangePassword) // Change password
-	auth.Get("/me", middleware.AuthMiddleware(jwtService), h.Auth.Me)
+	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
+
+	// Authenticated auth routes (authentication required)
+	authProtected := v1.Group("/auth")
+	authProtected.Use(middleware.AuthMiddleware(jwtService)) // Apply middleware using Use() instead of inline
+	authProtected.Get("/me", h.Auth.Me)
+	authProtected.Post("/change-password", h.Auth.ChangePassword)
 
 	// SDK routes (authentication required) - Download pre-configured SDK
 	sdk := v1.Group("/sdk")
 	sdk.Use(middleware.AuthMiddleware(jwtService))
 	sdk.Get("/download", h.SDK.DownloadSDK) // Download Python SDK with embedded credentials
-
-	// Auth routes - Token refresh with rotation
-	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
 
 	// SDK Token Management routes (authentication required)
 	sdkTokens := v1.Group("/users/me/sdk-tokens")
@@ -647,7 +649,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)        // Revoke specific token
 	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens)    // Revoke all tokens
 
-	// Agents routes (authentication required)
+	// ⭐ MCP Detection endpoints - Using DIFFERENT path to avoid agents group conflict
+	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
+	// Uses API key authentication for SDK-based reporting (NOT JWT)
+	detection := v1.Group("/detection")
+	detection.Use(middleware.APIKeyMiddleware(db)) // Apply middleware using Use() instead of inline
+	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
+	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus)
+
+	// Agents routes - All other agent endpoints with JWT authentication
 	agents := v1.Group("/agents")
 	agents.Use(middleware.AuthMiddleware(jwtService))
 	agents.Use(middleware.RateLimitMiddleware())
@@ -670,9 +680,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Delete("/:id/mcp-servers/bulk", middleware.MemberMiddleware(), h.Agent.BulkRemoveMCPServersFromAgent) // Remove multiple MCPs
 	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)  // Remove single MCP
 	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)       // Auto-detect MCPs from config
-	// MCP Detection endpoints - Report detections from SDK or Direct API
-	agents.Post("/:id/detection/report", middleware.MemberMiddleware(), h.Detection.ReportDetection)   // Report MCP detections
-	agents.Get("/:id/detection/status", h.Detection.GetDetectionStatus)                                 // Get detection status
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
