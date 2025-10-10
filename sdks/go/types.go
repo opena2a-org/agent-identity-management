@@ -33,3 +33,26 @@ type DetectionReportResponse struct {
 	ExistingMCPs        []string `json:"existingMCPs"`
 	Message             string   `json:"message"`
 }
+
+// MCPRegistrationRequest represents a request to register MCP servers
+type MCPRegistrationRequest struct {
+	MCPServerIDs   []string               `json:"mcp_server_ids"`
+	DetectedMethod string                 `json:"detected_method"`
+	Confidence     float64                `json:"confidence"`
+	Metadata       map[string]interface{} `json:"metadata"`
+}
+
+// MCPRegistrationResponse represents a response from MCP registration
+type MCPRegistrationResponse struct {
+	Success      bool     `json:"success"`
+	Message      string   `json:"message"`
+	Added        int      `json:"added"`
+	AgentID      string   `json:"agent_id"`
+	MCPServerIDs []string `json:"mcp_server_ids"`
+}
+
+// GrantCapabilityRequest represents a request to grant a capability to an agent
+type GrantCapabilityRequest struct {
+	CapabilityType string                 `json:"capabilityType"`
+	Scope          map[string]interface{} `json:"scope,omitempty"`
+}

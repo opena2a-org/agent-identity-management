@@ -206,8 +206,8 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 <Badge className={getStatusColor(server.status)}>
                   {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
                 </Badge>
-                <Badge className={getTrustColor(server.trust_score ?? 0)}>
-                  Trust: {(server.trust_score ?? 0).toFixed(1)}%
+                <Badge className={getTrustColor((server.trust_score ?? 0) * 100)}>
+                  Trust: {((server.trust_score ?? 0) * 100).toFixed(1)}%
                 </Badge>
               </div>
             </div>
@@ -254,13 +254,13 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${getTrustColor(server.trust_score ?? 0).split(' ')[0]}`}>
-              {(server.trust_score ?? 0).toFixed(1)}%
+            <div className={`text-2xl font-bold ${getTrustColor((server.trust_score ?? 0) * 100).split(' ')[0]}`}>
+              {((server.trust_score ?? 0) * 100).toFixed(1)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {(server.trust_score ?? 0) >= 80
+              {((server.trust_score ?? 0) * 100) >= 80
                 ? 'High trust'
-                : (server.trust_score ?? 0) >= 60
+                : ((server.trust_score ?? 0) * 100) >= 60
                 ? 'Medium trust'
                 : 'Low trust'}
             </p>
@@ -410,8 +410,8 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 <div className="grid grid-cols-3 items-center gap-4">
                   <span className="text-sm font-medium text-muted-foreground">Trust Score:</span>
                   <span className="col-span-2 text-sm">
-                    <Badge className={getTrustColor(server.trust_score ?? 0)}>
-                      {(server.trust_score ?? 0).toFixed(1)}%
+                    <Badge className={getTrustColor((server.trust_score ?? 0) * 100)}>
+                      {((server.trust_score ?? 0) * 100).toFixed(1)}%
                     </Badge>
                   </span>
                 </div>

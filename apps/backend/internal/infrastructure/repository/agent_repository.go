@@ -25,9 +25,9 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	query := `
 		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		                    trust_score, capability_violation_count, is_compromised, talks_to,
+		                    trust_score, capability_violation_count, is_compromised, talks_to, capabilities,
 		                    created_at, updated_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 	`
 
 	now := time.Now()
@@ -50,6 +50,12 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		return fmt.Errorf("failed to marshal talks_to: %w", err)
 	}
 
+	// Marshal capabilities to JSONB
+	capabilitiesJSON, err := json.Marshal(agent.Capabilities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal capabilities: %w", err)
+	}
+
 	_, err = r.db.Exec(query,
 		agent.ID,
 		agent.OrganizationID,
@@ -69,6 +75,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.CapabilityViolationCount,
 		agent.IsCompromised,
 		talksToJSON,
+		capabilitiesJSON, // ✅ Store capabilities
 		agent.CreatedAt,
 		agent.UpdatedAt,
 		agent.CreatedBy,
@@ -83,7 +90,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		       trust_score, verified_at, last_capability_check_at, capability_violation_count,
-		       is_compromised, talks_to, created_at, updated_at, created_by
+		       is_compromised, talks_to, capabilities, created_at, updated_at, created_by
 		FROM agents
 		WHERE id = $1
 	`
@@ -92,8 +99,12 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var publicKey sql.NullString
 	var encryptedPrivateKey sql.NullString
 	var keyAlgorithm sql.NullString
+	var certificateURL sql.NullString
+	var repositoryURL sql.NullString
+	var documentationURL sql.NullString
 	var lastCapabilityCheck sql.NullTime
 	var talksToJSON []byte
+	var capabilitiesJSON []byte
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
@@ -105,17 +116,18 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.Status,
 		&agent.Version,
 		&publicKey,
-		&encryptedPrivateKey, // ✅ NEW: Retrieve encrypted private key
+		&encryptedPrivateKey,
 		&keyAlgorithm,
-		&agent.CertificateURL,
-		&agent.RepositoryURL,
-		&agent.DocumentationURL,
+		&certificateURL,
+		&repositoryURL,
+		&documentationURL,
 		&agent.TrustScore,
 		&agent.VerifiedAt,
 		&lastCapabilityCheck,
 		&agent.CapabilityViolationCount,
 		&agent.IsCompromised,
 		&talksToJSON,
+		&capabilitiesJSON,
 		&agent.CreatedAt,
 		&agent.UpdatedAt,
 		&agent.CreatedBy,
@@ -138,6 +150,15 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	if keyAlgorithm.Valid {
 		agent.KeyAlgorithm = keyAlgorithm.String
 	}
+	if certificateURL.Valid {
+		agent.CertificateURL = certificateURL.String
+	}
+	if repositoryURL.Valid {
+		agent.RepositoryURL = repositoryURL.String
+	}
+	if documentationURL.Valid {
+		agent.DocumentationURL = documentationURL.String
+	}
 	if lastCapabilityCheck.Valid {
 		agent.LastCapabilityCheckAt = &lastCapabilityCheck.Time
 	}
@@ -146,6 +167,13 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	if len(talksToJSON) > 0 {
 		if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+		}
+	}
+
+	// Unmarshal capabilities from JSONB
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &agent.Capabilities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
 		}
 	}
 
@@ -172,6 +200,10 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var publicKey sql.NullString
+		var certificateURL sql.NullString
+		var repositoryURL sql.NullString
+		var documentationURL sql.NullString
 		var talksToJSON []byte
 		err := rows.Scan(
 			&agent.ID,
@@ -182,10 +214,10 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.AgentType,
 			&agent.Status,
 			&agent.Version,
-			&agent.PublicKey,
-			&agent.CertificateURL,
-			&agent.RepositoryURL,
-			&agent.DocumentationURL,
+			&publicKey,
+			&certificateURL,
+			&repositoryURL,
+			&documentationURL,
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
@@ -195,6 +227,20 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		// Convert nullable fields
+		if publicKey.Valid {
+			agent.PublicKey = &publicKey.String
+		}
+		if certificateURL.Valid {
+			agent.CertificateURL = certificateURL.String
+		}
+		if repositoryURL.Valid {
+			agent.RepositoryURL = repositoryURL.String
+		}
+		if documentationURL.Valid {
+			agent.DocumentationURL = documentationURL.String
 		}
 
 		// Unmarshal talks_to from JSONB
@@ -282,6 +328,10 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var publicKey sql.NullString
+		var certificateURL sql.NullString
+		var repositoryURL sql.NullString
+		var documentationURL sql.NullString
 		var talksToJSON []byte
 		err := rows.Scan(
 			&agent.ID,
@@ -292,10 +342,10 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.AgentType,
 			&agent.Status,
 			&agent.Version,
-			&agent.PublicKey,
-			&agent.CertificateURL,
-			&agent.RepositoryURL,
-			&agent.DocumentationURL,
+			&publicKey,
+			&certificateURL,
+			&repositoryURL,
+			&documentationURL,
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
@@ -305,6 +355,20 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		// Convert nullable fields
+		if publicKey.Valid {
+			agent.PublicKey = &publicKey.String
+		}
+		if certificateURL.Valid {
+			agent.CertificateURL = certificateURL.String
+		}
+		if repositoryURL.Valid {
+			agent.RepositoryURL = repositoryURL.String
+		}
+		if documentationURL.Valid {
+			agent.DocumentationURL = documentationURL.String
 		}
 
 		// Unmarshal talks_to from JSONB
@@ -367,6 +431,10 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var publicKey sql.NullString
+		var certificateURL sql.NullString
+		var repositoryURL sql.NullString
+		var documentationURL sql.NullString
 		var talksToJSON []byte
 		err := rows.Scan(
 			&agent.ID,
@@ -377,10 +445,10 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.AgentType,
 			&agent.Status,
 			&agent.Version,
-			&agent.PublicKey,
-			&agent.CertificateURL,
-			&agent.RepositoryURL,
-			&agent.DocumentationURL,
+			&publicKey,
+			&certificateURL,
+			&repositoryURL,
+			&documentationURL,
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
@@ -390,6 +458,20 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		// Convert nullable fields
+		if publicKey.Valid {
+			agent.PublicKey = &publicKey.String
+		}
+		if certificateURL.Valid {
+			agent.CertificateURL = certificateURL.String
+		}
+		if repositoryURL.Valid {
+			agent.RepositoryURL = repositoryURL.String
+		}
+		if documentationURL.Valid {
+			agent.DocumentationURL = documentationURL.String
 		}
 
 		// Unmarshal talks_to from JSONB

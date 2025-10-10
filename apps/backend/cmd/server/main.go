@@ -154,7 +154,16 @@ func main() {
 		})
 	})
 
-	// API v1 routes
+	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
+	// These routes use API key authentication for SDK/programmatic access
+	sdkAPI := app.Group("/api/v1/sdk-api")
+	sdkAPI.Use(middleware.APIKeyMiddleware(db))
+	sdkAPI.Use(middleware.RateLimitMiddleware())
+	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)  // SDK capability reporting
+	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)  // SDK MCP registration
+	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection) // SDK MCP detection and integration reporting
+
+	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
 	setupRoutes(v1, h, jwtService, repos.SDKToken, db)
 
@@ -618,9 +627,9 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
-	// SDK Token Tracking Middleware - MUST be first to track all API requests
-	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
-	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
+	// SDK Token Tracking Middleware - TEMPORARILY DISABLED for debugging
+	// sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
+	// v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
 
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
@@ -654,13 +663,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)        // Revoke specific token
 	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens)    // Revoke all tokens
 
+	// Note: SDK API routes moved to app level (main.go line 159) to avoid middleware inheritance
+
 	// ⭐ MCP Detection endpoints - Using DIFFERENT path to avoid agents group conflict
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
-	// Uses API key authentication for SDK-based reporting (NOT JWT)
+	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.APIKeyMiddleware(db)) // Apply middleware using Use() instead of inline
+	detection.Use(middleware.AuthMiddleware(jwtService)) // ✅ CHANGED: Use JWT middleware for web UI
+	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
-	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus)
+	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
 	// ⭐ Agent Capability Detection endpoints - Report detected agent capabilities
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 

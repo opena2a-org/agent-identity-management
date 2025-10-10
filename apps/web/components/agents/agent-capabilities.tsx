@@ -29,6 +29,7 @@ import { api } from '@/lib/api'
 
 interface AgentCapabilitiesProps {
   agentId: string
+  agentCapabilities?: string[]  // Basic capability tags from agent
 }
 
 interface ProgrammingEnvironment {
@@ -130,8 +131,9 @@ interface AgentCapabilityReport {
   riskAssessment: RiskAssessment
 }
 
-export function AgentCapabilities({ agentId }: AgentCapabilitiesProps) {
+export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilitiesProps) {
   const [capabilityReport, setCapabilityReport] = useState<AgentCapabilityReport | null>(null)
+  const [fetchedCapabilities, setFetchedCapabilities] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -141,8 +143,18 @@ export function AgentCapabilities({ agentId }: AgentCapabilitiesProps) {
       setError(null)
 
       try {
-        // TODO: Implement API call to fetch latest capability report
-        // For now, show placeholder message
+        // Fetch capabilities from backend API using the correct method
+        const capabilities = await api.getAgentCapabilities(agentId, false)
+
+        console.log('Agent capabilities:', capabilities)
+
+        // Extract capability types from the response
+        if (Array.isArray(capabilities)) {
+          const capabilityTypes = capabilities.map((cap: any) => cap.capabilityType)
+          setFetchedCapabilities(capabilityTypes)
+        }
+
+        // Set to null for now to show basic capabilities view
         setCapabilityReport(null)
       } catch (err: any) {
         console.error('Failed to fetch capabilities:', err)
@@ -201,16 +213,51 @@ export function AgentCapabilities({ agentId }: AgentCapabilitiesProps) {
     )
   }
 
-  // No capability report state
+  // No capability report state - but show basic capabilities if available
   if (!capabilityReport) {
+    // Merge provided capabilities with fetched capabilities
+    const allCapabilities = [...(agentCapabilities || []), ...fetchedCapabilities]
+    const uniqueCapabilities = Array.from(new Set(allCapabilities))
+
     return (
       <div className="space-y-4">
+        {/* Show basic capabilities if available */}
+        {uniqueCapabilities.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Detected Capabilities</CardTitle>
+              <CardDescription>
+                Basic capabilities detected by the AIM SDK. For detailed capability analysis, ensure
+                the agent is using the latest SDK version with full capability detection enabled.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {uniqueCapabilities.map((capability, idx) => (
+                  <Badge
+                    key={idx}
+                    variant="secondary"
+                    className="px-3 py-1 text-sm font-medium"
+                  >
+                    {capability.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Alert>
           <Brain className="h-4 w-4" />
-          <AlertTitle>No Capability Report Available</AlertTitle>
+          <AlertTitle>
+            {uniqueCapabilities.length > 0
+              ? 'Full Capability Report Not Available'
+              : 'No Capabilities Detected'}
+          </AlertTitle>
           <AlertDescription>
-            This agent hasn't reported its capabilities yet. Install the AIM SDK in your agent
-            application to enable automatic capability detection and risk assessment.
+            {uniqueCapabilities.length > 0
+              ? 'Basic capabilities have been detected, but a full capability report with risk assessment is not yet available. Install the latest AIM SDK to enable detailed capability detection.'
+              : 'This agent hasn\'t reported its capabilities yet. Install the AIM SDK in your agent application to enable automatic capability detection and risk assessment.'}
           </AlertDescription>
         </Alert>
 

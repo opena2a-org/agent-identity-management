@@ -6,6 +6,7 @@ import {
   decodePublicKey,
   encodePrivateKey,
   decodePrivateKey,
+  KeyPair,
 } from '../signing';
 
 describe('Ed25519 Signing', () => {
@@ -186,6 +187,217 @@ describe('Ed25519 Signing', () => {
       expect(valid).toBe(true);
       expect(decodedPrivateKey).toEqual(privateKey);
       expect(decodedPublicKey).toEqual(publicKey);
+    });
+  });
+
+  describe('KeyPair class (OOP approach)', () => {
+    describe('KeyPair.generate()', () => {
+      it('should generate a valid keypair', () => {
+        const keyPair = KeyPair.generate();
+
+        expect(keyPair).toBeDefined();
+        expect(keyPair.publicKey).toHaveLength(32);
+        expect(keyPair.privateKey).toHaveLength(64);
+      });
+
+      it('should generate different keypairs each time', () => {
+        const keyPair1 = KeyPair.generate();
+        const keyPair2 = KeyPair.generate();
+
+        expect(keyPair1.publicKey).not.toEqual(keyPair2.publicKey);
+        expect(keyPair1.privateKey).not.toEqual(keyPair2.privateKey);
+      });
+    });
+
+    describe('KeyPair.sign() and KeyPair.verify()', () => {
+      it('should sign and verify messages correctly', () => {
+        const keyPair = KeyPair.generate();
+        const message = 'test message for signing';
+
+        const signature = keyPair.sign(message);
+        expect(signature).toBeDefined();
+        expect(signature.length).toBeGreaterThan(0);
+
+        const valid = keyPair.verify(message, signature);
+        expect(valid).toBe(true);
+      });
+
+      it('should produce deterministic signatures', () => {
+        const keyPair = KeyPair.generate();
+        const message = 'test message';
+
+        const sig1 = keyPair.sign(message);
+        const sig2 = keyPair.sign(message);
+
+        expect(sig1).toBe(sig2);
+      });
+
+      it('should reject invalid signatures', () => {
+        const keyPair = KeyPair.generate();
+        const message = 'test message';
+        const invalidSignature = 'invalid_signature_base64';
+
+        const valid = keyPair.verify(message, invalidSignature);
+        expect(valid).toBe(false);
+      });
+
+      it('should reject signatures for different messages', () => {
+        const keyPair = KeyPair.generate();
+        const signature = keyPair.sign('original message');
+
+        const valid = keyPair.verify('different message', signature);
+        expect(valid).toBe(false);
+      });
+    });
+
+    describe('KeyPair.fromBase64()', () => {
+      it('should import keypair from base64 private key', () => {
+        const original = KeyPair.generate();
+        const privateKeyB64 = original.privateKeyBase64();
+
+        const imported = KeyPair.fromBase64(privateKeyB64);
+
+        expect(imported.publicKeyBase64()).toBe(original.publicKeyBase64());
+        expect(imported.privateKeyBase64()).toBe(original.privateKeyBase64());
+      });
+
+      it('should produce identical signatures after import', () => {
+        const original = KeyPair.generate();
+        const imported = KeyPair.fromBase64(original.privateKeyBase64());
+
+        const message = 'test message';
+        const sig1 = original.sign(message);
+        const sig2 = imported.sign(message);
+
+        expect(sig1).toBe(sig2);
+      });
+    });
+
+    describe('KeyPair.fromPrivateKey()', () => {
+      it('should create keypair from 32-byte seed', () => {
+        const original = KeyPair.generate();
+        const seed = original.privateKey.slice(0, 32);
+
+        const keyPair = KeyPair.fromPrivateKey(seed);
+
+        expect(keyPair.publicKeyBase64()).toBe(original.publicKeyBase64());
+      });
+
+      it('should create keypair from 64-byte private key', () => {
+        const original = KeyPair.generate();
+
+        const keyPair = KeyPair.fromPrivateKey(original.privateKey);
+
+        expect(keyPair.publicKeyBase64()).toBe(original.publicKeyBase64());
+        expect(keyPair.privateKeyBase64()).toBe(original.privateKeyBase64());
+      });
+
+      it('should throw error for invalid key length', () => {
+        const invalidKey = new Uint8Array(30);
+
+        expect(() => {
+          KeyPair.fromPrivateKey(invalidKey);
+        }).toThrow('Invalid private key length');
+      });
+    });
+
+    describe('KeyPair.signPayload()', () => {
+      it('should sign JSON payloads', () => {
+        const keyPair = KeyPair.generate();
+        const payload = {
+          name: 'test-agent',
+          type: 'ai_agent',
+          public_key: keyPair.publicKeyBase64(),
+        };
+
+        const signature = keyPair.signPayload(payload);
+
+        expect(signature).toBeDefined();
+        expect(signature.length).toBeGreaterThan(0);
+      });
+
+      it('should produce deterministic signatures for same payload', () => {
+        const keyPair = KeyPair.generate();
+        const payload = { name: 'test', value: 123 };
+
+        const sig1 = keyPair.signPayload(payload);
+        const sig2 = keyPair.signPayload(payload);
+
+        expect(sig1).toBe(sig2);
+      });
+
+      it('should produce same signature as signRequest()', () => {
+        const keyPair = KeyPair.generate();
+        const payload = { test: 'data' };
+
+        const classSig = keyPair.signPayload(payload);
+        const funcSig = signRequest(keyPair.privateKey, payload);
+
+        expect(classSig).toBe(funcSig);
+      });
+    });
+
+    describe('Key encoding methods', () => {
+      it('should encode public key to base64', () => {
+        const keyPair = KeyPair.generate();
+        const publicKeyB64 = keyPair.publicKeyBase64();
+
+        expect(publicKeyB64).toBeDefined();
+        expect(typeof publicKeyB64).toBe('string');
+
+        const decoded = decodePublicKey(publicKeyB64);
+        expect(decoded).toEqual(keyPair.publicKey);
+      });
+
+      it('should encode private key to base64', () => {
+        const keyPair = KeyPair.generate();
+        const privateKeyB64 = keyPair.privateKeyBase64();
+
+        expect(privateKeyB64).toBeDefined();
+        expect(typeof privateKeyB64).toBe('string');
+
+        const decoded = decodePrivateKey(privateKeyB64);
+        expect(decoded).toEqual(keyPair.privateKey);
+      });
+
+      it('should encode 32-byte seed to base64', () => {
+        const keyPair = KeyPair.generate();
+        const seedB64 = keyPair.seedBase64();
+
+        expect(seedB64).toBeDefined();
+
+        const seed = Buffer.from(seedB64, 'base64');
+        expect(seed.length).toBe(32);
+      });
+    });
+
+    describe('Client integration workflow', () => {
+      it('should complete full client signing workflow', () => {
+        // Generate keypair
+        const keyPair = KeyPair.generate();
+
+        // Sign a message
+        const message = 'important client message';
+        const signature = keyPair.sign(message);
+
+        // Verify signature
+        const valid = keyPair.verify(message, signature);
+        expect(valid).toBe(true);
+
+        // Export for storage
+        const privateKeyB64 = keyPair.privateKeyBase64();
+        const publicKeyB64 = keyPair.publicKeyBase64();
+
+        // Reload from storage
+        const reloaded = KeyPair.fromBase64(privateKeyB64);
+
+        // Verify keys match
+        expect(reloaded.publicKeyBase64()).toBe(publicKeyB64);
+
+        // Verify signatures match
+        const signature2 = reloaded.sign(message);
+        expect(signature2).toBe(signature);
+      });
     });
   });
 });

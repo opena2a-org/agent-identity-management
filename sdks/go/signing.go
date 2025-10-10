@@ -1,137 +1,214 @@
 package aimsdk
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"net/http"
+	"time"
 )
 
-// GenerateEd25519Keypair generates a new Ed25519 keypair
-// Returns private key (64 bytes) and public key (32 bytes)
-func GenerateEd25519Keypair() (privateKey ed25519.PrivateKey, publicKey ed25519.PublicKey, err error) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate Ed25519 keypair: %w", err)
-	}
-
-	return priv, pub, nil
+// KeyPair represents an Ed25519 public/private key pair
+type KeyPair struct {
+	PublicKey  ed25519.PublicKey
+	PrivateKey ed25519.PrivateKey
 }
 
-// SignRequest signs request data using Ed25519 private key
-// The data is marshaled to JSON with sorted keys for consistency
-// Returns base64-encoded signature
-func SignRequest(privateKey ed25519.PrivateKey, data interface{}) (string, error) {
-	// Marshal data to JSON with sorted keys for consistency
-	jsonData, err := marshalJSONSorted(data)
+// GenerateKeyPair generates a new Ed25519 keypair
+func GenerateKeyPair() (*KeyPair, error) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal data: %w", err)
+		return nil, fmt.Errorf("failed to generate keypair: %w", err)
 	}
 
-	// Sign the JSON payload
-	signature := ed25519.Sign(privateKey, jsonData)
+	return &KeyPair{
+		PublicKey:  publicKey,
+		PrivateKey: privateKey,
+	}, nil
+}
 
-	// Return base64-encoded signature
+// NewKeyPairFromPrivateKey creates a KeyPair from an existing private key.
+// Supports both 32-byte seed format and 64-byte (seed+public) format for compatibility.
+func NewKeyPairFromPrivateKey(privateKeyBytes []byte) (*KeyPair, error) {
+	var privateKey ed25519.PrivateKey
+	var publicKey ed25519.PublicKey
+
+	switch len(privateKeyBytes) {
+	case ed25519.SeedSize: // 32 bytes - seed only
+		privateKey = ed25519.NewKeyFromSeed(privateKeyBytes)
+		publicKey = privateKey.Public().(ed25519.PublicKey)
+
+	case ed25519.PrivateKeySize: // 64 bytes - seed + public key
+		privateKey = ed25519.PrivateKey(privateKeyBytes)
+		publicKey = privateKey.Public().(ed25519.PublicKey)
+
+	default:
+		return nil, fmt.Errorf("invalid private key length: expected 32 or 64 bytes, got %d", len(privateKeyBytes))
+	}
+
+	return &KeyPair{
+		PublicKey:  publicKey,
+		PrivateKey: privateKey,
+	}, nil
+}
+
+// NewKeyPairFromBase64 creates a KeyPair from base64-encoded private key string.
+// Supports both 32-byte and 64-byte private key formats.
+func NewKeyPairFromBase64(privateKeyBase64 string) (*KeyPair, error) {
+	privateKeyBytes, err := base64.StdEncoding.DecodeString(privateKeyBase64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 private key: %w", err)
+	}
+
+	return NewKeyPairFromPrivateKey(privateKeyBytes)
+}
+
+// Sign signs a message with the private key and returns base64-encoded signature
+func (kp *KeyPair) Sign(message string) (string, error) {
+	if kp.PrivateKey == nil {
+		return "", fmt.Errorf("private key is nil")
+	}
+
+	messageBytes := []byte(message)
+	signature := ed25519.Sign(kp.PrivateKey, messageBytes)
+
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
-// VerifySignature verifies Ed25519 signature
-// Used for testing and validation
-func VerifySignature(publicKey ed25519.PublicKey, data interface{}, signatureB64 string) bool {
-	// Marshal data to JSON with sorted keys
-	jsonData, err := marshalJSONSorted(data)
+// Verify verifies a signature against a message using the public key
+func (kp *KeyPair) Verify(message string, signatureBase64 string) (bool, error) {
+	if kp.PublicKey == nil {
+		return false, fmt.Errorf("public key is nil")
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(signatureBase64)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to decode signature: %w", err)
 	}
 
-	// Decode base64 signature
-	signature, err := base64.StdEncoding.DecodeString(signatureB64)
+	messageBytes := []byte(message)
+	return ed25519.Verify(kp.PublicKey, messageBytes, signature), nil
+}
+
+// PublicKeyBase64 returns the public key as base64-encoded string
+func (kp *KeyPair) PublicKeyBase64() string {
+	return base64.StdEncoding.EncodeToString(kp.PublicKey)
+}
+
+// PrivateKeyBase64 returns the private key as base64-encoded string
+func (kp *KeyPair) PrivateKeyBase64() string {
+	return base64.StdEncoding.EncodeToString(kp.PrivateKey)
+}
+
+// SeedBase64 returns only the 32-byte seed portion of the private key as base64
+func (kp *KeyPair) SeedBase64() string {
+	seed := kp.PrivateKey.Seed()
+	return base64.StdEncoding.EncodeToString(seed)
+}
+
+// SignPayload signs a JSON payload and returns base64-encoded signature
+// This is used for signing registration and verification requests
+func (kp *KeyPair) SignPayload(payload map[string]interface{}) (string, error) {
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return false
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Verify signature
-	return ed25519.Verify(publicKey, jsonData, signature)
+	return kp.Sign(string(payloadJSON))
 }
 
-// marshalJSONSorted marshals data to JSON with sorted keys for deterministic output
-func marshalJSONSorted(data interface{}) ([]byte, error) {
-	// First marshal to get a map
-	tempJSON, err := json.Marshal(data)
+// VerificationResult represents the result of an action verification request
+type VerificationResult struct {
+	Success        bool                   `json:"success"`
+	Verified       bool                   `json:"verified"`
+	Message        string                 `json:"message"`
+	TrustScore     float64                `json:"trust_score"`
+	VerificationID string                 `json:"verification_id"`
+	Details        map[string]interface{} `json:"details,omitempty"`
+}
+
+// SignMessage is a convenience method that signs a message using the client's keypair
+func (c *Client) SignMessage(message string) (string, error) {
+	if c.keyPair == nil {
+		return "", fmt.Errorf("client has no keypair configured")
+	}
+
+	return c.keyPair.Sign(message)
+}
+
+// VerifyAction sends a verification request to the AIM backend
+// This allows the agent to verify an action before executing it
+func (c *Client) VerifyAction(ctx context.Context, actionType string, resource string, context map[string]interface{}) (*VerificationResult, error) {
+	if c.keyPair == nil {
+		return nil, fmt.Errorf("client has no keypair configured")
+	}
+
+	// Create verification payload
+	payload := map[string]interface{}{
+		"action_type": actionType,
+		"resource":    resource,
+		"context":     context,
+		"timestamp":   fmt.Sprintf("%d", nowUnixMillis()),
+	}
+
+	// Sign the payload
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Unmarshal to generic map
-	var m map[string]interface{}
-	if err := json.Unmarshal(tempJSON, &m); err != nil {
-		// If it's not a map, just return the original marshaled data
-		return tempJSON, nil
-	}
-
-	// Marshal again with sorted keys
-	return json.Marshal(sortedMap(m))
-}
-
-// sortedMap recursively sorts map keys
-func sortedMap(m map[string]interface{}) map[string]interface{} {
-	// Get sorted keys
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Create new map with sorted keys
-	result := make(map[string]interface{})
-	for _, k := range keys {
-		v := m[k]
-		// Recursively sort nested maps
-		if nestedMap, ok := v.(map[string]interface{}); ok {
-			result[k] = sortedMap(nestedMap)
-		} else {
-			result[k] = v
-		}
-	}
-
-	return result
-}
-
-// EncodePublicKey encodes a public key to base64
-func EncodePublicKey(publicKey ed25519.PublicKey) string {
-	return base64.StdEncoding.EncodeToString(publicKey)
-}
-
-// DecodePublicKey decodes a base64-encoded public key
-func DecodePublicKey(publicKeyB64 string) (ed25519.PublicKey, error) {
-	publicKey, err := base64.StdEncoding.DecodeString(publicKeyB64)
+	signature, err := c.keyPair.Sign(string(payloadJSON))
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode public key: %w", err)
+		return nil, fmt.Errorf("failed to sign payload: %w", err)
 	}
 
-	if len(publicKey) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid public key size: expected %d, got %d", ed25519.PublicKeySize, len(publicKey))
+	// Prepare request body
+	reqBody := map[string]interface{}{
+		"action_type": actionType,
+		"resource":    resource,
+		"context":     context,
+		"signature":   signature,
+		"public_key":  c.keyPair.PublicKeyBase64(),
 	}
 
-	return ed25519.PublicKey(publicKey), nil
-}
-
-// EncodePrivateKey encodes a private key to base64
-func EncodePrivateKey(privateKey ed25519.PrivateKey) string {
-	return base64.StdEncoding.EncodeToString(privateKey)
-}
-
-// DecodePrivateKey decodes a base64-encoded private key
-func DecodePrivateKey(privateKeyB64 string) (ed25519.PrivateKey, error) {
-	privateKey, err := base64.StdEncoding.DecodeString(privateKeyB64)
+	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode private key: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	if len(privateKey) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("invalid private key size: expected %d, got %d", ed25519.PrivateKeySize, len(privateKey))
+	// Send verification request
+	url := fmt.Sprintf("%s/api/v1/agents/%s/verify", c.config.APIURL, c.config.AgentID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	return ed25519.PrivateKey(privateKey), nil
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.config.APIKey))
+
+	resp, err := c.reporter.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("verification request failed with status: %d", resp.StatusCode)
+	}
+
+	var result VerificationResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// nowUnixMillis returns current Unix timestamp in milliseconds
+func nowUnixMillis() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
 }

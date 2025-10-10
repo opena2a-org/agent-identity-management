@@ -21,28 +21,20 @@ export default function SDKDownloadPage() {
       setSuccess(false)
       setSelectedSDK(sdk)
 
-      if (sdk === 'python') {
-        // Use API client with automatic token refresh on 401
-        const blob = await api.downloadSDK()
+      // Use API client with automatic token refresh on 401
+      const blob = await api.downloadSDK(sdk)
 
-        // Create blob and trigger download
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'aim-sdk-python.zip'
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
+      // Create blob and trigger download
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aim-sdk-${sdk}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
 
-        setSuccess(true)
-      } else {
-        // For Go and JavaScript, download from GitHub releases
-        const repoUrl = 'https://github.com/opena2a-org/agent-identity-management'
-        const sdkPath = sdk === 'go' ? 'sdks/go' : 'sdks/javascript'
-        window.open(`${repoUrl}/tree/main/${sdkPath}`, '_blank')
-        setSuccess(true)
-      }
+      setSuccess(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to download SDK')
     } finally {
@@ -157,7 +149,7 @@ export default function SDKDownloadPage() {
               className="w-full bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 disabled:bg-cyan-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'go' ? 'Opening...' : 'View on GitHub →'}
+              {downloading && selectedSDK === 'go' ? 'Downloading...' : 'Download SDK'}
             </button>
           </div>
 
@@ -207,7 +199,7 @@ export default function SDKDownloadPage() {
               className="w-full bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'javascript' ? 'Opening...' : 'View on GitHub →'}
+              {downloading && selectedSDK === 'javascript' ? 'Downloading...' : 'Download SDK'}
             </button>
           </div>
 

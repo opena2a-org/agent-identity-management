@@ -91,7 +91,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		CertificateURL:      req.CertificateURL,
 		RepositoryURL:       req.RepositoryURL,
 		DocumentationURL:    req.DocumentationURL,
-		TalksTo:             req.TalksTo, // MCP servers this agent communicates with
+		TalksTo:             req.TalksTo,       // MCP servers this agent communicates with
+		Capabilities:        req.Capabilities,  // ✅ Store detected capabilities from SDK
 		Status:              domain.AgentStatusPending,
 		CreatedBy:           userID,
 	}
@@ -115,7 +116,59 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
+	// ✅ AUTO-VERIFICATION: Automatically verify agent if it meets basic criteria
+	// This eliminates manual verification step for legitimate agents
+	shouldAutoVerify := s.shouldAutoVerifyAgent(agent)
+	if shouldAutoVerify {
+		now := time.Now()
+		agent.Status = domain.AgentStatusVerified
+		agent.VerifiedAt = &now
+
+		if err := s.agentRepo.Update(agent); err != nil {
+			fmt.Printf("Warning: failed to auto-verify agent: %v\n", err)
+		} else {
+			fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
+		}
+
+		// Recalculate trust score with verified status (verification boosts score)
+		updatedTrustScore, err := s.trustCalc.Calculate(agent)
+		if err == nil {
+			agent.TrustScore = updatedTrustScore.Score
+			s.agentRepo.Update(agent)
+			s.trustScoreRepo.Create(updatedTrustScore)
+			fmt.Printf("✅ Updated trust score after verification: %.2f\n", agent.TrustScore)
+		}
+	}
+
 	return agent, nil
+}
+
+// shouldAutoVerifyAgent determines if an agent meets criteria for automatic verification
+// Auto-verification criteria:
+// 1. Has valid cryptographic keys (public + encrypted private key)
+// 2. Trust score >= 0.3 (30% minimum threshold)
+// 3. Has required metadata (name, description, type)
+func (s *AgentService) shouldAutoVerifyAgent(agent *domain.Agent) bool {
+	// ✅ Check 1: Must have cryptographic keys
+	if agent.PublicKey == nil || agent.EncryptedPrivateKey == nil {
+		fmt.Printf("⚠️  Agent %s cannot be auto-verified: missing cryptographic keys\n", agent.Name)
+		return false
+	}
+
+	// ✅ Check 2: Trust score must be >= 0.3 (30%)
+	if agent.TrustScore < 0.3 {
+		fmt.Printf("⚠️  Agent %s cannot be auto-verified: trust score too low (%.2f < 0.3)\n", agent.Name, agent.TrustScore)
+		return false
+	}
+
+	// ✅ Check 3: Must have required metadata
+	if agent.Name == "" || agent.DisplayName == "" || agent.Description == "" {
+		fmt.Printf("⚠️  Agent %s cannot be auto-verified: missing required metadata\n", agent.Name)
+		return false
+	}
+
+	// ✅ All checks passed - agent qualifies for auto-verification
+	return true
 }
 
 // GetAgent retrieves an agent by ID

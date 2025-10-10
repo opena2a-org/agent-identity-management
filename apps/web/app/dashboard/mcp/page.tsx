@@ -419,12 +419,12 @@ export default function MCPServersPage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className={`text-sm font-semibold ${
-                      (server.trust_score || 0) >= 80 ? 'text-green-600 dark:text-green-400' :
-                      (server.trust_score || 0) >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                      (server.trust_score || 0) >= 40 ? 'text-orange-600 dark:text-orange-400' :
+                      ((server.trust_score || 0) * 100) >= 80 ? 'text-green-600 dark:text-green-400' :
+                      ((server.trust_score || 0) * 100) >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
+                      ((server.trust_score || 0) * 100) >= 40 ? 'text-orange-600 dark:text-orange-400' :
                       'text-red-600 dark:text-red-400'
                     }`}>
-                      {(server.trust_score || 0).toFixed(1)}
+                      {((server.trust_score || 0) * 100).toFixed(1)}%
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

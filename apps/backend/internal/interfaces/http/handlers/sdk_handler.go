@@ -42,15 +42,33 @@ type SDKCredentials struct {
 
 // DownloadSDK generates a pre-configured SDK with embedded credentials
 // @Summary Download pre-configured SDK
-// @Description Downloads Python SDK with embedded OAuth credentials for zero-config usage
+// @Description Downloads SDK (Python, Go, or JavaScript) with embedded OAuth credentials for zero-config usage
 // @Tags sdk
 // @Produce application/zip
+// @Param sdk query string false "SDK type (python, go, javascript)" default(python)
 // @Success 200 {file} binary "SDK zip file"
+// @Failure 400 {object} ErrorResponse "Invalid SDK type"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/sdk/download [get]
 // @Security BearerAuth
 func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
+	// Get SDK type from query parameter (default to python for backward compatibility)
+	sdkType := c.Query("sdk", "python")
+
+	// Validate SDK type
+	validSDKs := map[string]bool{
+		"python":     true,
+		"go":         true,
+		"javascript": true,
+	}
+
+	if !validSDKs[sdkType] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": fmt.Sprintf("Invalid SDK type '%s'. Supported: python, go, javascript", sdkType),
+		})
+	}
+
 	// Get authenticated user from context (set by AuthMiddleware)
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
@@ -106,8 +124,9 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
 
-	// Parse User-Agent into friendly device name
-	deviceName := h.parseDeviceName(userAgent)
+	// Parse User-Agent into friendly device name with SDK type
+	baseDeviceName := h.parseDeviceName(userAgent)
+	deviceName := fmt.Sprintf("%s SDK (%s)", getSDKDisplayName(sdkType), baseDeviceName)
 	deviceFingerprint := h.generateDeviceFingerprint(userAgent, ipAddress)
 
 	// Track SDK token in database for security (revocation, monitoring)
@@ -150,7 +169,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Generate SDK zip with embedded credentials
-	zipData, err := h.createSDKZip(credentials)
+	zipData, err := h.createSDKZip(credentials, sdkType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create SDK package: %v", err),
@@ -158,21 +177,23 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Set response headers for file download
+	filename := fmt.Sprintf("aim-sdk-%s.zip", sdkType)
 	c.Set("Content-Type", "application/zip")
-	c.Set("Content-Disposition", "attachment; filename=aim-sdk-python.zip")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Set("Content-Length", fmt.Sprintf("%d", len(zipData)))
 
 	return c.Send(zipData)
 }
 
 // createSDKZip creates a zip file with SDK and embedded credentials
-func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
+func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([]byte, error) {
 	// Create in-memory zip buffer
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
 
-	// Get SDK root directory (relative to backend)
-	sdkRoot := "../../sdks/python"
+	// Get SDK root directory based on type
+	sdkRoot := fmt.Sprintf("../../sdks/%s", sdkType)
+	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)
 
 	// Add SDK files to zip
 	err := filepath.Walk(sdkRoot, func(path string, info os.FileInfo, err error) error {
@@ -183,18 +204,29 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
 		// Skip certain directories and files
 		if info.IsDir() {
 			dirName := filepath.Base(path)
-			if dirName == "__pycache__" || dirName == ".pytest_cache" ||
-			   dirName == "*.egg-info" || dirName == ".git" {
-				return filepath.SkipDir
+			skipDirs := []string{
+				"__pycache__", ".pytest_cache", "*.egg-info", ".git",
+				"node_modules", ".next", "dist", "build", "target",
+				".idea", ".vscode",
+			}
+			for _, skip := range skipDirs {
+				if dirName == skip {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}
 
-		// Skip test files and compiled files
+		// Skip test files, compiled files, and build artifacts
 		fileName := filepath.Base(path)
-		if filepath.Ext(fileName) == ".pyc" ||
-		   filepath.Ext(fileName) == ".pyo" ||
-		   fileName == ".DS_Store" {
+		ext := filepath.Ext(fileName)
+		skipExts := []string{".pyc", ".pyo", ".so", ".dylib", ".exe", ".o"}
+		for _, skipExt := range skipExts {
+			if ext == skipExt {
+				return nil
+			}
+		}
+		if fileName == ".DS_Store" || fileName == "Thumbs.db" {
 			return nil
 		}
 
@@ -204,8 +236,8 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
 			return err
 		}
 
-		// Create zip entry
-		zipFile, err := zipWriter.Create(filepath.Join("aim-sdk-python", relPath))
+		// Create zip entry with SDK-specific prefix
+		zipFile, err := zipWriter.Create(filepath.Join(zipPrefix, relPath))
 		if err != nil {
 			return err
 		}
@@ -230,8 +262,9 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	// Add credentials file to zip
-	credFile, err := zipWriter.Create("aim-sdk-python/.aim/credentials.json")
+	// Add credentials file to zip (in .aim directory)
+	credPath := filepath.Join(zipPrefix, ".aim", "credentials.json")
+	credFile, err := zipWriter.Create(credPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create credentials file: %w", err)
 	}
@@ -241,60 +274,11 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials) ([]byte, error) {
 		return nil, fmt.Errorf("failed to write credentials: %w", err)
 	}
 
-	// Add README with setup instructions
-	setupInstructions := `# AIM SDK - Quick Start
+	// Add README with SDK-specific setup instructions
+	setupInstructions := h.generateSetupInstructions(sdkType, zipPrefix)
 
-This SDK is pre-configured with your credentials!
-
-## Installation
-
-1. Unzip this file:
-   ` + "```bash\n   unzip aim-sdk-python.zip\n   cd aim-sdk-python\n   ```" + `
-
-2. Install the SDK:
-   ` + "```bash\n   pip install -e .\n   ```" + `
-
-## Usage
-
-The SDK is already configured with your identity. Just use it!
-
-` + "```python\n" +
-		`from aim_sdk import register_agent
-
-# Zero configuration needed! Your credentials are embedded.
-agent = register_agent(
-    name="my-awesome-agent",
-    display_name="My Awesome Agent",
-    description="An agent that does amazing things",
-    agent_type="ai_agent"
-)
-
-print(f"Agent registered! ID: {agent.agent_id}")
-print(f"Your agent is visible at: {agent.aim_url}/dashboard/agents")
-` + "```" + `
-
-## Automatic Authentication
-
-Your SDK contains embedded OAuth credentials that automatically:
-- ✅ Authenticate your agent registrations
-- ✅ Link agents to your user account
-- ✅ Refresh tokens when they expire
-- ✅ Work for 90 days without re-authentication
-
-## Security
-
-Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
-
-⚠️ **Important Security Notes:**
-- Credentials are valid for 90 days
-- Never commit credentials to Git
-- Revoke tokens from dashboard if compromised
-- Tokens can be revoked at any time from your dashboard
-
-For more examples, see the included test files.
-`
-
-	readmeFile, err := zipWriter.Create("aim-sdk-python/QUICKSTART.md")
+	readmePath := filepath.Join(zipPrefix, "QUICKSTART.md")
+	readmeFile, err := zipWriter.Create(readmePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create README: %w", err)
 	}
@@ -386,4 +370,242 @@ func stringContainsUA(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// getSDKDisplayName converts SDK type to capitalized display name
+func getSDKDisplayName(sdkType string) string {
+	switch sdkType {
+	case "python":
+		return "Python"
+	case "go":
+		return "Go"
+	case "javascript":
+		return "JavaScript"
+	default:
+		return sdkType
+	}
+}
+
+// generateSetupInstructions creates SDK-specific setup instructions
+func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix string) string {
+	switch sdkType {
+	case "python":
+		return h.generatePythonInstructions(zipPrefix)
+	case "go":
+		return h.generateGoInstructions(zipPrefix)
+	case "javascript":
+		return h.generateJavaScriptInstructions(zipPrefix)
+	default:
+		return "# AIM SDK\n\nPlease refer to the SDK documentation for usage instructions."
+	}
+}
+
+// generatePythonInstructions creates Python-specific setup instructions
+func (h *SDKHandler) generatePythonInstructions(zipPrefix string) string {
+	return `# AIM Python SDK - Quick Start
+
+This SDK is pre-configured with your credentials!
+
+## Installation
+
+1. Unzip this file:
+   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
+
+2. Install the SDK:
+   ` + "```bash\n   pip install -e .\n   ```" + `
+
+## Usage
+
+The SDK is already configured with your identity. Just use it!
+
+` + "```python\n" +
+		`from aim_sdk import AIMClient
+
+# Zero configuration needed! Your credentials are embedded.
+client = AIMClient()
+
+# Register an agent
+agent = client.register_agent(
+    name="my-awesome-agent",
+    agent_type="ai_agent",
+    description="An agent that does amazing things"
+)
+
+print(f"Agent registered! ID: {agent['id']}")
+print(f"Trust Score: {agent.get('trust_score', 'N/A')}")
+` + "```" + `
+
+## Automatic Authentication
+
+Your SDK contains embedded OAuth credentials that automatically:
+- ✅ Authenticate your agent registrations
+- ✅ Link agents to your user account
+- ✅ Refresh tokens when they expire
+- ✅ Work for 90 days without re-authentication
+
+## Security
+
+Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+
+⚠️ **Important Security Notes:**
+- Credentials are valid for 90 days
+- Never commit credentials to Git
+- Revoke tokens from dashboard if compromised
+- Tokens can be revoked at any time from your dashboard
+
+For more examples, see the included test files.
+`
+}
+
+// generateGoInstructions creates Go-specific setup instructions
+func (h *SDKHandler) generateGoInstructions(zipPrefix string) string {
+	return `# AIM Go SDK - Quick Start
+
+This SDK is pre-configured with your credentials!
+
+## Installation
+
+1. Unzip this file:
+   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
+
+2. Initialize Go module (if needed):
+   ` + "```bash\n   go mod init your-project\n   go mod tidy\n   ```" + `
+
+## Usage
+
+The SDK is already configured with your identity. Just use it!
+
+` + "```go\n" +
+		`package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/opena2a/aim-sdk-go/client"
+)
+
+func main() {
+    // Zero configuration needed! Your credentials are embedded.
+    c, err := client.NewClient()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Register an agent
+    agent, err := c.RegisterAgent(&client.RegisterAgentRequest{
+        Name:        "my-awesome-agent",
+        AgentType:   "ai_agent",
+        Description: "An agent that does amazing things",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Agent registered! ID: %s\n", agent.ID)
+    fmt.Printf("Trust Score: %.2f\n", agent.TrustScore)
+}
+` + "```" + `
+
+## Automatic Authentication
+
+Your SDK contains embedded OAuth credentials that automatically:
+- ✅ Authenticate your agent registrations
+- ✅ Link agents to your user account
+- ✅ Refresh tokens when they expire
+- ✅ Work for 90 days without re-authentication
+
+## Security
+
+Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+
+⚠️ **Important Security Notes:**
+- Credentials are valid for 90 days
+- Never commit credentials to Git
+- Revoke tokens from dashboard if compromised
+- Tokens can be revoked at any time from your dashboard
+
+For more examples, see the included test files.
+`
+}
+
+// generateJavaScriptInstructions creates JavaScript-specific setup instructions
+func (h *SDKHandler) generateJavaScriptInstructions(zipPrefix string) string {
+	return `# AIM JavaScript SDK - Quick Start
+
+This SDK is pre-configured with your credentials!
+
+## Installation
+
+1. Unzip this file:
+   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
+
+2. Install dependencies:
+   ` + "```bash\n   npm install\n   # or\n   yarn install\n   ```" + `
+
+## Usage
+
+The SDK is already configured with your identity. Just use it!
+
+` + "```javascript\n" +
+		`const { AIMClient } = require('@opena2a/aim-sdk');
+
+async function main() {
+  // Zero configuration needed! Your credentials are embedded.
+  const client = new AIMClient();
+
+  // Register an agent
+  const agent = await client.registerAgent({
+    name: 'my-awesome-agent',
+    agentType: 'ai_agent',
+    description: 'An agent that does amazing things'
+  });
+
+  console.log('Agent registered! ID:', agent.id);
+  console.log('Trust Score:', agent.trustScore);
+}
+
+main().catch(console.error);
+` + "```" + `
+
+## TypeScript Support
+
+This SDK includes full TypeScript definitions!
+
+` + "```typescript\n" +
+		`import { AIMClient, Agent, RegisterAgentRequest } from '@opena2a/aim-sdk';
+
+async function registerAgent(): Promise<Agent> {
+  const client = new AIMClient();
+
+  const request: RegisterAgentRequest = {
+    name: 'my-awesome-agent',
+    agentType: 'ai_agent',
+    description: 'An agent that does amazing things'
+  };
+
+  return await client.registerAgent(request);
+}
+` + "```" + `
+
+## Automatic Authentication
+
+Your SDK contains embedded OAuth credentials that automatically:
+- ✅ Authenticate your agent registrations
+- ✅ Link agents to your user account
+- ✅ Refresh tokens when they expire
+- ✅ Work for 90 days without re-authentication
+
+## Security
+
+Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+
+⚠️ **Important Security Notes:**
+- Credentials are valid for 90 days
+- Never commit credentials to Git
+- Revoke tokens from dashboard if compromised
+- Tokens can be revoked at any time from your dashboard
+
+For more examples, see the included test files.
+`
 }

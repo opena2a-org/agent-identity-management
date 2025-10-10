@@ -62,7 +62,8 @@ class AIMClient:
         timeout: int = 30,
         auto_retry: bool = True,
         max_retries: int = 3,
-        sdk_token_id: Optional[str] = None
+        sdk_token_id: Optional[str] = None,
+        oauth_token_manager: Optional[Any] = None
     ):
         # Validate required parameters
         if not agent_id:
@@ -79,6 +80,7 @@ class AIMClient:
         self.timeout = timeout
         self.auto_retry = auto_retry
         self.max_retries = max_retries
+        self.oauth_token_manager = oauth_token_manager
 
         # Initialize Ed25519 signing key
         try:
@@ -168,11 +170,28 @@ class AIMClient:
         """
         url = f"{self.aim_url}{endpoint}"
 
+        # Prepare additional headers (merge with session headers)
+        additional_headers = {}
+
+        # Add OAuth authorization if token manager is available
+        if self.oauth_token_manager:
+            try:
+                access_token = self.oauth_token_manager.get_access_token()
+                if access_token:
+                    additional_headers['Authorization'] = f'Bearer {access_token}'
+            except Exception:
+                # If OAuth token fails, continue without it
+                pass
+
+        # Merge session headers with additional headers
+        merged_headers = {**self.session.headers, **additional_headers}
+
         try:
             response = self.session.request(
                 method=method,
                 url=url,
                 json=data,
+                headers=merged_headers,
                 timeout=self.timeout
             )
 
@@ -432,7 +451,7 @@ class AIMClient:
         try:
             result = self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/agents/{self.agent_id}/detection/report",
+                endpoint=f"/api/v1/detection/agents/{self.agent_id}/report",
                 data={"detections": detections}
             )
             return result
@@ -441,6 +460,127 @@ class AIMClient:
             raise
         except Exception as e:
             raise VerificationError(f"Detection report failed: {e}")
+
+    def register_mcp(
+        self,
+        mcp_server_id: str,
+        detection_method: str = "manual",
+        confidence: float = 100.0,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """
+        Register an MCP server to this agent's "talks_to" list.
+
+        This creates a relationship between the agent and an MCP server,
+        indicating that the agent communicates with this MCP server.
+
+        Args:
+            mcp_server_id: MCP server ID or name to register
+            detection_method: How the MCP was detected ("manual", "auto_sdk", "auto_config", "cli")
+            confidence: Detection confidence score (0-100, default: 100 for manual)
+            metadata: Optional additional context about the detection
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - message: str
+                - added: int - Number of MCP servers added
+                - agent_id: str
+                - mcp_server_ids: List[str]
+
+        Example:
+            # Register filesystem MCP server
+            result = client.register_mcp(
+                mcp_server_id="filesystem-mcp-server",
+                detection_method="manual",
+                confidence=100.0
+            )
+            print(f"Registered {result['added']} MCP server(s)")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        try:
+            result = self._make_request(
+                method="PUT",
+                endpoint=f"/api/v1/agents/{self.agent_id}/mcp-servers",
+                data={
+                    "mcp_server_ids": [mcp_server_id],
+                    "detected_method": detection_method,
+                    "confidence": confidence,
+                    "metadata": metadata or {}
+                }
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"MCP registration failed: {e}")
+
+    def report_sdk_integration(
+        self,
+        sdk_version: str,
+        platform: str = "python",
+        capabilities: Optional[List[str]] = None
+    ) -> Dict:
+        """
+        Report SDK integration status to AIM dashboard.
+
+        This updates the Detection tab to show that the AIM SDK is installed
+        and integrated with the agent, enabling auto-detection features.
+
+        Args:
+            sdk_version: SDK version string (e.g., "aim-sdk-python@1.0.0")
+            platform: Platform/language (e.g., "python", "javascript", "go")
+            capabilities: Optional list of SDK capabilities enabled
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - detectionsProcessed: int
+                - message: str
+
+        Example:
+            # Report SDK integration
+            result = client.report_sdk_integration(
+                sdk_version="aim-sdk-python@1.0.0",
+                platform="python",
+                capabilities=["auto_detect_mcps", "capability_detection"]
+            )
+            print(f"SDK integration reported: {result['message']}")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        try:
+            # Create SDK integration detection event
+            detection_event = {
+                "mcpServer": "aim-sdk-integration",
+                "detectionMethod": "sdk_integration",
+                "confidence": 100.0,
+                "details": {
+                    "platform": platform,
+                    "capabilities": capabilities or [],
+                    "integrated": True
+                },
+                "sdkVersion": sdk_version,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/detection/agents/{self.agent_id}/report",
+                data={"detections": [detection_event]}
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"SDK integration report failed: {e}")
 
     def perform_action(
         self,
@@ -686,11 +826,23 @@ def register_agent(
             print(f"   Trust Score: {existing_creds['trust_score']}")
             print(f"\n   To register a new agent, use force_new=True")
 
+            # Create OAuth token manager if tokens are in credentials
+            token_manager = None
+            if "refresh_token" in existing_creds or "access_token" in existing_creds:
+                # Create a temporary credentials file for the token manager
+                from pathlib import Path
+                temp_creds_path = Path.home() / ".aim" / f"temp_{name}_creds.json"
+                token_manager = OAuthTokenManager(str(temp_creds_path))
+                # Directly set the credentials with OAuth tokens
+                token_manager.credentials = existing_creds
+                token_manager.access_token = existing_creds.get("access_token")
+
             return AIMClient(
                 agent_id=existing_creds["agent_id"],
                 public_key=existing_creds["public_key"],
                 private_key=existing_creds["private_key"],
-                aim_url=existing_creds["aim_url"]
+                aim_url=existing_creds["aim_url"],
+                oauth_token_manager=token_manager
             )
 
     # 2. Detect authentication mode (SDK vs Manual)
@@ -808,11 +960,48 @@ def _register_via_oauth(
     talks_to: Optional[List[str]]
 ) -> AIMClient:
     """Register agent using OAuth token from SDK credentials"""
-    # Initialize OAuth token manager
-    token_manager = OAuthTokenManager(sdk_creds)
+    print(f"[DEBUG] _register_via_oauth() called")
+    print(f"[DEBUG] sdk_creds type: {type(sdk_creds)}")
+    print(f"[DEBUG] sdk_creds keys: {sdk_creds.keys() if sdk_creds else 'None'}")
+
+    # Generate Ed25519 keypair client-side (for OAuth mode)
+    print(f"🔐 Generating Ed25519 keypair...")
+    signing_key = SigningKey.generate()
+    private_key_bytes = bytes(signing_key) + bytes(signing_key.verify_key)  # 64 bytes (seed + public)
+    public_key_bytes = bytes(signing_key.verify_key)
+
+    private_key_b64 = base64.b64encode(private_key_bytes).decode('utf-8')
+    public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
+
+    # Add public key to registration data
+    registration_data["public_key"] = public_key_b64
+    print(f"✅ Keypair generated")
+
+    # Initialize OAuth token manager with SDK credentials path
+    # OAuthTokenManager expects a file path, not the credentials dict
+    # Check for .aim directory (not plaintext file - it might be encrypted!)
+    from pathlib import Path
+    sdk_dir = Path.cwd() / ".aim"
+    print(f"[DEBUG] Checking SDK dir: {sdk_dir}")
+    print(f"[DEBUG] Dir exists: {sdk_dir.exists()}")
+
+    if not sdk_dir.exists():
+        # Fall back to home directory
+        sdk_dir = Path.home() / ".aim"
+        print(f"[DEBUG] Fallback to home dir: {sdk_dir}")
+        print(f"[DEBUG] Home dir exists: {sdk_dir.exists()}")
+
+    # OAuthTokenManager will handle finding encrypted or plaintext credentials
+    sdk_creds_path = sdk_dir / "credentials.json"
+
+    print(f"[DEBUG] Creating OAuthTokenManager with path: {sdk_creds_path}")
+    token_manager = OAuthTokenManager(str(sdk_creds_path))
+    print(f"[DEBUG] OAuthTokenManager created, calling get_access_token()...")
     access_token = token_manager.get_access_token()
+    print(f"[DEBUG] get_access_token() returned: {access_token[:80] if access_token else 'None'}...")
 
     if not access_token:
+        print(f"[DEBUG] No access token obtained, raising error")
         raise ConfigurationError("Failed to obtain OAuth access token")
 
     # Call authenticated endpoint
@@ -839,6 +1028,22 @@ def _register_via_oauth(
 
     credentials = response.json()
 
+    # Backend returns 'id' but we need 'agent_id' for consistency
+    if "id" in credentials and "agent_id" not in credentials:
+        credentials["agent_id"] = credentials["id"]
+
+    # Add client-side generated private key to credentials (backend doesn't send it back)
+    credentials["private_key"] = private_key_b64
+    credentials["public_key"] = public_key_b64  # Ensure public key is in response
+    credentials["aim_url"] = aim_url  # Ensure URL is in response
+
+    # Add OAuth tokens to credentials so they can be used for future API calls
+    if token_manager and token_manager.credentials:
+        if "refresh_token" in token_manager.credentials:
+            credentials["refresh_token"] = token_manager.credentials["refresh_token"]
+        if "access_token" in token_manager.credentials:
+            credentials["access_token"] = token_manager.credentials["access_token"]
+
     # Save credentials locally
     _save_credentials(name, credentials)
 
@@ -847,7 +1052,8 @@ def _register_via_oauth(
         agent_id=credentials["agent_id"],
         public_key=credentials["public_key"],
         private_key=credentials["private_key"],
-        aim_url=credentials["aim_url"]
+        aim_url=credentials["aim_url"],
+        oauth_token_manager=token_manager  # Pass token manager for OAuth authentication
     )
 
     if talks_to:

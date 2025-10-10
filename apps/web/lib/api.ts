@@ -95,7 +95,7 @@ export interface SDKToken {
 }
 
 // MCP Detection Types
-export type DetectionMethod = 'manual' | 'claude_config' | 'sdk_import' | 'sdk_runtime' | 'direct_api'
+export type DetectionMethod = 'manual' | 'claude_config' | 'sdk_import' | 'sdk_runtime' | 'direct_api' | 'sdk_integration'
 
 export interface DetectionEvent {
   mcpServer: string
@@ -871,9 +871,9 @@ class APIClient {
   }
 
   // SDK Download with automatic token refresh on 401
-  async downloadSDK(): Promise<Blob> {
+  async downloadSDK(sdkType: 'python' | 'go' | 'javascript' = 'python'): Promise<Blob> {
     const attemptDownload = async (token: string | null): Promise<Response> => {
-      return fetch(`${this.baseURL}/api/v1/sdk/download`, {
+      return fetch(`${this.baseURL}/api/v1/sdk/download?sdk=${sdkType}`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -922,7 +922,7 @@ class APIClient {
 
   // Get current detection status for an agent
   async getDetectionStatus(agentId: string): Promise<DetectionStatusResponse> {
-    return this.request(`/api/v1/agents/${agentId}/detection/status`)
+    return this.request(`/api/v1/detection/agents/${agentId}/status`)
   }
 }
 
