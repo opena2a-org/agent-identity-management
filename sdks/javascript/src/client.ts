@@ -2,6 +2,9 @@ import { AIMClientConfig, DetectedMCP, DetectionMethod, DetectionEvent } from '.
 import { ImportDetector } from './detection/import-detector';
 import { ConnectionDetector } from './detection/connection-detector';
 import { APIReporter } from './reporting/api-reporter';
+import { registerAgent, registerAgentWithOAuth, RegisterOptions } from './registration';
+import { autoDetectMCPs } from './detection/capability-detection';
+import { loadCredentials } from './credentials';
 
 export class AIMClient {
   private config: Required<AIMClientConfig>;
@@ -26,6 +29,52 @@ export class AIMClient {
 
     if (this.config.autoDetect) {
       this.initializeDetectors();
+    }
+  }
+
+  /**
+   * Create a client with credentials loaded from keyring
+   */
+  static async fromKeyring(apiUrl: string): Promise<AIMClient> {
+    const creds = await loadCredentials();
+    if (!creds) {
+      throw new Error('No credentials found in keyring. Please register an agent first.');
+    }
+
+    return new AIMClient({
+      apiUrl,
+      apiKey: creds.apiKey,
+      agentId: creds.agentId,
+    });
+  }
+
+  /**
+   * Register a new agent
+   */
+  async registerAgent(options: RegisterOptions) {
+    return await registerAgent(this.config.apiUrl, options);
+  }
+
+  /**
+   * Register agent with OAuth
+   */
+  async registerAgentWithOAuth(options: RegisterOptions) {
+    return await registerAgentWithOAuth(this.config.apiUrl, options);
+  }
+
+  /**
+   * Auto-detect MCPs and report them
+   */
+  async autoDetectAndReport(): Promise<void> {
+    const detection = await autoDetectMCPs();
+
+    for (const mcp of detection.mcps) {
+      try {
+        await this.reportMCP(mcp.name);
+        console.log(`✅ Reported: ${mcp.name}`);
+      } catch (err) {
+        console.warn(`Warning: Failed to report ${mcp.name}:`, err);
+      }
     }
   }
 

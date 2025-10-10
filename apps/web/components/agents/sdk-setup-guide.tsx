@@ -25,44 +25,74 @@ export function SDKSetupGuide({ agentId, apiKey }: SDKSetupGuideProps) {
   const examples = {
     javascript: `npm install @aim/sdk
 
-import { AIMClient } from '@aim/sdk';
+import { AIMClient, registerAgent, autoDetectMCPs } from '@aim/sdk';
 
-const aim = new AIMClient({
-  apiUrl: '${apiUrl}',
-  apiKey: '${apiKey}',
-  agentId: '${agentId}',
-  autoDetect: true  // Enable auto-detection
+// 1. Register new agent with Ed25519 signing
+const registration = await registerAgent({
+  name: 'my-agent',
+  type: 'ai_agent',
+  apiUrl: '${apiUrl}'
 });
 
-// That's it! SDK will auto-detect MCP usage`,
+// 2. Auto-detect MCPs from config files
+const detection = await autoDetectMCPs();
+console.log(\`Detected \${detection.mcps.length} MCPs\`);
+
+// 3. Create client with credentials
+const client = new AIMClient({
+  apiUrl: '${apiUrl}',
+  apiKey: registration.apiKey,
+  agentId: registration.id,
+  autoDetect: true  // Auto-report MCPs
+});
+
+// ✅ Features: OAuth, keyring, Ed25519, auto-detection`,
 
     python: `pip install aim-sdk
 
 from aim_sdk import register_agent
 
 # ONE LINE - Zero configuration!
+# ✅ Ed25519 keypair auto-generated
+# ✅ Credentials auto-saved to keyring
+# ✅ Capabilities auto-detected from imports
+# ✅ MCPs auto-detected from Claude Desktop config
+# ✅ Challenge-response auto-completed
+
 agent = register_agent(
     "${agentId.split('-')[0]}-agent",
     api_key="${apiKey}",
     aim_url="${apiUrl}"
 )
 
-# Auto-detects capabilities + MCPs automatically`,
+print(f"Agent ID: {agent.agent_id}")
+print(f"Trust Score: {agent.trust_score}")`,
 
     go: `go get github.com/opena2a/aim-sdk-go
 
-import aimsdk "github.com/opena2a/aim-sdk-go"
+import (
+    "context"
+    aimsdk "github.com/opena2a/aim-sdk-go"
+)
 
 func main() {
-    client := aimsdk.NewClient(aimsdk.Config{
-        APIURL:  "${apiUrl}",
-        APIKey:  "${apiKey}",
-        AgentID: "${agentId}",
-    })
-    defer client.Close()
+    ctx := context.Background()
 
-    // Manually report MCP usage
-    client.ReportMCP(ctx, "filesystem")
+    // 1. Register agent (Ed25519 keypair auto-generated)
+    client := aimsdk.NewClient(aimsdk.Config{
+        APIURL: "${apiUrl}",
+    })
+
+    reg, _ := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+        Name: "my-go-agent",
+        Type: "ai_agent",
+    })
+
+    // 2. Auto-detect MCPs
+    detection, _ := aimsdk.AutoDetectMCPs()
+    fmt.Printf("Detected %d MCPs\\n", len(detection.MCPs))
+
+    // ✅ OAuth, keyring, Ed25519, auto-detection
 }`,
   };
 
@@ -112,12 +142,14 @@ func main() {
               </div>
 
               <div className="text-sm text-muted-foreground space-y-1">
-                <p className="font-medium">What happens automatically:</p>
+                <p className="font-medium">✅ 100% Feature Parity - All SDKs include:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Detects MCP server usage from imports</li>
-                  <li>Reports to AIM API every 10 seconds</li>
-                  <li>Updates dashboard in real-time</li>
-                  <li>Zero performance impact (&lt;0.1% CPU)</li>
+                  <li>Ed25519 cryptographic signing (request verification)</li>
+                  <li>OAuth integration (Google, Microsoft, Okta)</li>
+                  <li>Auto-detect MCPs from config files</li>
+                  <li>System keyring integration (secure credential storage)</li>
+                  <li>Agent registration with challenge-response verification</li>
+                  <li>Real-time MCP reporting to dashboard</li>
                 </ul>
               </div>
             </TabsContent>

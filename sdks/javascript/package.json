@@ -13,6 +13,13 @@
   "keywords": ["aim", "mcp", "agent", "detection", "identity", "opena2a"],
   "author": "OpenA2A",
   "license": "MIT",
+  "dependencies": {
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "keytar": "^7.9.0",
+    "axios": "^1.6.0",
+    "open": "^10.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",

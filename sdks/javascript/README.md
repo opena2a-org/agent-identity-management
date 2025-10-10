@@ -1,173 +1,498 @@
-# @aim/sdk - JavaScript/TypeScript SDK
+# AIM SDK for JavaScript/TypeScript
 
-AIM SDK for automatic MCP detection in AI agents.
+**Agent Identity Management SDK** - Enterprise-grade identity and capability management for AI agents.
 
-## Installation
+## 🚀 Features
+
+- ✅ **Ed25519 Cryptographic Signing** - Secure agent identity verification
+- ✅ **OAuth/OIDC Integration** - Enterprise SSO (Google, Microsoft, Okta)
+- ✅ **Automatic MCP Detection** - Discover MCP servers from configs
+- ✅ **Secure Credential Storage** - System keyring integration (Keychain/Credential Locker)
+- ✅ **Agent Registration** - Complete onboarding workflow
+- ✅ **Manual MCP Reporting** - Report MCP usage to AIM backend
+- ✅ **TypeScript Support** - Full type safety with TypeScript
+- ✅ **Zero-Config Operation** - Automatic detection and reporting
+- ✅ **Claude Desktop Integration** - Parse Claude Desktop configs
+
+## 📦 Installation
 
 ```bash
 npm install @aim/sdk
+# or
+yarn add @aim/sdk
+# or
+pnpm add @aim/sdk
 ```
 
-## Quick Start
+## 🎯 Quick Start
 
-```javascript
-import { AIMClient } from '@aim/sdk';
-
-const aim = new AIMClient({
-  apiUrl: 'https://aim.yourcompany.com',
-  apiKey: process.env.AIM_API_KEY,
-  agentId: 'your-agent-id',
-  autoDetect: true, // Enable auto-detection
-});
-
-// SDK will automatically detect and report MCP usage!
-```
-
-## Features
-
-- ✅ Automatic MCP detection from imports
-- ✅ Automatic reporting to AIM API
-- ✅ Zero-config operation
-- ✅ TypeScript support
-- ✅ Capability auto-detection
-- ✅ Claude Desktop config parsing
-
-## API
-
-### `new AIMClient(config)`
-
-Create a new AIM client.
-
-**Config Options:**
-- `apiUrl` (required): AIM API URL
-- `apiKey` (required): Your AIM API key
-- `agentId` (required): Your agent ID
-- `autoDetect` (optional): Enable auto-detection (default: true)
-- `detectionMethods` (optional): Detection methods to use (default: ['import', 'connection'])
-- `reportInterval` (optional): Report interval in milliseconds (default: 10000)
-
-### `client.detect()`
-
-Manually trigger detection (returns array of detected MCPs).
-
-```javascript
-const detections = await aim.detect();
-console.log('Detected MCPs:', detections);
-```
-
-### `client.reportMCP(name)`
-
-Manually report a specific MCP usage.
-
-```javascript
-await aim.reportMCP('filesystem');
-```
-
-### `client.destroy()`
-
-Clean up resources (stop detectors, clear intervals).
-
-```javascript
-aim.destroy();
-```
-
-## Utility Functions
-
-### `autoDetectCapabilities()`
-
-Automatically detect agent capabilities from loaded modules.
-
-```javascript
-import { autoDetectCapabilities } from '@aim/sdk';
-
-const capabilities = autoDetectCapabilities();
-console.log('Capabilities:', capabilities);
-// ['make_api_calls', 'read_files', 'write_files', 'access_database']
-```
-
-### `autoDetectMCPs()`
-
-Detect MCP servers from Claude Desktop configuration.
-
-```javascript
-import { autoDetectMCPs } from '@aim/sdk';
-
-const mcps = autoDetectMCPs();
-console.log('MCPs from config:', mcps);
-// [{ mcpServer: 'filesystem', detectionMethod: 'claude_config', confidence: 100, ... }]
-```
-
-## Example Usage
-
-```javascript
-import { AIMClient, autoDetectCapabilities, autoDetectMCPs } from '@aim/sdk';
-
-async function main() {
-  // Initialize AIM client
-  const aim = new AIMClient({
-    apiUrl: 'http://localhost:8080',
-    apiKey: process.env.AIM_API_KEY,
-    agentId: process.env.AIM_AGENT_ID,
-  });
-
-  // Auto-detect capabilities
-  const capabilities = autoDetectCapabilities();
-  console.log('Auto-detected capabilities:', capabilities);
-
-  // Auto-detect MCPs from Claude config
-  const mcps = autoDetectMCPs();
-  console.log('MCPs from Claude config:', mcps);
-
-  // SDK will automatically report detections every 10 seconds
-  console.log('AIM SDK is now monitoring MCP usage...');
-
-  // Clean up on exit
-  process.on('SIGINT', () => {
-    console.log('Cleaning up...');
-    aim.destroy();
-    process.exit(0);
-  });
-}
-
-main().catch(console.error);
-```
-
-## TypeScript Support
-
-The SDK is written in TypeScript and includes full type definitions.
+### Option 1: Register a New Agent
 
 ```typescript
-import { AIMClient, AIMClientConfig, DetectedMCP } from '@aim/sdk';
+import { AIMClient } from '@aim/sdk';
 
-const config: AIMClientConfig = {
-  apiUrl: 'http://localhost:8080',
-  apiKey: 'aim_key_123',
-  agentId: 'agent-uuid',
-  autoDetect: true,
-};
+async function main() {
+  const client = new AIMClient({
+    apiUrl: 'http://localhost:8080',
+  });
 
-const client = new AIMClient(config);
+  // Register new agent (generates Ed25519 keypair)
+  const registration = await client.registerAgent({
+    name: 'my-js-agent',
+    type: 'ai_agent',
+    description: 'My first JavaScript agent',
+  });
+
+  console.log(`✅ Agent registered: ${registration.id}`);
+  console.log('   Credentials stored in system keyring');
+}
+
+main();
 ```
 
-## How It Works
+### Option 2: Use Existing Agent
 
-1. **Import Detection**: The SDK hooks into Node.js's `require()` to detect when MCP packages are imported
-2. **Automatic Reporting**: Detections are reported to the AIM API every 10 seconds (configurable)
-3. **Deduplication**: MCPs are only reported once per 60 seconds to avoid spam
-4. **Silent Failures**: Network failures don't break your agent - errors are logged but ignored
+```typescript
+import { AIMClient } from '@aim/sdk';
 
-## Performance
+async function main() {
+  // Load client from system keyring
+  const client = await AIMClient.fromKeyring('http://localhost:8080');
+
+  // Auto-detect and report MCPs
+  await client.autoDetectAndReport();
+
+  console.log('✅ MCPs reported successfully');
+}
+
+main();
+```
+
+## 📚 Core Features
+
+### 1. Ed25519 Cryptographic Signing
+
+Secure agent identity verification using Ed25519 digital signatures.
+
+```typescript
+import {
+  generateEd25519Keypair,
+  signRequest,
+  verifySignature,
+  encodePublicKey,
+  encodePrivateKey,
+} from '@aim/sdk';
+
+// Generate new keypair
+const { privateKey, publicKey } = generateEd25519Keypair();
+
+// Sign data
+const data = {
+  agent_id: 'agent-123',
+  timestamp: new Date().toISOString(),
+};
+const signature = signRequest(privateKey, data);
+
+// Verify signature
+const valid = verifySignature(publicKey, data, signature);
+console.log(`Signature valid: ${valid}`);
+
+// Encode keys for storage
+const publicKeyB64 = encodePublicKey(publicKey);
+const privateKeyB64 = encodePrivateKey(privateKey);
+```
+
+### 2. OAuth/OIDC Integration
+
+Enterprise SSO authentication with Google, Microsoft, and Okta.
+
+```typescript
+import { AIMClient, OAuthProvider } from '@aim/sdk';
+
+const client = new AIMClient({
+  apiUrl: 'http://localhost:8080',
+});
+
+// Register agent with OAuth
+const registration = await client.registerAgentWithOAuth({
+  name: 'oauth-agent',
+  type: 'ai_agent',
+  oauthProvider: OAuthProvider.Google,
+  redirectUrl: 'http://localhost:8080/callback',
+});
+
+console.log(`✅ Registered with OAuth: ${registration.id}`);
+```
+
+**Supported Providers:**
+- `OAuthProvider.Google` - Google (accounts.google.com)
+- `OAuthProvider.Microsoft` - Microsoft (login.microsoftonline.com)
+- `OAuthProvider.Okta` - Okta (custom domain)
+
+**OAuth Flow:**
+1. SDK generates authorization URL
+2. Opens browser for user consent
+3. Starts local callback server (port 8080)
+4. Receives authorization code
+5. Exchanges code for access token
+6. Registers agent with token
+
+### 3. Automatic MCP Detection
+
+Discover MCP servers from configuration files.
+
+```typescript
+import { autoDetectMCPs } from '@aim/sdk';
+
+// Auto-detect MCPs
+const detection = await autoDetectMCPs();
+
+console.log(`Found ${detection.mcps.length} MCP(s):`);
+detection.mcps.forEach((mcp) => {
+  console.log(`  - ${mcp.name} (${mcp.capabilities.join(', ')})`);
+});
+
+// Detection includes runtime info
+console.log(`Runtime: ${detection.runtime.runtime}`);
+console.log(`Node Version: ${detection.runtime.node_version}`);
+console.log(`Platform: ${detection.runtime.platform}`);
+```
+
+**Detection Locations:**
+- `~/.config/mcp/servers.json`
+- `~/.mcp/config.json`
+- `~/.config/claude/mcp/servers.json`
+- `./mcp.json`
+- `./.mcp/servers.json`
+
+**Detected Capabilities:**
+- `filesystem` - File operations
+- `database` - SQL/NoSQL databases (sqlite, postgres, mongodb)
+- `web` - Browser automation
+- `memory` - Vector/cache storage
+- `github` - GitHub integration
+- `sequential` - Sequential thinking
+- `brave` - Brave search
+
+### 4. Secure Credential Storage
+
+System keyring integration for secure credential management.
+
+```typescript
+import {
+  storeCredentials,
+  loadCredentials,
+  hasCredentials,
+  clearCredentials,
+} from '@aim/sdk';
+
+// Store credentials
+await storeCredentials({
+  agentId: 'agent-123',
+  apiKey: 'aim_key_456',
+  privateKey: privateKey,
+});
+
+// Load credentials
+const creds = await loadCredentials();
+if (creds) {
+  console.log(`Agent ID: ${creds.agentId}`);
+}
+
+// Check if credentials exist
+const exists = await hasCredentials();
+console.log(`Credentials exist: ${exists}`);
+
+// Clear all credentials
+await clearCredentials();
+```
+
+**Platform Support:**
+- **macOS**: Keychain Access
+- **Windows**: Credential Locker
+- **Linux**: Secret Service (GNOME Keyring, KWallet)
+
+### 5. Agent Registration
+
+Complete agent onboarding workflow.
+
+```typescript
+// Basic registration (Ed25519 only)
+const registration = await client.registerAgent({
+  name: 'my-agent',
+  type: 'ai_agent',
+  description: 'My AI agent',
+});
+
+// OAuth registration
+const registration = await client.registerAgentWithOAuth({
+  name: 'oauth-agent',
+  type: 'ai_agent',
+  oauthProvider: OAuthProvider.Google,
+  redirectUrl: 'http://localhost:8080/callback',
+});
+```
+
+**Registration Flow:**
+1. Generate Ed25519 keypair
+2. Create payload (name, type, public_key)
+3. Sign payload with private key
+4. Send registration request to backend
+5. Receive agent_id and api_key
+6. Store all credentials in system keyring
+7. Update client with new credentials
+
+### 6. MCP Reporting
+
+Report MCP usage to AIM backend.
+
+```typescript
+// Manual reporting
+await client.reportMCP('filesystem');
+
+// Auto-detect and report all MCPs
+await client.autoDetectAndReport();
+```
+
+## 🔧 API Reference
+
+### Client Configuration
+
+```typescript
+interface AIMClientConfig {
+  apiUrl: string;           // AIM API URL (required)
+  apiKey?: string;          // API key (optional, loaded from keyring if empty)
+  agentId?: string;         // Agent ID (optional, loaded from keyring if empty)
+  autoDetect?: boolean;     // Enable auto-detection (default: true)
+  reportInterval?: number;  // Report interval in ms (default: 10000)
+}
+```
+
+### Registration Options
+
+```typescript
+interface RegisterOptions {
+  name: string;             // Agent name (required)
+  type: 'ai_agent' | 'human_agent';  // Agent type (required)
+  description?: string;     // Agent description (optional)
+  oauthProvider?: OAuthProvider;     // OAuth provider (optional)
+  redirectUrl?: string;     // OAuth redirect URL (optional, default: http://localhost:8080/callback)
+}
+```
+
+### Client Methods
+
+**`new AIMClient(config: AIMClientConfig)`**
+- Create new AIM client
+
+**`static async fromKeyring(apiUrl: string): Promise<AIMClient>`**
+- Load client from stored credentials
+
+**`async registerAgent(opts: RegisterOptions): Promise<AgentRegistration>`**
+- Register new agent with Ed25519 signing
+
+**`async registerAgentWithOAuth(opts: RegisterOptions): Promise<AgentRegistration>`**
+- Register agent with OAuth/OIDC
+
+**`async reportMCP(name: string): Promise<void>`**
+- Manually report MCP usage
+
+**`async autoDetectAndReport(): Promise<void>`**
+- Auto-detect and report all MCPs
+
+**`destroy(): void`**
+- Clean up resources
+
+### Credential Functions
+
+**`async storeCredentials(creds: Credentials): Promise<void>`**
+- Store credentials in system keyring
+
+**`async loadCredentials(): Promise<Credentials | null>`**
+- Load credentials from system keyring
+
+**`async hasCredentials(): Promise<boolean>`**
+- Check if credentials exist
+
+**`async clearCredentials(): Promise<void>`**
+- Clear all credentials
+
+### Signing Functions
+
+**`generateEd25519Keypair(): { privateKey: Uint8Array, publicKey: Uint8Array }`**
+- Generate new Ed25519 keypair
+
+**`signRequest(privateKey: Uint8Array, data: Record<string, any>): string`**
+- Sign data with private key
+
+**`verifySignature(publicKey: Uint8Array, data: Record<string, any>, signature: string): boolean`**
+- Verify signed data
+
+**`encodePublicKey(publicKey: Uint8Array): string`**
+- Encode public key to base64
+
+**`decodePublicKey(encoded: string): Uint8Array`**
+- Decode base64 public key
+
+**`encodePrivateKey(privateKey: Uint8Array): string`**
+- Encode private key to base64
+
+**`decodePrivateKey(encoded: string): Uint8Array`**
+- Decode base64 private key
+
+### Detection Functions
+
+**`async autoDetectMCPs(): Promise<Detection>`**
+- Auto-detect MCP servers from configs
+
+**`autoDetectCapabilities(): string[]`**
+- Auto-detect agent capabilities (legacy)
+
+## 📖 Complete Example
+
+See [`examples/complete-example.ts`](./examples/complete-example.ts) for a comprehensive example demonstrating all SDK features.
+
+```bash
+# Run the complete example
+npm run example
+
+# Run specific example
+npm run example 1  # Register agent
+npm run example 2  # OAuth registration
+npm run example 3  # Use existing agent
+npm run example 4  # Auto-detect MCPs
+npm run example 5  # Report MCPs
+npm run example 6  # Manual reporting
+npm run example 7  # Clear credentials
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm test -- --coverage
+
+# Run specific test file
+npm test signing.test.ts
+```
+
+**Test Coverage:**
+- ✅ Ed25519 signing (11 test cases)
+- ✅ MCP detection (8 test cases)
+- ✅ Integration tests (10+ test cases)
+- ✅ Keypair generation
+- ✅ Signature verification
+- ✅ Key encoding/decoding
+- ✅ Credential management
+- ✅ Complete lifecycle workflow
+
+## 🔒 Security
+
+- **Ed25519**: Industry-standard elliptic curve signatures (via tweetnacl)
+- **System Keyring**: Never store credentials in plaintext (via keytar)
+- **OAuth PKCE**: CSRF protection via state parameter
+- **Canonical JSON**: Deterministic signing with sorted keys
+- **Base64 Encoding**: Safe key transmission
+
+## ⚡ Performance
 
 - **Initialization**: <50ms
 - **Memory Usage**: <10MB
 - **CPU Overhead**: <0.1% (imperceptible)
-- **Network**: 1 API call every 10 seconds (only if new detections)
+- **Network**: 1 API call per manual report or periodic interval
+- **Signing**: <1ms per operation
 
-## License
+## 🐛 Troubleshooting
+
+### "No credentials found"
+```typescript
+// Register a new agent first
+const registration = await client.registerAgent({
+  name: 'my-agent',
+  type: 'ai_agent',
+});
+```
+
+### "Failed to access keyring"
+- **macOS**: Grant Keychain Access permission
+- **Windows**: Ensure Credential Locker is enabled
+- **Linux**: Install gnome-keyring or kwallet
+
+### "OAuth callback timeout"
+- Check that port 8080 is available
+- Ensure browser opens automatically
+- Verify redirect URL matches OAuth config
+
+### TypeScript Errors
+```bash
+# Ensure TypeScript is installed
+npm install --save-dev typescript @types/node
+
+# Check tsconfig.json includes SDK types
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "esModuleInterop": true
+  }
+}
+```
+
+## 📝 TypeScript Support
+
+The SDK is written in TypeScript and includes full type definitions.
+
+```typescript
+import type {
+  AIMClient,
+  AIMClientConfig,
+  RegisterOptions,
+  AgentRegistration,
+  DetectedMCP,
+  Detection,
+  Credentials,
+} from '@aim/sdk';
+```
+
+## 🔄 Migration from AIVF SDK
+
+If you're migrating from the old AIVF SDK:
+
+```typescript
+// Old AIVF SDK
+import { AIVFClient } from '@aivf/sdk';
+const client = new AIVFClient({ apiKey, agentId });
+
+// New AIM SDK
+import { AIMClient } from '@aim/sdk';
+const client = new AIMClient({ apiUrl, apiKey, agentId });
+```
+
+**Breaking Changes:**
+- `apiUrl` is now required (was optional)
+- `autoDetect` is now `true` by default (was `false`)
+- MCP detection now includes capability probing
+- Credentials are now stored in system keyring (not environment variables)
+
+## 📝 License
 
 MIT
 
-## Support
+## 🤝 Support
 
-For issues and questions, please visit:
-https://github.com/opena2a-org/agent-identity-management/issues
+For issues and questions:
+- **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
+- **Documentation**: https://docs.opena2a.org/aim-sdk-js
+
+## 🔗 Related SDKs
+
+- [Python SDK](../python/) - Python/asyncio implementation
+- [Go SDK](../go/) - Go implementation
+
+---
+
+**Version**: 1.0.0
+**Node.js Version**: 16+
+**Status**: Production Ready ✅
