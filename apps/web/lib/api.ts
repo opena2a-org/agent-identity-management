@@ -924,6 +924,71 @@ class APIClient {
   async getDetectionStatus(agentId: string): Promise<DetectionStatusResponse> {
     return this.request(`/api/v1/detection/agents/${agentId}/status`)
   }
+
+  // ========================================
+  // Security Policies (Admin Only)
+  // ========================================
+
+  // List all security policies for the organization
+  async getSecurityPolicies(): Promise<any[]> {
+    return this.request('/api/v1/admin/security-policies')
+  }
+
+  // Get a specific security policy by ID
+  async getSecurityPolicy(policyId: string): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`)
+  }
+
+  // Create a new security policy
+  async createSecurityPolicy(data: {
+    name: string
+    description?: string
+    policy_type: string
+    enforcement_action: 'alert_only' | 'block_and_alert' | 'allow'
+    severity_threshold: string
+    rules?: Record<string, any>
+    applies_to: string
+    is_enabled: boolean
+    priority: number
+  }): Promise<any> {
+    return this.request('/api/v1/admin/security-policies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Update an existing security policy
+  async updateSecurityPolicy(policyId: string, data: {
+    name: string
+    description?: string
+    policy_type: string
+    enforcement_action: 'alert_only' | 'block_and_alert' | 'allow'
+    severity_threshold: string
+    rules?: Record<string, any>
+    applies_to: string
+    is_enabled: boolean
+    priority: number
+  }): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Delete a security policy
+  async deleteSecurityPolicy(policyId: string): Promise<void> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // Toggle policy enabled/disabled status
+  async toggleSecurityPolicy(policyId: string, isEnabled: boolean): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}/toggle`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isEnabled }),
+    })
+  }
 }
 
 export const api = new APIClient(API_URL)
