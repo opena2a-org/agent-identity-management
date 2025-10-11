@@ -422,6 +422,14 @@ func (s *AgentService) AddMCPServers(
 		if err := s.agentRepo.Update(agent); err != nil {
 			return nil, nil, fmt.Errorf("failed to update agent: %w", err)
 		}
+
+		// 6. Automatically recalculate trust score after MCP connections change
+		trustScore, err := s.trustCalc.Calculate(agent)
+		if err == nil {
+			agent.TrustScore = trustScore.Score
+			s.agentRepo.Update(agent)
+			s.trustScoreRepo.Create(trustScore)
+		}
 	}
 
 	return agent, addedServers, nil
@@ -467,6 +475,14 @@ func (s *AgentService) RemoveMCPServers(
 	if len(removedServers) > 0 {
 		if err := s.agentRepo.Update(agent); err != nil {
 			return nil, nil, fmt.Errorf("failed to update agent: %w", err)
+		}
+
+		// 6. Automatically recalculate trust score after MCP connections change
+		trustScore, err := s.trustCalc.Calculate(agent)
+		if err == nil {
+			agent.TrustScore = trustScore.Score
+			s.agentRepo.Update(agent)
+			s.trustScoreRepo.Create(trustScore)
 		}
 	}
 
@@ -638,6 +654,15 @@ func (s *AgentService) DetectMCPServersFromConfig(
 
 // parseClaudeDesktopConfig parses Claude Desktop config JSON file
 func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMCPServer, error) {
+	// Expand tilde (~) in path to home directory
+	if len(configPath) > 0 && configPath[0] == '~' {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		configPath = homeDir + configPath[1:]
+	}
+
 	// Read config file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
