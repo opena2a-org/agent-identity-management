@@ -15,9 +15,10 @@ import (
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo   domain.UserRepository
-	orgRepo    domain.OrganizationRepository
-	apiKeyRepo domain.APIKeyRepository
+	userRepo      domain.UserRepository
+	orgRepo       domain.OrganizationRepository
+	apiKeyRepo    domain.APIKeyRepository
+	policyService *SecurityPolicyService
 }
 
 // NewAuthService creates a new auth service
@@ -25,11 +26,13 @@ func NewAuthService(
 	userRepo domain.UserRepository,
 	orgRepo domain.OrganizationRepository,
 	apiKeyRepo domain.APIKeyRepository,
+	policyService *SecurityPolicyService,
 ) *AuthService {
 	return &AuthService{
-		userRepo:   userRepo,
-		orgRepo:    orgRepo,
-		apiKeyRepo: apiKeyRepo,
+		userRepo:      userRepo,
+		orgRepo:       orgRepo,
+		apiKeyRepo:    apiKeyRepo,
+		policyService: policyService,
 	}
 }
 
@@ -133,6 +136,17 @@ func (s *AuthService) autoProvisionUser(ctx context.Context, oauthUser *auth.OAu
 
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// 🛡️ Create default security policies for new organizations
+	if isFirstUser {
+		fmt.Printf("✅ Creating default security policies for new organization %s\n", org.ID)
+		if err := s.policyService.CreateDefaultPolicies(ctx, org.ID, user.ID); err != nil {
+			// Log error but don't fail user creation - policies can be created manually later
+			fmt.Printf("⚠️  Warning: failed to create default security policies: %v\n", err)
+		} else {
+			fmt.Printf("✅ Successfully created default security policies for organization %s\n", org.ID)
+		}
 	}
 
 	return user, nil

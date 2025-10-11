@@ -322,11 +322,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	}
 	log.Println("✅ KeyVault initialized for automatic key generation")
 
+	// ✅ Initialize Security Policy Service for policy-based enforcement
+	securityPolicyService := application.NewSecurityPolicyService(
+		repos.SecurityPolicy,
+		repos.Alert,
+	)
+
 	// Create services
 	authService := application.NewAuthService(
 		repos.User,
 		repos.Organization,
 		repos.APIKey,
+		securityPolicyService, // ✅ For auto-creating default policies
 	)
 
 	adminService := application.NewAdminService(
@@ -341,12 +348,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.APIKey,
 		repos.AuditLog,
 		repos.Capability, // ✅ NEW: Add capability repository for risk scoring
-	)
-
-	// ✅ Initialize Security Policy Service for policy-based enforcement
-	securityPolicyService := application.NewSecurityPolicyService(
-		repos.SecurityPolicy,
-		repos.Alert,
 	)
 
 	agentService := application.NewAgentService(

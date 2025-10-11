@@ -110,13 +110,14 @@ func (s *SecurityPolicyService) policyAppliesToAgent(policy *domain.SecurityPoli
 
 // CreateDefaultPolicies creates default security policies for a new organization
 func (s *SecurityPolicyService) CreateDefaultPolicies(ctx context.Context, orgID, userID uuid.UUID) error {
-	// Default Policy 1: Block + Alert for Capability Violations (HIGH priority)
+	// Default Policy 1: Alert on Capability Violations (HIGH priority)
+	// NOTE: Default is alert-only. Admins can enable blocking with explicit confirmation.
 	capabilityViolationPolicy := &domain.SecurityPolicy{
 		OrganizationID:    orgID,
-		Name:              "Block Capability Violations",
-		Description:       "Block and alert on any capability violations (e.g., EchoLeak attacks). This prevents unauthorized actions that exceed an agent's registered capabilities.",
+		Name:              "Monitor Capability Violations",
+		Description:       "Generate alerts on any capability violations (e.g., EchoLeak attacks). This monitors unauthorized actions that exceed an agent's registered capabilities. Admins can enable blocking mode to prevent these actions.",
 		PolicyType:        domain.PolicyTypeCapabilityViolation,
-		EnforcementAction: domain.EnforcementBlockAndAlert,
+		EnforcementAction: domain.EnforcementAlertOnly,
 		SeverityThreshold: domain.AlertSeverityHigh,
 		Rules: map[string]interface{}{
 			"attack_patterns": []string{"echoleak", "bulk_access", "data_exfiltration"},
@@ -152,13 +153,14 @@ func (s *SecurityPolicyService) CreateDefaultPolicies(ctx context.Context, orgID
 		return fmt.Errorf("failed to create low trust policy: %w", err)
 	}
 
-	// Default Policy 3: Block + Alert for Data Exfiltration Attempts
+	// Default Policy 3: Alert on Data Exfiltration Attempts
+	// NOTE: Default is alert-only. Admins can enable blocking with explicit confirmation.
 	dataExfiltrationPolicy := &domain.SecurityPolicy{
 		OrganizationID:    orgID,
-		Name:              "Block Data Exfiltration",
-		Description:       "Block and alert on suspected data exfiltration attempts (e.g., external URL fetching, bulk data access). Protects against data leakage.",
+		Name:              "Monitor Data Exfiltration",
+		Description:       "Generate alerts on suspected data exfiltration attempts (e.g., external URL fetching, bulk data access). This monitors potential data leakage. Admins can enable blocking mode to prevent these actions.",
 		PolicyType:        domain.PolicyTypeDataExfiltration,
-		EnforcementAction: domain.EnforcementBlockAndAlert,
+		EnforcementAction: domain.EnforcementAlertOnly,
 		SeverityThreshold: domain.AlertSeverityCritical,
 		Rules: map[string]interface{}{
 			"patterns": []string{"fetch_external_url", "bulk_export", "mass_download"},
