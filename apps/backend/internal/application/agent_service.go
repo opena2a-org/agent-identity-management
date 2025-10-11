@@ -20,6 +20,7 @@ type AgentService struct {
 	keyVault       *crypto.KeyVault              // ✅ For secure private key storage
 	alertRepo      domain.AlertRepository         // ✅ For creating security alerts
 	policyService  *SecurityPolicyService         // ✅ For policy-based enforcement
+	capabilityRepo domain.CapabilityRepository    // ✅ For checking agent capabilities
 }
 
 // NewAgentService creates a new agent service
@@ -30,6 +31,7 @@ func NewAgentService(
 	keyVault *crypto.KeyVault,
 	alertRepo domain.AlertRepository,         // ✅ NEW: AlertRepository for security alerts
 	policyService *SecurityPolicyService,     // ✅ NEW: Security Policy Service
+	capabilityRepo domain.CapabilityRepository, // ✅ NEW: CapabilityRepository for capability checks
 ) *AgentService {
 	return &AgentService{
 		agentRepo:      agentRepo,
@@ -38,6 +40,7 @@ func NewAgentService(
 		keyVault:       keyVault,
 		alertRepo:      alertRepo,
 		policyService:  policyService,
+		capabilityRepo: capabilityRepo,
 	}
 }
 
@@ -321,19 +324,62 @@ func (s *AgentService) VerifyAction(
 
 	// 4. ✅ CAPABILITY-BASED ACCESS CONTROL (CBAC)
 	// This is what prevents EchoLeak and similar attacks
-	if agent.Capabilities == nil || len(agent.Capabilities) == 0 {
-		// ⚠️  CRITICAL: If agent has NO capabilities, DENY ALL actions
-		// This is the default-deny security posture
-		return false, "Agent has no registered capabilities - action denied (capability violation)", auditID, nil
+	//
+	// ✅ ENTERPRISE ARCHITECTURE: Check BOTH capability systems for maximum flexibility
+	// 1. AgentCapability records (granular, with revocation support)
+	// 2. agent.Capabilities array (simple, backward compatible)
+	//
+	// This dual-check ensures:
+	// - Backward compatibility with existing agents
+	// - Migration path to granular capability management
+	// - Zero breaking changes for current deployments
+
+	// First, check AgentCapability records (preferred, granular)
+	activeCapabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: failed to fetch agent capability records: %v\n", err)
+		// Don't fail-safe here - fall back to agent.Capabilities check
 	}
 
-	// 5. Check if requested action matches any registered capability
+	// Build list of all capabilities (from both systems)
+	capabilityTypes := []string{}
 	hasCapability := false
-	for _, capability := range agent.Capabilities {
-		if s.matchesCapability(actionType, resource, capability) {
-			hasCapability = true
-			break
+
+	// Check AgentCapability records (if available)
+	if activeCapabilities != nil && len(activeCapabilities) > 0 {
+		for _, capability := range activeCapabilities {
+			capabilityTypes = append(capabilityTypes, capability.CapabilityType)
+			if s.matchesCapability(actionType, resource, capability.CapabilityType) {
+				hasCapability = true
+			}
 		}
+	}
+
+	// Fallback: Check agent.Capabilities array (backward compatibility)
+	if agent.Capabilities != nil && len(agent.Capabilities) > 0 {
+		for _, capability := range agent.Capabilities {
+			// Only add if not already in list (avoid duplicates)
+			isDuplicate := false
+			for _, existing := range capabilityTypes {
+				if existing == capability {
+					isDuplicate = true
+					break
+				}
+			}
+			if !isDuplicate {
+				capabilityTypes = append(capabilityTypes, capability)
+			}
+
+			// Check if action matches
+			if s.matchesCapability(actionType, resource, capability) {
+				hasCapability = true
+			}
+		}
+	}
+
+	// ⚠️  CRITICAL: If agent has NO capabilities in EITHER system, DENY ALL actions
+	if len(capabilityTypes) == 0 {
+		return false, "Agent has no registered capabilities - action denied (capability violation)", auditID, nil
 	}
 
 	if !hasCapability {
@@ -359,7 +405,7 @@ func (s *AgentService) VerifyAction(
 				"Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). "+
 				"This matches the attack pattern of CVE-2025-32711 (EchoLeak). "+
 				"Security Policy '%s' enforcement: %s. Audit ID: %s",
-				agent.DisplayName, actionType, agent.Capabilities, policyName,
+				agent.DisplayName, actionType, capabilityTypes, policyName,
 				map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[shouldBlock],
 				auditID.String(),
 			)
@@ -389,7 +435,7 @@ func (s *AgentService) VerifyAction(
 		if shouldBlock {
 			return false, fmt.Sprintf(
 				"Capability violation blocked by security policy '%s': Agent does not have permission for action '%s' (allowed: %v)",
-				policyName, actionType, agent.Capabilities,
+				policyName, actionType, capabilityTypes,
 			), auditID, nil
 		} else {
 			// Policy says alert-only mode - allow the action but log it

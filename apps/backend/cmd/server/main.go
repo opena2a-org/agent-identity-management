@@ -357,6 +357,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		keyVault,              // ✅ NEW: Inject KeyVault for automatic key generation
 		repos.Alert,           // ✅ NEW: Inject AlertRepository for security alerts
 		securityPolicyService, // ✅ NEW: Inject SecurityPolicyService for policy evaluation
+		repos.Capability,      // ✅ NEW: Inject CapabilityRepository for capability checks
 	)
 
 	apiKeyService := application.NewAPIKeyService(
