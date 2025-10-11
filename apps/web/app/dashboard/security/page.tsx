@@ -249,34 +249,6 @@ export default function SecurityPage() {
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Monitor security threats and anomalies across all agents and MCP servers.
-          </p>
-        </div>
-
-        {/* Informative Banner */}
-        <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                About Security Threats
-              </h3>
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                AIM automatically monitors agent behavior and detects potential security threats in real-time. Security threats are identified through:
-              </p>
-              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside ml-2">
-                <li><strong>Behavioral Analysis:</strong> Unusual patterns in agent actions or API usage</li>
-                <li><strong>Trust Score Monitoring:</strong> Sudden drops in trust scores indicating potential compromise</li>
-                <li><strong>Verification Failures:</strong> Failed cryptographic verifications or invalid signatures</li>
-                <li><strong>Anomaly Detection:</strong> Actions that deviate from normal agent behavior patterns</li>
-                <li><strong>Compliance Violations:</strong> Attempts to perform unauthorized operations</li>
-              </ul>
-              <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                💡 <strong>Tip:</strong> Click on any threat to view detailed information, affected agents, and recommended remediation steps.
-              </p>
-            </div>
-          </div>
         </div>
 
         {error && (
