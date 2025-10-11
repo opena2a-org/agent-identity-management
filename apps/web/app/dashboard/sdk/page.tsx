@@ -89,7 +89,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <p className="text-sm text-gray-700 mb-4 h-20">
-              Zero config, OAuth, auto-detection, Ed25519 signing, keyring support.
+              Official Python client for agent identity management with cryptographic verification.
             </p>
 
             <button
@@ -135,7 +135,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <p className="text-sm text-gray-700 mb-4 h-20">
-              Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
+              Official Go client for agent identity management with cryptographic verification.
             </p>
 
             <button
@@ -181,7 +181,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <p className="text-sm text-gray-700 mb-4 h-20">
-              Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
+              Official JavaScript/TypeScript client for agent identity management with cryptographic verification.
             </p>
 
             <button
