@@ -8,10 +8,11 @@ import { useState } from 'react';
 
 interface SDKSetupGuideProps {
   agentId: string;
-  apiKey: string;
+  agentName: string;
+  agentType: string;
 }
 
-export function SDKSetupGuide({ agentId, apiKey }: SDKSetupGuideProps) {
+export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuideProps) {
   const [copiedLang, setCopiedLang] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, lang: string) => {
@@ -30,14 +31,14 @@ export function SDKSetupGuide({ agentId, apiKey }: SDKSetupGuideProps) {
 
 import { AIMClient } from '@aim/sdk';
 
-// Prerequisites: Get agent credentials from AIM dashboard
-// 1. Create agent in dashboard
-// 2. Copy agent ID and Ed25519 private key from success page
+// Your Agent: ${agentName} (${agentType})
+// Prerequisites: Get Ed25519 private key from agent creation success page
+// Set environment variable: export AIM_PRIVATE_KEY="your-64-char-hex-private-key"
 
 // Initialize client with Ed25519 authentication
 const client = new AIMClient({
   apiUrl: '${apiUrl}',
-  agentId: '${agentId}',
+  agentId: '${agentId}',  // Your agent ID (pre-filled)
   privateKey: process.env.AIM_PRIVATE_KEY,  // Ed25519 private key (64 hex chars)
   autoDetect: {
     enabled: true,
@@ -53,7 +54,7 @@ console.log(\`Detected \${detection.mcps.length} MCPs\`);
 const verification = await client.verifyAction({
   action: 'read_file',
   resource: '/path/to/file.txt',
-  context: { reason: 'Reading user data' }
+  context: { reason: 'Reading user data for ${agentName}' }
 });
 
 // ✅ Ed25519 signing for all requests
@@ -65,15 +66,14 @@ const verification = await client.verifyAction({
 from aim_sdk import AIMClient
 import os
 
-# Prerequisites: Get agent credentials from AIM dashboard
-# 1. Create agent in dashboard
-# 2. Copy agent ID and Ed25519 private key from success page
-# 3. Set environment variable: export AIM_PRIVATE_KEY="your-private-key"
+# Your Agent: ${agentName} (${agentType})
+# Prerequisites: Get Ed25519 private key from agent creation success page
+# Set environment variable: export AIM_PRIVATE_KEY="your-64-char-hex-private-key"
 
 # Initialize client with Ed25519 authentication
 client = AIMClient(
     api_url="${apiUrl}",
-    agent_id="${agentId}",
+    agent_id="${agentId}",  # Your agent ID (pre-filled)
     private_key=os.getenv("AIM_PRIVATE_KEY"),  # Ed25519 private key (64 hex chars)
     auto_detect={
         "enabled": True,
@@ -83,13 +83,13 @@ client = AIMClient(
 
 # Auto-detect and report MCPs from Claude Desktop config
 detection = client.detect_mcps()
-print(f"Detected {len(detection['mcps'])} MCPs")
+print(f"[${agentName}] Detected {len(detection['mcps'])} MCPs")
 
 # Verify agent action (with Ed25519 signature)
 verification = client.verify_action(
     action="database_read",
     resource="users_table",
-    context={"reason": "Fetching user analytics"}
+    context={"reason": "Fetching user analytics for ${agentName}"}
 )
 
 # ✅ Ed25519 signing for all requests
@@ -108,15 +108,14 @@ import (
 func main() {
     ctx := context.Background()
 
-    // Prerequisites: Get agent credentials from AIM dashboard
-    // 1. Create agent in dashboard
-    // 2. Copy agent ID and Ed25519 private key from success page
-    // 3. Set environment variable: export AIM_PRIVATE_KEY="your-private-key"
+    // Your Agent: ${agentName} (${agentType})
+    // Prerequisites: Get Ed25519 private key from agent creation success page
+    // Set environment variable: export AIM_PRIVATE_KEY="your-64-char-hex-private-key"
 
     // Initialize client with Ed25519 authentication
     client := aimsdk.NewClient(aimsdk.Config{
         APIURL:     "${apiUrl}",
-        AgentID:    "${agentId}",
+        AgentID:    "${agentId}",  // Your agent ID (pre-filled)
         PrivateKey: os.Getenv("AIM_PRIVATE_KEY"),  // Ed25519 private key (64 hex chars)
         AutoDetect: aimsdk.AutoDetectConfig{
             Enabled:    true,
@@ -126,13 +125,13 @@ func main() {
 
     // Auto-detect and report MCPs from Claude Desktop config
     detection, _ := client.DetectMCPs(ctx)
-    fmt.Printf("Detected %d MCPs\\n", len(detection.MCPs))
+    fmt.Printf("[${agentName}] Detected %d MCPs\\n", len(detection.MCPs))
 
     // Verify agent action (with Ed25519 signature)
     verification, _ := client.VerifyAction(ctx, aimsdk.ActionRequest{
         Action:   "api_call",
         Resource: "external-api.com/endpoint",
-        Context:  map[string]interface{}{"reason": "Fetching external data"},
+        Context:  map[string]interface{}{"reason": "Fetching external data for ${agentName}"},
     })
 
     // ✅ Ed25519 signing for all requests

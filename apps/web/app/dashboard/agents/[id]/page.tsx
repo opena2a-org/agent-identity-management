@@ -349,7 +349,11 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
         </TabsContent>
 
         <TabsContent value="sdk">
-          <SDKSetupGuide agentId={agent.id} apiKey="your-api-key-placeholder" />
+          <SDKSetupGuide
+            agentId={agent.id}
+            agentName={agent.name}
+            agentType={agent.agent_type}
+          />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">
