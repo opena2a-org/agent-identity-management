@@ -56,15 +56,11 @@ export default function CapabilityRequestsPage() {
 
   const fetchRequests = async () => {
     try {
-      // TODO: Replace with actual API endpoint when backend is ready
-      // const data = await api.getCapabilityRequests()
-
-      // Mock data for now (will be replaced with real API)
-      const mockData: CapabilityRequest[] = []
-
-      setRequests(mockData)
+      const data = await api.getCapabilityRequests()
+      setRequests(data || [])
     } catch (error) {
       console.error('Failed to fetch capability requests:', error)
+      setRequests([])
     } finally {
       setLoading(false)
     }
@@ -72,18 +68,15 @@ export default function CapabilityRequestsPage() {
 
   const approveRequest = async (requestId: string) => {
     try {
-      // TODO: Replace with actual API endpoint
-      // await api.approveCapabilityRequest(requestId)
+      await api.approveCapabilityRequest(requestId)
 
-      // Update local state
-      setRequests(requests.map(r =>
-        r.id === requestId ? { ...r, status: 'approved' as const } : r
-      ))
+      // Refresh the list to get updated data
+      await fetchRequests()
 
-      alert('Capability request approved successfully!')
+      alert('✅ Capability request approved and capability granted!')
     } catch (error) {
       console.error('Failed to approve request:', error)
-      alert('Failed to approve capability request')
+      alert('❌ Failed to approve capability request: ' + (error as Error).message)
     }
   }
 
@@ -93,18 +86,15 @@ export default function CapabilityRequestsPage() {
     }
 
     try {
-      // TODO: Replace with actual API endpoint
-      // await api.rejectCapabilityRequest(requestId)
+      await api.rejectCapabilityRequest(requestId)
 
-      // Update local state
-      setRequests(requests.map(r =>
-        r.id === requestId ? { ...r, status: 'rejected' as const } : r
-      ))
+      // Refresh the list to get updated data
+      await fetchRequests()
 
-      alert('Capability request rejected')
+      alert('❌ Capability request rejected')
     } catch (error) {
       console.error('Failed to reject request:', error)
-      alert('Failed to reject capability request')
+      alert('❌ Failed to reject capability request: ' + (error as Error).message)
     }
   }
 

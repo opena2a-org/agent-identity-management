@@ -212,10 +212,6 @@ func (s *DetectionService) ReportDetections(
 			if detection.SDKVersion != "" {
 				s.updateSDKHeartbeat(ctx, agentID, detection.SDKVersion)
 			}
-
-			// TODO: Trigger trust score recalculation for significant detections
-			// TODO: Send webhooks for significant detections
-			// TODO: Create security alerts for anomalous detections
 		}
 	}
 
