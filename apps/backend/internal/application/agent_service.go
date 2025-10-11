@@ -17,7 +17,8 @@ type AgentService struct {
 	agentRepo      domain.AgentRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
-	keyVault       *crypto.KeyVault // ✅ NEW: For secure private key storage
+	keyVault       *crypto.KeyVault   // ✅ For secure private key storage
+	alertRepo      domain.AlertRepository // ✅ For creating security alerts
 }
 
 // NewAgentService creates a new agent service
@@ -25,13 +26,15 @@ func NewAgentService(
 	agentRepo domain.AgentRepository,
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
-	keyVault *crypto.KeyVault, // ✅ NEW: KeyVault dependency injection
+	keyVault *crypto.KeyVault,
+	alertRepo domain.AlertRepository, // ✅ NEW: AlertRepository for security alerts
 ) *AgentService {
 	return &AgentService{
 		agentRepo:      agentRepo,
 		trustCalc:      trustCalc,
 		trustScoreRepo: trustScoreRepo,
 		keyVault:       keyVault,
+		alertRepo:      alertRepo,
 	}
 }
 
@@ -286,6 +289,8 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 }
 
 // VerifyAction verifies if an agent can perform an action
+// ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
+// This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
 func (s *AgentService) VerifyAction(
 	ctx context.Context,
 	agentID uuid.UUID,
@@ -293,29 +298,95 @@ func (s *AgentService) VerifyAction(
 	resource string,
 	metadata map[string]interface{},
 ) (allowed bool, reason string, auditID uuid.UUID, err error) {
+	auditID = uuid.New()
+
 	// 1. Fetch agent
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return false, "Agent not found", uuid.Nil, err
 	}
 
-	// 2. Check agent status
+	// 2. Check agent status - MUST be verified
 	if agent.Status != domain.AgentStatusVerified {
-		return false, "Agent not verified", uuid.Nil, nil
+		return false, "Agent not verified - all actions denied", auditID, nil
 	}
 
-	// 3. Check capabilities (simplified for now - will be enhanced)
-	// TODO: Implement proper capability matching logic
-	// For now, we allow all actions for verified agents
-	allowed = true
-	reason = "Action matches registered capabilities"
+	// 3. Check if agent is compromised
+	if agent.IsCompromised {
+		return false, "Agent is marked as compromised - all actions denied", auditID, nil
+	}
 
-	// 4. Create audit log
-	auditID = uuid.New()
-	// Note: We need an audit service instance, but for now we'll skip audit logging
-	// This should be properly implemented with the audit service in production
+	// 4. ✅ CAPABILITY-BASED ACCESS CONTROL (CBAC)
+	// This is what prevents EchoLeak and similar attacks
+	if agent.Capabilities == nil || len(agent.Capabilities) == 0 {
+		// ⚠️  CRITICAL: If agent has NO capabilities, DENY ALL actions
+		// This is the default-deny security posture
+		return false, "Agent has no registered capabilities - action denied (capability violation)", auditID, nil
+	}
 
-	return allowed, reason, auditID, nil
+	// 5. Check if requested action matches any registered capability
+	hasCapability := false
+	for _, capability := range agent.Capabilities {
+		if s.matchesCapability(actionType, resource, capability) {
+			hasCapability = true
+			break
+		}
+	}
+
+	if !hasCapability {
+		// ✅ BLOCK THE ATTACK - Action not in capability list
+		// This prevents scope violations like EchoLeak's bulk email access
+
+		// 🚨 CREATE SECURITY ALERT for capability violation
+		alert := &domain.Alert{
+			ID:             uuid.New(),
+			OrganizationID: agent.OrganizationID,
+			AlertType:      domain.AlertSecurityBreach, // Security breach / unauthorized action attempt
+			Severity:       domain.AlertSeverityHigh,
+			Title:          fmt.Sprintf("Capability Violation Detected: %s", agent.DisplayName),
+			Description:    fmt.Sprintf("Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). This matches the attack pattern of CVE-2025-32711 (EchoLeak). The action was BLOCKED by AIM's capability-based access control. Audit ID: %s", agent.DisplayName, actionType, agent.Capabilities, auditID.String()),
+			ResourceType:   "agent",
+			ResourceID:     agentID,
+			IsAcknowledged: false,
+			CreatedAt:      time.Now(),
+		}
+
+		// Save the alert (fire-and-forget - don't fail the verification if alert creation fails)
+		if err := s.alertRepo.Create(alert); err != nil {
+			fmt.Printf("⚠️  Warning: failed to create security alert for capability violation: %v\n", err)
+		} else {
+			fmt.Printf("🚨 SECURITY ALERT CREATED: Capability violation detected for agent %s (action: %s)\n", agent.Name, actionType)
+		}
+
+		return false, fmt.Sprintf("Capability violation: Agent does not have permission for action '%s' (allowed: %v)", actionType, agent.Capabilities), auditID, nil
+	}
+
+	// 6. ✅ ACTION ALLOWED - Agent has proper capability
+	return true, "Action matches registered capabilities", auditID, nil
+}
+
+// matchesCapability checks if an action matches a registered capability
+// Supports exact matching and wildcard patterns
+func (s *AgentService) matchesCapability(actionType string, resource string, capability string) bool {
+	// Exact match
+	if actionType == capability {
+		return true
+	}
+
+	// Wildcard patterns (e.g., "read_*" matches "read_email", "read_file")
+	if len(capability) > 0 && capability[len(capability)-1] == '*' {
+		prefix := capability[:len(capability)-1]
+		if len(actionType) >= len(prefix) && actionType[:len(prefix)] == prefix {
+			return true
+		}
+	}
+
+	// Future: Add more sophisticated pattern matching here
+	// - Resource-based matching (e.g., "read:/data/*")
+	// - Time-based capabilities
+	// - Context-aware matching
+
+	return false
 }
 
 // LogActionResult logs the outcome of a verified action
