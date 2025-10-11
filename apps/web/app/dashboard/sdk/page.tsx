@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { SDKTestResults } from '@/components/agents/sdk-test-results'
 
 type SDKLanguage = 'python' | 'go' | 'javascript'
 
@@ -79,9 +78,6 @@ export default function SDKDownloadPage() {
       <div className="grid md:grid-cols-3 gap-6 mb-8">
         {/* Python SDK - Full Featured */}
         <div className="bg-white border-2 border-blue-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-blue-50 px-4 py-2 border-b border-blue-200">
-            <span className="text-xs font-semibold text-blue-700">✨ RECOMMENDED</span>
-          </div>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -120,14 +116,15 @@ export default function SDKDownloadPage() {
               <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
               <span>Ed25519 crypto signing</span>
             </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>System keyring integration</span>
+            </div>
           </div>
         </div>
 
         {/* Go SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-green-50 px-4 py-2 border-b border-green-200">
-            <span className="text-xs font-semibold text-green-700">✅ PRODUCTION READY</span>
-          </div>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 bg-cyan-100 rounded-lg flex items-center justify-center">
@@ -175,9 +172,6 @@ export default function SDKDownloadPage() {
 
         {/* JavaScript SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-green-50 px-4 py-2 border-b border-green-200">
-            <span className="text-xs font-semibold text-green-700">✅ PRODUCTION READY</span>
-          </div>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -223,9 +217,6 @@ export default function SDKDownloadPage() {
           </div>
         </div>
       </div>
-
-      {/* SDK Test Results */}
-      <SDKTestResults />
 
       {/* Security Notice */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 flex items-start gap-3">
