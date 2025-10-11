@@ -1,9 +1,36 @@
 # 🔍 Developer QA Testing Plan - Agent Identity Management (AIM)
 
-**Version**: 1.0
-**Date**: October 10, 2025
+**Version**: 1.1
+**Date**: October 11, 2025
 **Purpose**: Complete quality assurance testing of all AIM features (backend and frontend)
-**Estimated Time**: 16-24 hours
+**Estimated Time**: 31 hours
+
+## 🆕 What's New in v1.1
+
+This update includes testing scenarios for newly implemented features:
+
+### New Backend Endpoints (10 endpoints)
+- **Capability Requests**: 5 endpoints for requesting, listing, approving, and rejecting capability expansion requests
+- **Security Policies**: 5 endpoints for managing configurable security policies with enforcement modes
+
+### New Frontend Pages (2 pages)
+- **Admin Capability Requests Page** (`/dashboard/admin/capability-requests`): Admin interface for reviewing and approving capability expansion requests
+- **Admin Security Policies Page** (`/dashboard/admin/security-policies`): Admin interface for configuring security policy enforcement modes
+
+### Enhanced Features
+- **Agent Capabilities Display**: Enhanced agent detail page with comprehensive capability visualization (risk levels, actions, granted by)
+- **Trust Score Auto-Grant**: Automatic capability granting based on trust score threshold (≥ 0.30)
+- **Security Policy Enforcement**: Configurable enforcement modes (Alert Only, Block & Alert, Allow)
+- **Capability Request Workflow**: Complete end-to-end approval workflow from request to grant
+
+### New Integration Tests (3 flows)
+- Capability Request Approval Flow (15 steps)
+- Trust Score Auto-Grant Flow (9 steps)
+- Security Policy Enforcement Flow (15 steps)
+
+**Total Endpoints**: 70+ (was 60+)
+**Total Admin Pages**: 6 (was 4)
+**Estimated Testing Time**: 31 hours (was 26 hours)
 
 ---
 
@@ -24,11 +51,12 @@
 ## 📊 Overview
 
 ### Objectives
-- **Verify all 60+ backend endpoints** are functional and return correct responses
-- **Test all frontend pages** for UI/UX, data display, and user interactions
+- **Verify all 70+ backend endpoints** are functional and return correct responses (including new capability requests & security policies)
+- **Test all frontend pages** for UI/UX, data display, and user interactions (including 2 new admin pages)
 - **Validate integration** between frontend, backend, and database
 - **Ensure security** measures are properly implemented
 - **Check performance** meets targets (<100ms API response, <2s page load)
+- **Validate new features**: Capability request approval workflow, security policies enforcement, trust score auto-grant
 
 ### Scope
 - ✅ All REST API endpoints (`/api/v1/*`)
@@ -793,6 +821,14 @@ Authorization: Bearer {token}
 - ✅ Valid agent ID → 200 OK
 - ✅ Score between 0-100
 - ✅ Score saved to DB
+- ✅ Auto-grant triggered if score ≥ 0.30 (30%)
+- ✅ Capabilities automatically granted based on trust level
+- ✅ Auto-granted capabilities have granted_by = NULL
+- ✅ Initial capabilities include:
+  - file:read (if trust ≥ 0.30)
+  - database:read (if trust ≥ 0.30)
+  - api:call (if trust ≥ 0.30)
+- ✅ Higher trust scores unlock more capabilities
 - ✅ MANAGER role can calculate → 200 OK
 - ✅ MEMBER role cannot calculate → 403 Forbidden
 
@@ -1019,6 +1055,172 @@ Authorization: Bearer {admin_token}
 - ✅ Returns total_agents, verified_agents, etc.
 - ✅ Includes recent activity
 - ✅ Performance metrics
+
+#### 6.15 List Capability Requests
+```http
+GET http://localhost:8080/api/v1/admin/capability-requests
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK with array of capability requests
+**Test Cases**:
+- ✅ ADMIN role → 200 OK
+- ✅ Returns all capability requests for organization
+- ✅ Includes agent details, requester, reviewer info
+- ✅ Filter by status works (pending, approved, rejected)
+- ✅ Filter by agent_id works
+- ✅ Pagination works (limit, offset)
+- ✅ Non-admin role → 403 Forbidden
+
+#### 6.16 Get Capability Request
+```http
+GET http://localhost:8080/api/v1/admin/capability-requests/{id}
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK with capability request details
+**Test Cases**:
+- ✅ Valid request ID → 200 OK
+- ✅ Non-existent ID → 404 Not Found
+- ✅ Includes full details (agent, capability type, reason, status)
+- ✅ ADMIN role only → 403 for others
+
+#### 6.17 Approve Capability Request
+```http
+POST http://localhost:8080/api/v1/admin/capability-requests/{id}/approve
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK
+**Test Cases**:
+- ✅ Valid pending request → 200 OK
+- ✅ Request status updated to approved
+- ✅ Reviewer information recorded
+- ✅ Capability automatically granted to agent
+- ✅ Capability appears in agent_capabilities table
+- ✅ Already approved request → 400 Bad Request
+- ✅ Non-existent request → 404 Not Found
+- ✅ ADMIN role only → 403 for others
+
+#### 6.18 Reject Capability Request
+```http
+POST http://localhost:8080/api/v1/admin/capability-requests/{id}/reject
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK
+**Test Cases**:
+- ✅ Valid pending request → 200 OK
+- ✅ Request status updated to rejected
+- ✅ Reviewer information recorded
+- ✅ Capability NOT granted to agent
+- ✅ Already rejected request → 400 Bad Request
+- ✅ ADMIN role only → 403 for others
+
+#### 6.19 Create Capability Request
+```http
+POST http://localhost:8080/api/v1/capability-requests
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "agentId": "agent-uuid",
+  "capabilityType": "database:write",
+  "reason": "Need to update user records for analytics"
+}
+```
+**Expected**: 201 Created
+**Test Cases**:
+- ✅ Valid data → 201 Created
+- ✅ Request created with pending status
+- ✅ Requester set to current user
+- ✅ Duplicate pending request → 409 Conflict
+- ✅ Capability already granted → 409 Conflict
+- ✅ Invalid agent ID → 404 Not Found
+- ✅ Missing required fields → 400 Bad Request
+- ✅ All authenticated users can create
+
+#### 6.20 List Security Policies
+```http
+GET http://localhost:8080/api/v1/admin/security-policies
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK with array of security policies
+**Test Cases**:
+- ✅ ADMIN role → 200 OK
+- ✅ Returns all policies for organization
+- ✅ Includes policy details (name, description, enforcement mode, priority)
+- ✅ Shows enabled/disabled status
+- ✅ Non-admin role → 403 Forbidden
+
+#### 6.21 Get Security Policy
+```http
+GET http://localhost:8080/api/v1/admin/security-policies/{id}
+Authorization: Bearer {admin_token}
+```
+**Expected**: 200 OK with policy details
+**Test Cases**:
+- ✅ Valid policy ID → 200 OK
+- ✅ Non-existent ID → 404 Not Found
+- ✅ Includes configuration details
+- ✅ ADMIN role only → 403 for others
+
+#### 6.22 Update Security Policy
+```http
+PUT http://localhost:8080/api/v1/admin/security-policies/{id}
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+
+{
+  "enforcementMode": "block_and_alert",
+  "isEnabled": true,
+  "priority": 100
+}
+```
+**Expected**: 200 OK
+**Test Cases**:
+- ✅ Valid data → 200 OK
+- ✅ Policy updated in database
+- ✅ Valid enforcement modes: alert_only, block_and_alert, allow
+- ✅ Invalid enforcement mode → 400 Bad Request
+- ✅ Priority validation (1-1000) works
+- ✅ Changes take effect immediately
+- ✅ ADMIN role only → 403 for others
+
+#### 6.23 Enable/Disable Security Policy
+```http
+PATCH http://localhost:8080/api/v1/admin/security-policies/{id}/toggle
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+
+{
+  "isEnabled": false
+}
+```
+**Expected**: 200 OK
+**Test Cases**:
+- ✅ Valid policy → 200 OK
+- ✅ Policy enabled/disabled in database
+- ✅ Disabled policies not enforced
+- ✅ ADMIN role only → 403 for others
+
+#### 6.24 Create Security Policy
+```http
+POST http://localhost:8080/api/v1/admin/security-policies
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+
+{
+  "name": "High Risk Action Monitoring",
+  "description": "Monitor high-risk capability usage",
+  "policyType": "capability_violation",
+  "enforcementMode": "alert_only",
+  "priority": 95
+}
+```
+**Expected**: 201 Created
+**Test Cases**:
+- ✅ Valid data → 201 Created
+- ✅ Default values applied (isEnabled: true)
+- ✅ Duplicate name → 409 Conflict
+- ✅ Invalid policy type → 400 Bad Request
+- ✅ ADMIN role only → 403 for others
 
 ---
 
@@ -1611,7 +1813,21 @@ Content-Type: application/json
 - ✅ "Verify Agent" button visible (for MANAGER+)
 - ✅ Trust score history chart renders
 - ✅ Recent activity table shows agent actions
-- ✅ Capabilities section lists granted capabilities
+- ✅ Capabilities section displays correctly:
+  - Lists all granted capabilities
+  - Shows capability type (database:read, api:external_call, etc.)
+  - Displays risk level badges (Low, Medium, High, Critical)
+  - Risk level colors match severity:
+    - Low: green
+    - Medium: yellow
+    - High: orange
+    - Critical: red
+  - Shows granted by (user who granted)
+  - Shows granted at (timestamp)
+  - Shows actions allowed for each capability
+  - Empty state when no capabilities granted
+  - "Request Capability" button works (opens modal/form)
+- ✅ Auto-grant indicator shown for trust score ≥ 0.30
 - ✅ MCP servers section lists related MCPs
 - ✅ Tags displayed with colors
 - ✅ "Download SDK" button works
@@ -1789,6 +2005,76 @@ Content-Type: application/json
 - ✅ Filter by status (open/acknowledged/resolved) works
 - ✅ Severity badges colored correctly
 
+#### 17.5 Admin Capability Requests Page (`/dashboard/admin/capability-requests`)
+**URL**: http://localhost:3000/dashboard/admin/capability-requests
+
+**Test Cases**:
+- ✅ Page loads without errors (ADMIN only)
+- ✅ Statistics cards display:
+  - Total Requests
+  - Pending Review
+  - Approved
+  - Rejected
+- ✅ Search/filter functionality works
+- ✅ Filter by status works (all, pending, approved, rejected)
+- ✅ Search by agent name/capability type works
+- ✅ Requests list displays with correct data:
+  - Agent display name and name
+  - Capability type badge
+  - Reason text
+  - Requested by (user email)
+  - Requested at (timestamp)
+- ✅ Status badges colored correctly:
+  - Pending: yellow
+  - Approved: green
+  - Rejected: red
+- ✅ "Approve" button visible only for pending requests
+- ✅ "Reject" button visible only for pending requests
+- ✅ Approve flow works:
+  - Click approve → API call succeeds
+  - Success alert shown
+  - List refreshes automatically
+  - Request status updated to approved
+  - Reviewer info displayed
+- ✅ Reject flow works:
+  - Confirmation dialog shown
+  - Click confirm → API call succeeds
+  - Request status updated to rejected
+  - Reviewer info displayed
+- ✅ Empty state shown when no requests match filter
+- ✅ Info banner explains auto-grant architecture
+- ✅ Non-admin role redirected to 403 page
+
+#### 17.6 Admin Security Policies Page (`/dashboard/admin/security-policies`)
+**URL**: http://localhost:3000/dashboard/admin/security-policies
+
+**Test Cases**:
+- ✅ Page loads without errors (ADMIN only)
+- ✅ Security policies list displays
+- ✅ Table columns: Name, Description, Type, Enforcement Mode, Priority, Status
+- ✅ Enforcement mode selector works:
+  - Alert Only (monitor only)
+  - Block & Alert (enforce and notify)
+  - Allow (disabled)
+- ✅ Enforcement mode changes save correctly
+- ✅ Visual indicators for enforcement modes:
+  - Alert Only: blue/info
+  - Block & Alert: red/warning
+  - Allow: gray/muted
+- ✅ Warning banner shows when blocking mode enabled
+- ✅ Enable/disable toggle works
+- ✅ Priority displayed correctly (1-1000)
+- ✅ Policy type badges displayed:
+  - Capability Violation
+  - Low Trust Score
+  - Unusual Activity
+- ✅ Default policies present for all organizations:
+  - Capability Violation Detection
+  - Low Trust Score Monitoring
+  - Unusual Activity Detection
+- ✅ Empty state handled (though should not occur with defaults)
+- ✅ Non-admin role redirected to 403 page
+
 ---
 
 ### Common UI Components
@@ -1801,6 +2087,14 @@ Content-Type: application/json
 - ✅ Role-based menu items shown:
   - Admin menu only for ADMIN
   - Security menu only for MANAGER+
+- ✅ Admin submenu includes:
+  - Users
+  - Registrations
+  - Alerts
+  - Capability Requests (NEW)
+  - Security Policies (NEW)
+- ✅ Capability Requests link navigates to /dashboard/admin/capability-requests
+- ✅ Security Policies link navigates to /dashboard/admin/security-policies
 - ✅ Collapse/expand button works
 - ✅ Sidebar responsive on mobile
 
@@ -2011,6 +2305,91 @@ Content-Type: application/json
 - ✅ Real event triggers webhook
 - ✅ Webhook payload correctly formatted
 - ✅ Webhook signature included
+
+#### 19.9 Capability Request Approval Flow
+**Steps**:
+1. Login as MEMBER user
+2. Navigate to agent detail page
+3. Click "Request Capability" button
+4. Fill out capability request form:
+   - Select capability type (database:write)
+   - Enter reason (business justification)
+5. Submit request
+6. Verify request created with pending status
+7. Logout and login as ADMIN
+8. Navigate to capability requests page
+9. Verify request appears in pending list
+10. Click "Approve" button
+11. Verify success message
+12. Check request status updated to approved
+13. Navigate to agent detail page
+14. Verify capability now appears in capabilities section
+15. Check agent_capabilities table has new entry
+
+**Expected**:
+- ✅ Request created with status: pending
+- ✅ Requester recorded correctly
+- ✅ Admin can see pending request
+- ✅ Approval updates status to approved
+- ✅ Reviewer information recorded
+- ✅ Capability automatically granted to agent
+- ✅ Capability visible on agent detail page
+- ✅ Database tables updated correctly (capability_requests, agent_capabilities)
+
+#### 19.10 Trust Score Auto-Grant Flow
+**Steps**:
+1. Create new agent
+2. Agent automatically verified with initial capabilities
+3. Calculate trust score (should be ≥ 0.30 for new verified agent)
+4. Verify capabilities auto-granted:
+   - Check agent_capabilities table
+   - Verify capabilities based on trust score threshold
+5. Login to dashboard
+6. Navigate to agent detail page
+7. Verify auto-granted capabilities displayed
+8. Check granted_by is NULL (auto-granted)
+9. Verify trust score badge shows ≥ 0.30
+
+**Expected**:
+- ✅ New agent trust score calculated automatically
+- ✅ Trust score ≥ 0.30 triggers auto-grant
+- ✅ Initial capabilities granted without manual approval
+- ✅ Auto-granted capabilities have granted_by = NULL
+- ✅ Agent can immediately use auto-granted capabilities
+- ✅ UI shows auto-grant indicator
+- ✅ Additional capabilities require approval (request flow)
+
+#### 19.11 Security Policy Enforcement Flow
+**Steps**:
+1. Login as ADMIN
+2. Navigate to security policies page
+3. Verify 3 default policies exist:
+   - Capability Violation Detection
+   - Low Trust Score Monitoring
+   - Unusual Activity Detection
+4. Select "Capability Violation Detection" policy
+5. Change enforcement mode to "Block & Alert"
+6. Verify warning banner appears
+7. Save changes
+8. Trigger capability violation:
+   - Agent attempts action without granted capability
+   - Or agent attempts high-risk action
+9. Verify action blocked (if enforcement mode = block_and_alert)
+10. Check security alert created
+11. Navigate to alerts page
+12. Verify violation alert visible
+13. Change enforcement back to "Alert Only"
+14. Trigger same violation
+15. Verify action allowed but alert created
+
+**Expected**:
+- ✅ Default policies created for all organizations
+- ✅ Enforcement mode changes save correctly
+- ✅ Block & Alert mode prevents unauthorized actions
+- ✅ Alert Only mode allows actions but creates alerts
+- ✅ Security alerts created with correct severity
+- ✅ Policy priority determines execution order
+- ✅ Disabled policies not enforced
 
 ---
 
@@ -2329,13 +2708,13 @@ SELECT * FROM agents WHERE id = 'agent-id';
 | Phase | Duration | Tasks |
 |-------|----------|-------|
 | Setup | 2 hours | Environment setup, test data creation |
-| Backend Testing | 8 hours | Test all 60+ API endpoints |
-| Frontend Testing | 6 hours | Test all dashboard pages |
-| Integration Testing | 3 hours | End-to-end user flows |
+| Backend Testing | 10 hours | Test all 70+ API endpoints (including new capability requests & security policies) |
+| Frontend Testing | 8 hours | Test all dashboard pages (including new admin pages) |
+| Integration Testing | 4 hours | End-to-end user flows (including capability request & security policy flows) |
 | Security Testing | 2 hours | Auth, RBAC, injection tests |
 | Performance Testing | 2 hours | Load testing, profiling |
 | Reporting | 3 hours | Document findings, create issues |
-| **Total** | **26 hours** | **Complete QA cycle** |
+| **Total** | **31 hours** | **Complete QA cycle** |
 
 ---
 
@@ -2384,6 +2763,21 @@ SELECT * FROM agents WHERE id = 'agent-id';
 
 ---
 
-**Last Updated**: October 10, 2025
-**Version**: 1.0
+**Last Updated**: October 11, 2025
+**Version**: 1.1
 **Maintainer**: OpenA2A Team (hello@opena2a.org)
+
+## 📝 Changelog
+
+### v1.1 (October 11, 2025)
+- ✅ Added 10 new backend endpoint tests (Capability Requests & Security Policies)
+- ✅ Added 2 new frontend page tests (Admin Capability Requests & Security Policies)
+- ✅ Added 3 new integration test flows (Capability Request, Trust Score Auto-Grant, Security Policy Enforcement)
+- ✅ Enhanced agent capabilities display testing with risk levels and auto-grant indicators
+- ✅ Updated trust score testing to include auto-grant functionality
+- ✅ Updated sidebar navigation testing to include new admin menu items
+- ✅ Increased total testing time estimate from 26 to 31 hours
+- ✅ Updated endpoint count from 60+ to 70+
+
+### v1.0 (October 10, 2025)
+- Initial release with comprehensive testing plan for all core features
