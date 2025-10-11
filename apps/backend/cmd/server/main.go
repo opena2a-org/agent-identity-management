@@ -475,6 +475,7 @@ type Handlers struct {
 	Compliance        *handlers.ComplianceHandler
 	MCP               *handlers.MCPHandler
 	Security          *handlers.SecurityHandler
+	SecurityPolicy    *handlers.SecurityPolicyHandler // ✅ For policy management
 	Analytics         *handlers.AnalyticsHandler
 	Webhook           *handlers.WebhookHandler
 	VerificationEvent *handlers.VerificationEventHandler
@@ -530,6 +531,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Security: handlers.NewSecurityHandler(
 			services.Security,
 			services.Audit,
+		),
+		SecurityPolicy: handlers.NewSecurityPolicyHandler(
+			services.SecurityPolicy,
 		),
 		Analytics: handlers.NewAnalyticsHandler(
 			services.Agent,
@@ -762,6 +766,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Dashboard stats
 	admin.Get("/dashboard/stats", h.Admin.GetDashboardStats)
+
+	// Security Policy Management routes (admin only)
+	admin.Get("/security-policies", h.SecurityPolicy.ListPolicies)
+	admin.Get("/security-policies/:id", h.SecurityPolicy.GetPolicy)
+	admin.Post("/security-policies", h.SecurityPolicy.CreatePolicy)
+	admin.Put("/security-policies/:id", h.SecurityPolicy.UpdatePolicy)
+	admin.Delete("/security-policies/:id", h.SecurityPolicy.DeletePolicy)
+	admin.Patch("/security-policies/:id/toggle", h.SecurityPolicy.TogglePolicy)
 
 	// Compliance routes (admin only)
 	compliance := v1.Group("/compliance")
