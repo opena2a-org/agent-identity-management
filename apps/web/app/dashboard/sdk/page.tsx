@@ -300,38 +300,6 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* Features */}
-      <div className="mt-8 grid md:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mb-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Zero Config</h4>
-          <p className="text-sm text-gray-600">
-            Credentials embedded. Dependencies auto-install. One line to register!
-          </p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
-            <Code className="h-5 w-5 text-blue-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Auto-Detection</h4>
-          <p className="text-sm text-gray-600">
-            Capabilities and MCP servers detected automatically from your code.
-          </p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-            <Shield className="h-5 w-5 text-purple-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Auto-Verification</h4>
-          <p className="text-sm text-gray-600">
-            Challenge-response verification completes automatically with auto-approval.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }
