@@ -19,6 +19,7 @@ import {
   Download,
   Lock,
   ShieldCheck,
+  CheckSquare,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -96,6 +97,12 @@ const navigationBase: NavSection[] = [
         href: '/dashboard/admin/alerts',
         icon: Bell,
         roles: ['admin', 'manager'], // Managers can view alerts
+      },
+      {
+        name: 'Capability Requests',
+        href: '/dashboard/admin/capability-requests',
+        icon: CheckSquare,
+        roles: ['admin'], // Admin-only capability approval
       },
       {
         name: 'Security Policies',
