@@ -20,79 +20,124 @@ export function SDKSetupGuide({ agentId, apiKey }: SDKSetupGuideProps) {
     setTimeout(() => setCopiedLang(null), 2000);
   };
 
-  const apiUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  // Backend API URL - port 8080, not frontend port 3000
+  const apiUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8080`
+    : 'http://localhost:8080';
 
   const examples = {
     javascript: `npm install @aim/sdk
 
-import { AIMClient, registerAgent, autoDetectMCPs } from '@aim/sdk';
+import { AIMClient } from '@aim/sdk';
 
-// 1. Register new agent with Ed25519 signing
-const registration = await registerAgent({
-  name: 'my-agent',
-  type: 'ai_agent',
-  apiUrl: '${apiUrl}'
-});
+// Prerequisites: Get agent credentials from AIM dashboard
+// 1. Create agent in dashboard
+// 2. Copy agent ID and Ed25519 private key from success page
 
-// 2. Auto-detect MCPs from config files
-const detection = await autoDetectMCPs();
-console.log(\`Detected \${detection.mcps.length} MCPs\`);
-
-// 3. Create client with credentials
+// Initialize client with Ed25519 authentication
 const client = new AIMClient({
   apiUrl: '${apiUrl}',
-  apiKey: registration.apiKey,
-  agentId: registration.id,
-  autoDetect: true  // Auto-report MCPs
+  agentId: '${agentId}',
+  privateKey: process.env.AIM_PRIVATE_KEY,  // Ed25519 private key (64 hex chars)
+  autoDetect: {
+    enabled: true,
+    configPath: '~/.config/claude/mcp_config.json'  // Claude Desktop MCP config
+  }
 });
 
-// ✅ Features: OAuth, keyring, Ed25519, auto-detection`,
+// Auto-detect and report MCPs from Claude Desktop config
+const detection = await client.detectMCPs();
+console.log(\`Detected \${detection.mcps.length} MCPs\`);
+
+// Verify agent action (with Ed25519 signature)
+const verification = await client.verifyAction({
+  action: 'read_file',
+  resource: '/path/to/file.txt',
+  context: { reason: 'Reading user data' }
+});
+
+// ✅ Ed25519 signing for all requests
+// ✅ Auto-MCP detection from Claude config
+// ✅ Real-time reporting to dashboard`,
 
     python: `pip install aim-sdk
 
-from aim_sdk import register_agent
+from aim_sdk import AIMClient
+import os
 
-# ONE LINE - Zero configuration!
-# ✅ Ed25519 keypair auto-generated
-# ✅ Credentials auto-saved to keyring
-# ✅ Capabilities auto-detected from imports
-# ✅ MCPs auto-detected from Claude Desktop config
-# ✅ Challenge-response auto-completed
+# Prerequisites: Get agent credentials from AIM dashboard
+# 1. Create agent in dashboard
+# 2. Copy agent ID and Ed25519 private key from success page
+# 3. Set environment variable: export AIM_PRIVATE_KEY="your-private-key"
 
-agent = register_agent(
-    "${agentId.split('-')[0]}-agent",
-    api_key="${apiKey}",
-    aim_url="${apiUrl}"
+# Initialize client with Ed25519 authentication
+client = AIMClient(
+    api_url="${apiUrl}",
+    agent_id="${agentId}",
+    private_key=os.getenv("AIM_PRIVATE_KEY"),  # Ed25519 private key (64 hex chars)
+    auto_detect={
+        "enabled": True,
+        "config_path": "~/.config/claude/mcp_config.json"  # Claude Desktop MCP config
+    }
 )
 
-print(f"Agent ID: {agent.agent_id}")
-print(f"Trust Score: {agent.trust_score}")`,
+# Auto-detect and report MCPs from Claude Desktop config
+detection = client.detect_mcps()
+print(f"Detected {len(detection['mcps'])} MCPs")
+
+# Verify agent action (with Ed25519 signature)
+verification = client.verify_action(
+    action="database_read",
+    resource="users_table",
+    context={"reason": "Fetching user analytics"}
+)
+
+# ✅ Ed25519 signing for all requests
+# ✅ Auto-MCP detection from Claude config
+# ✅ Real-time reporting to dashboard`,
 
     go: `go get github.com/opena2a/aim-sdk-go
 
 import (
     "context"
+    "fmt"
+    "os"
     aimsdk "github.com/opena2a/aim-sdk-go"
 )
 
 func main() {
     ctx := context.Background()
 
-    // 1. Register agent (Ed25519 keypair auto-generated)
+    // Prerequisites: Get agent credentials from AIM dashboard
+    // 1. Create agent in dashboard
+    // 2. Copy agent ID and Ed25519 private key from success page
+    // 3. Set environment variable: export AIM_PRIVATE_KEY="your-private-key"
+
+    // Initialize client with Ed25519 authentication
     client := aimsdk.NewClient(aimsdk.Config{
-        APIURL: "${apiUrl}",
+        APIURL:     "${apiUrl}",
+        AgentID:    "${agentId}",
+        PrivateKey: os.Getenv("AIM_PRIVATE_KEY"),  // Ed25519 private key (64 hex chars)
+        AutoDetect: aimsdk.AutoDetectConfig{
+            Enabled:    true,
+            ConfigPath: "~/.config/claude/mcp_config.json",  // Claude Desktop MCP config
+        },
     })
 
-    reg, _ := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
-        Name: "my-go-agent",
-        Type: "ai_agent",
-    })
-
-    // 2. Auto-detect MCPs
-    detection, _ := aimsdk.AutoDetectMCPs()
+    // Auto-detect and report MCPs from Claude Desktop config
+    detection, _ := client.DetectMCPs(ctx)
     fmt.Printf("Detected %d MCPs\\n", len(detection.MCPs))
 
-    // ✅ OAuth, keyring, Ed25519, auto-detection
+    // Verify agent action (with Ed25519 signature)
+    verification, _ := client.VerifyAction(ctx, aimsdk.ActionRequest{
+        Action:   "api_call",
+        Resource: "external-api.com/endpoint",
+        Context:  map[string]interface{}{"reason": "Fetching external data"},
+    })
+
+    // ✅ Ed25519 signing for all requests
+    // ✅ Auto-MCP detection from Claude config
+    // ✅ Real-time reporting to dashboard
 }`,
   };
 
@@ -142,14 +187,14 @@ func main() {
               </div>
 
               <div className="text-sm text-muted-foreground space-y-1">
-                <p className="font-medium">✅ 100% Feature Parity - All SDKs include:</p>
+                <p className="font-medium">✅ All SDKs include:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Ed25519 cryptographic signing (request verification)</li>
-                  <li>OAuth integration (Google, Microsoft, Okta)</li>
-                  <li>Auto-detect MCPs from config files</li>
-                  <li>System keyring integration (secure credential storage)</li>
-                  <li>Agent registration with challenge-response verification</li>
-                  <li>Real-time MCP reporting to dashboard</li>
+                  <li><strong>Ed25519 Authentication:</strong> All requests cryptographically signed with private key</li>
+                  <li><strong>Auto-MCP Detection:</strong> Detects MCPs from Claude Desktop config (~/.config/claude/mcp_config.json)</li>
+                  <li><strong>Real-time Reporting:</strong> Automatically reports detected MCPs to AIM dashboard</li>
+                  <li><strong>Action Verification:</strong> Verify agent actions with context and audit trail</li>
+                  <li><strong>Capability Detection:</strong> Auto-detect agent capabilities from code imports</li>
+                  <li><strong>Trust Score Integration:</strong> Automatic trust score calculation based on behavior</li>
                 </ul>
               </div>
             </TabsContent>
@@ -157,9 +202,16 @@ func main() {
         </Tabs>
 
         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-sm text-blue-900 dark:text-blue-100">
-            <strong>💡 Pro Tip:</strong> The SDK works automatically - just install it and run your agent.
-            Check this dashboard to see detected MCPs appear in real-time!
+          <p className="text-sm text-blue-900 dark:text-blue-100 space-y-2">
+            <strong>💡 Quick Start:</strong>
+            <br />
+            1. Create agent in AIM dashboard → Get agent ID and Ed25519 private key
+            <br />
+            2. Set environment variable: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">export AIM_PRIVATE_KEY="your-private-key"</code>
+            <br />
+            3. Install SDK and initialize with agent ID + private key
+            <br />
+            4. MCPs auto-detected from Claude Desktop config and reported to dashboard in real-time!
           </p>
         </div>
       </CardContent>
