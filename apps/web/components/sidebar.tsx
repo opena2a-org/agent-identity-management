@@ -11,7 +11,6 @@ import {
   Key,
   Users,
   Bell,
-  FileText,
   LogOut,
   ChevronLeft,
   Menu,
@@ -96,12 +95,6 @@ const navigationBase: NavSection[] = [
         href: '/dashboard/admin/alerts',
         icon: Bell,
         roles: ['admin', 'manager'], // Managers can view alerts
-      },
-      {
-        name: 'Audit Logs',
-        href: '/dashboard/admin/audit-logs',
-        icon: FileText,
-        roles: ['admin'],
       },
     ],
   },
