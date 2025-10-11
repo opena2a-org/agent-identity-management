@@ -18,6 +18,7 @@ import {
   Activity,
   Download,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -95,6 +96,12 @@ const navigationBase: NavSection[] = [
         href: '/dashboard/admin/alerts',
         icon: Bell,
         roles: ['admin', 'manager'], // Managers can view alerts
+      },
+      {
+        name: 'Security Policies',
+        href: '/dashboard/admin/security-policies',
+        icon: ShieldCheck,
+        roles: ['admin'], // Admin-only policy management
       },
     ],
   },

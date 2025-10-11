@@ -15,6 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface SecurityPolicy {
   id: string;
@@ -68,6 +75,11 @@ export default function SecurityPoliciesPage() {
     policyId: string;
     policyName: string;
     currentAction: string;
+  } | null>(null);
+  const [pendingEnforcementChange, setPendingEnforcementChange] = useState<{
+    policyId: string;
+    policyName: string;
+    newAction: 'alert_only' | 'block_and_alert' | 'allow';
   } | null>(null);
 
   useEffect(() => {
@@ -125,6 +137,71 @@ export default function SecurityPoliciesPage() {
   const cancelBlockingMode = () => {
     setShowBlockingWarning(false);
     setPendingPolicyToggle(null);
+    setPendingEnforcementChange(null);
+  };
+
+  const changeEnforcementAction = async (
+    policyId: string,
+    newAction: 'alert_only' | 'block_and_alert' | 'allow'
+  ) => {
+    try {
+      const policy = policies.find(p => p.id === policyId);
+      if (!policy) return;
+
+      // Update the policy with new enforcement action
+      await api.updateSecurityPolicy(policyId, {
+        name: policy.name,
+        description: policy.description,
+        policy_type: policy.policy_type,
+        enforcement_action: newAction,
+        severity_threshold: policy.severity_threshold,
+        rules: policy.rules,
+        applies_to: policy.applies_to,
+        is_enabled: policy.is_enabled,
+        priority: policy.priority,
+      });
+
+      // Update local state
+      setPolicies(policies.map(p =>
+        p.id === policyId ? { ...p, enforcement_action: newAction } : p
+      ));
+    } catch (error) {
+      console.error('Failed to update enforcement action:', error);
+      alert('Failed to update enforcement action. Please try again.');
+    }
+  };
+
+  const handleEnforcementChange = (
+    policy: SecurityPolicy,
+    newAction: 'alert_only' | 'block_and_alert' | 'allow'
+  ) => {
+    // If changing to blocking mode, show warning
+    if (newAction === 'block_and_alert') {
+      setPendingEnforcementChange({
+        policyId: policy.id,
+        policyName: policy.name,
+        newAction,
+      });
+      setShowBlockingWarning(true);
+    } else {
+      // Safe to change directly
+      changeEnforcementAction(policy.id, newAction);
+    }
+  };
+
+  const confirmEnforcementChange = async () => {
+    if (pendingEnforcementChange) {
+      await changeEnforcementAction(
+        pendingEnforcementChange.policyId,
+        pendingEnforcementChange.newAction
+      );
+      setShowBlockingWarning(false);
+      setPendingEnforcementChange(null);
+    } else if (pendingPolicyToggle) {
+      await togglePolicy(pendingPolicyToggle.policyId, false);
+      setShowBlockingWarning(false);
+      setPendingPolicyToggle(null);
+    }
   };
 
   const enabledCount = policies.filter(p => p.is_enabled).length;
@@ -314,22 +391,60 @@ export default function SecurityPoliciesPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-4 ml-6">
-                      <div className="text-right mr-2">
-                        <p className="text-xs text-muted-foreground">Status</p>
-                        <p className={`text-sm font-medium ${
-                          policy.is_enabled
-                            ? 'text-green-600'
-                            : 'text-gray-500'
-                        }`}>
-                          {policy.is_enabled ? 'Enabled' : 'Disabled'}
-                        </p>
+                    <div className="flex flex-col gap-4 ml-6">
+                      {/* Enforcement Action Selector */}
+                      <div className="min-w-[180px]">
+                        <p className="text-xs text-muted-foreground mb-2">Enforcement Mode</p>
+                        <Select
+                          value={policy.enforcement_action}
+                          onValueChange={(value: 'alert_only' | 'block_and_alert' | 'allow') =>
+                            handleEnforcementChange(policy, value)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="alert_only">
+                              <div className="flex items-center gap-2">
+                                <Eye className="h-4 w-4 text-yellow-600" />
+                                <span>Alert Only</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="block_and_alert">
+                              <div className="flex items-center gap-2">
+                                <Lock className="h-4 w-4 text-red-600" />
+                                <span>Block & Alert</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="allow">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-green-600" />
+                                <span>Allow</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Switch
-                        checked={policy.is_enabled}
-                        onCheckedChange={(checked) => handlePolicyToggle(policy, checked)}
-                        className="data-[state=checked]:bg-green-600"
-                      />
+
+                      {/* Enable/Disable Toggle */}
+                      <div className="flex items-center gap-4">
+                        <div className="text-right mr-2">
+                          <p className="text-xs text-muted-foreground">Status</p>
+                          <p className={`text-sm font-medium ${
+                            policy.is_enabled
+                              ? 'text-green-600'
+                              : 'text-gray-500'
+                          }`}>
+                            {policy.is_enabled ? 'Enabled' : 'Disabled'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={policy.is_enabled}
+                          onCheckedChange={(checked) => handlePolicyToggle(policy, checked)}
+                          className="data-[state=checked]:bg-green-600"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -349,7 +464,9 @@ export default function SecurityPoliciesPage() {
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-4">
               <p className="font-medium text-foreground">
-                You are about to enable <strong>"{pendingPolicyToggle?.policyName}"</strong> in blocking mode.
+                You are about to {pendingEnforcementChange ? 'switch' : 'enable'}{' '}
+                <strong>"{pendingEnforcementChange?.policyName || pendingPolicyToggle?.policyName}"</strong>{' '}
+                {pendingEnforcementChange ? 'to' : 'in'} blocking mode.
               </p>
               <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4 rounded-md space-y-2">
                 <p className="text-sm font-semibold text-red-800 dark:text-red-200">
@@ -363,7 +480,7 @@ export default function SecurityPoliciesPage() {
                 </ul>
               </div>
               <p className="text-sm">
-                Are you sure you want to enable blocking mode for this policy?
+                Are you sure you want to {pendingEnforcementChange ? 'switch to' : 'enable'} blocking mode for this policy?
               </p>
             </DialogDescription>
           </DialogHeader>
@@ -377,11 +494,11 @@ export default function SecurityPoliciesPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={confirmBlockingMode}
+              onClick={confirmEnforcementChange}
               className="bg-red-600 hover:bg-red-700"
             >
               <AlertOctagon className="h-4 w-4 mr-2" />
-              Enable Blocking Mode
+              {pendingEnforcementChange ? 'Switch to Blocking Mode' : 'Enable Blocking Mode'}
             </Button>
           </DialogFooter>
         </DialogContent>
