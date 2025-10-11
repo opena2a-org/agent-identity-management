@@ -236,39 +236,6 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* Auto-Detection Features */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-5 mb-8">
-        <div className="flex items-start gap-3">
-          <CheckCircle className="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 Zero-Config Auto-Detection</h3>
-            <p className="text-gray-700 mb-3">
-              The SDK automatically detects <strong>everything</strong> - no manual configuration needed!
-            </p>
-            <div className="space-y-2 text-sm text-gray-700">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>Capabilities</strong> - Auto-detected from imports, decorators, and config files
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>MCP Servers</strong> - Auto-detected from Claude Desktop config and Python imports
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>Security Packages</strong> - Cryptography and keyring auto-install with dependencies
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Setup Instructions */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="p-6">
