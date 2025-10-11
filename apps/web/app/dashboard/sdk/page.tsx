@@ -44,9 +44,11 @@ export default function SDKDownloadPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Download SDK</h1>
-        <p className="text-gray-600">
-          Get started with AIM SDK in seconds. Zero configuration required!
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          The Stripe of Agent Security
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 text-lg">
+          Secure your agents with 1 line of code. Zero configuration required.
         </p>
       </div>
 
@@ -216,19 +218,20 @@ export default function SDKDownloadPage() {
       </div>
 
       {/* Security Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 flex items-start gap-3">
-        <Shield className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+      <div className="bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/20 rounded-lg p-6 mb-8 flex items-start gap-3">
+        <Shield className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
         <div className="flex-1">
-          <p className="font-medium text-blue-900">Security Best Practices</p>
-          <p className="text-sm text-blue-700 mt-1">
-            Each SDK download generates a unique authentication token. You can monitor and revoke tokens anytime.
+          <p className="font-semibold text-gray-900 dark:text-white text-lg">Enterprise-Grade Security, Developer-Friendly UX</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
+            AIM SDK uses Ed25519 cryptographic signing for authentication - more secure than API keys.
+            Each agent gets a unique private key, and you can monitor and revoke access anytime.
           </p>
           <Link
-            href="/dashboard/sdk-tokens"
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium mt-2"
+            href="/dashboard/agents"
+            className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium mt-3"
           >
             <Lock className="h-4 w-4" />
-            Manage SDK Tokens →
+            View Agent Security Dashboard →
           </Link>
         </div>
       </div>
@@ -258,37 +261,39 @@ export default function SDKDownloadPage() {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Register Your First Agent - ONE LINE!</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
+              <h4 className="font-medium text-gray-900 mb-2">2. Secure Your Agent - ONE LINE!</h4>
+              <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <code className="text-sm text-green-400 font-mono">
-                  from aim_sdk import register_agent<br />
+                  from aim_sdk import secure<br />
+                  import os<br />
                   <br />
-                  # ONE LINE - Everything auto-detected! 🚀<br />
-                  agent = register_agent("my-awesome-agent")<br />
+                  # ONE LINE - Enterprise security enabled! 🚀<br />
+                  secure(agent_id="your-agent-id", private_key=os.getenv("AIM_PRIVATE_KEY"))<br />
                   <br />
-                  # ✅ Credentials: Auto-loaded from SDK<br />
-                  # ✅ Capabilities: Auto-detected from imports<br />
-                  # ✅ MCP Servers: Auto-detected from Claude config<br />
-                  # ✅ Verification: Auto-completed via challenge-response<br />
+                  # ✨ That&apos;s it! Your agent is now secure.<br />
                   <br />
-                  print(f"Agent ID: {'{'}agent.agent_id{'}'}")<br />
-                  print(f"Trust Score: {'{'}agent.trust_score{'}'}")
+                  # Automatically enabled:<br />
+                  # ✅ Ed25519 cryptographic signing on every request<br />
+                  # ✅ Auto-MCP detection from Claude Desktop config<br />
+                  # ✅ Real-time trust scoring and behavior analytics<br />
+                  # ✅ Audit logging and compliance reporting<br />
+                  # ✅ Anomaly detection and security alerts
                 </code>
               </div>
-              <p className="text-sm text-gray-600 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                <span>That&apos;s it! One line. Zero configuration. The &quot;Stripe Moment&quot; for AI agents.</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <span>That&apos;s it! One line. Zero configuration. The &quot;Stripe of Agent Security.&quot;</span>
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. View in Dashboard</h4>
-              <p className="text-gray-700 mb-3">
-                Your agent appears automatically with full trust score, capabilities, and MCP server connections.
+              <h4 className="font-medium text-gray-900 mb-2">3. View Real-Time Security Analytics</h4>
+              <p className="text-gray-700 dark:text-gray-300 mb-3">
+                Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics in real-time.
               </p>
               <a
                 href="/dashboard/agents"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
               >
                 View Agents Dashboard →
               </a>
