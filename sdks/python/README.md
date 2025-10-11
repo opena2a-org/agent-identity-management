@@ -157,6 +157,93 @@ def delete_user_account(user_id):
     return database.execute("DELETE FROM users WHERE id = ?", user_id)
 ```
 
+## Capability Management - How Auto-Grant Works 🔒
+
+### Initial Registration: Auto-Grant (No Approval Needed!)
+
+When you register an agent, **capabilities are automatically granted** - no admin approval required!
+
+```python
+from aim_sdk import register_agent
+
+# Capabilities detected and AUTO-GRANTED immediately
+agent = register_agent("my-agent")
+
+# ✅ Capabilities: Auto-detected from imports/decorators
+# ✅ Granted: Automatically during registration
+# ✅ Ready to use: Perform actions immediately!
+```
+
+**This is a game-changer**: Users can start using agents immediately without waiting for admin approval.
+
+### Capability Updates: Admin Approval Required
+
+If you need to add NEW capabilities after registration, admins must approve:
+
+```python
+from aim_sdk import AIMClient
+
+client = AIMClient.from_credentials("my-agent")
+
+# Request new capability (requires admin approval)
+request = client.capabilities.request(
+    capability_type="delete_email",
+    reason="Need to clean up spam automatically"
+)
+
+print(f"Request created: {request['id']}")
+print(f"Status: {request['status']}")  # "pending"
+
+# Admin reviews and approves via dashboard
+# Once approved, capability is automatically granted
+```
+
+**Why this workflow?**
+- **Fast onboarding**: Users start immediately
+- **Security**: Admins review capability expansions
+- **Scalability**: No bottleneck for thousands of agents
+
+### How Enforcement Works
+
+AIM enforces capabilities using a **single source of truth**:
+
+```python
+# ✅ ENFORCEMENT: Only GRANTED capabilities are enforced
+# - agent.capabilities (array) = DECLARED (reference only)
+# - agent_capabilities (table) = GRANTED (enforcement)
+
+@agent.perform_action("read_email")
+def read_inbox():
+    # ✅ Allowed if "read_email" was GRANTED
+    # ❌ Denied if "read_email" not granted (even if declared)
+    pass
+```
+
+**Security Benefits**:
+- Prevents CVE-2025-32711 (EchoLeak) attacks
+- Admin control over capability expansion
+- Full audit trail (who granted what, when)
+
+### Alternative: Delete and Re-register
+
+Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
+
+```python
+from aim_sdk import register_agent, AIMClient
+
+# Delete existing agent
+client = AIMClient.from_credentials("my-agent")
+client.agents.delete(agent_id=client.agent_id)
+
+# Re-register with updated capabilities
+agent = register_agent(
+    "my-agent",
+    capabilities=["read_email", "send_email", "delete_email"]  # ✅ All auto-granted
+)
+```
+
+**Trade-off**: Loses historical trust score and audit logs.
+
 ## Credential Storage
 
 Credentials are automatically saved to `~/.aim/credentials.json` with secure permissions (0600).

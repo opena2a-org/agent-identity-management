@@ -242,7 +242,99 @@ const registration = await client.registerAgentWithOAuth({
 6. Store all credentials in system keyring
 7. Update client with new credentials
 
-### 6. MCP Reporting
+### 6. Capability Management - Auto-Grant Workflow 🔒
+
+#### Initial Registration: Auto-Grant (No Approval Needed!)
+
+When you register an agent, **capabilities are automatically granted** - no admin approval required!
+
+```typescript
+import { AIMClient } from '@aim/sdk';
+
+async function registerAgent() {
+  const client = new AIMClient({ apiUrl: 'http://localhost:8080' });
+
+  // Capabilities detected and AUTO-GRANTED immediately
+  const registration = await client.registerAgent({
+    name: 'my-agent',
+    type: 'ai_agent',
+    description: 'My AI agent',
+  });
+
+  // ✅ Capabilities: Auto-detected from your code
+  // ✅ Granted: Automatically during registration
+  // ✅ Ready to use: Perform actions immediately!
+}
+```
+
+**This is a game-changer**: Users can start using agents immediately without waiting for admin approval.
+
+#### Capability Updates: Admin Approval Required
+
+If you need to add NEW capabilities after registration, admins must approve:
+
+```typescript
+// Request new capability (requires admin approval)
+const request = await client.capabilities.request({
+  capability_type: 'delete_email',
+  reason: 'Need to clean up spam automatically',
+});
+
+console.log(`Request created: ${request.id}`);
+console.log(`Status: ${request.status}`);  // "pending"
+
+// Admin reviews and approves via dashboard
+// Once approved, capability is automatically granted
+```
+
+**Why this workflow?**
+- **Fast onboarding**: Users start immediately
+- **Security**: Admins review capability expansions
+- **Scalability**: No bottleneck for thousands of agents
+
+#### How Enforcement Works
+
+AIM enforces capabilities using a **single source of truth**:
+
+```typescript
+// ✅ ENFORCEMENT: Only GRANTED capabilities are enforced
+// - agent.capabilities (array) = DECLARED (reference only)
+// - agent_capabilities (table) = GRANTED (enforcement)
+
+// This action requires "read_email" capability
+const result = await client.verifyAction({
+  action_type: 'read_email',
+  resource: 'inbox'
+});
+
+// ✅ Allowed if "read_email" was GRANTED
+// ❌ Denied if "read_email" not granted (even if declared)
+```
+
+**Security Benefits**:
+- Prevents CVE-2025-32711 (EchoLeak) attacks
+- Admin control over capability expansion
+- Full audit trail (who granted what, when)
+
+#### Alternative: Delete and Re-register
+
+Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
+
+```typescript
+// Delete existing agent
+await client.agents.delete(agentId);
+
+// Re-register with updated capabilities
+const registration = await client.registerAgent({
+  name: 'my-agent',
+  type: 'ai_agent',
+  capabilities: ['read_email', 'send_email', 'delete_email']  // ✅ All auto-granted
+});
+```
+
+**Trade-off**: Loses historical trust score and audit logs.
+
+### 7. MCP Reporting
 
 Report MCP usage to AIM backend.
 

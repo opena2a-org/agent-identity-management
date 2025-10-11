@@ -149,6 +149,31 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
+	// ✅ AUTO-GRANT CAPABILITIES: Auto-grant declared capabilities during registration
+	// This eliminates admin approval bottleneck - users can start using agents immediately!
+	// Admins only approve capability UPDATES, not initial registration.
+	if len(req.Capabilities) > 0 {
+		grantedCount := 0
+		for _, capabilityType := range req.Capabilities {
+			capabilityRecord := &domain.AgentCapability{
+				AgentID:        agent.ID,
+				CapabilityType: capabilityType,
+				GrantedBy:      &userID, // Auto-granted by user who created agent
+				GrantedAt:      time.Now(),
+			}
+
+			if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
+				fmt.Printf("⚠️  Warning: failed to auto-grant capability '%s': %v\n", capabilityType, err)
+			} else {
+				grantedCount++
+			}
+		}
+
+		if grantedCount > 0 {
+			fmt.Printf("✅ Auto-granted %d capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
+		}
+	}
+
 	return agent, nil
 }
 
@@ -325,61 +350,40 @@ func (s *AgentService) VerifyAction(
 	// 4. ✅ CAPABILITY-BASED ACCESS CONTROL (CBAC)
 	// This is what prevents EchoLeak and similar attacks
 	//
-	// ✅ ENTERPRISE ARCHITECTURE: Check BOTH capability systems for maximum flexibility
-	// 1. AgentCapability records (granular, with revocation support)
-	// 2. agent.Capabilities array (simple, backward compatible)
+	// ✅ ENTERPRISE ARCHITECTURE: SINGLE SOURCE OF TRUTH
+	// - agent_capabilities table records = GRANTED capabilities (enforcement)
+	// - agent.capabilities array = DECLARED capabilities (reference only)
 	//
-	// This dual-check ensures:
-	// - Backward compatibility with existing agents
-	// - Migration path to granular capability management
-	// - Zero breaking changes for current deployments
+	// Security Workflow:
+	// 1. Agent declares capabilities during registration (agent.capabilities)
+	// 2. Admin reviews and grants specific capabilities (agent_capabilities table)
+	// 3. System enforces ONLY granted capabilities (this function)
+	//
+	// This prevents:
+	// - Unauthorized capability escalation (agents can't self-authorize)
+	// - Scope violations like CVE-2025-32711 (EchoLeak)
+	// - Unclear approval chains (full audit trail via granted_by, granted_at)
 
-	// First, check AgentCapability records (preferred, granular)
+	// ✅ Fetch GRANTED capabilities (single source of truth for enforcement)
 	activeCapabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
 	if err != nil {
-		fmt.Printf("⚠️  Warning: failed to fetch agent capability records: %v\n", err)
-		// Don't fail-safe here - fall back to agent.Capabilities check
+		return false, fmt.Sprintf("Failed to fetch agent capabilities: %v", err), auditID, err
 	}
 
-	// Build list of all capabilities (from both systems)
+	// Build list of granted capability types for error messages
 	capabilityTypes := []string{}
 	hasCapability := false
 
-	// Check AgentCapability records (if available)
-	if activeCapabilities != nil && len(activeCapabilities) > 0 {
-		for _, capability := range activeCapabilities {
-			capabilityTypes = append(capabilityTypes, capability.CapabilityType)
-			if s.matchesCapability(actionType, resource, capability.CapabilityType) {
-				hasCapability = true
-			}
+	for _, capability := range activeCapabilities {
+		capabilityTypes = append(capabilityTypes, capability.CapabilityType)
+		if s.matchesCapability(actionType, resource, capability.CapabilityType) {
+			hasCapability = true
 		}
 	}
 
-	// Fallback: Check agent.Capabilities array (backward compatibility)
-	if agent.Capabilities != nil && len(agent.Capabilities) > 0 {
-		for _, capability := range agent.Capabilities {
-			// Only add if not already in list (avoid duplicates)
-			isDuplicate := false
-			for _, existing := range capabilityTypes {
-				if existing == capability {
-					isDuplicate = true
-					break
-				}
-			}
-			if !isDuplicate {
-				capabilityTypes = append(capabilityTypes, capability)
-			}
-
-			// Check if action matches
-			if s.matchesCapability(actionType, resource, capability) {
-				hasCapability = true
-			}
-		}
-	}
-
-	// ⚠️  CRITICAL: If agent has NO capabilities in EITHER system, DENY ALL actions
+	// ⚠️  CRITICAL: If agent has NO GRANTED capabilities, DENY ALL actions
 	if len(capabilityTypes) == 0 {
-		return false, "Agent has no registered capabilities - action denied (capability violation)", auditID, nil
+		return false, "Agent has no granted capabilities - action denied (admin must grant capabilities first)", auditID, nil
 	}
 
 	if !hasCapability {
