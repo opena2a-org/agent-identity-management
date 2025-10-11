@@ -180,17 +180,17 @@ function DashboardContent() {
       // Need to fetch 500+ to get interesting integration test data (create, verify, etc.)
       const logs = await api.getAuditLogs(500, 0);
 
-      // Filter out excessive "view" + "alerts" entries (there are 4,226 of them)
-      // Keep more interesting activities like create, verify, update, delete
+      // Filter out ALL "view" actions - they're not meaningful for Recent Activity
+      // Only show actual changes: create, update, delete, verify, grant, revoke, etc.
       const filtered = logs.filter((log: AuditLog) => {
-        // Exclude view + alerts (automated polling)
-        if (log.action === 'view' && log.resource_type === 'alerts') return false;
-        // Exclude view + dashboard_stats (also automated)
-        if (log.action === 'view' && log.resource_type === 'dashboard_stats') return false;
-        // Exclude view + users (less interesting)
-        if (log.action === 'view' && log.resource_type === 'users') return false;
-        // Exclude view + audit_logs (less interesting)
-        if (log.action === 'view' && log.resource_type === 'audit_logs') return false;
+        // Exclude ALL view actions completely
+        if (log.action === 'view') return false;
+
+        // Also exclude automated system actions that aren't interesting
+        if (log.resource_type === 'dashboard_stats') return false;
+        if (log.resource_type === 'organization_settings' && log.action === 'view') return false;
+
+        // Keep only meaningful actions: create, update, delete, verify, grant, revoke, suspend, acknowledge
         return true;
       });
 
