@@ -269,6 +269,7 @@ type Repositories struct {
 	Tag               *repository.TagRepository
 	SDKToken          domain.SDKTokenRepository
 	Capability        domain.CapabilityRepository
+	CapabilityRequest domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 }
 
 func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
@@ -289,6 +290,7 @@ func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 		Tag:               repository.NewTagRepository(db),
 		SDKToken:          repository.NewSDKTokenRepository(db),
 		Capability:        repository.NewCapabilityRepository(dbx),
+		CapabilityRequest: repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 	}
 }
 
@@ -311,6 +313,7 @@ type Services struct {
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
 	Capability        *application.CapabilityService
+	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
@@ -439,6 +442,12 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.TrustScore,
 	)
 
+	capabilityRequestService := application.NewCapabilityRequestService(
+		repos.CapabilityRequest,
+		repos.Capability,
+		repos.Agent,
+	)
+
 	detectionService := application.NewDetectionService(
 		db,
 		trustCalculator,  // ✅ NEW: Inject trust calculator for proper risk assessment
@@ -464,6 +473,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
 		Capability:        capabilityService,
+		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService, // ✅ For MCP auto-detection (SDK + Direct API)
 	}, keyVault
 }
@@ -489,6 +499,7 @@ type Handlers struct {
 	AuthRefresh       *handlers.AuthRefreshHandler
 	Capability        *handlers.CapabilityHandler
 	Detection         *handlers.DetectionHandler // ✅ For MCP auto-detection (SDK + Direct API)
+	CapabilityRequest *handlers.CapabilityRequestHandlers // ✅ For capability request approval
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -579,6 +590,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Detection: handlers.NewDetectionHandler(
 			services.Detection,
 			services.Audit,
+		),
+		CapabilityRequest: handlers.NewCapabilityRequestHandlers(
+			services.CapabilityRequest,
 		),
 	}
 }
@@ -777,6 +791,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Delete("/security-policies/:id", h.SecurityPolicy.DeletePolicy)
 	admin.Patch("/security-policies/:id/toggle", h.SecurityPolicy.TogglePolicy)
 
+	// Capability Request Management routes (admin only)
+	admin.Get("/capability-requests", h.CapabilityRequest.ListCapabilityRequests)
+	admin.Get("/capability-requests/:id", h.CapabilityRequest.GetCapabilityRequest)
+	admin.Post("/capability-requests/:id/approve", h.CapabilityRequest.ApproveCapabilityRequest)
+	admin.Post("/capability-requests/:id/reject", h.CapabilityRequest.RejectCapabilityRequest)
+
 	// Compliance routes (admin only)
 	compliance := v1.Group("/compliance")
 	compliance.Use(middleware.AuthMiddleware(jwtService))
@@ -890,6 +910,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Agent violation routes (under /agents/:id/violations)
 	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)
+
+	// Capability Request routes (authentication required)
+	capabilityRequests := v1.Group("/capability-requests")
+	capabilityRequests.Use(middleware.AuthMiddleware(jwtService))
+	capabilityRequests.Use(middleware.RateLimitMiddleware())
+	capabilityRequests.Post("/", h.CapabilityRequest.CreateCapabilityRequest) // Any authenticated user can request capabilities
 
 	// MCP server tag routes (under /mcp-servers/:id/tags)
 	mcpServers.Get("/:id/tags", h.Tag.GetMCPServerTags)
