@@ -393,6 +393,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	securityService := application.NewSecurityService(
 		repos.Security,
 		repos.Agent,
+		repos.Alert,  // ✅ For converting alerts to threats (NO MOCK DATA!)
 	)
 
 	webhookService := application.NewWebhookService(

@@ -53,27 +53,35 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 1: Use Existing "Microsoft Copilot" Agent
+# Phase 1: Create "Microsoft Copilot" Agent Dynamically
 ###############################################################################
-echo -e "${PURPLE}[Phase 1]${NC} Using existing 'Microsoft Copilot' agent..."
+echo -e "${PURPLE}[Phase 1]${NC} Creating 'Microsoft Copilot' agent for simulation..."
 
-# Use the agent we already created via UI
-AGENT_ID="d7bb73e3-688e-47ee-a32f-35b57cc574e0"
+# Create Microsoft Copilot agent
+AGENT_CREATE_RESPONSE=$(curl -s -X POST "${BASE_URL}/api/v1/agents" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "microsoft-copilot-echoleak-test",
+    "display_name": "Microsoft Copilot (EchoLeak Simulation)",
+    "description": "Microsoft 365 Copilot AI assistant for EchoLeak attack simulation",
+    "agent_type": "ai_agent",
+    "version": "1.0.0",
+    "capabilities": ["read_email"],
+    "talks_to": ["microsoft-graph-api", "exchange-online"]
+  }')
 
-# Verify agent exists
-AGENT_INFO=$(curl -s -X GET "${BASE_URL}/api/v1/agents/${AGENT_ID}" \
-  -H "Authorization: Bearer $TOKEN")
+AGENT_ID=$(echo "$AGENT_CREATE_RESPONSE" | jq -r '.id // empty')
 
-AGENT_NAME=$(echo "$AGENT_INFO" | jq -r '.name // empty')
-
-if [ -z "$AGENT_NAME" ] || [ "$AGENT_NAME" == "null" ]; then
-  echo -e "${RED}✗ Agent not found: $AGENT_ID${NC}"
+if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" == "null" ]; then
+  echo -e "${RED}✗ Failed to create agent${NC}"
+  echo "$AGENT_CREATE_RESPONSE" | jq '.'
   exit 1
 else
-  echo -e "${GREEN}✓ Found Microsoft Copilot agent: $AGENT_ID${NC}"
-  echo -e "${BLUE}  → Name: $(echo "$AGENT_INFO" | jq -r '.display_name')${NC}"
-  echo -e "${BLUE}  → Status: $(echo "$AGENT_INFO" | jq -r '.status')${NC}"
-  echo -e "${BLUE}  → Trust Score: $(echo "$AGENT_INFO" | jq -r '.trust_score')${NC}"
+  echo -e "${GREEN}✓ Created Microsoft Copilot agent: $AGENT_ID${NC}"
+  echo -e "${BLUE}  → Name: $(echo "$AGENT_CREATE_RESPONSE" | jq -r '.display_name')${NC}"
+  echo -e "${BLUE}  → Status: $(echo "$AGENT_CREATE_RESPONSE" | jq -r '.status')${NC}"
+  echo -e "${BLUE}  → Trust Score: $(echo "$AGENT_CREATE_RESPONSE" | jq -r '.trust_score')${NC}"
 fi
 
 # Grant LIMITED capabilities (read_email, NOT read_all_emails or fetch_external_url)
@@ -310,3 +318,15 @@ cat > "$SCREENSHOT_DIR/evidence.json" << EOF
 EOF
 
 echo -e "${GREEN}✓ Evidence exported to: $SCREENSHOT_DIR/evidence.json${NC}"
+
+###############################################################################
+# Cleanup: Delete Test Agent
+###############################################################################
+echo ""
+echo -e "${PURPLE}[Cleanup]${NC} Deleting test agent..."
+
+DELETE_RESPONSE=$(curl -s -X DELETE "${BASE_URL}/api/v1/agents/${AGENT_ID}" \
+  -H "Authorization: Bearer $TOKEN")
+
+echo -e "${GREEN}✓ Test agent deleted: $AGENT_ID${NC}"
+echo ""
