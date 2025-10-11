@@ -319,11 +319,21 @@ function DashboardContent() {
       }
       // If we have user email in metadata
       if (log.metadata.user_email) {
-        return `User: ${log.metadata.user_email}`;
+        return log.metadata.user_email;
+      }
+      // If we have display_name in metadata
+      if (log.metadata.display_name) {
+        return log.metadata.display_name;
       }
     }
-    // Default: assume it was a user action
-    return 'User';
+    // Fallback: show user ID if available (better than just "User")
+    if (log.user_id) {
+      // Extract the first part of UUID for readability (e.g., "User abc123...")
+      const shortId = log.user_id.split('-')[0];
+      return `User ${shortId}`;
+    }
+    // Last resort
+    return 'System';
   };
 
   // Helper function to categorize the event type
