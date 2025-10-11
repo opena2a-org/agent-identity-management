@@ -8,12 +8,16 @@ DECLARE
     admin_user_id UUID;
     go_agent_id UUID;
     js_agent_id UUID;
+    py_agent_id UUID;
     go_api_key_id UUID;
     js_api_key_id UUID;
+    py_api_key_id UUID;
     go_public_key TEXT := 'fOQu+6FZXHXV5yZ0TYjN7wKHxQvZGBzX2xhE3KjY2sU=';
     go_private_key TEXT := 'MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgtestkeyforgotestagent1234567890abcdefghijklmn';
     js_public_key TEXT := 'iK4+LnR8pXhJ9zA1b3MvOxWqTcUfVnBmA7iN/jPsQdE=';
     js_private_key TEXT := 'MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgtestkeyforgotestagent0987654321zyxwvutsrqponm';
+    py_public_key TEXT := 'zK8+MrS9qYjL0aB2c4NwPyXrUdVgWoCnB8jO/kQtReF=';
+    py_private_key TEXT := 'MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgtestkeyforgotestagentpython1234567890abcdefgh';
 BEGIN
     -- Get admin user and their organization
     SELECT id, organization_id INTO admin_user_id, test_org_id
@@ -24,7 +28,7 @@ BEGIN
     END IF;
 
     -- Delete existing test agents if they exist
-    DELETE FROM agents WHERE name IN ('go-sdk-test-agent', 'javascript-sdk-test-agent');
+    DELETE FROM agents WHERE name IN ('go-sdk-test-agent', 'javascript-sdk-test-agent', 'python-sdk-test-agent');
 
     -- Insert Go SDK test agent
     INSERT INTO agents (
@@ -52,6 +56,19 @@ BEGIN
         NOW(), NOW()
     ) RETURNING id INTO js_agent_id;
 
+    -- Insert Python SDK test agent
+    INSERT INTO agents (
+        id, organization_id, name, display_name, agent_type,
+        description, version, status, public_key, created_by,
+        created_at, updated_at
+    ) VALUES (
+        uuid_generate_v4(), test_org_id, 'python-sdk-test-agent',
+        'Python SDK Test Agent', 'ai_agent',
+        'Test agent for Python SDK capability detection validation',
+        '1.0.0', 'verified', py_public_key, admin_user_id,
+        NOW(), NOW()
+    ) RETURNING id INTO py_agent_id;
+
     -- Create API keys for Go SDK test agent
     INSERT INTO api_keys (
         id, organization_id, agent_id, name, key_hash, prefix,
@@ -59,7 +76,7 @@ BEGIN
     ) VALUES (
         uuid_generate_v4(), test_org_id, go_agent_id,
         'Go SDK Test Key',
-        encode(digest('aim_test_go_sdk_key_12345', 'sha256'), 'hex'),
+        encode(digest('aim_test_go_sdk_key_12345', 'sha256'), 'base64'),
         'aim_go_test',
         true, admin_user_id, NOW(), NOW() + INTERVAL '30 days'
     ) RETURNING id INTO go_api_key_id;
@@ -71,10 +88,22 @@ BEGIN
     ) VALUES (
         uuid_generate_v4(), test_org_id, js_agent_id,
         'JavaScript SDK Test Key',
-        encode(digest('aim_test_js_sdk_key_67890', 'sha256'), 'hex'),
+        encode(digest('aim_test_js_sdk_key_67890', 'sha256'), 'base64'),
         'aim_js_test',
         true, admin_user_id, NOW(), NOW() + INTERVAL '30 days'
     ) RETURNING id INTO js_api_key_id;
+
+    -- Create API keys for Python SDK test agent
+    INSERT INTO api_keys (
+        id, organization_id, agent_id, name, key_hash, prefix,
+        is_active, created_by, created_at, expires_at
+    ) VALUES (
+        uuid_generate_v4(), test_org_id, py_agent_id,
+        'Python SDK Test Key',
+        encode(digest('aim_test_py_sdk_key_abcde', 'sha256'), 'base64'),
+        'aim_py_test',
+        true, admin_user_id, NOW(), NOW() + INTERVAL '30 days'
+    ) RETURNING id INTO py_api_key_id;
 
     -- Store agent IDs and private keys in system_config for easy retrieval
     INSERT INTO system_config (key, value) VALUES
@@ -83,12 +112,19 @@ BEGIN
         ('go_sdk_test_private_key', go_private_key),
         ('js_sdk_test_agent_id', js_agent_id::TEXT),
         ('js_sdk_test_api_key', 'aim_test_js_sdk_key_67890'),
-        ('js_sdk_test_private_key', js_private_key)
+        ('js_sdk_test_private_key', js_private_key),
+        ('py_sdk_test_agent_id', py_agent_id::TEXT),
+        ('py_sdk_test_api_key', 'aim_test_py_sdk_key_abcde'),
+        ('py_sdk_test_private_key', py_private_key)
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
 
     RAISE NOTICE 'Created test agents successfully!';
     RAISE NOTICE 'Go SDK Test Agent ID: %', go_agent_id;
     RAISE NOTICE 'Go SDK API Key: aim_test_go_sdk_key_12345';
+    RAISE NOTICE '';
     RAISE NOTICE 'JavaScript SDK Test Agent ID: %', js_agent_id;
     RAISE NOTICE 'JavaScript SDK API Key: aim_test_js_sdk_key_67890';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Python SDK Test Agent ID: %', py_agent_id;
+    RAISE NOTICE 'Python SDK API Key: aim_test_py_sdk_key_abcde';
 END $$;

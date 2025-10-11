@@ -256,7 +256,7 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
           </AlertTitle>
           <AlertDescription>
             {uniqueCapabilities.length > 0
-              ? 'Basic capabilities have been detected, but a full capability report with risk assessment is not yet available. Install the latest AIM SDK to enable detailed capability detection.'
+              ? 'Basic capabilities have been detected, but additional capability report is coming in future release.'
               : 'This agent hasn\'t reported its capabilities yet. Install the AIM SDK in your agent application to enable automatic capability detection and risk assessment.'}
           </AlertDescription>
         </Alert>

@@ -56,9 +56,10 @@ class AIMClient:
     def __init__(
         self,
         agent_id: str,
-        public_key: str,
-        private_key: str,
-        aim_url: str,
+        public_key: str = None,
+        private_key: str = None,
+        aim_url: str = None,
+        api_key: str = None,
         timeout: int = 30,
         auto_retry: bool = True,
         max_retries: int = 3,
@@ -68,50 +69,57 @@ class AIMClient:
         # Validate required parameters
         if not agent_id:
             raise ConfigurationError("agent_id is required")
-        if not public_key:
-            raise ConfigurationError("public_key is required")
-        if not private_key:
-            raise ConfigurationError("private_key is required")
         if not aim_url:
             raise ConfigurationError("aim_url is required")
 
+        # Require either API key OR (public_key + private_key)
+        if not api_key and (not public_key or not private_key):
+            raise ConfigurationError(
+                "Either api_key OR (public_key + private_key) is required.\n"
+                "Use api_key for SDK API mode or keys for cryptographic signing."
+            )
+
         self.agent_id = agent_id
         self.aim_url = aim_url.rstrip('/')
+        self.api_key = api_key
         self.timeout = timeout
         self.auto_retry = auto_retry
         self.max_retries = max_retries
         self.oauth_token_manager = oauth_token_manager
 
-        # Initialize Ed25519 signing key
-        try:
-            private_key_bytes = base64.b64decode(private_key)
-            # Ed25519 private key from Go is 64 bytes (32-byte seed + 32-byte public key)
-            # PyNaCl SigningKey expects only the 32-byte seed
-            if len(private_key_bytes) == 64:
-                # Extract seed (first 32 bytes)
-                seed = private_key_bytes[:32]
-                self.signing_key = SigningKey(seed)
-            elif len(private_key_bytes) == 32:
-                # Already just the seed
-                self.signing_key = SigningKey(private_key_bytes)
-            else:
-                raise ValueError(f"Invalid private key length: {len(private_key_bytes)} bytes (expected 32 or 64)")
-        except Exception as e:
-            raise ConfigurationError(f"Invalid private key format: {e}")
-
-        # Verify public key matches
-        try:
-            expected_public_key = self.signing_key.verify_key.encode(encoder=Base64Encoder).decode('utf-8')
-            if expected_public_key != public_key:
-                raise ConfigurationError("Public key does not match private key")
-        except Exception as e:
-            raise ConfigurationError(f"Key validation failed: {e}")
-
+        # Initialize Ed25519 signing key (only if using cryptographic mode)
+        self.signing_key = None
         self.public_key = public_key
 
-        # Load SDK token ID from credentials if not provided
-        if not sdk_token_id:
-            sdk_creds = load_sdk_credentials()
+        if private_key and public_key:
+            try:
+                private_key_bytes = base64.b64decode(private_key)
+                # Ed25519 private key from Go is 64 bytes (32-byte seed + 32-byte public key)
+                # PyNaCl SigningKey expects only the 32-byte seed
+                if len(private_key_bytes) == 64:
+                    # Extract seed (first 32 bytes)
+                    seed = private_key_bytes[:32]
+                    self.signing_key = SigningKey(seed)
+                elif len(private_key_bytes) == 32:
+                    # Already just the seed
+                    self.signing_key = SigningKey(private_key_bytes)
+                else:
+                    raise ValueError(f"Invalid private key length: {len(private_key_bytes)} bytes (expected 32 or 64)")
+            except Exception as e:
+                raise ConfigurationError(f"Invalid private key format: {e}")
+
+            # Verify public key matches
+            try:
+                expected_public_key = self.signing_key.verify_key.encode(encoder=Base64Encoder).decode('utf-8')
+                if expected_public_key != public_key:
+                    raise ConfigurationError("Public key does not match private key")
+            except Exception as e:
+                raise ConfigurationError(f"Key validation failed: {e}")
+
+        # Load SDK token ID from credentials if not provided (only in OAuth mode)
+        # Skip if using API key mode to avoid unnecessary credential loading
+        if not sdk_token_id and not api_key:
+            sdk_creds = load_sdk_credentials(use_secure_storage=False)  # Disable secure storage for speed
             if sdk_creds and 'sdk_token_id' in sdk_creds:
                 sdk_token_id = sdk_creds['sdk_token_id']
 
@@ -173,14 +181,18 @@ class AIMClient:
         # Prepare additional headers (merge with session headers)
         additional_headers = {}
 
-        # Add OAuth authorization if token manager is available
+        # Add API key authentication if available
+        if self.api_key:
+            additional_headers['X-API-Key'] = self.api_key
+
+        # Add OAuth authorization if token manager is available (takes precedence over API key)
         if self.oauth_token_manager:
             try:
                 access_token = self.oauth_token_manager.get_access_token()
                 if access_token:
                     additional_headers['Authorization'] = f'Bearer {access_token}'
             except Exception:
-                # If OAuth token fails, continue without it
+                # If OAuth token fails, fall back to API key if available
                 pass
 
         # Merge session headers with additional headers
@@ -503,8 +515,8 @@ class AIMClient:
         """
         try:
             result = self._make_request(
-                method="PUT",
-                endpoint=f"/api/v1/agents/{self.agent_id}/mcp-servers",
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-servers",
                 data={
                     "mcp_server_ids": [mcp_server_id],
                     "detected_method": detection_method,
@@ -518,6 +530,92 @@ class AIMClient:
             raise
         except Exception as e:
             raise VerificationError(f"MCP registration failed: {e}")
+
+    def report_capabilities(
+        self,
+        capabilities: List[str],
+        scope: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """
+        Report agent capabilities to AIM (API key mode).
+
+        This method is used when the SDK is running in API key mode to report
+        detected capabilities to the backend. Capabilities are granted individually.
+
+        Args:
+            capabilities: List of capability types to report
+            scope: Optional scope information for the capabilities
+
+        Returns:
+            Dict with keys:
+                - granted: int - Number of capabilities granted
+                - total: int - Total capabilities attempted
+
+        Example:
+            # Report detected capabilities
+            result = client.report_capabilities([
+                "network_access",
+                "make_api_calls",
+                "read_files"
+            ])
+            print(f"Granted {result['granted']}/{result['total']} capabilities")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        if not self.api_key:
+            raise ConfigurationError("report_capabilities requires API key authentication mode")
+
+        granted_count = 0
+        total_count = len(capabilities)
+
+        # Temporarily disable auto-retry for capability reporting to handle duplicates faster
+        original_auto_retry = self.auto_retry
+        self.auto_retry = False
+
+        try:
+            for capability_type in capabilities:
+                try:
+                    # Use SDK API endpoint for capability grant
+                    result = self._make_request(
+                        method="POST",
+                        endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capabilities",
+                        data={
+                            "capabilityType": capability_type,
+                            "scope": scope or {
+                                "source": "python_sdk_auto_detection",
+                                "detectedAt": datetime.now(timezone.utc).isoformat()
+                            }
+                        }
+                    )
+
+                    if result:
+                        granted_count += 1
+
+                except Exception as e:
+                    # Capability might already exist (duplicate key error) - count as granted
+                    # Check both the exception message and type
+                    error_str = str(e).lower()
+                    is_duplicate = (
+                        "duplicate" in error_str or
+                        "already exists" in error_str or
+                        "unique constraint" in error_str or
+                        "500" in error_str  # Backend returns 500 for duplicate key violations
+                    )
+                    if is_duplicate:
+                        granted_count += 1
+                    # Continue even if one capability fails for other reasons
+                    continue
+
+        finally:
+            # Restore original auto-retry setting
+            self.auto_retry = original_auto_retry
+
+        return {
+            "granted": granted_count,
+            "total": total_count
+        }
 
     def report_sdk_integration(
         self,
@@ -572,7 +670,7 @@ class AIMClient:
 
             result = self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/detection/agents/{self.agent_id}/report",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/detection/report",
                 data={"detections": [detection_event]}
             )
             return result
