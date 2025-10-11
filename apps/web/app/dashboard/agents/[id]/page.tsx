@@ -27,6 +27,7 @@ interface Agent {
   version: string
   trust_score: number
   talks_to?: string[]
+  capabilities?: string[]  // Basic capability tags from SDK detection
   created_at: string
   updated_at: string
   organization_id: string
@@ -320,7 +321,7 @@ export default function AgentDetailsPage({ params }: { params: Promise<{ id: str
         </TabsContent>
 
         <TabsContent value="capabilities">
-          <AgentCapabilities agentId={agent.id} />
+          <AgentCapabilities agentId={agent.id} agentCapabilities={agent.capabilities} />
         </TabsContent>
 
         <TabsContent value="graph">

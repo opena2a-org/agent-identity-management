@@ -265,73 +265,88 @@ func (c *TrustCalculator) calculateCapabilityRisk(agent *domain.Agent) float64 {
 
 	// Get active capabilities for the agent
 	capabilities, err := c.capabilityRepo.GetActiveCapabilitiesByAgentID(agent.ID)
-	if err != nil || len(capabilities) == 0 {
-		return score // No capabilities data = neutral score
-	}
-
-	// Define high-risk capability types
-	highRiskCapabilities := map[string]float64{
-		domain.CapabilityFileDelete:      -0.15, // File deletion is high risk
-		domain.CapabilitySystemAdmin:     -0.20, // System admin is very high risk
-		domain.CapabilityUserImpersonate: -0.20, // Impersonation is very high risk
-		domain.CapabilityDataExport:      -0.10, // Data export is moderate risk
-	}
-
-	mediumRiskCapabilities := map[string]float64{
-		domain.CapabilityFileWrite:   -0.08,
-		domain.CapabilityDBWrite:     -0.08,
-		domain.CapabilityAPICall:     -0.05,
-	}
-
-	lowRiskCapabilities := map[string]float64{
-		domain.CapabilityFileRead:    -0.03,
-		domain.CapabilityDBQuery:     -0.03,
-		domain.CapabilityMCPToolUse:  -0.02,
-	}
-
-	// Calculate risk based on capabilities
-	for _, cap := range capabilities {
-		// Check high-risk capabilities
-		if penalty, exists := highRiskCapabilities[cap.CapabilityType]; exists {
-			score += penalty
-		} else if penalty, exists := mediumRiskCapabilities[cap.CapabilityType]; exists {
-			score += penalty
-		} else if penalty, exists := lowRiskCapabilities[cap.CapabilityType]; exists {
-			score += penalty
+	if err != nil {
+		// On error, check violations only and return
+		violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
+		if err == nil && len(violations) > 0 {
+			score = c.applyViolationPenalties(score, violations)
 		}
+		return score
 	}
 
-	// Get recent violations (last 30 days)
-	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
-	if err == nil && len(violations) > 0 {
-		// Recent violations significantly impact trust
-		recentViolations := 0
-		thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+	// Calculate risk based on capabilities (if any)
+	if len(capabilities) > 0 {
+		// Define high-risk capability types
+		highRiskCapabilities := map[string]float64{
+			domain.CapabilityFileDelete:      -0.15, // File deletion is high risk
+			domain.CapabilitySystemAdmin:     -0.20, // System admin is very high risk
+			domain.CapabilityUserImpersonate: -0.20, // Impersonation is very high risk
+			domain.CapabilityDataExport:      -0.10, // Data export is moderate risk
+		}
 
-		for _, violation := range violations {
-			if violation.CreatedAt.After(thirtyDaysAgo) {
-				recentViolations++
+		mediumRiskCapabilities := map[string]float64{
+			domain.CapabilityFileWrite:   -0.08,
+			domain.CapabilityDBWrite:     -0.08,
+			domain.CapabilityAPICall:     -0.05,
+		}
 
-				// Additional penalty based on violation severity
-				switch violation.Severity {
-				case domain.ViolationSeverityCritical:
-					score -= 0.15
-				case domain.ViolationSeverityHigh:
-					score -= 0.10
-				case domain.ViolationSeverityMedium:
-					score -= 0.05
-				case domain.ViolationSeverityLow:
-					score -= 0.02
-				}
+		lowRiskCapabilities := map[string]float64{
+			domain.CapabilityFileRead:    -0.03,
+			domain.CapabilityDBQuery:     -0.03,
+			domain.CapabilityMCPToolUse:  -0.02,
+		}
+
+		// Calculate risk based on capabilities
+		for _, cap := range capabilities {
+			// Check high-risk capabilities
+			if penalty, exists := highRiskCapabilities[cap.CapabilityType]; exists {
+				score += penalty
+			} else if penalty, exists := mediumRiskCapabilities[cap.CapabilityType]; exists {
+				score += penalty
+			} else if penalty, exists := lowRiskCapabilities[cap.CapabilityType]; exists {
+				score += penalty
 			}
 		}
+	}
 
-		// Cap violations penalty
-		if recentViolations > 10 {
-			score -= 0.20 // Significant violation history
-		} else if recentViolations > 5 {
-			score -= 0.10
+	// Check for violations (independent of capabilities)
+	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
+	if err == nil && len(violations) > 0 {
+		score = c.applyViolationPenalties(score, violations)
+	}
+
+	return score
+}
+
+// applyViolationPenalties applies trust score penalties based on violations
+func (c *TrustCalculator) applyViolationPenalties(score float64, violations []*domain.CapabilityViolation) float64 {
+	// Recent violations significantly impact trust
+	recentViolations := 0
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+
+	for _, violation := range violations {
+		if violation.CreatedAt.After(thirtyDaysAgo) {
+			recentViolations++
+
+			// Additional penalty based on violation severity
+			switch violation.Severity {
+			case domain.ViolationSeverityCritical:
+				score -= 0.15
+			case domain.ViolationSeverityHigh:
+				score -= 0.10
+			case domain.ViolationSeverityMedium:
+				score -= 0.05
+			case domain.ViolationSeverityLow:
+				score -= 0.02
+			}
 		}
+	}
+
+	// Cap violations penalty
+	if recentViolations > 10 {
+		score -= 0.20 // Significant violation history
+	} else if recentViolations > 5 {
+		score -= 0.10
 	}
 
 	// Ensure score stays within bounds [0, 1]

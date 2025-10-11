@@ -1,10 +1,5 @@
 import axios from 'axios';
-import {
-  generateEd25519Keypair,
-  signRequest,
-  encodePublicKey,
-  encodePrivateKey,
-} from './signing';
+import { KeyPair } from './signing';
 import { storeCredentials, storeOAuthToken } from './credentials';
 import {
   OAuthProvider,
@@ -39,17 +34,17 @@ export async function registerAgent(
   const { name, type = 'ai_agent' } = options;
 
   // Generate Ed25519 keypair for agent identity
-  const { privateKey, publicKey } = generateEd25519Keypair();
+  const keyPair = KeyPair.generate();
 
   // Prepare registration payload
   const payload: Record<string, any> = {
     name,
     type,
-    public_key: encodePublicKey(publicKey),
+    public_key: keyPair.publicKeyBase64(),
   };
 
   // Sign the payload for cryptographic verification
-  const signature = signRequest(privateKey, payload);
+  const signature = keyPair.signPayload(payload);
   payload.signature = signature;
 
   // Send registration request
@@ -63,7 +58,7 @@ export async function registerAgent(
   await storeCredentials({
     agentId: result.id,
     apiKey: result.apiKey,
-    privateKey,
+    privateKey: keyPair.privateKey,
   });
 
   return result;
@@ -111,19 +106,19 @@ export async function registerAgentWithOAuth(
   );
 
   // Generate Ed25519 keypair
-  const { privateKey, publicKey } = generateEd25519Keypair();
+  const keyPair = KeyPair.generate();
 
   // Prepare registration payload with OAuth token
   const payload: Record<string, any> = {
     name,
     type,
-    public_key: encodePublicKey(publicKey),
+    public_key: keyPair.publicKeyBase64(),
     oauth_provider: oauthProvider,
     oauth_token: token.accessToken,
   };
 
   // Sign the payload
-  const signature = signRequest(privateKey, payload);
+  const signature = keyPair.signPayload(payload);
   payload.signature = signature;
 
   // Send registration request with OAuth token
@@ -140,7 +135,7 @@ export async function registerAgentWithOAuth(
   await storeCredentials({
     agentId: result.id,
     apiKey: result.apiKey,
-    privateKey,
+    privateKey: keyPair.privateKey,
   });
 
   await storeOAuthToken(token.accessToken);

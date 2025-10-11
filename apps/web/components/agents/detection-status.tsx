@@ -194,6 +194,18 @@ export function DetectionStatus({ agentId }: DetectionStatusProps) {
 }
 
 function DetectedMCPsTable({ detections }: { detections: DetectedMCPSummary[] }) {
+  // Helper to check if timestamp is valid
+  const isValidTimestamp = (timestamp: string | null | undefined): boolean => {
+    if (!timestamp) return false
+    const date = new Date(timestamp)
+    return !isNaN(date.getTime()) && date.getFullYear() > 1970
+  }
+
+  // Helper to check if server was manually added
+  const isManualServer = (detection: DetectedMCPSummary): boolean => {
+    return detection.detectedBy.includes('manual' as any)
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -214,39 +226,61 @@ function DetectedMCPsTable({ detections }: { detections: DetectedMCPSummary[] })
           </tr>
         </thead>
         <tbody>
-          {detections.map((detection) => (
-            <tr key={detection.name} className="border-b last:border-0">
-              <td className="py-3 px-2">
-                <p className="text-sm font-mono font-medium">{detection.name}</p>
-              </td>
-              <td className="py-3 px-2">
-                <ConfidenceBadge score={detection.confidenceScore} />
-              </td>
-              <td className="py-3 px-2">
-                <DetectionMethodsBadges methods={detection.detectedBy} maxDisplay={2} />
-              </td>
-              <td className="py-3 px-2">
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div className="flex items-center gap-1">
-                    <span>First:</span>
-                    <span className="font-medium">
-                      {formatDistanceToNow(new Date(detection.firstDetected), {
-                        addSuffix: true,
-                      })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>Last:</span>
-                    <span className="font-medium">
-                      {formatDistanceToNow(new Date(detection.lastSeen), {
-                        addSuffix: true,
-                      })}
-                    </span>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          ))}
+          {detections.map((detection) => {
+            const isManual = isManualServer(detection)
+            const hasValidFirstDetected = isValidTimestamp(detection.firstDetected)
+            const hasValidLastSeen = isValidTimestamp(detection.lastSeen)
+
+            return (
+              <tr key={detection.name} className="border-b last:border-0">
+                <td className="py-3 px-2">
+                  <p className="text-sm font-mono font-medium">{detection.name}</p>
+                </td>
+                <td className="py-3 px-2">
+                  {isManual ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <span className="text-xs">Manual</span>
+                    </Badge>
+                  ) : (
+                    <ConfidenceBadge score={detection.confidenceScore} />
+                  )}
+                </td>
+                <td className="py-3 px-2">
+                  <DetectionMethodsBadges methods={detection.detectedBy} maxDisplay={2} />
+                </td>
+                <td className="py-3 px-2">
+                  {isManual ? (
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium">Manually added</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div className="flex items-center gap-1">
+                        <span>First:</span>
+                        <span className="font-medium">
+                          {hasValidFirstDetected
+                            ? formatDistanceToNow(new Date(detection.firstDetected), {
+                                addSuffix: true,
+                              })
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>Last:</span>
+                        <span className="font-medium">
+                          {hasValidLastSeen
+                            ? formatDistanceToNow(new Date(detection.lastSeen), {
+                                addSuffix: true,
+                              })
+                            : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

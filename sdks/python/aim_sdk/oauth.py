@@ -272,8 +272,9 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
     """
     Load credentials from SDK-embedded location.
 
-    This function looks for credentials in the default location
-    where the SDK download process places them.
+    This function looks for credentials in multiple locations:
+    1. Current directory (./.aim/credentials.json) - for SDK download
+    2. Home directory (~/.aim/credentials.json) - for installed SDK
 
     Args:
         use_secure_storage: Try encrypted storage first (default: True)
@@ -281,25 +282,32 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
     Returns:
         Credentials dict or None if not found
     """
-    credentials_path = Path.home() / ".aim" / "credentials.json"
+    # Check current directory first (SDK download location)
+    credentials_paths = [
+        Path.cwd() / ".aim" / "credentials.json",
+        Path.home() / ".aim" / "credentials.json"
+    ]
 
-    # Try secure storage first
-    if use_secure_storage and SECURE_STORAGE_AVAILABLE:
-        try:
-            storage = SecureCredentialStorage(str(credentials_path))
-            credentials = storage.load_credentials()
-            if credentials:
-                return credentials
-        except Exception as e:
-            print(f"⚠️  Warning: Failed to load from secure storage: {e}")
+    for credentials_path in credentials_paths:
+        # Try secure storage first
+        if use_secure_storage and SECURE_STORAGE_AVAILABLE:
+            try:
+                storage = SecureCredentialStorage(str(credentials_path))
+                credentials = storage.load_credentials()
+                if credentials:
+                    return credentials
+            except Exception as e:
+                # Continue to next path
+                pass
 
-    # Fall back to plaintext
-    if not credentials_path.exists():
-        return None
+        # Fall back to plaintext
+        if credentials_path.exists():
+            try:
+                with open(credentials_path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                # Continue to next path
+                pass
 
-    try:
-        with open(credentials_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"⚠️  Warning: Failed to load SDK credentials: {e}")
-        return None
+    # No credentials found in any location
+    return None

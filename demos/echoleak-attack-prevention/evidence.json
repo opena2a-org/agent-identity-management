@@ -1,0 +1,31 @@
+{
+  "simulation_timestamp": "2025-10-11T15:14:34Z",
+  "agent_id": "9c26ff3c-22fa-4a02-b7b3-10c01c0b80f3",
+  "agent_name": "microsoft-copilot",
+  "attack_1": {
+    "type": "bulk_email_access",
+    "action": "read_all_emails",
+    "target": "500 emails",
+    "result": "blocked",
+    "audit_id": "be2507ce-613e-40a5-a2a0-5dcbd3e7ef1b"
+  },
+  "attack_2": {
+    "type": "data_exfiltration",
+    "action": "fetch_external_url",
+    "target": "https://attacker.com/exfiltrate",
+    "result": "blocked",
+    "audit_id": "7def7252-5937-4022-b6e9-9f38655d558b"
+  },
+  "security_impact": {
+    "alerts_generated": 3,
+    "trust_score_before": 0,
+    "trust_score_after": 0,
+    "trust_score_drop": "0"
+  },
+  "frontend_urls": {
+    "dashboard": "http://localhost:3000/dashboard",
+    "agent_detail": "http://localhost:3000/dashboard/agents/9c26ff3c-22fa-4a02-b7b3-10c01c0b80f3",
+    "security_dashboard": "http://localhost:3000/dashboard/security",
+    "admin_alerts": "http://localhost:3000/dashboard/admin/alerts"
+  }
+}

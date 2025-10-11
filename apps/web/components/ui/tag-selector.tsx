@@ -151,19 +151,28 @@ export function TagSelector({
           )}
 
           {/* Create New Tag (if callback provided) */}
-          {onCreateTag && (
+          {onCreateTag && searchQuery && filteredTags.length === 0 && (
             <div className="pt-2 border-t">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  // TODO: Open create tag modal
-                  console.log('Create new tag')
+                onClick={async () => {
+                  const [key, value] = searchQuery.includes(':')
+                    ? searchQuery.split(':', 2)
+                    : [searchQuery, searchQuery]
+
+                  await onCreateTag({
+                    key: key.trim(),
+                    value: value.trim(),
+                    category: 'custom',
+                    description: `Custom tag: ${searchQuery}`,
+                  })
+                  setSearchQuery('')
                 }}
                 className="w-full"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Create New Tag
+                Create Tag "{searchQuery}"
               </Button>
             </div>
           )}

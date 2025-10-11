@@ -142,14 +142,20 @@ function DashboardContent() {
   const [userRole, setUserRole] = useState<UserRole>('viewer');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
-  // Extract user role from JWT token
+  // Extract user info from JWT token
   useEffect(() => {
     const token = api.getToken();
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         setUserRole((payload.role as UserRole) || 'viewer');
+        // Extract user ID and email from JWT
+        setCurrentUser({
+          id: payload.sub || payload.user_id || '',
+          email: payload.email || ''
+        });
       } catch (e) {
         console.error('Failed to decode JWT token:', e);
         setUserRole('viewer');
@@ -180,22 +186,27 @@ function DashboardContent() {
       // Need to fetch 500+ to get interesting integration test data (create, verify, etc.)
       const logs = await api.getAuditLogs(500, 0);
 
-      // Filter out excessive "view" + "alerts" entries (there are 4,226 of them)
-      // Keep more interesting activities like create, verify, update, delete
+      // Filter out ALL "view" actions - they're not meaningful for Recent Activity
+      // Only show actual changes: create, update, delete, verify, grant, revoke, etc.
       const filtered = logs.filter((log: AuditLog) => {
-        // Exclude view + alerts (automated polling)
-        if (log.action === 'view' && log.resource_type === 'alerts') return false;
-        // Exclude view + dashboard_stats (also automated)
-        if (log.action === 'view' && log.resource_type === 'dashboard_stats') return false;
-        // Exclude view + users (less interesting)
-        if (log.action === 'view' && log.resource_type === 'users') return false;
-        // Exclude view + audit_logs (less interesting)
-        if (log.action === 'view' && log.resource_type === 'audit_logs') return false;
+        // Exclude ALL view actions completely
+        if (log.action === 'view') return false;
+
+        // Also exclude automated system actions that aren't interesting
+        if (log.resource_type === 'dashboard_stats') return false;
+        if (log.resource_type === 'organization_settings' && log.action === 'view') return false;
+
+        // Keep only meaningful actions: create, update, delete, verify, grant, revoke, suspend, acknowledge
         return true;
       });
 
-      // Take first 10 interesting activities (create, verify, delete, etc.)
-      setAuditLogs(filtered.slice(0, 10));
+      // Sort by timestamp DESC (most recent first) to show latest activities
+      const sorted = filtered.sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+
+      // Take first 10 most recent activities (agent/MCP creates, verifications, etc.)
+      setAuditLogs(sorted.slice(0, 10));
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
       // Fail silently - keep empty array
@@ -319,11 +330,29 @@ function DashboardContent() {
       }
       // If we have user email in metadata
       if (log.metadata.user_email) {
-        return `User: ${log.metadata.user_email}`;
+        return log.metadata.user_email;
+      }
+      // If we have display_name in metadata
+      if (log.metadata.display_name) {
+        return log.metadata.display_name;
       }
     }
-    // Default: assume it was a user action
-    return 'User';
+
+    // Check if this is the current user and show their email
+    if (log.user_id && currentUser) {
+      if (log.user_id === currentUser.id) {
+        return currentUser.email;
+      }
+    }
+
+    // Fallback: show user ID if available
+    if (log.user_id) {
+      const shortId = log.user_id.split('-')[0];
+      return `User ${shortId}`;
+    }
+
+    // Last resort
+    return 'System';
   };
 
   // Helper function to categorize the event type

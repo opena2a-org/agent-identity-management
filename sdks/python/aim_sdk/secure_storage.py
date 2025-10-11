@@ -154,13 +154,44 @@ class SecureCredentialStorage:
                     f"   You may need to re-register with AIM."
                 )
 
-        # Check for old plaintext file and warn user
+        # Auto-migrate plaintext credentials to encrypted storage (transparent security upgrade)
         if self.credentials_path.exists():
-            raise RuntimeError(
-                f"❌ SECURITY ERROR: Found plaintext credentials at {self.credentials_path}\n"
-                f"   AIM SDK no longer supports plaintext storage.\n"
-                f"   Please delete this file and re-register with AIM for secure storage."
-            )
+            try:
+                # Load plaintext credentials FIRST
+                with open(self.credentials_path, 'r') as f:
+                    credentials = json.load(f)
+
+                print(f"🔐 Auto-migrating plaintext credentials to encrypted storage...")
+
+                # Save as encrypted (this also sets self.credentials)
+                self.save_credentials(credentials)
+
+                # Only delete plaintext AFTER successful encryption
+                try:
+                    self.credentials_path.unlink()
+                    print(f"✅ Credentials migrated successfully. Plaintext file deleted.")
+                except Exception as delete_error:
+                    # If deletion fails, not critical - encryption succeeded
+                    print(f"⚠️  Warning: Failed to delete plaintext file: {delete_error}")
+
+                return credentials
+
+            except Exception as e:
+                # If migration fails, try to read plaintext if it still exists
+                print(f"⚠️  Warning: Failed to migrate credentials to encrypted storage: {e}")
+                print(f"   Attempting to use plaintext credentials as fallback...")
+
+                try:
+                    # Check if plaintext still exists before trying to read
+                    if self.credentials_path.exists():
+                        with open(self.credentials_path, 'r') as f:
+                            return json.load(f)
+                    else:
+                        print(f"   Plaintext file no longer exists. Migration partially completed.")
+                        return None
+                except Exception as fallback_error:
+                    print(f"   Failed to read plaintext fallback: {fallback_error}")
+                    return None
 
         return None
 
