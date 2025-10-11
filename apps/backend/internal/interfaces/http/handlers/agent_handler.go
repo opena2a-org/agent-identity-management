@@ -12,15 +12,18 @@ import (
 
 type AgentHandler struct {
 	agentService *application.AgentService
+	mcpService   *application.MCPService
 	auditService *application.AuditService
 }
 
 func NewAgentHandler(
 	agentService *application.AgentService,
+	mcpService   *application.MCPService,
 	auditService *application.AuditService,
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService: agentService,
+		mcpService:   mcpService,
 		auditService: auditService,
 	}
 }
@@ -934,14 +937,12 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// Note: We need MCPService instance for auto-registration
-	// For now, we'll pass nil and handle registration separately
-	// TODO: Inject MCPService into AgentHandler
+	// Call service with mcpService for auto-registration
 	result, err := h.agentService.DetectMCPServersFromConfig(
 		c.Context(),
 		agentID,
 		&req,
-		nil, // mcpService - TODO: inject this dependency
+		h.mcpService, // ✅ Pass mcpService for auto-registration
 		orgID,
 		userID,
 	)

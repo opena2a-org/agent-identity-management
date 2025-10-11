@@ -421,6 +421,8 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Capability,
 		repos.Agent,
 		repos.AuditLog,
+		trustCalculator,
+		repos.TrustScore,
 	)
 
 	detectionService := application.NewDetectionService(
@@ -482,6 +484,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Agent: handlers.NewAgentHandler(
 			services.Agent,
+			services.MCP, // ✅ Inject MCPService for auto-detect MCPs feature
 			services.Audit,
 		),
 		APIKey: handlers.NewAPIKeyHandler(
