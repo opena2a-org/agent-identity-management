@@ -17,8 +17,9 @@ type AgentService struct {
 	agentRepo      domain.AgentRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
-	keyVault       *crypto.KeyVault   // ✅ For secure private key storage
-	alertRepo      domain.AlertRepository // ✅ For creating security alerts
+	keyVault       *crypto.KeyVault              // ✅ For secure private key storage
+	alertRepo      domain.AlertRepository         // ✅ For creating security alerts
+	policyService  *SecurityPolicyService         // ✅ For policy-based enforcement
 }
 
 // NewAgentService creates a new agent service
@@ -27,7 +28,8 @@ func NewAgentService(
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
 	keyVault *crypto.KeyVault,
-	alertRepo domain.AlertRepository, // ✅ NEW: AlertRepository for security alerts
+	alertRepo domain.AlertRepository,         // ✅ NEW: AlertRepository for security alerts
+	policyService *SecurityPolicyService,     // ✅ NEW: Security Policy Service
 ) *AgentService {
 	return &AgentService{
 		agentRepo:      agentRepo,
@@ -35,6 +37,7 @@ func NewAgentService(
 		trustScoreRepo: trustScoreRepo,
 		keyVault:       keyVault,
 		alertRepo:      alertRepo,
+		policyService:  policyService,
 	}
 }
 
@@ -334,31 +337,69 @@ func (s *AgentService) VerifyAction(
 	}
 
 	if !hasCapability {
-		// ✅ BLOCK THE ATTACK - Action not in capability list
+		// ✅ CAPABILITY VIOLATION DETECTED - Evaluate security policies
 		// This prevents scope violations like EchoLeak's bulk email access
 
-		// 🚨 CREATE SECURITY ALERT for capability violation
-		alert := &domain.Alert{
-			ID:             uuid.New(),
-			OrganizationID: agent.OrganizationID,
-			AlertType:      domain.AlertSecurityBreach, // Security breach / unauthorized action attempt
-			Severity:       domain.AlertSeverityHigh,
-			Title:          fmt.Sprintf("Capability Violation Detected: %s", agent.DisplayName),
-			Description:    fmt.Sprintf("Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). This matches the attack pattern of CVE-2025-32711 (EchoLeak). The action was BLOCKED by AIM's capability-based access control. Audit ID: %s", agent.DisplayName, actionType, agent.Capabilities, auditID.String()),
-			ResourceType:   "agent",
-			ResourceID:     agentID,
-			IsAcknowledged: false,
-			CreatedAt:      time.Now(),
+		// 🛡️ Evaluate security policies to determine enforcement action
+		shouldBlock, shouldAlert, policyName, err := s.policyService.EvaluateCapabilityViolation(
+			ctx, agent, actionType, resource, auditID,
+		)
+		if err != nil {
+			// Policy evaluation failed - use safe default (block + alert)
+			fmt.Printf("⚠️  Policy evaluation failed: %v, using safe default (block + alert)\n", err)
+			shouldBlock = true
+			shouldAlert = true
+			policyName = "default_policy"
 		}
 
-		// Save the alert (fire-and-forget - don't fail the verification if alert creation fails)
-		if err := s.alertRepo.Create(alert); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create security alert for capability violation: %v\n", err)
+		// 🚨 CREATE SECURITY ALERT if policy requires it
+		if shouldAlert {
+			alertTitle := fmt.Sprintf("Capability Violation Detected: %s", agent.DisplayName)
+			alertDescription := fmt.Sprintf(
+				"Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). "+
+				"This matches the attack pattern of CVE-2025-32711 (EchoLeak). "+
+				"Security Policy '%s' enforcement: %s. Audit ID: %s",
+				agent.DisplayName, actionType, agent.Capabilities, policyName,
+				map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[shouldBlock],
+				auditID.String(),
+			)
+
+			alert := &domain.Alert{
+				ID:             uuid.New(),
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertSecurityBreach,
+				Severity:       domain.AlertSeverityHigh,
+				Title:          alertTitle,
+				Description:    alertDescription,
+				ResourceType:   "agent",
+				ResourceID:     agentID,
+				IsAcknowledged: false,
+				CreatedAt:      time.Now(),
+			}
+
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
+			} else {
+				fmt.Printf("🚨 SECURITY ALERT: Capability violation for agent %s (policy: %s, action: %s)\n",
+					agent.Name, policyName, map[bool]string{true: "BLOCKED", false: "MONITORED"}[shouldBlock])
+			}
+		}
+
+		// Return enforcement decision from policy
+		if shouldBlock {
+			return false, fmt.Sprintf(
+				"Capability violation blocked by security policy '%s': Agent does not have permission for action '%s' (allowed: %v)",
+				policyName, actionType, agent.Capabilities,
+			), auditID, nil
 		} else {
-			fmt.Printf("🚨 SECURITY ALERT CREATED: Capability violation detected for agent %s (action: %s)\n", agent.Name, actionType)
+			// Policy says alert-only mode - allow the action but log it
+			fmt.Printf("⚠️  Capability violation ALLOWED by policy '%s' (alert-only mode): %s attempting %s\n",
+				policyName, agent.Name, actionType)
+			return true, fmt.Sprintf(
+				"Action allowed by security policy '%s' (alert-only mode) - capability violation logged",
+				policyName,
+			), auditID, nil
 		}
-
-		return false, fmt.Sprintf("Capability violation: Agent does not have permission for action '%s' (allowed: %v)", actionType, agent.Capabilities), auditID, nil
 	}
 
 	// 6. ✅ ACTION ALLOWED - Agent has proper capability

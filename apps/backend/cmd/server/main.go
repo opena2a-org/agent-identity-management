@@ -263,6 +263,7 @@ type Repositories struct {
 	MCPServer         *repository.MCPServerRepository
 	MCPCapability     *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
 	Security          *repository.SecurityRepository
+	SecurityPolicy    *repository.SecurityPolicyRepository       // ✅ For configurable security policies
 	Webhook           *repository.WebhookRepository
 	VerificationEvent *repository.VerificationEventRepositorySimple
 	Tag               *repository.TagRepository
@@ -282,6 +283,7 @@ func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 		MCPServer:         repository.NewMCPServerRepository(db),
 		MCPCapability:     repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
 		Security:          repository.NewSecurityRepository(db),
+		SecurityPolicy:    repository.NewSecurityPolicyRepository(db),       // ✅ For configurable security policies
 		Webhook:           repository.NewWebhookRepository(db),
 		VerificationEvent: repository.NewVerificationEventRepository(db),
 		Tag:               repository.NewTagRepository(db),
@@ -302,6 +304,7 @@ type Services struct {
 	MCP               *application.MCPService
 	MCPCapability     *application.MCPCapabilityService // ✅ For MCP server capability management
 	Security          *application.SecurityService
+	SecurityPolicy    *application.SecurityPolicyService // ✅ For policy-based enforcement
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
 	OAuth             *application.OAuthService
@@ -340,12 +343,19 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Capability, // ✅ NEW: Add capability repository for risk scoring
 	)
 
+	// ✅ Initialize Security Policy Service for policy-based enforcement
+	securityPolicyService := application.NewSecurityPolicyService(
+		repos.SecurityPolicy,
+		repos.Alert,
+	)
+
 	agentService := application.NewAgentService(
 		repos.Agent,
 		trustCalculator,
 		repos.TrustScore,
-		keyVault,      // ✅ NEW: Inject KeyVault for automatic key generation
-		repos.Alert,   // ✅ NEW: Inject AlertRepository for security alerts
+		keyVault,              // ✅ NEW: Inject KeyVault for automatic key generation
+		repos.Alert,           // ✅ NEW: Inject AlertRepository for security alerts
+		securityPolicyService, // ✅ NEW: Inject SecurityPolicyService for policy evaluation
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -444,6 +454,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		MCP:               mcpService,
 		MCPCapability:     mcpCapabilityService, // ✅ For MCP server capability management
 		Security:          securityService,
+		SecurityPolicy:    securityPolicyService, // ✅ For policy-based enforcement
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
 		OAuth:             oauthService,
