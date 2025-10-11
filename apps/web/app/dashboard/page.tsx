@@ -142,14 +142,20 @@ function DashboardContent() {
   const [userRole, setUserRole] = useState<UserRole>('viewer');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
-  // Extract user role from JWT token
+  // Extract user info from JWT token
   useEffect(() => {
     const token = api.getToken();
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         setUserRole((payload.role as UserRole) || 'viewer');
+        // Extract user ID and email from JWT
+        setCurrentUser({
+          id: payload.sub || payload.user_id || '',
+          email: payload.email || ''
+        });
       } catch (e) {
         console.error('Failed to decode JWT token:', e);
         setUserRole('viewer');
@@ -326,12 +332,20 @@ function DashboardContent() {
         return log.metadata.display_name;
       }
     }
-    // Fallback: show user ID if available (better than just "User")
+
+    // Check if this is the current user and show their email
+    if (log.user_id && currentUser) {
+      if (log.user_id === currentUser.id) {
+        return currentUser.email;
+      }
+    }
+
+    // Fallback: show user ID if available
     if (log.user_id) {
-      // Extract the first part of UUID for readability (e.g., "User abc123...")
       const shortId = log.user_id.split('-')[0];
       return `User ${shortId}`;
     }
+
     // Last resort
     return 'System';
   };
