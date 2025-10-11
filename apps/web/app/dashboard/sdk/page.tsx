@@ -79,17 +79,16 @@ export default function SDKDownloadPage() {
         {/* Python SDK - Full Featured */}
         <div className="bg-white border-2 border-blue-500 rounded-lg shadow-sm overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Python SDK</h2>
-                <p className="text-xs text-gray-500">Full featured</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
+            <p className="text-sm text-gray-700 mb-4 h-20">
               Zero config, OAuth, auto-detection, Ed25519 signing, keyring support.
             </p>
 
@@ -126,17 +125,16 @@ export default function SDKDownloadPage() {
         {/* Go SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-cyan-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-cyan-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Go SDK</h2>
-                <p className="text-xs text-gray-500">100% feature parity • 9/9 tests passing</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
+            <p className="text-sm text-gray-700 mb-4 h-20">
               Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
             </p>
 
@@ -173,17 +171,16 @@ export default function SDKDownloadPage() {
         {/* JavaScript SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-yellow-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">JavaScript SDK</h2>
-                <p className="text-xs text-gray-500">100% feature parity • 36/37 tests passing</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
+            <p className="text-sm text-gray-700 mb-4 h-20">
               Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
             </p>
 
