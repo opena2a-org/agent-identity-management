@@ -134,8 +134,17 @@ def get_user_data(user_id):
 ### Installation
 
 ```bash
+# Install from source (development)
 cd sdks/python
-pip install -r requirements.txt
+pip install -e .
+
+# Or download from AIM Dashboard
+# Navigate to http://localhost:3000/dashboard/sdk
+# Click "Download SDK" button for Python
+# Extract and install:
+unzip aim-sdk-python.zip
+cd aim-sdk-python
+pip install -e .
 ```
 
 ### Basic Usage
@@ -338,30 +347,30 @@ terraform apply
 
 **60+ endpoints** covering:
 
-- **Authentication**: `/auth/login`, `/auth/register`, `/auth/sso/{provider}`
-- **Agents**: `/api/agents`, `/api/agents/{id}`, `/api/agents/{id}/verify`
-- **MCP Servers**: `/api/mcp-servers`, `/api/mcp-servers/{id}/verify`
-- **API Keys**: `/api/keys`, `/api/keys/{id}/revoke`
-- **Trust Scores**: `/api/trust-scores`, `/api/trust-scores/history`
-- **Audit Logs**: `/api/audit-logs`, `/api/audit-logs/export`
-- **Alerts**: `/api/alerts`, `/api/alerts/{id}/acknowledge`
-- **Compliance**: `/api/compliance/reports`, `/api/compliance/export`
+- **Authentication**: `/api/v1/auth/login`, `/api/v1/auth/register`, `/api/v1/auth/sso/{provider}`
+- **Agents**: `/api/v1/agents`, `/api/v1/agents/{id}`, `/api/v1/agents/{id}/verify`
+- **MCP Servers**: `/api/v1/mcp-servers`, `/api/v1/mcp-servers/{id}/verify`
+- **API Keys**: `/api/v1/keys`, `/api/v1/keys/{id}/revoke`
+- **Trust Scores**: `/api/v1/trust-scores`, `/api/v1/trust-scores/history`
+- **Audit Logs**: `/api/v1/audit-logs`, `/api/v1/audit-logs/export`
+- **Alerts**: `/api/v1/alerts`, `/api/v1/alerts/{id}/acknowledge`
+- **Compliance**: `/api/v1/compliance/reports`, `/api/v1/compliance/export`
 
 ### Authentication
 
 ```bash
 # Register user
-curl -X POST http://localhost:8080/auth/register \
+curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secure123"}'
 
 # Login
-curl -X POST http://localhost:8080/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secure123"}'
 
 # Use token
-curl http://localhost:8080/api/agents \
+curl http://localhost:8080/api/v1/agents \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
