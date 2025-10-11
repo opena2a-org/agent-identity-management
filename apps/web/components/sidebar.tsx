@@ -130,7 +130,7 @@ export function Sidebar() {
             if (payload.exp && payload.exp < now) {
               // Token expired - clear and redirect
               api.clearToken();
-              setTimeout(() => router.push('/login'), 0);
+              setTimeout(() => router.push('/auth/login'), 0);
               return;
             }
 
@@ -142,11 +142,11 @@ export function Sidebar() {
           } catch (e) {
             console.log('Token invalid, redirecting to login');
             api.clearToken();
-            setTimeout(() => router.push('/login'), 0);
+            setTimeout(() => router.push('/auth/login'), 0);
           }
         } else {
           // No token at all - redirect to login
-          setTimeout(() => router.push('/login'), 0);
+          setTimeout(() => router.push('/auth/login'), 0);
         }
       }
     };
@@ -194,12 +194,12 @@ export function Sidebar() {
   const handleLogout = async () => {
     try {
       await api.logout();
-      router.push('/login');
+      router.push('/auth/login');
     } catch (error) {
       console.error('Logout failed:', error);
       // Force logout even if API call fails
       api.clearToken();
-      router.push('/login');
+      router.push('/auth/login');
     }
   };
 
