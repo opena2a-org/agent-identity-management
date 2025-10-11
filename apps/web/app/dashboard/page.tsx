@@ -200,8 +200,13 @@ function DashboardContent() {
         return true;
       });
 
-      // Take first 10 interesting activities (create, verify, delete, etc.)
-      setAuditLogs(filtered.slice(0, 10));
+      // Sort by timestamp DESC (most recent first) to show latest activities
+      const sorted = filtered.sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+
+      // Take first 10 most recent activities (agent/MCP creates, verifications, etc.)
+      setAuditLogs(sorted.slice(0, 10));
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
       // Fail silently - keep empty array
