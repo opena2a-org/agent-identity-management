@@ -34,9 +34,9 @@ export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuidePr
 
   // Zero-config registration: Register your agent with 1 line of code
   const quickStart = {
-    javascript: `import { registerAgent } from '@aim/sdk';\nconst agent = registerAgent({ name: '${agentId}' });`,
-    python: `from aim_sdk import register_agent\nagent = register_agent("${agentId}")`,
-    go: `import aimsdk "github.com/opena2a/aim-sdk-go"\nclient := aimsdk.NewClient()\nreg, _ := client.RegisterAgent(ctx, aimsdk.RegisterOptions{Name: "${agentId}"})`
+    javascript: `import { secure } from '@aim/sdk';\nconst agent = secure({ name: '${agentId}' });`,
+    python: `from aim_sdk import secure\nagent = secure("${agentId}")`,
+    go: `import aimsdk "github.com/opena2a/aim-sdk-go"\nclient := aimsdk.NewClient()\nreg, _ := client.Secure(ctx, aimsdk.SecureOptions{Name: "${agentId}"})`
   };
 
   const examples = {

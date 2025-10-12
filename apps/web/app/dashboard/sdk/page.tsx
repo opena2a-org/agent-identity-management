@@ -264,10 +264,10 @@ export default function SDKDownloadPage() {
               <h4 className="font-medium text-gray-900 mb-2">2. Register Your Agent - ONE LINE!</h4>
               <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <code className="text-sm text-green-400 font-mono">
-                  from aim_sdk import register_agent<br />
+                  from aim_sdk import secure<br />
                   <br />
                   # ONE LINE - Enterprise security enabled! 🚀<br />
-                  agent = register_agent(&quot;your-agent-name&quot;)<br />
+                  agent = secure(&quot;your-agent-name&quot;)<br />
                   <br />
                   # ✨ That&apos;s it! Your agent is now secure.<br />
                   <br />
