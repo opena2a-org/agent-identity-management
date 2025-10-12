@@ -104,7 +104,7 @@ func (h *ComplianceHandler) GenerateComplianceReport(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionGenerate,
 		"compliance_report",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -155,7 +155,7 @@ func (h *ComplianceHandler) GetComplianceStatus(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"compliance_status",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		nil,
@@ -226,7 +226,7 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"compliance_metrics",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -261,24 +261,35 @@ func (h *ComplianceHandler) ExportAuditLog(c fiber.Ctx) error {
 		})
 	}
 
-	// Parse dates
-	startDate, err := time.Parse(time.RFC3339, req.StartDate)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid start_date format. Use RFC3339",
-		})
+	// Parse dates with defaults (last 90 days if not provided)
+	var startDate, endDate time.Time
+	if req.StartDate != "" {
+		parsed, err := time.Parse(time.RFC3339, req.StartDate)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid start_date format. Use RFC3339",
+			})
+		}
+		startDate = parsed
+	} else {
+		startDate = time.Now().AddDate(0, 0, -90) // Default: last 90 days
 	}
 
-	endDate, err := time.Parse(time.RFC3339, req.EndDate)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid end_date format. Use RFC3339",
-		})
+	if req.EndDate != "" {
+		parsed, err := time.Parse(time.RFC3339, req.EndDate)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid end_date format. Use RFC3339",
+			})
+		}
+		endDate = parsed
+	} else {
+		endDate = time.Now() // Default: now
 	}
 
 	// Default format
 	if req.Format == "" {
-		req.Format = "json"
+		req.Format = "csv"
 	}
 
 	// Export audit log
@@ -302,7 +313,7 @@ func (h *ComplianceHandler) ExportAuditLog(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionExport,
 		"audit_log",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -348,7 +359,7 @@ func (h *ComplianceHandler) GetAccessReview(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"access_review",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		nil,
@@ -376,7 +387,7 @@ func (h *ComplianceHandler) GetDataRetention(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"data_retention",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		nil,
@@ -424,7 +435,7 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionCheck,
 		"compliance",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -525,7 +536,7 @@ func (h *ComplianceHandler) GetComplianceReportByFramework(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionGenerate,
 		"compliance_report",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -583,7 +594,7 @@ func (h *ComplianceHandler) RunComplianceScanByFramework(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionCheck,
 		"compliance_scan",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
