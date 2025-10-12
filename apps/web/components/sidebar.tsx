@@ -20,6 +20,7 @@ import {
   Lock,
   ShieldCheck,
   CheckSquare,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -109,6 +110,12 @@ const navigationBase: NavSection[] = [
         href: '/dashboard/admin/security-policies',
         icon: ShieldCheck,
         roles: ['admin'], // Admin-only policy management
+      },
+      {
+        name: 'Compliance',
+        href: '/dashboard/admin/compliance',
+        icon: ClipboardCheck,
+        roles: ['admin'], // Admin-only compliance monitoring
       },
     ],
   },

@@ -40,11 +40,11 @@ func main() {
 
     // Create client without credentials
     client := aimsdk.NewClient(aimsdk.Config{
-        APIURL: "http://localhost:8080",
+        APIURL: "https://aim.opena2a.org",
     })
 
     // Register new agent (generates Ed25519 keypair)
-    registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+    registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
         Name: "my-go-agent",
         Type: "ai_agent",
         Description: "My first Go agent",
@@ -79,7 +79,7 @@ func main() {
 
     // Create client with stored credentials
     client := aimsdk.NewClient(aimsdk.Config{
-        APIURL:  "http://localhost:8080",
+        APIURL:  "https://aim.opena2a.org",
         AgentID: creds.AgentID,
         APIKey:  creds.APIKey,
     })
@@ -127,7 +127,7 @@ Enterprise SSO authentication with Google, Microsoft, and Okta.
 
 ```go
 // Register agent with OAuth
-registration, err := client.RegisterAgentWithOAuth(ctx, aimsdk.RegisterOptions{
+registration, err := client.SecureWithOAuth(ctx, aimsdk.RegisterOptions{
     Name:          "oauth-agent",
     Type:          "ai_agent",
     OAuthProvider: aimsdk.OAuthProviderGoogle,
@@ -226,14 +226,14 @@ Complete agent onboarding workflow.
 
 ```go
 // Basic registration (Ed25519 only)
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name:        "my-agent",
     Type:        "ai_agent",
     Description: "My AI agent",
 })
 
 // OAuth registration
-registration, err := client.RegisterAgentWithOAuth(ctx, aimsdk.RegisterOptions{
+registration, err := client.SecureWithOAuth(ctx, aimsdk.RegisterOptions{
     Name:          "oauth-agent",
     Type:          "ai_agent",
     OAuthProvider: aimsdk.OAuthProviderGoogle,
@@ -260,7 +260,7 @@ When you register an agent, **capabilities are automatically granted** - no admi
 import aimsdk "github.com/opena2a/aim-sdk-go"
 
 // Capabilities detected and AUTO-GRANTED immediately
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name:        "my-agent",
     Type:        "ai_agent",
     Description: "My AI agent",
@@ -329,7 +329,7 @@ Don't want to wait for admin approval? Delete your agent and re-register with up
 err := client.Agents.Delete(ctx, agentID)
 
 // Re-register with updated capabilities
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name: "my-agent",
     Type: "ai_agent",
     Capabilities: []string{"read_email", "send_email", "delete_email"}, // ✅ All auto-granted
@@ -386,10 +386,10 @@ type RegisterOptions struct {
 **`NewClient(config Config) *Client`**
 - Create new AIM client
 
-**`RegisterAgent(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
+**`Secure(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
 - Register new agent with Ed25519 signing
 
-**`RegisterAgentWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
+**`SecureWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
 - Register agent with OAuth/OIDC
 
 **`ReportMCP(ctx context.Context, name string) error`**
@@ -497,7 +497,7 @@ go test -v -run TestSignRequest
 ### "No credentials found"
 ```go
 // Register a new agent first
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name: "my-agent",
     Type: "ai_agent",
 })

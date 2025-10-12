@@ -1,18 +1,18 @@
 # AIM Python SDK
 
-**"AIM is Stripe for AI Agent Identity"**
+**Enterprise-grade identity and capability management for AI agents.**
 
 One-line agent registration with automatic cryptographic verification.
 
-## Quick Start - The "Stripe Moment" 🚀
+## Quick Start - Zero Configuration 🚀
 
 ### SDK Download Mode (ZERO CONFIG!)
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - That's it! Everything auto-detected.
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # ✅ Auto-detected: OAuth credentials, capabilities, MCP servers
 # ✅ Auto-verified: Challenge-response verification
@@ -66,10 +66,10 @@ pip install -r requirements.txt
 ### Mode 1: SDK Download (ZERO CONFIG) ⭐ Recommended
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - Everything auto-detected!
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # What happens behind the scenes:
 # ✅ OAuth credentials loaded from .aim/credentials.json
@@ -83,10 +83,10 @@ agent = register_agent("my-agent")
 ### Mode 2: Manual Install (API Key)
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # Requires API key, but still auto-detects capabilities + MCPs
-agent = register_agent("my-agent", api_key="aim_abc123")
+agent = secure("my-agent", api_key="aim_abc123")
 
 # What happens:
 # ✅ Capabilities auto-detected
@@ -98,10 +98,10 @@ agent = register_agent("my-agent", api_key="aim_abc123")
 ### Mode 3: Power User (Full Control)
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # Disable auto-detection, specify everything manually
-agent = register_agent(
+agent = secure(
     name="my-agent",
     api_key="aim_abc123",
     auto_detect=False,  # Disable auto-detection
@@ -164,10 +164,10 @@ def delete_user_account(user_id):
 When you register an agent, **capabilities are automatically granted** - no admin approval required!
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # Capabilities detected and AUTO-GRANTED immediately
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # ✅ Capabilities: Auto-detected from imports/decorators
 # ✅ Granted: Automatically during registration
@@ -229,14 +229,14 @@ def read_inbox():
 Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
 
 ```python
-from aim_sdk import register_agent, AIMClient
+from aim_sdk import secure, AIMClient
 
 # Delete existing agent
 client = AIMClient.from_credentials("my-agent")
 client.agents.delete(agent_id=client.agent_id)
 
 # Re-register with updated capabilities
-agent = register_agent(
+agent = secure(
     "my-agent",
     capabilities=["read_email", "send_email", "delete_email"]  # ✅ All auto-granted
 )
@@ -264,17 +264,17 @@ Credentials are automatically saved to `~/.aim/credentials.json` with secure per
 }
 ```
 
-## Auto-Detection: The "Stripe Moment" is HERE! 🎉
+## Auto-Detection: Fully Automated Setup 🎉
 
 ### Full Auto-Detection (NOW AVAILABLE!)
 
 AIM now automatically detects **EVERYTHING**:
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - Zero configuration!
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # AIM automatically detects:
 # ✅ Agent capabilities (from imports, decorators, config files)
@@ -327,10 +327,10 @@ agent = register_agent("my-agent")
 You can always override auto-detection:
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # Disable auto-detection entirely
-agent = register_agent(
+agent = secure(
     "my-agent",
     api_key="aim_abc123",
     auto_detect=False,
@@ -339,7 +339,7 @@ agent = register_agent(
 )
 
 # Or mix auto-detection with manual specification
-agent = register_agent(
+agent = secure(
     "my-agent",
     api_key="aim_abc123",
     capabilities=["read_files", "write_files"],  # Manual
@@ -369,9 +369,9 @@ python example_auto_detection.py
 ```
 Demonstrates automatic capability and MCP server detection.
 
-### Full "Stripe Moment" Demo
+### Full Zero-Config Demo
 ```bash
-python example_stripe_moment.py
+python example_zero_config.py
 ```
 Shows zero-config registration and verified actions (requires backend running).
 

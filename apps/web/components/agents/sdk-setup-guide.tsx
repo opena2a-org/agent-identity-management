@@ -32,11 +32,11 @@ export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuidePr
     ? `${window.location.protocol}//${window.location.hostname}:8080`
     : 'http://localhost:8080';
 
-  // 🔥 THE STRIPE PHILOSOPHY: Secure your agent with 1 line of code
+  // Zero-config registration: Register your agent with 1 line of code
   const quickStart = {
-    javascript: `import { secure } from '@aim/sdk';\nsecure({ agentId: '${agentId}', privateKey: process.env.AIM_PRIVATE_KEY });`,
-    python: `from aim_sdk import secure\nsecure(agent_id="${agentId}", private_key=os.getenv("AIM_PRIVATE_KEY"))`,
-    go: `import aim "github.com/opena2a/aim-sdk-go"\naim.Secure("${agentId}", os.Getenv("AIM_PRIVATE_KEY"))`
+    javascript: `import { registerAgent } from '@aim/sdk';\nconst agent = registerAgent({ name: '${agentId}' });`,
+    python: `from aim_sdk import register_agent\nagent = register_agent("${agentId}")`,
+    go: `import aimsdk "github.com/opena2a/aim-sdk-go"\nclient := aimsdk.NewClient()\nreg, _ := client.RegisterAgent(ctx, aimsdk.RegisterOptions{Name: "${agentId}"})`
   };
 
   const examples = {
@@ -148,7 +148,7 @@ func main() {
             <CardTitle className="text-2xl">Secure Your Agent with 1 Line of Code</CardTitle>
           </div>
           <CardDescription className="text-base">
-            The Stripe of Agent Security - Enterprise-grade protection in seconds
+            Enterprise-grade security with zero-configuration setup
           </CardDescription>
         </CardHeader>
         <CardContent>

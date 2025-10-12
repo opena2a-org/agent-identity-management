@@ -45,7 +45,7 @@ export default function SDKDownloadPage() {
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          The Stripe of Agent Security
+          Enterprise-Grade Agent Security
         </h1>
         <p className="text-gray-600 dark:text-gray-400 text-lg">
           Secure your agents with 1 line of code. Zero configuration required.
@@ -261,14 +261,13 @@ export default function SDKDownloadPage() {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Secure Your Agent - ONE LINE!</h4>
+              <h4 className="font-medium text-gray-900 mb-2">2. Register Your Agent - ONE LINE!</h4>
               <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <code className="text-sm text-green-400 font-mono">
-                  from aim_sdk import secure<br />
-                  import os<br />
+                  from aim_sdk import register_agent<br />
                   <br />
                   # ONE LINE - Enterprise security enabled! 🚀<br />
-                  secure(agent_id="your-agent-id", private_key=os.getenv("AIM_PRIVATE_KEY"))<br />
+                  agent = register_agent(&quot;your-agent-name&quot;)<br />
                   <br />
                   # ✨ That&apos;s it! Your agent is now secure.<br />
                   <br />
@@ -282,7 +281,7 @@ export default function SDKDownloadPage() {
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>That&apos;s it! One line. Zero configuration. The &quot;Stripe of Agent Security.&quot;</span>
+                <span>That&apos;s it! One line. Zero configuration. Enterprise-grade security.</span>
               </p>
             </div>
 

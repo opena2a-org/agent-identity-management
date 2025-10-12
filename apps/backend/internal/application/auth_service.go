@@ -52,17 +52,27 @@ func (s *AuthService) findOrCreateUser(ctx context.Context, oauthUser *auth.OAut
 	}
 
 	if user != nil {
-		// User exists, update profile if needed
+		// User exists, update profile and last_login_at
+		now := time.Now()
 		avatarChanged := (user.AvatarURL == nil && oauthUser.AvatarURL != "") ||
 			(user.AvatarURL != nil && *user.AvatarURL != oauthUser.AvatarURL)
 
-		if user.Name != oauthUser.Name || avatarChanged {
+		// Always update last_login_at on successful login
+		needsUpdate := user.Name != oauthUser.Name || avatarChanged
+		user.LastLoginAt = &now
+		user.UpdatedAt = now
+
+		if needsUpdate {
 			user.Name = oauthUser.Name
 			user.AvatarURL = &oauthUser.AvatarURL
-			if err := s.userRepo.Update(user); err != nil {
-				return nil, err
-			}
 		}
+
+		// Update user with new login timestamp (and profile if changed)
+		if err := s.userRepo.Update(user); err != nil {
+			// Log error but don't fail the login - this is non-critical
+			fmt.Printf("Warning: failed to update user on login for %s: %v\n", user.ID, err)
+		}
+
 		return user, nil
 	}
 
@@ -188,6 +198,15 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, email, password str
 	// Check if email is verified
 	if !user.EmailVerified {
 		return nil, fmt.Errorf("email not verified")
+	}
+
+	// Update last login timestamp
+	now := time.Now()
+	user.LastLoginAt = &now
+	user.UpdatedAt = now
+	if err := s.userRepo.Update(user); err != nil {
+		// Log error but don't fail the login - this is non-critical
+		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
 	}
 
 	return user, nil

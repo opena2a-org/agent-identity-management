@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**The Stripe of Agent Security**
+**Enterprise-Grade Agent Identity Management**
 
 *Secure your AI agents with 1 line of code*
 
@@ -22,15 +22,15 @@
 
 **AIM (Agent Identity Management)** is the first open-source platform designed specifically for securing AI agent ecosystems. It provides cryptographic identity verification, trust scoring, and compliance monitoring for autonomous AI agents and [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers.
 
-### The Stripe Philosophy: 1 Line of Code
+### One Line of Code Philosophy
 
-Just like Stripe revolutionized payments with simple integration, **AIM makes agent security effortless**:
+**AIM makes agent security effortless**:
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - Agent registered, verified, and secured! 🚀
-agent = register_agent("my-agent", "http://localhost:8080")
+agent = secure("my-agent")
 ```
 
 **That's it.** No complex configuration. No key management. No security expertise required.
@@ -97,13 +97,13 @@ pip install -e .
 ### The Magic: One Line
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 import os
 
 # ONE LINE - Enterprise security enabled! 🚀
-agent = register_agent(
+agent = secure(
     name="my-agent",
-    aim_url="http://localhost:8080",
+    aim_url="https://aim.opena2a.org",
     private_key=os.getenv("AIM_PRIVATE_KEY")  # Get from dashboard
 )
 
@@ -125,7 +125,7 @@ import os
 
 # For existing agents or custom configurations
 client = AIMClient(
-    api_url="http://localhost:8080",
+    api_url="https://aim.opena2a.org",
     agent_id="your-agent-id",  # From dashboard
     private_key=os.getenv("AIM_PRIVATE_KEY"),
     auto_detect={
@@ -152,11 +152,11 @@ print(f"Detected {len(detection['mcps'])} MCP servers")
 
 ```python
 from crewai import Agent, Task, Crew
-from aim_sdk import register_agent
+from aim_sdk import secure
 from aim_sdk.integrations.crewai import AIMCrewWrapper
 
 # Register with AIM
-aim_agent = register_agent("my-crew", "http://localhost:8080")
+aim_agent = secure("my-crew", "https://aim.opena2a.org")
 
 # Wrap your crew
 my_crew = Crew(
@@ -178,11 +178,11 @@ result = verified_crew.kickoff(inputs={"topic": "AI safety"})
 
 ```python
 from langchain.agents import AgentExecutor, create_openai_functions_agent
-from aim_sdk import register_agent
+from aim_sdk import secure
 from aim_sdk.integrations.langchain import AIMAgentExecutor
 
 # Register with AIM
-aim_agent = register_agent("langchain-agent", "http://localhost:8080")
+aim_agent = secure("langchain-agent", "https://aim.opena2a.org")
 
 # Create LangChain agent
 agent = create_openai_functions_agent(llm, tools, prompt)
@@ -205,7 +205,7 @@ from aim_sdk import AIMClient
 from aim_sdk.integrations.mcp import register_mcp_server
 
 client = AIMClient(
-    api_url="http://localhost:8080",
+    api_url="https://aim.opena2a.org",
     agent_id="your-agent-id",
     private_key=os.getenv("AIM_PRIVATE_KEY")
 )
@@ -720,7 +720,6 @@ See the [LICENSE](LICENSE) file for full details.
 Built with ❤️ by the [OpenA2A](https://opena2a.org) community.
 
 **Special thanks to:**
-- [Anthropic](https://anthropic.com) - Claude 4.5 Sonnet for development assistance
 - [Model Context Protocol](https://modelcontextprotocol.io) - MCP specification
 - [Go](https://golang.org) - Backend language
 - [Next.js](https://nextjs.org) - Frontend framework
@@ -750,11 +749,9 @@ If you find AIM useful, please give it a ⭐ on GitHub!
 
 <div align="center">
 
-**🛡️ The Stripe of Agent Security 🛡️**
+**🛡️ Enterprise-Grade Agent Security 🛡️**
 
 *Secure your agents with 1 line of code*
-
-Made with 🤖 by AI, for AI
 
 [Get Started](#-quick-start) • [Documentation](docs/) • [Community](https://discord.gg/opena2a)
 

@@ -24,6 +24,17 @@ export interface AgentRegistration {
 }
 
 /**
+ * Secure is an alias for registerAgent
+ * One-line agent registration
+ */
+export async function secure(
+  apiUrl: string,
+  options: RegisterOptions
+): Promise<AgentRegistration> {
+  return registerAgent(apiUrl, options);
+}
+
+/**
  * Register a new agent with the AIM backend
  * Generates Ed25519 keypair, signs the request, and stores credentials securely
  */
@@ -62,6 +73,16 @@ export async function registerAgent(
   });
 
   return result;
+}
+
+/**
+ * SecureWithOAuth is an alias for registerAgentWithOAuth
+ */
+export async function secureWithOAuth(
+  apiUrl: string,
+  options: RegisterOptions
+): Promise<AgentRegistration> {
+  return registerAgentWithOAuth(apiUrl, options);
 }
 
 /**

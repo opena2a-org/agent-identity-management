@@ -24,6 +24,12 @@ type AgentRegistration struct {
 	PublicKey string `json:"public_key"`
 }
 
+// Secure is an alias for RegisterAgent
+// Registers an agent with one line of code
+func (c *Client) Secure(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
+	return c.RegisterAgent(ctx, opts)
+}
+
 // RegisterAgent registers a new agent with the AIM backend
 // This method generates Ed25519 keypair, signs the request, and stores credentials securely
 func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
@@ -77,6 +83,11 @@ func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*Agen
 	c.config.APIKey = result.APIKey
 
 	return &result, nil
+}
+
+// SecureWithOAuth is an alias for RegisterAgentWithOAuth
+func (c *Client) SecureWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
+	return c.RegisterAgentWithOAuth(ctx, opts)
 }
 
 // RegisterAgentWithOAuth registers an agent using OAuth authentication

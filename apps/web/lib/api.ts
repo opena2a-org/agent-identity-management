@@ -1041,6 +1041,111 @@ class APIClient {
       body: JSON.stringify({ isEnabled }),
     })
   }
+
+  // ========================================
+  // Compliance (Admin Only)
+  // ========================================
+
+  // Get compliance status overview
+  async getComplianceStatus(): Promise<{
+    compliance_level: string
+    total_agents: number
+    verified_agents: number
+    verification_rate: number // Already in percentage (0-100)
+    average_trust_score: number // Already in percentage (0-100)
+    recent_audit_count: number
+  }> {
+    return this.request('/api/v1/compliance/status')
+  }
+
+  // Get compliance metrics
+  async getComplianceMetrics(): Promise<{
+    start_date: string
+    end_date: string
+    interval: string
+    metrics: {
+      period: {
+        start: string
+        end: string
+        interval: string
+      }
+      agent_verification_trend: Array<{
+        date: string
+        verified: number
+      }>
+      trust_score_trend: Array<{
+        date: string
+        avg_score: number // 0-1 scale
+      }>
+    }
+  }> {
+    return this.request('/api/v1/compliance/metrics')
+  }
+
+  // Export audit log (returns CSV file as blob)
+  async exportAuditLog(params?: {
+    start_date?: string
+    end_date?: string
+    entity_type?: string
+    action?: string
+  }): Promise<Blob> {
+    const queryParams = new URLSearchParams()
+    if (params?.start_date) queryParams.append('start_date', params.start_date)
+    if (params?.end_date) queryParams.append('end_date', params.end_date)
+    if (params?.entity_type) queryParams.append('entity_type', params.entity_type)
+    if (params?.action) queryParams.append('action', params.action)
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
+    const token = this.getToken()
+
+    const response = await fetch(`${this.baseURL}/api/v1/compliance/audit-log/export${query}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to export audit log' }))
+      throw new Error(error.error || 'Failed to export audit log')
+    }
+
+    return response.blob()
+  }
+
+  // Get access review (users and their permissions)
+  async getAccessReview(): Promise<{
+    users: Array<{
+      id: string
+      email: string
+      name: string
+      role: string
+      last_login: string
+      created_at: string
+      status: string
+    }>
+    total: number
+  }> {
+    return this.request('/api/v1/compliance/access-review')
+  }
+
+  // Run compliance check
+  async runComplianceCheck(checkType: string = 'all'): Promise<{
+    check_type: string
+    passed: number
+    failed: number
+    total: number
+    compliance_rate: number
+    checks: Array<{
+      name: string
+      passed: boolean
+    }>
+  }> {
+    return this.request('/api/v1/compliance/check', {
+      method: 'POST',
+      body: JSON.stringify({ check_type: checkType }),
+    })
+  }
 }
 
 export const api = new APIClient(API_URL)

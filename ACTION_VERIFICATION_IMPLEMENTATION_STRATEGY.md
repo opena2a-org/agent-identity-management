@@ -230,7 +230,7 @@ def generate_context(action, resource, metadata):
 
 ## Developer Experience: Zero Friction
 
-### One-Line Security (Stripe Philosophy)
+### One-Line Security (Zero-Config Philosophy)
 ```python
 # Install SDK
 pip install aim-sdk

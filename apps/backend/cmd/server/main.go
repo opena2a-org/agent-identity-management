@@ -798,23 +798,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/capability-requests/:id/reject", h.CapabilityRequest.RejectCapabilityRequest)
 
 	// Compliance routes (admin only)
+	// Basic compliance features - Advanced features (SOC 2, HIPAA, GDPR, ISO 27001) reserved for premium
 	compliance := v1.Group("/compliance")
 	compliance.Use(middleware.AuthMiddleware(jwtService))
 	compliance.Use(middleware.AdminMiddleware())
 	compliance.Use(middleware.StrictRateLimitMiddleware())
-	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
-	compliance.Get("/data-retention", h.Compliance.GetDataRetention)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
-	// NEW: Additional compliance endpoints
-	compliance.Get("/frameworks", h.Compliance.GetComplianceFrameworks)
-	compliance.Get("/reports/:framework", h.Compliance.GetComplianceReportByFramework)
-	compliance.Post("/scan/:framework", h.Compliance.RunComplianceScanByFramework)
-	compliance.Get("/violations", h.Compliance.GetComplianceViolations)
-	compliance.Post("/remediate/:violation_id", h.Compliance.RemediateViolation)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
