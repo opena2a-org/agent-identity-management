@@ -249,7 +249,7 @@ print(f"MCP Trust Score: {verification.trust_score}")
 
 - **1-Line SDK Setup**: `register_agent()` - that's it!
 - **Auto-MCP Detection**: Discovers MCP servers from Claude Desktop config
-- **Framework Integrations**: CrewAI, LangChain (Microsoft Copilot coming soon)
+- **Framework Integrations**: CrewAI, LangChain Microsoft Copilot
 - **Zero Code Changes**: Secure existing agents without refactoring
 - **REST API**: 60+ endpoints with full OpenAPI documentation
 - **Docker Ready**: Production-grade containers and Docker Compose setup
@@ -279,8 +279,8 @@ print(f"MCP Trust Score: {verification.trust_score}")
 
 #### SDK
 - **Python SDK**: Full-featured with CrewAI, LangChain, MCP integrations
-- **Go SDK**: Coming soon
-- **JavaScript SDK**: Coming soon
+- **Go SDK**
+- **JavaScript SDK**
 
 #### Infrastructure
 - **Containers**: Docker + Docker Compose
