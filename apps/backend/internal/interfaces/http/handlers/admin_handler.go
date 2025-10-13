@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -17,6 +18,7 @@ type AdminHandler struct {
 	mcpService   *application.MCPService
 	auditService *application.AuditService
 	alertService *application.AlertService
+	oauthService *application.OAuthService
 }
 
 func NewAdminHandler(
@@ -26,6 +28,7 @@ func NewAdminHandler(
 	mcpService *application.MCPService,
 	auditService *application.AuditService,
 	alertService *application.AlertService,
+	oauthService *application.OAuthService,
 ) *AdminHandler {
 	return &AdminHandler{
 		authService:  authService,
@@ -34,18 +37,85 @@ func NewAdminHandler(
 		mcpService:   mcpService,
 		auditService: auditService,
 		alertService: alertService,
+		oauthService: oauthService,
 	}
 }
 
-// ListUsers returns all users in the organization
+// ListUsers returns all users in the organization including pending registration requests
 func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	// Get approved users
 	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch users",
+		})
+	}
+
+	// Get pending registration requests
+	pendingRequests, _, err := h.oauthService.ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch pending registration requests",
+		})
+	}
+
+	// Convert pending requests to a user-like format for the frontend
+	type UserWithStatus struct {
+		ID                    uuid.UUID  `json:"id"`
+		Email                 string     `json:"email"`
+		Name                  string     `json:"name"`
+		Role                  string     `json:"role"`
+		Status                string     `json:"status"`
+		CreatedAt             time.Time  `json:"created_at"`
+		Provider              string     `json:"provider,omitempty"`
+		RequestedAt           *time.Time `json:"requested_at,omitempty"`
+		PictureURL            *string    `json:"picture_url,omitempty"`
+		IsRegistrationRequest bool       `json:"is_registration_request"`
+	}
+
+	var allUsers []UserWithStatus
+
+	// Add approved users
+	for _, user := range users {
+		allUsers = append(allUsers, UserWithStatus{
+			ID:                    user.ID,
+			Email:                 user.Email,
+			Name:                  user.Name,
+			Role:                  string(user.Role),
+			Status:                "active",
+			CreatedAt:             user.CreatedAt,
+			Provider:              user.Provider,
+			IsRegistrationRequest: false,
+		})
+	}
+
+	// Add pending registration requests
+	for _, req := range pendingRequests {
+		fullName := req.FirstName
+		if req.LastName != "" {
+			if fullName != "" {
+				fullName += " "
+			}
+			fullName += req.LastName
+		}
+		if fullName == "" {
+			fullName = req.Email
+		}
+
+		allUsers = append(allUsers, UserWithStatus{
+			ID:                    req.ID,
+			Email:                 req.Email,
+			Name:                  fullName,
+			Role:                  "pending",
+			Status:                "pending_approval",
+			CreatedAt:             req.CreatedAt,
+			Provider:              string(req.OAuthProvider),
+			RequestedAt:           &req.RequestedAt,
+			PictureURL:            req.ProfilePictureURL,
+			IsRegistrationRequest: true,
 		})
 	}
 
@@ -60,13 +130,17 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_users": len(users),
+			"total_users":           len(users),
+			"pending_registrations": len(pendingRequests),
+			"total_combined":        len(allUsers),
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"users": users,
-		"total": len(users),
+		"users":                 allUsers,
+		"total":                 len(allUsers),
+		"approved_users":        len(users),
+		"pending_registrations": len(pendingRequests),
 	})
 }
 
@@ -562,19 +636,19 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		// Agent metrics
-		"total_agents":       len(agents),
-		"verified_agents":    verifiedAgents,
-		"pending_agents":     pendingAgents,
-		"verification_rate":  verificationRate,
-		"avg_trust_score":    avgTrustScore,
+		"total_agents":      len(agents),
+		"verified_agents":   verifiedAgents,
+		"pending_agents":    pendingAgents,
+		"verification_rate": verificationRate,
+		"avg_trust_score":   avgTrustScore,
 
 		// MCP Server metrics
 		"total_mcp_servers":  len(mcpServersList),
 		"active_mcp_servers": activeMCPServers,
 
 		// User metrics
-		"total_users":        len(users),
-		"active_users":       len(users), // TODO: track last_active_at
+		"total_users":  len(users),
+		"active_users": len(users), // TODO: track last_active_at
 
 		// Security metrics
 		"active_alerts":      total,
@@ -582,7 +656,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		"security_incidents": 0, // TODO: add incidents tracking
 
 		// Organization
-		"organization_id":    orgID,
+		"organization_id": orgID,
 	})
 }
 
@@ -700,6 +774,96 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "User rejected successfully",
+	})
+}
+
+// ApproveRegistrationRequest approves a pending registration request from the users page
+func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	adminID := c.Locals("user_id").(uuid.UUID)
+	requestID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request ID",
+		})
+	}
+
+	// Approve registration request
+	newUser, err := h.oauthService.ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to approve registration: %v", err),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		adminID,
+		domain.AuditActionUpdate,
+		"registration_approval",
+		requestID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":     "approved",
+			"user_email": newUser.Email,
+			"user_name":  newUser.Name,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message": "Registration request approved successfully",
+		"user":    newUser,
+	})
+}
+
+// RejectRegistrationRequest rejects a pending registration request from the users page
+func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	adminID := c.Locals("user_id").(uuid.UUID)
+	requestID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request ID",
+		})
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		// Reason is optional
+		req.Reason = "Rejected by admin"
+	}
+
+	// Reject registration request
+	if err := h.oauthService.RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to reject registration: %v", err),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		adminID,
+		domain.AuditActionDelete,
+		"registration_rejection",
+		requestID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action": "rejected",
+			"reason": req.Reason,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"message": "Registration request rejected successfully",
 	})
 }
 

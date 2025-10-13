@@ -61,7 +61,7 @@ func (h *OAuthHandler) InitiateOAuth(c fiber.Ctx) error {
 		Value:    state,
 		Expires:  time.Now().Add(10 * time.Minute),
 		HTTPOnly: true,
-		Secure:   true,
+		Secure:   false, // Set to true in production with HTTPS
 		SameSite: "Lax",
 	})
 
@@ -123,30 +123,22 @@ func (h *OAuthHandler) HandleOAuthCallback(c fiber.Ctx) error {
 		HTTPOnly: true,
 	})
 
-	// Try to log in existing user first
-	accessToken, refreshToken, _, err := h.oauthService.HandleOAuthLogin(c.Context(), provider, code)
-	if err == nil {
-		// User exists - return JWT tokens for login (access + refresh)
-		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?token=%s&refresh_token=%s", accessToken, refreshToken))
-	}
-
-	// User doesn't exist - proceed with registration flow
-	req, err := h.oauthService.HandleOAuthCallback(c.Context(), provider, code)
+	// Process OAuth callback - this will handle both login and registration
+	result, err := h.oauthService.ProcessOAuthCallback(c.Context(), provider, code)
 	if err != nil {
-		if err == application.ErrUserAlreadyExists {
-			// This shouldn't happen since we tried login first, but handle it anyway
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "User already exists. Please try logging in again.",
-			})
-		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to process OAuth callback: %v", err),
 		})
 	}
 
-	// Registration request created successfully
-	// Redirect to success page
-	return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/registration-pending?request_id=%s", req.ID))
+	// Check if it's a login (existing user) or registration request
+	if result.IsLogin {
+		// User exists - return JWT tokens for login (access + refresh)
+		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?token=%s&refresh_token=%s", result.AccessToken, result.RefreshToken))
+	} else {
+		// User doesn't exist - redirect to registration pending page
+		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/registration-pending?request_id=%s", result.RegistrationRequest.ID))
+	}
 }
 
 // ListPendingRegistrationRequests returns all pending registration requests

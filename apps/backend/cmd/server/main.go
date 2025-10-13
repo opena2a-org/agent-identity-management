@@ -15,6 +15,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/config"
 	"github.com/opena2a/identity/backend/internal/crypto"
@@ -25,7 +26,6 @@ import (
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/middleware"
-	"github.com/jmoiron/sqlx"
 )
 
 // @title Agent Identity Management API
@@ -392,6 +392,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	oauthService := application.NewOAuthService(
 		oauthRepo,
 		repos.User,
+		repos.Organization,
 		authService,
 		auditService,
 		jwtService,
@@ -416,8 +417,8 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 
 	detectionService := application.NewDetectionService(
 		db,
-		trustCalculator,  // ✅ NEW: Inject trust calculator for proper risk assessment
-		repos.Agent,      // ✅ NEW: Inject agent repository to fetch agent data
+		trustCalculator, // ✅ NEW: Inject trust calculator for proper risk assessment
+		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
 	return &Services{
@@ -491,6 +492,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.MCP,
 			services.Audit,
 			services.Alert,
+			services.OAuth,
 		),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,
@@ -625,13 +627,13 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
-	public.Post("/agents/register", h.PublicAgent.Register) // 🚀 ONE-LINE agent registration
+	public.Post("/agents/register", h.PublicAgent.Register)   // 🚀 ONE-LINE agent registration
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
-	auth.Post("/login/local", h.Auth.LocalLogin)      // Local email/password login
-	auth.Get("/login/:provider", h.Auth.Login)        // OAuth login
-	auth.Get("/callback/:provider", h.Auth.Callback)  // OAuth callback
+	auth.Post("/login/local", h.Auth.LocalLogin)     // Local email/password login
+	auth.Get("/login/:provider", h.Auth.Login)       // OAuth login
+	auth.Get("/callback/:provider", h.Auth.Callback) // OAuth callback
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
 
@@ -649,10 +651,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// SDK Token Management routes (authentication required)
 	sdkTokens := v1.Group("/users/me/sdk-tokens")
 	sdkTokens.Use(middleware.AuthMiddleware(jwtService))
-	sdkTokens.Get("/", h.SDKToken.ListUserTokens)                // List all SDK tokens
-	sdkTokens.Get("/count", h.SDKToken.GetActiveTokenCount)      // Get active token count
-	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)        // Revoke specific token
-	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens)    // Revoke all tokens
+	sdkTokens.Get("/", h.SDKToken.ListUserTokens)             // List all SDK tokens
+	sdkTokens.Get("/count", h.SDKToken.GetActiveTokenCount)   // Get active token count
+	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)     // Revoke specific token
+	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens) // Revoke all tokens
 
 	// ⭐ MCP Detection endpoints - Using DIFFERENT path to avoid agents group conflict
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
@@ -682,11 +684,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
 	agents.Get("/:id/credentials", h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
-	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                // Get MCP servers agent talks to
-	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)         // Add MCP servers (bulk)
+	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                   // Get MCP servers agent talks to
+	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                  // Add MCP servers (bulk)
 	agents.Delete("/:id/mcp-servers/bulk", middleware.MemberMiddleware(), h.Agent.BulkRemoveMCPServersFromAgent) // Remove multiple MCPs
-	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)  // Remove single MCP
-	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)       // Auto-detect MCPs from config
+	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)   // Remove single MCP
+	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)        // Auto-detect MCPs from config
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -718,6 +720,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/users/:id/reject", h.Admin.RejectUser)
 	admin.Put("/users/:id/role", h.Admin.UpdateUserRole)
 	admin.Delete("/users/:id", h.Admin.DeactivateUser)
+
+	// Registration request management (for pending OAuth registrations)
+	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)
+	admin.Post("/registration-requests/:id/reject", h.Admin.RejectRegistrationRequest)
 
 	// Organization settings
 	admin.Get("/organization/settings", h.Admin.GetOrganizationSettings)

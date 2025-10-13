@@ -54,6 +54,7 @@ type JWTService interface {
 type OAuthService struct {
 	oauthRepo    OAuthRepository
 	userRepo     domain.UserRepository
+	orgRepo      domain.OrganizationRepository
 	authService  *AuthService
 	auditService *AuditService
 	jwtService   JWTService
@@ -63,6 +64,7 @@ type OAuthService struct {
 func NewOAuthService(
 	oauthRepo OAuthRepository,
 	userRepo domain.UserRepository,
+	orgRepo domain.OrganizationRepository,
 	authService *AuthService,
 	auditService *AuditService,
 	jwtService JWTService,
@@ -71,6 +73,7 @@ func NewOAuthService(
 	return &OAuthService{
 		oauthRepo:    oauthRepo,
 		userRepo:     userRepo,
+		orgRepo:      orgRepo,
 		authService:  authService,
 		auditService: auditService,
 		jwtService:   jwtService,
@@ -151,36 +154,97 @@ func (s *OAuthService) HandleOAuthLogin(
 	return accessToken, refreshToken, existingUser, nil
 }
 
-// HandleOAuthCallback processes the OAuth callback and creates a registration request
-func (s *OAuthService) HandleOAuthCallback(
+// OAuthCallbackResult represents the result of processing an OAuth callback
+type OAuthCallbackResult struct {
+	IsLogin             bool                            `json:"is_login"`
+	AccessToken         string                          `json:"access_token,omitempty"`
+	RefreshToken        string                          `json:"refresh_token,omitempty"`
+	User                *domain.User                    `json:"user,omitempty"`
+	RegistrationRequest *domain.UserRegistrationRequest `json:"registration_request,omitempty"`
+}
+
+// ProcessOAuthCallback processes OAuth callback and handles both login and registration scenarios
+func (s *OAuthService) ProcessOAuthCallback(
 	ctx context.Context,
 	provider domain.OAuthProvider,
 	code string,
-) (*domain.UserRegistrationRequest, error) {
+) (*OAuthCallbackResult, error) {
 	// Get provider
 	p, ok := s.providers[provider]
 	if !ok {
 		return nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
 	}
 
-	// Exchange code for tokens
-	accessToken, _, _, err := p.ExchangeCode(ctx, code)
+	// Exchange code for tokens (only once!)
+	oauthAccessToken, _, _, err := p.ExchangeCode(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code: %w", err)
 	}
 
-	// Get user profile
-	profile, err := p.GetUserProfile(ctx, accessToken)
+	// Get user profile from OAuth provider
+	profile, err := p.GetUserProfile(ctx, oauthAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user profile: %w", err)
 	}
 
-	// Check if user already exists
+	// Check if user exists
 	existingUser, err := s.userRepo.GetByEmail(profile.Email)
 	if err == nil && existingUser != nil {
-		return nil, ErrUserAlreadyExists
+		// User exists - handle login
+		accessToken, refreshToken, err := s.jwtService.GenerateTokenPair(
+			existingUser.ID.String(),
+			existingUser.OrganizationID.String(),
+			existingUser.Email,
+			string(existingUser.Role),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate token pair: %w", err)
+		}
+
+		// Log audit trail
+		s.auditService.LogAction(
+			ctx,
+			existingUser.OrganizationID,
+			existingUser.ID,
+			domain.AuditActionLogin,
+			"user",
+			existingUser.ID,
+			"", // IP address
+			"", // User agent
+			map[string]interface{}{
+				"oauth_provider": provider,
+				"login_method":   "oauth",
+			},
+		)
+
+		return &OAuthCallbackResult{
+			IsLogin:      true,
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			User:         existingUser,
+		}, nil
 	}
 
+	// User doesn't exist - always create registration request for manual approval
+	// Always require admin approval for new users (no auto-provisioning)
+	// Create registration request for manual approval
+	registrationRequest, err := s.createRegistrationRequest(ctx, provider, profile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registration request: %w", err)
+	}
+
+	return &OAuthCallbackResult{
+		IsLogin:             false,
+		RegistrationRequest: registrationRequest,
+	}, nil
+}
+
+// createRegistrationRequest creates a new user registration request
+func (s *OAuthService) createRegistrationRequest(
+	ctx context.Context,
+	provider domain.OAuthProvider,
+	profile *domain.OAuthProfile,
+) (*domain.UserRegistrationRequest, error) {
 	// Check if registration request already exists
 	existingReq, err := s.oauthRepo.GetRegistrationRequestByOAuth(ctx, provider, profile.ProviderUserID)
 	if err == nil && existingReq != nil {
@@ -213,6 +277,130 @@ func (s *OAuthService) HandleOAuthCallback(
 	// TODO: Send notification to admins
 
 	return req, nil
+}
+
+// HandleOAuthCallback processes the OAuth callback and creates a registration request
+// DEPRECATED: Use ProcessOAuthCallback instead to avoid double code exchange
+func (s *OAuthService) HandleOAuthCallback(
+	ctx context.Context,
+	provider domain.OAuthProvider,
+	code string,
+) (*domain.UserRegistrationRequest, error) {
+	// Get provider
+	p, ok := s.providers[provider]
+	if !ok {
+		return nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+
+	// Exchange code for tokens
+	accessToken, _, _, err := p.ExchangeCode(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	// Get user profile
+	profile, err := p.GetUserProfile(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user profile: %w", err)
+	}
+
+	// Check if user already exists
+	existingUser, err := s.userRepo.GetByEmail(profile.Email)
+	if err == nil && existingUser != nil {
+		return nil, ErrUserAlreadyExists
+	}
+
+	return s.createRegistrationRequest(ctx, provider, profile)
+}
+
+// extractEmailDomain extracts domain from email address
+func extractEmailDomain(email string) string {
+	for i := len(email) - 1; i >= 0; i-- {
+		if email[i] == '@' {
+			return email[i+1:]
+		}
+	}
+	return ""
+}
+
+// getOrCreateOrganization finds or creates an organization by domain
+func (s *OAuthService) getOrCreateOrganization(ctx context.Context, domainName string) (*domain.Organization, error) {
+	// Try to find existing organization
+	org, err := s.orgRepo.GetByDomain(domainName)
+	if err == nil && org != nil {
+		return org, nil
+	}
+
+	// Create new organization with manual approval required by default
+	org = &domain.Organization{
+		ID:             uuid.New(),
+		Name:           domainName,
+		Domain:         domainName,
+		PlanType:       "free",
+		MaxAgents:      100,
+		MaxUsers:       10,
+		IsActive:       true,
+		AutoApproveSSO: false, // Require manual approval for all new users
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+
+	if err := s.orgRepo.Create(org); err != nil {
+		return nil, fmt.Errorf("failed to create organization: %w", err)
+	}
+
+	return org, nil
+}
+
+// autoProvisionUser creates a new user automatically
+func (s *OAuthService) autoProvisionUser(ctx context.Context, provider domain.OAuthProvider, profile *domain.OAuthProfile, org *domain.Organization) (*domain.User, error) {
+	// Check if this is the first user (make them admin)
+	existingUsers, err := s.userRepo.GetByOrganization(org.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing users: %w", err)
+	}
+
+	role := domain.RoleViewer
+	if len(existingUsers) == 0 {
+		role = domain.RoleAdmin // First user becomes admin
+	}
+
+	// Create full name
+	fullName := profile.FirstName
+	if profile.LastName != "" {
+		if fullName != "" {
+			fullName += " "
+		}
+		fullName += profile.LastName
+	}
+	if fullName == "" {
+		fullName = profile.Email // Fallback to email
+	}
+
+	// Create user
+	user := &domain.User{
+		ID:             uuid.New(),
+		OrganizationID: org.ID,
+		Email:          profile.Email,
+		Name:           fullName,
+		Role:           role,
+		Provider:       string(provider),
+		ProviderID:     profile.ProviderUserID,
+		EmailVerified:  profile.EmailVerified,
+		Status:         domain.UserStatusActive, // Auto-approved users are active
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+
+	if profile.PictureURL != "" {
+		user.AvatarURL = &profile.PictureURL
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return user, nil
 }
 
 // ListPendingRegistrationRequests returns all pending registration requests for an organization
