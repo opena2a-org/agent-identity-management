@@ -17,12 +17,17 @@ export interface Agent {
 
 export interface User {
   id: string
-  organization_id: string
+  organization_id?: string
   email: string
   name: string
-  avatar_url: string
-  role: 'admin' | 'manager' | 'member' | 'viewer'
+  avatar_url?: string
+  role: 'admin' | 'manager' | 'member' | 'viewer' | 'pending'
+  status: 'active' | 'pending_approval' | 'suspended' | 'deactivated'
   created_at: string
+  provider?: string
+  requested_at?: string
+  picture_url?: string
+  is_registration_request?: boolean
 }
 
 export interface APIKey {
@@ -249,7 +254,7 @@ class APIClient {
 
   // Auth
   async login(provider: string): Promise<{ redirect_url: string }> {
-    return this.request(`/api/v1/auth/login/${provider}`)
+    return this.request(`/api/v1/oauth/${provider}/login`)
   }
 
   async getCurrentUser(): Promise<User> {
@@ -329,6 +334,18 @@ class APIClient {
     return this.request(`/api/v1/admin/users/${userId}/role`, {
       method: 'PUT',
       body: JSON.stringify({ role })
+    })
+  }
+
+  async approveRegistrationRequest(requestId: string): Promise<void> {
+    return this.request(`/api/v1/admin/registration-requests/${requestId}/approve`, {
+      method: 'POST'
+    })
+  }
+
+  async rejectRegistrationRequest(requestId: string): Promise<void> {
+    return this.request(`/api/v1/admin/registration-requests/${requestId}/reject`, {
+      method: 'POST'
     })
   }
 

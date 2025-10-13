@@ -7,26 +7,10 @@ import { CheckCircle2, Shield, Users, Lock } from 'lucide-react'
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  const handleOAuthLogin = async (provider: 'google' | 'microsoft' | 'okta') => {
+  const handleOAuthLogin = (provider: 'google' | 'microsoft' | 'okta') => {
     setIsLoading(provider)
-    try {
-      // Get redirect URL from backend
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/auth/login/${provider}`
-      )
-      const data = await response.json()
-
-      if (data.redirect_url) {
-        // Redirect to OAuth provider
-        window.location.href = data.redirect_url
-      } else {
-        console.error('No redirect URL in response')
-        setIsLoading(null)
-      }
-    } catch (error) {
-      console.error('Failed to initiate OAuth login:', error)
-      setIsLoading(null)
-    }
+    // Redirect directly to OAuth handler
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/oauth/${provider}/login`
   }
 
   return (

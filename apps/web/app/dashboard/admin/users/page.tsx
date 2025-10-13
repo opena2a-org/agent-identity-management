@@ -24,43 +24,50 @@ interface User {
   email: string
   name: string
   display_name?: string
-  role: 'admin' | 'manager' | 'member' | 'viewer'
-  status: 'pending' | 'active' | 'suspended' | 'deactivated'
-  organization_id: string
+  role: 'admin' | 'manager' | 'member' | 'viewer' | 'pending'
+  status: 'pending' | 'active' | 'suspended' | 'deactivated' | 'pending_approval'
+  organization_id?: string
   organization_name?: string
   provider: string
   approved_by?: string
   approved_at?: string
   created_at: string
   last_login_at?: string
+  requested_at?: string
+  picture_url?: string
+  is_registration_request?: boolean
 }
 
 const roleColors = {
   admin: 'bg-purple-100 text-purple-800',
   manager: 'bg-blue-100 text-blue-800',
   member: 'bg-green-100 text-green-800',
-  viewer: 'bg-gray-100 text-gray-800'
+  viewer: 'bg-gray-100 text-gray-800',
+  pending: 'bg-yellow-100 text-yellow-800'
 }
 
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-800',
   active: 'bg-green-100 text-green-800',
   suspended: 'bg-orange-100 text-orange-800',
-  deactivated: 'bg-red-100 text-red-800'
+  deactivated: 'bg-red-100 text-red-800',
+  pending_approval: 'bg-orange-100 text-orange-800'
 }
 
 const statusIcons = {
   pending: Clock,
   active: Check,
   suspended: Ban,
-  deactivated: UserX
+  deactivated: UserX,
+  pending_approval: Clock
 }
 
 const roleIcons = {
   admin: Shield,
   manager: Users,
   member: Users,
-  viewer: Users
+  viewer: Users,
+  pending: Clock
 }
 
 export default function UsersPage() {
@@ -134,28 +141,40 @@ export default function UsersPage() {
     }
   }
 
-  const approveUser = async (userId: string) => {
+  const approveUser = async (user: User) => {
     try {
-      await api.approveUser(userId)
-      // Update local state
-      setUsers(users?.map(u =>
-        u.id === userId ? { ...u, status: 'active' as User['status'] } : u
-      ) || [])
+      if (user.is_registration_request) {
+        await api.approveRegistrationRequest(user.id)
+        alert('Registration request approved successfully')
+      } else {
+        await api.approveUser(user.id)
+        alert('User approved successfully')
+      }
+      fetchUsers() // Refresh the list
     } catch (error) {
       console.error('Failed to approve user:', error)
       alert('Failed to approve user')
     }
   }
 
-  const rejectUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to reject this user? This will delete their account.')) {
+  const rejectUser = async (user: User) => {
+    const message = user.is_registration_request 
+      ? 'Are you sure you want to reject this registration request?' 
+      : 'Are you sure you want to reject this user? This will delete their account.'
+    
+    if (!confirm(message)) {
       return
     }
 
     try {
-      await api.rejectUser(userId)
-      // Remove from local state
-      setUsers(users?.filter(u => u.id !== userId) || [])
+      if (user.is_registration_request) {
+        await api.rejectRegistrationRequest(user.id)
+        alert('Registration request rejected successfully')
+      } else {
+        await api.rejectUser(user.id)
+        alert('User rejected successfully')
+      }
+      fetchUsers() // Refresh the list
     } catch (error) {
       console.error('Failed to reject user:', error)
       alert('Failed to reject user')
@@ -174,12 +193,12 @@ export default function UsersPage() {
     return matchesSearch && matchesOrg && matchesStatus
   }) || []
 
-  const organizations = Array.from(new Set(users?.map(u => ({
-    id: u.organization_id,
+  const organizations = Array.from(new Set(users?.filter(u => u.organization_id).map(u => ({
+    id: u.organization_id!,
     name: u.organization_name || 'Unknown'
   })) || []))
 
-  const pendingCount = users?.filter(u => u.status === 'pending').length || 0
+  const pendingCount = users?.filter(u => u.status === 'pending' || u.status === 'pending_approval' || u.is_registration_request).length || 0
   const activeCount = users?.filter(u => u.status === 'active').length || 0
 
   if (loading) {
@@ -324,6 +343,7 @@ export default function UsersPage() {
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="pending_approval">Pending Approval</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
               <SelectItem value="deactivated">Deactivated</SelectItem>
@@ -358,7 +378,7 @@ export default function UsersPage() {
             {filteredUsers.map((user) => {
               const RoleIcon = roleIcons[user.role]
               const StatusIcon = statusIcons[user.status]
-              const isPending = user.status === 'pending'
+              const isPending = user.status === 'pending' || user.status === 'pending_approval' || user.is_registration_request
 
               return (
                 <div
@@ -402,24 +422,29 @@ export default function UsersPage() {
                     </div>
 
                     {isPending && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => approveUser(user.id)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <Check className="h-4 w-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => rejectUser(user.id)}
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Reject
-                        </Button>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => approveUser(user)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => rejectUser(user)}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Role can be updated after approval
+                        </p>
                       </div>
                     )}
 
