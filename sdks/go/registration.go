@@ -24,6 +24,12 @@ type AgentRegistration struct {
 	PublicKey string `json:"public_key"`
 }
 
+// Secure is an alias for RegisterAgent
+// Registers an agent with one line of code
+func (c *Client) Secure(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
+	return c.RegisterAgent(ctx, opts)
+}
+
 // RegisterAgent registers a new agent with the AIM backend
 // This method generates Ed25519 keypair, signs the request, and stores credentials securely
 func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
@@ -36,7 +42,7 @@ func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*Agen
 	}
 
 	// Generate Ed25519 keypair for agent identity
-	privateKey, publicKey, err := GenerateEd25519Keypair()
+	keyPair, err := GenerateKeyPair()
 	if err != nil {
 		return nil, fmt.Errorf("keypair generation failed: %w", err)
 	}
@@ -45,11 +51,11 @@ func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*Agen
 	payload := map[string]interface{}{
 		"name":       opts.Name,
 		"type":       opts.Type,
-		"public_key": EncodePublicKey(publicKey),
+		"public_key": keyPair.PublicKeyBase64(),
 	}
 
 	// Sign the payload for cryptographic verification
-	signature, err := SignRequest(privateKey, payload)
+	signature, err := keyPair.SignPayload(payload)
 	if err != nil {
 		return nil, fmt.Errorf("signing failed: %w", err)
 	}
@@ -65,7 +71,7 @@ func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*Agen
 	creds := &Credentials{
 		AgentID:    result.ID,
 		APIKey:     result.APIKey,
-		PrivateKey: privateKey,
+		PrivateKey: keyPair.PrivateKey,
 	}
 
 	if err := StoreCredentials(creds); err != nil {
@@ -77,6 +83,11 @@ func (c *Client) RegisterAgent(ctx context.Context, opts RegisterOptions) (*Agen
 	c.config.APIKey = result.APIKey
 
 	return &result, nil
+}
+
+// SecureWithOAuth is an alias for RegisterAgentWithOAuth
+func (c *Client) SecureWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error) {
+	return c.RegisterAgentWithOAuth(ctx, opts)
 }
 
 // RegisterAgentWithOAuth registers an agent using OAuth authentication
@@ -111,7 +122,7 @@ func (c *Client) RegisterAgentWithOAuth(ctx context.Context, opts RegisterOption
 	}
 
 	// Generate Ed25519 keypair
-	privateKey, publicKey, err := GenerateEd25519Keypair()
+	keyPair, err := GenerateKeyPair()
 	if err != nil {
 		return nil, fmt.Errorf("keypair generation failed: %w", err)
 	}
@@ -120,13 +131,13 @@ func (c *Client) RegisterAgentWithOAuth(ctx context.Context, opts RegisterOption
 	payload := map[string]interface{}{
 		"name":           opts.Name,
 		"type":           opts.Type,
-		"public_key":     EncodePublicKey(publicKey),
+		"public_key":     keyPair.PublicKeyBase64(),
 		"oauth_provider": string(opts.OAuthProvider),
 		"oauth_token":    token.AccessToken,
 	}
 
 	// Sign the payload
-	signature, err := SignRequest(privateKey, payload)
+	signature, err := keyPair.SignPayload(payload)
 	if err != nil {
 		return nil, fmt.Errorf("signing failed: %w", err)
 	}
@@ -142,7 +153,7 @@ func (c *Client) RegisterAgentWithOAuth(ctx context.Context, opts RegisterOption
 	creds := &Credentials{
 		AgentID:    result.ID,
 		APIKey:     result.APIKey,
-		PrivateKey: privateKey,
+		PrivateKey: keyPair.PrivateKey,
 	}
 
 	if err := StoreCredentials(creds); err != nil {

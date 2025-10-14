@@ -110,7 +110,8 @@ export type DetectionMethod =
   | "claude_config"
   | "sdk_import"
   | "sdk_runtime"
-  | "direct_api";
+  | "direct_api"
+  | "sdk_integration";
 
 export interface DetectionEvent {
   mcpServer: string;
@@ -974,9 +975,11 @@ class APIClient {
   }
 
   // SDK Download with automatic token refresh on 401
-  async downloadSDK(): Promise<Blob> {
+  async downloadSDK(
+    sdkType: "python" | "go" | "javascript" = "python"
+  ): Promise<Blob> {
     const attemptDownload = async (token: string | null): Promise<Response> => {
-      return fetch(`${this.baseURL}/api/v1/sdk/download`, {
+      return fetch(`${this.baseURL}/api/v1/sdk/download?sdk=${sdkType}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1029,7 +1032,241 @@ class APIClient {
 
   // Get current detection status for an agent
   async getDetectionStatus(agentId: string): Promise<DetectionStatusResponse> {
-    return this.request(`/api/v1/agents/${agentId}/detection/status`);
+    return this.request(`/api/v1/detection/agents/${agentId}/status`);
+  }
+
+  // ========================================
+  // Capability Requests (Admin + User)
+  // ========================================
+
+  // List capability requests (admin only)
+  async getCapabilityRequests(params?: {
+    status?: "pending" | "approved" | "rejected";
+    agentId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.agentId) queryParams.append("agent_id", params.agentId);
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.offset) queryParams.append("offset", params.offset.toString());
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+    return this.request(`/api/v1/admin/capability-requests${query}`);
+  }
+
+  // Get a single capability request by ID (admin only)
+  async getCapabilityRequest(id: string): Promise<any> {
+    return this.request(`/api/v1/admin/capability-requests/${id}`);
+  }
+
+  // Approve a capability request (admin only)
+  async approveCapabilityRequest(id: string): Promise<{ message: string }> {
+    return this.request(`/api/v1/admin/capability-requests/${id}/approve`, {
+      method: "POST",
+    });
+  }
+
+  // Reject a capability request (admin only)
+  async rejectCapabilityRequest(id: string): Promise<{ message: string }> {
+    return this.request(`/api/v1/admin/capability-requests/${id}/reject`, {
+      method: "POST",
+    });
+  }
+
+  // Create a capability request (any authenticated user)
+  async createCapabilityRequest(data: {
+    agent_id: string;
+    capability_type: string;
+    reason: string;
+  }): Promise<any> {
+    return this.request("/api/v1/capability-requests", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ========================================
+  // Security Policies (Admin Only)
+  // ========================================
+
+  // List all security policies for the organization
+  async getSecurityPolicies(): Promise<any[]> {
+    return this.request("/api/v1/admin/security-policies");
+  }
+
+  // Get a specific security policy by ID
+  async getSecurityPolicy(policyId: string): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`);
+  }
+
+  // Create a new security policy
+  async createSecurityPolicy(data: {
+    name: string;
+    description?: string;
+    policy_type: string;
+    enforcement_action: "alert_only" | "block_and_alert" | "allow";
+    severity_threshold: string;
+    rules?: Record<string, any>;
+    applies_to: string;
+    is_enabled: boolean;
+    priority: number;
+  }): Promise<any> {
+    return this.request("/api/v1/admin/security-policies", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Update an existing security policy
+  async updateSecurityPolicy(
+    policyId: string,
+    data: {
+      name: string;
+      description?: string;
+      policy_type: string;
+      enforcement_action: "alert_only" | "block_and_alert" | "allow";
+      severity_threshold: string;
+      rules?: Record<string, any>;
+      applies_to: string;
+      is_enabled: boolean;
+      priority: number;
+    }
+  ): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Delete a security policy
+  async deleteSecurityPolicy(policyId: string): Promise<void> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Toggle policy enabled/disabled status
+  async toggleSecurityPolicy(
+    policyId: string,
+    isEnabled: boolean
+  ): Promise<any> {
+    return this.request(`/api/v1/admin/security-policies/${policyId}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ isEnabled }),
+    });
+  }
+
+  // ========================================
+  // Compliance (Admin Only)
+  // ========================================
+
+  // Get compliance status overview
+  async getComplianceStatus(): Promise<{
+    compliance_level: string;
+    total_agents: number;
+    verified_agents: number;
+    verification_rate: number; // Already in percentage (0-100)
+    average_trust_score: number; // Already in percentage (0-100)
+    recent_audit_count: number;
+  }> {
+    return this.request("/api/v1/compliance/status");
+  }
+
+  // Get compliance metrics
+  async getComplianceMetrics(): Promise<{
+    start_date: string;
+    end_date: string;
+    interval: string;
+    metrics: {
+      period: {
+        start: string;
+        end: string;
+        interval: string;
+      };
+      agent_verification_trend: Array<{
+        date: string;
+        verified: number;
+      }>;
+      trust_score_trend: Array<{
+        date: string;
+        avg_score: number; // 0-1 scale
+      }>;
+    };
+  }> {
+    return this.request("/api/v1/compliance/metrics");
+  }
+
+  // Export audit log (returns CSV file as blob)
+  async exportAuditLog(params?: {
+    start_date?: string;
+    end_date?: string;
+    entity_type?: string;
+    action?: string;
+  }): Promise<Blob> {
+    const queryParams = new URLSearchParams();
+    if (params?.start_date) queryParams.append("start_date", params.start_date);
+    if (params?.end_date) queryParams.append("end_date", params.end_date);
+    if (params?.entity_type)
+      queryParams.append("entity_type", params.entity_type);
+    if (params?.action) queryParams.append("action", params.action);
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+    const token = this.getToken();
+
+    const response = await fetch(
+      `${this.baseURL}/api/v1/compliance/audit-log/export${query}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ error: "Failed to export audit log" }));
+      throw new Error(error.error || "Failed to export audit log");
+    }
+
+    return response.blob();
+  }
+
+  // Get access review (users and their permissions)
+  async getAccessReview(): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      last_login: string;
+      created_at: string;
+      status: string;
+    }>;
+    total: number;
+  }> {
+    return this.request("/api/v1/compliance/access-review");
+  }
+
+  // Run compliance check
+  async runComplianceCheck(checkType: string = "all"): Promise<{
+    check_type: string;
+    passed: number;
+    failed: number;
+    total: number;
+    compliance_rate: number;
+    checks: Array<{
+      name: string;
+      passed: boolean;
+    }>;
+  }> {
+    return this.request("/api/v1/compliance/check", {
+      method: "POST",
+      body: JSON.stringify({ check_type: checkType }),
+    });
   }
 }
 

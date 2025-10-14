@@ -28,7 +28,7 @@ import { formatDateTime } from '@/lib/date-utils'
 interface Alert {
   id: string
   alert_type: string
-  severity: 'info' | 'warning' | 'critical'
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'info' | 'warning' // ✅ All severity levels
   title: string
   description: string
   resource_type: string
@@ -183,8 +183,9 @@ export default function AlertsPage() {
   const stats = {
     total: alerts.length,
     critical: alerts.filter(a => a.severity === 'critical' && !a.is_acknowledged).length,
-    warning: alerts.filter(a => a.severity === 'warning' && !a.is_acknowledged).length,
-    info: alerts.filter(a => a.severity === 'info' && !a.is_acknowledged).length,
+    high: alerts.filter(a => a.severity === 'high' && !a.is_acknowledged).length,
+    medium: alerts.filter(a => (a.severity === 'medium' || a.severity === 'warning') && !a.is_acknowledged).length,
+    low: alerts.filter(a => (a.severity === 'low' || a.severity === 'info') && !a.is_acknowledged).length,
     unacknowledged: alerts.filter(a => !a.is_acknowledged).length,
   }
 
@@ -210,7 +211,7 @@ export default function AlertsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Alerts</CardTitle>
@@ -229,24 +230,34 @@ export default function AlertsPage() {
             <div className="text-2xl font-bold text-red-900">{stats.critical}</div>
           </CardContent>
         </Card>
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-orange-800">
+              High
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-900">{stats.high}</div>
+          </CardContent>
+        </Card>
         <Card className="border-yellow-200 bg-yellow-50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-yellow-800">
-              Warning
+              Medium
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-900">{stats.warning}</div>
+            <div className="text-2xl font-bold text-yellow-900">{stats.medium}</div>
           </CardContent>
         </Card>
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-gray-200 bg-gray-50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-800">
-              Info
+            <CardTitle className="text-sm font-medium text-gray-800">
+              Low
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-900">{stats.info}</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.low}</div>
           </CardContent>
         </Card>
       </div>
@@ -275,8 +286,9 @@ export default function AlertsPage() {
             <SelectContent>
               <SelectItem value="all">All Severities</SelectItem>
               <SelectItem value="critical">Critical</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
             </SelectContent>
           </Select>
 

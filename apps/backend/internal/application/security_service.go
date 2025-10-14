@@ -12,21 +12,78 @@ import (
 type SecurityService struct {
 	securityRepo *repository.SecurityRepository
 	agentRepo    *repository.AgentRepository
+	alertRepo    domain.AlertRepository  // ✅ NEW: For converting alerts to threats
 }
 
 func NewSecurityService(
 	securityRepo *repository.SecurityRepository,
 	agentRepo *repository.AgentRepository,
+	alertRepo domain.AlertRepository,
 ) *SecurityService {
 	return &SecurityService{
 		securityRepo: securityRepo,
 		agentRepo:    agentRepo,
+		alertRepo:    alertRepo,
 	}
 }
 
 // GetThreats retrieves security threats
+// ✅ ENTERPRISE SOLUTION: Convert real alerts to threats (NO MOCK DATA!)
 func (s *SecurityService) GetThreats(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error) {
-	return s.securityRepo.GetThreats(orgID, limit, offset)
+	// Fetch real alerts from database
+	alerts, err := s.alertRepo.GetByOrganization(orgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert alerts to threats for display in Security Dashboard
+	threats := make([]*domain.Threat, 0, len(alerts))
+	for _, alert := range alerts {
+		// Map alert type to threat type
+		threatType := mapAlertTypeToThreatType(alert.AlertType)
+
+		// Create target name (short ID for display)
+		targetName := alert.ResourceID.String()[:8] + "..."
+
+		// Create threat from alert
+		threat := &domain.Threat{
+			ID:             alert.ID,
+			OrganizationID: alert.OrganizationID,
+			ThreatType:     domain.ThreatType(threatType),
+			Severity:       alert.Severity,
+			Title:          alert.Title,
+			Description:    alert.Description,
+			Source:         alert.ResourceID.String(),
+			TargetType:     alert.ResourceType,
+			TargetID:       alert.ResourceID,
+			TargetName:     &targetName, // Pointer to short ID for display
+			IsBlocked:      false,        // Alerts don't have blocked status
+			CreatedAt:      alert.CreatedAt,
+			ResolvedAt:     alert.AcknowledgedAt, // Map acknowledged_at to resolved_at
+		}
+
+		threats = append(threats, threat)
+	}
+
+	return threats, nil
+}
+
+// mapAlertTypeToThreatType converts alert types to threat types for display
+func mapAlertTypeToThreatType(alertType domain.AlertType) string {
+	switch alertType {
+	case domain.AlertSecurityBreach:
+		return "malicious_agent"
+	case domain.AlertCertificateExpiring:
+		return "certificate_expiry"
+	case domain.AlertAPIKeyExpiring:
+		return "credential_leak"
+	case domain.AlertTrustScoreLow:
+		return "suspicious_activity"
+	case domain.AlertTypeConfigurationDrift:
+		return "configuration_drift"
+	default:
+		return "suspicious_activity"
+	}
 }
 
 // GetAnomalies retrieves detected anomalies

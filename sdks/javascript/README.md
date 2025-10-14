@@ -29,15 +29,11 @@ pnpm add @aim/sdk
 ### Option 1: Register a New Agent
 
 ```typescript
-import { AIMClient } from '@aim/sdk';
+import { secure } from '@aim/sdk';
 
 async function main() {
-  const client = new AIMClient({
-    apiUrl: 'http://localhost:8080',
-  });
-
   // Register new agent (generates Ed25519 keypair)
-  const registration = await client.registerAgent({
+  const registration = await secure('https://aim.opena2a.org', {
     name: 'my-js-agent',
     type: 'ai_agent',
     description: 'My first JavaScript agent',
@@ -57,7 +53,7 @@ import { AIMClient } from '@aim/sdk';
 
 async function main() {
   // Load client from system keyring
-  const client = await AIMClient.fromKeyring('http://localhost:8080');
+  const client = await AIMClient.fromKeyring('https://aim.opena2a.org');
 
   // Auto-detect and report MCPs
   await client.autoDetectAndReport();
@@ -107,14 +103,10 @@ const privateKeyB64 = encodePrivateKey(privateKey);
 Enterprise SSO authentication with Google, Microsoft, and Okta.
 
 ```typescript
-import { AIMClient, OAuthProvider } from '@aim/sdk';
-
-const client = new AIMClient({
-  apiUrl: 'http://localhost:8080',
-});
+import { secureWithOAuth, OAuthProvider } from '@aim/sdk';
 
 // Register agent with OAuth
-const registration = await client.registerAgentWithOAuth({
+const registration = await secureWithOAuth('https://aim.opena2a.org', {
   name: 'oauth-agent',
   type: 'ai_agent',
   oauthProvider: OAuthProvider.Google,
@@ -217,15 +209,17 @@ await clearCredentials();
 Complete agent onboarding workflow.
 
 ```typescript
+import { secure, secureWithOAuth, OAuthProvider } from '@aim/sdk';
+
 // Basic registration (Ed25519 only)
-const registration = await client.registerAgent({
+const registration = await secure('https://aim.opena2a.org', {
   name: 'my-agent',
   type: 'ai_agent',
   description: 'My AI agent',
 });
 
 // OAuth registration
-const registration = await client.registerAgentWithOAuth({
+const registration = await secureWithOAuth('https://aim.opena2a.org', {
   name: 'oauth-agent',
   type: 'ai_agent',
   oauthProvider: OAuthProvider.Google,
@@ -242,7 +236,100 @@ const registration = await client.registerAgentWithOAuth({
 6. Store all credentials in system keyring
 7. Update client with new credentials
 
-### 6. MCP Reporting
+### 6. Capability Management - Auto-Grant Workflow 🔒
+
+#### Initial Registration: Auto-Grant (No Approval Needed!)
+
+When you register an agent, **capabilities are automatically granted** - no admin approval required!
+
+```typescript
+import { secure } from '@aim/sdk';
+
+async function registerAgent() {
+  // Capabilities detected and AUTO-GRANTED immediately
+  const registration = await secure('https://aim.opena2a.org', {
+    name: 'my-agent',
+    type: 'ai_agent',
+    description: 'My AI agent',
+  });
+
+  // ✅ Capabilities: Auto-detected from your code
+  // ✅ Granted: Automatically during registration
+  // ✅ Ready to use: Perform actions immediately!
+}
+```
+
+**This is a game-changer**: Users can start using agents immediately without waiting for admin approval.
+
+#### Capability Updates: Admin Approval Required
+
+If you need to add NEW capabilities after registration, admins must approve:
+
+```typescript
+// Request new capability (requires admin approval)
+const request = await client.capabilities.request({
+  capability_type: 'delete_email',
+  reason: 'Need to clean up spam automatically',
+});
+
+console.log(`Request created: ${request.id}`);
+console.log(`Status: ${request.status}`);  // "pending"
+
+// Admin reviews and approves via dashboard
+// Once approved, capability is automatically granted
+```
+
+**Why this workflow?**
+- **Fast onboarding**: Users start immediately
+- **Security**: Admins review capability expansions
+- **Scalability**: No bottleneck for thousands of agents
+
+#### How Enforcement Works
+
+AIM enforces capabilities using a **single source of truth**:
+
+```typescript
+// ✅ ENFORCEMENT: Only GRANTED capabilities are enforced
+// - agent.capabilities (array) = DECLARED (reference only)
+// - agent_capabilities (table) = GRANTED (enforcement)
+
+// This action requires "read_email" capability
+const result = await client.verifyAction({
+  action_type: 'read_email',
+  resource: 'inbox'
+});
+
+// ✅ Allowed if "read_email" was GRANTED
+// ❌ Denied if "read_email" not granted (even if declared)
+```
+
+**Security Benefits**:
+- Prevents CVE-2025-32711 (EchoLeak) attacks
+- Admin control over capability expansion
+- Full audit trail (who granted what, when)
+
+#### Alternative: Delete and Re-register
+
+Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
+
+```typescript
+import { secure, AIMClient } from '@aim/sdk';
+
+// Delete existing agent (requires client)
+const client = await AIMClient.fromKeyring('https://aim.opena2a.org');
+await client.agents.delete(agentId);
+
+// Re-register with updated capabilities
+const registration = await secure('https://aim.opena2a.org', {
+  name: 'my-agent',
+  type: 'ai_agent',
+  capabilities: ['read_email', 'send_email', 'delete_email']  // ✅ All auto-granted
+});
+```
+
+**Trade-off**: Loses historical trust score and audit logs.
+
+### 7. MCP Reporting
 
 Report MCP usage to AIM backend.
 
@@ -288,10 +375,10 @@ interface RegisterOptions {
 **`static async fromKeyring(apiUrl: string): Promise<AIMClient>`**
 - Load client from stored credentials
 
-**`async registerAgent(opts: RegisterOptions): Promise<AgentRegistration>`**
+**`async secure(apiUrl: string, opts: RegisterOptions): Promise<AgentRegistration>`**
 - Register new agent with Ed25519 signing
 
-**`async registerAgentWithOAuth(opts: RegisterOptions): Promise<AgentRegistration>`**
+**`async secureWithOAuth(apiUrl: string, opts: RegisterOptions): Promise<AgentRegistration>`**
 - Register agent with OAuth/OIDC
 
 **`async reportMCP(name: string): Promise<void>`**
@@ -409,8 +496,10 @@ npm test signing.test.ts
 
 ### "No credentials found"
 ```typescript
+import { secure } from '@aim/sdk';
+
 // Register a new agent first
-const registration = await client.registerAgent({
+const registration = await secure('https://aim.opena2a.org', {
   name: 'my-agent',
   type: 'ai_agent',
 });

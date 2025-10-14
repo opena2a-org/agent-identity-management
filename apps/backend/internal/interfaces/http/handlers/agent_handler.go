@@ -12,15 +12,18 @@ import (
 
 type AgentHandler struct {
 	agentService *application.AgentService
+	mcpService   *application.MCPService
 	auditService *application.AuditService
 }
 
 func NewAgentHandler(
 	agentService *application.AgentService,
+	mcpService   *application.MCPService,
 	auditService *application.AuditService,
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService: agentService,
+		mcpService:   mcpService,
 		auditService: auditService,
 	}
 }
@@ -583,7 +586,14 @@ func getAIMBaseURL(c fiber.Ctx) string {
 // @Router /api/v1/agents/{id}/mcp-servers [put]
 func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+
+	// Support both JWT auth (user_id) and API key auth (no user_id)
+	var userID uuid.UUID
+	if userIDLocal := c.Locals("user_id"); userIDLocal != nil {
+		userID = userIDLocal.(uuid.UUID)
+	}
+	// If no user_id (API key auth), we'll fetch it from the agent later
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -631,11 +641,17 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 		})
 	}
 
+	// For API key auth (no user_id), use agent's creator for audit logging
+	auditUserID := userID
+	if auditUserID == uuid.Nil {
+		auditUserID = agent.CreatedBy
+	}
+
 	// Log audit
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
-		userID,
+		auditUserID,
 		domain.AuditActionUpdate,
 		"agent",
 		agentID,
@@ -646,6 +662,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 			"added_servers":     addedServers,
 			"detected_method":   req.DetectedMethod,
 			"total_talks_to":    len(updatedAgent.TalksTo),
+			"auth_method":       c.Locals("auth_method"), // API key or JWT
 		},
 	)
 
@@ -920,14 +937,12 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// Note: We need MCPService instance for auto-registration
-	// For now, we'll pass nil and handle registration separately
-	// TODO: Inject MCPService into AgentHandler
+	// Call service with mcpService for auto-registration
 	result, err := h.agentService.DetectMCPServersFromConfig(
 		c.Context(),
 		agentID,
 		&req,
-		nil, // mcpService - TODO: inject this dependency
+		h.mcpService, // ✅ Pass mcpService for auto-registration
 		orgID,
 		userID,
 	)

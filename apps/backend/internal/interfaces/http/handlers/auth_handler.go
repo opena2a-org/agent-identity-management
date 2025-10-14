@@ -164,7 +164,7 @@ func (h *AuthHandler) Callback(c fiber.Ctx) error {
 		})
 	}
 
-	// Login or create user
+	// Login or create user (this also updates last_login_at)
 	user, err := h.authService.LoginWithOAuth(c.Context(), oauthUser)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -267,7 +267,7 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 		})
 	}
 
-	// Authenticate user
+	// Authenticate user (this also updates last_login_at)
 	user, err := h.authService.LoginWithPassword(c.Context(), req.Email, req.Password)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

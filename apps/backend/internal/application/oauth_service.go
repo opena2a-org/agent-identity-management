@@ -139,6 +139,15 @@ func (s *OAuthService) HandleOAuthLogin(
 		return "", "", nil, fmt.Errorf("failed to generate token pair: %w", err)
 	}
 
+	// Update user's last login timestamp
+	now := time.Now()
+	existingUser.LastLoginAt = &now
+	existingUser.UpdatedAt = now
+	if err := s.userRepo.Update(existingUser); err != nil {
+		// Log error but don't fail the login - this is non-critical
+		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", existingUser.ID, err)
+	}
+
 	// Update user's OAuth connection (refresh tokens, etc.)
 	// TODO: Store/update OAuth connection with new access token
 
