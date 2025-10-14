@@ -1,13 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import { TagCategory } from '@/lib/api';
+import { useState } from "react";
+import { X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import { TagCategory } from "@/lib/api";
 
 interface CreateTagModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (tag: { key: string; value: string; category: TagCategory; description?: string; color?: string }) => void;
+  onSuccess?: (tag: {
+    key: string;
+    value: string;
+    category: TagCategory;
+    description?: string;
+    color?: string;
+  }) => void;
 }
 
 interface FormData {
@@ -19,21 +26,21 @@ interface FormData {
 }
 
 const TAG_CATEGORIES: { value: TagCategory; label: string }[] = [
-  { value: 'environment', label: 'Environment' },
-  { value: 'data_classification', label: 'Data Classification' },
-  { value: 'custom', label: 'Custom' },
+  { value: "environment", label: "Environment" },
+  { value: "data_classification", label: "Data Classification" },
+  { value: "custom", label: "Custom" },
 ];
 
 const PRESET_COLORS = [
-  { hex: '#10B981', name: 'Green' },
-  { hex: '#3B82F6', name: 'Blue' },
-  { hex: '#F59E0B', name: 'Amber' },
-  { hex: '#EF4444', name: 'Red' },
-  { hex: '#8B5CF6', name: 'Purple' },
-  { hex: '#EC4899', name: 'Pink' },
-  { hex: '#06B6D4', name: 'Cyan' },
-  { hex: '#DC2626', name: 'Dark Red' },
-  { hex: '#6B7280', name: 'Gray' },
+  { hex: "#10B981", name: "Green" },
+  { hex: "#3B82F6", name: "Blue" },
+  { hex: "#F59E0B", name: "Amber" },
+  { hex: "#EF4444", name: "Red" },
+  { hex: "#8B5CF6", name: "Purple" },
+  { hex: "#EC4899", name: "Pink" },
+  { hex: "#06B6D4", name: "Cyan" },
+  { hex: "#DC2626", name: "Dark Red" },
+  { hex: "#6B7280", name: "Gray" },
 ];
 
 export function CreateTagModal({
@@ -46,11 +53,11 @@ export function CreateTagModal({
   const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
-    key: '',
-    value: '',
-    category: 'custom',
-    description: '',
-    color: '#3B82F6', // Default blue
+    key: "",
+    value: "",
+    category: "custom",
+    description: "",
+    color: "#3B82F6", // Default blue
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -59,19 +66,21 @@ export function CreateTagModal({
     const newErrors: Record<string, string> = {};
 
     if (!formData.key.trim()) {
-      newErrors.key = 'Tag key is required';
+      newErrors.key = "Tag key is required";
     } else if (!/^[a-z0-9_]+$/.test(formData.key)) {
-      newErrors.key = 'Tag key must be lowercase alphanumeric with underscores only';
+      newErrors.key =
+        "Tag key must be lowercase alphanumeric with underscores only";
     }
 
     if (!formData.value.trim()) {
-      newErrors.value = 'Tag value is required';
+      newErrors.value = "Tag value is required";
     } else if (!/^[a-z0-9_-]+$/.test(formData.value)) {
-      newErrors.value = 'Tag value must be lowercase alphanumeric with underscores/hyphens only';
+      newErrors.value =
+        "Tag value must be lowercase alphanumeric with underscores/hyphens only";
     }
 
     if (!formData.category) {
-      newErrors.category = 'Please select a category';
+      newErrors.category = "Please select a category";
     }
 
     setErrors(newErrors);
@@ -101,13 +110,39 @@ export function CreateTagModal({
       onSuccess?.(tagData);
       setSuccess(true);
 
+      // Show success toast
+      toast.success("Tag Created Successfully", {
+        description: `Custom tag "${tagData.key}:${tagData.value}" has been created and is now available.`,
+      });
+
       // Close modal after a brief delay to show success message
       setTimeout(() => {
         handleClose();
       }, 1000);
     } catch (err) {
-      console.error('Failed to create tag:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create tag');
+      console.error("Failed to create tag:", err);
+
+      // Extract error message from different possible error formats
+      let errorMessage = "Failed to create tag";
+
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === "string") {
+        errorMessage = err;
+      } else if (err && typeof err === "object" && "message" in err) {
+        errorMessage = (err as any).message;
+      }
+
+      setError(errorMessage);
+
+      // Show error toast
+      toast.error("Tag Creation Failed", {
+        description: errorMessage,
+        action: {
+          label: "Retry",
+          onClick: () => handleSubmit(new Event("submit") as any),
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -115,11 +150,11 @@ export function CreateTagModal({
 
   const resetForm = () => {
     setFormData({
-      key: '',
-      value: '',
-      category: 'custom',
-      description: '',
-      color: '#3B82F6',
+      key: "",
+      value: "",
+      category: "custom",
+      description: "",
+      color: "#3B82F6",
     });
     setErrors({});
     setError(null);
@@ -137,10 +172,10 @@ export function CreateTagModal({
   const isFormDirty = () => {
     if (success) return false;
     return (
-      formData.key.trim() !== '' ||
-      formData.value.trim() !== '' ||
-      formData.description.trim() !== '' ||
-      formData.color !== '#3B82F6'
+      formData.key.trim() !== "" ||
+      formData.value.trim() !== "" ||
+      formData.description.trim() !== "" ||
+      formData.color !== "#3B82F6"
     );
   };
 
@@ -148,7 +183,11 @@ export function CreateTagModal({
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       if (isFormDirty()) {
-        if (confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+        if (
+          confirm(
+            "You have unsaved changes. Are you sure you want to close without saving?"
+          )
+        ) {
           handleClose();
         }
       } else {
@@ -196,7 +235,8 @@ export function CreateTagModal({
                     Tag Created Successfully
                   </p>
                   <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                    Your custom tag "{getTagPreview()}" has been created and is now available.
+                    Your custom tag "{getTagPreview()}" has been created and is
+                    now available.
                   </p>
                 </div>
               </div>
@@ -221,7 +261,9 @@ export function CreateTagModal({
               {/* Tag Preview */}
               {getTagPreview() && (
                 <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Preview:</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Preview:
+                  </p>
                   <div
                     className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-white"
                     style={{ backgroundColor: formData.color }}
@@ -239,10 +281,14 @@ export function CreateTagModal({
                 <input
                   type="text"
                   value={formData.key}
-                  onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, key: e.target.value })
+                  }
                   placeholder="e.g., team, region, project"
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.key ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
+                    errors.key
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                   disabled={loading}
                 />
@@ -250,7 +296,8 @@ export function CreateTagModal({
                   <p className="mt-1 text-xs text-red-500">{errors.key}</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  The category or type of tag (lowercase, alphanumeric, underscores only)
+                  The category or type of tag (lowercase, alphanumeric,
+                  underscores only)
                 </p>
               </div>
 
@@ -262,10 +309,14 @@ export function CreateTagModal({
                 <input
                   type="text"
                   value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, value: e.target.value })
+                  }
                   placeholder="e.g., backend, us-east, customer-portal"
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.value ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
+                    errors.value
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                   disabled={loading}
                 />
@@ -273,7 +324,8 @@ export function CreateTagModal({
                   <p className="mt-1 text-xs text-red-500">{errors.value}</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  The specific value for this tag (lowercase, alphanumeric, underscores/hyphens)
+                  The specific value for this tag (lowercase, alphanumeric,
+                  underscores/hyphens)
                 </p>
               </div>
 
@@ -284,9 +336,16 @@ export function CreateTagModal({
                 </label>
                 <select
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value as TagCategory })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      category: e.target.value as TagCategory,
+                    })
+                  }
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.category ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
+                    errors.category
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                   disabled={loading}
                 >
@@ -308,7 +367,9 @@ export function CreateTagModal({
                 </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
                   placeholder="What does this tag represent?"
                   rows={2}
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
@@ -326,11 +387,13 @@ export function CreateTagModal({
                     <button
                       key={preset.hex}
                       type="button"
-                      onClick={() => setFormData({ ...formData, color: preset.hex })}
+                      onClick={() =>
+                        setFormData({ ...formData, color: preset.hex })
+                      }
                       className={`h-10 rounded-lg transition-all ${
                         formData.color === preset.hex
-                          ? 'ring-2 ring-offset-2 ring-blue-500 scale-105'
-                          : 'hover:scale-105'
+                          ? "ring-2 ring-offset-2 ring-blue-500 scale-105"
+                          : "hover:scale-105"
                       }`}
                       style={{ backgroundColor: preset.hex }}
                       title={preset.name}

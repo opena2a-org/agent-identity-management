@@ -210,7 +210,9 @@ func getMigrationFiles() ([]string, error) {
 		if file.IsDir() {
 			continue
 		}
-		if strings.HasSuffix(file.Name(), ".sql") {
+		// Only include .up.sql files or .sql files without .down suffix for up migrations
+		if strings.HasSuffix(file.Name(), ".up.sql") || 
+		   (strings.HasSuffix(file.Name(), ".sql") && !strings.Contains(file.Name(), ".down.sql")) {
 			migrations = append(migrations, file.Name())
 		}
 	}

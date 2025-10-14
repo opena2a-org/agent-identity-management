@@ -64,7 +64,7 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 		"period":        period,
 		"total_agents":  totalAgents,
 		"active_agents": activeAgents,
-		"api_calls":     totalAgents * 150, // Simulated
+		"api_calls":     totalAgents * 150,           // Simulated
 		"data_volume":   float64(totalAgents) * 25.5, // MB, simulated
 		"uptime":        99.9,
 		"generated_at":  time.Now().UTC(),
@@ -114,8 +114,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"period": fmt.Sprintf("Last %d days", days),
-		"trends": trends,
+		"period":          fmt.Sprintf("Last %d days", days),
+		"trends":          trends,
 		"current_average": avgScore,
 	})
 }
@@ -143,11 +143,11 @@ func (h *AnalyticsHandler) GenerateReport(c fiber.Ctx) error {
 	}
 
 	report := map[string]interface{}{
-		"report_type":   reportType,
-		"format":        format,
-		"generated_at":  time.Now().UTC(),
-		"organization":  orgID.String(),
-		"total_agents":  len(agents),
+		"report_type":  reportType,
+		"format":       format,
+		"generated_at": time.Now().UTC(),
+		"organization": orgID.String(),
+		"total_agents": len(agents),
 		"metrics": map[string]interface{}{
 			"verified_agents":     countByStatus(agents, "verified"),
 			"pending_agents":      countByStatus(agents, "pending"),
@@ -190,12 +190,12 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		}
 
 		activities = append(activities, map[string]interface{}{
-			"agent_id":     agent.ID.String(),
-			"agent_name":   agent.Name,
-			"status":       agent.Status,
-			"trust_score":  agent.TrustScore,
-			"last_active":  time.Now().Add(-time.Duration(i) * time.Hour),
-			"api_calls":    150 + i*10,
+			"agent_id":       agent.ID.String(),
+			"agent_name":     agent.Name,
+			"status":         agent.Status,
+			"trust_score":    agent.TrustScore,
+			"last_active":    time.Now().Add(-time.Duration(i) * time.Hour),
+			"api_calls":      150 + i*10,
 			"data_processed": 25.5 + float64(i)*1.2,
 		})
 	}
@@ -229,6 +229,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	// Fetch MCP servers
 	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
 	if err != nil {
+		fmt.Printf("Error fetching MCP servers: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch MCP servers",
 		})
