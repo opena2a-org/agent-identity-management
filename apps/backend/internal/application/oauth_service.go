@@ -10,13 +10,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 )
 
 var (
-	ErrRegistrationNotFound    = errors.New("registration request not found")
-	ErrRegistrationNotPending  = errors.New("registration request is not pending")
-	ErrOAuthConnectionNotFound = errors.New("OAuth connection not found")
-	ErrUserAlreadyExists       = errors.New("user with this email already exists")
+	ErrRegistrationNotFound      = errors.New("registration request not found")
+	ErrRegistrationNotPending    = errors.New("registration request is not pending")
+	ErrOAuthConnectionNotFound   = errors.New("OAuth connection not found")
+	ErrUserAlreadyExists         = errors.New("user with this email already exists")
+	ErrRegistrationRequestExists = errors.New("registration request with this email already exists")
+	ErrUserNotFound              = errors.New("user not found")
+	ErrUserNotApproved           = errors.New("user registration not approved")
+	ErrPasswordAlreadySet        = errors.New("password already set for this user")
 )
 
 // OAuthProvider defines the interface for OAuth providers
@@ -33,6 +38,8 @@ type OAuthRepository interface {
 	CreateRegistrationRequest(ctx context.Context, req *domain.UserRegistrationRequest) error
 	GetRegistrationRequest(ctx context.Context, id uuid.UUID) (*domain.UserRegistrationRequest, error)
 	GetRegistrationRequestByOAuth(ctx context.Context, provider domain.OAuthProvider, providerUserID string) (*domain.UserRegistrationRequest, error)
+	GetRegistrationRequestByEmail(ctx context.Context, email string) (*domain.UserRegistrationRequest, error)
+	GetRegistrationRequestByEmailAnyStatus(ctx context.Context, email string) (*domain.UserRegistrationRequest, error)
 	ListPendingRegistrationRequests(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error)
 	UpdateRegistrationRequest(ctx context.Context, req *domain.UserRegistrationRequest) error
 
@@ -261,7 +268,7 @@ func (s *OAuthService) createRegistrationRequest(
 	}
 
 	// Create new registration request
-	req := domain.NewUserRegistrationRequest(
+	req := domain.NewUserRegistrationRequestOAuth(
 		profile.Email,
 		profile.FirstName,
 		profile.LastName,
@@ -448,26 +455,59 @@ func (s *OAuthService) ApproveRegistrationRequest(
 		fullName = req.Email // Fallback to email if no name provided
 	}
 
-	oauthProvider := string(req.OAuthProvider)
+	// Determine provider and provider ID based on registration type
+	provider := "local" // Default for manual registrations
+	providerID := ""
+	emailVerified := false
+	
+	if req.OAuthProvider != nil && req.OAuthUserID != nil {
+		// OAuth registration
+		provider = string(*req.OAuthProvider)
+		providerID = *req.OAuthUserID
+		emailVerified = req.OAuthEmailVerified
+	} else {
+		// Manual registration - email verification will be handled separately
+		emailVerified = false
+	}
+
 	user := &domain.User{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
 		Email:          req.Email,
 		Name:           fullName,
 		Role:           domain.RoleViewer, // Default to viewer role for new users
-		Provider:       oauthProvider,
-		ProviderID:     req.OAuthUserID,
-		EmailVerified:  req.OAuthEmailVerified,
+		Provider:       provider,
+		ProviderID:     providerID,
+		PasswordHash:   req.PasswordHash, // Will be set for manual registrations, nil for OAuth
+		EmailVerified:  emailVerified,
+		ApprovedBy:     &reviewerID,
+		ApprovedAt:     &time.Time{},
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
+	
+	// Set approval timestamp
+	now := time.Now()
+	user.ApprovedAt = &now
 
 	// Create user via repository
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Log audit
+	// Log audit with appropriate registration method
+	registrationMethod := "manual_self_registration"
+	auditData := map[string]interface{}{
+		"registration_id":     req.ID,
+		"registration_method": registrationMethod,
+	}
+	
+	if req.OAuthProvider != nil {
+		registrationMethod = "oauth_self_registration"
+		auditData["oauth_provider"] = *req.OAuthProvider
+		auditData["registration_method"] = registrationMethod
+	}
+
 	s.auditService.LogAction(
 		ctx,
 		orgID,
@@ -477,11 +517,7 @@ func (s *OAuthService) ApproveRegistrationRequest(
 		user.ID,
 		"", // IP address
 		"", // User agent
-		map[string]interface{}{
-			"oauth_provider":      req.OAuthProvider,
-			"registration_id":     req.ID,
-			"registration_method": "oauth_self_registration",
-		},
+		auditData,
 	)
 
 	// TODO: Send approval email to user
@@ -516,6 +552,62 @@ func (s *OAuthService) RejectRegistrationRequest(
 
 	return nil
 }
+
+// CreateManualRegistrationRequest creates a registration request for manual (non-OAuth) user registration
+func (s *OAuthService) CreateManualRegistrationRequest(
+	ctx context.Context,
+	email, firstName, lastName, password string,
+) (*domain.UserRegistrationRequest, error) {
+	// Check if user already exists
+	existingUser, err := s.userRepo.GetByEmail(email)
+	if err == nil && existingUser != nil {
+		return nil, ErrUserAlreadyExists
+	}
+
+	// Check if a registration request already exists for this email
+	existingRequest, err := s.oauthRepo.GetRegistrationRequestByEmail(ctx, email)
+	if err == nil && existingRequest != nil && existingRequest.IsPending() {
+		return nil, ErrRegistrationRequestExists
+	}
+
+	// Hash and validate password
+	passwordHasher := auth.NewPasswordHasher()
+	if err := passwordHasher.ValidatePassword(password); err != nil {
+		return nil, fmt.Errorf("password validation failed: %w", err)
+	}
+
+	hashedPassword, err := passwordHasher.HashPassword(password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Create new manual registration request
+	req := domain.NewUserRegistrationRequestManual(
+		email,
+		firstName,
+		lastName,
+		hashedPassword,
+	)
+
+	// Save registration request
+	if err := s.oauthRepo.CreateRegistrationRequest(ctx, req); err != nil {
+		return nil, fmt.Errorf("failed to create registration request: %w", err)
+	}
+
+	return req, nil
+}
+
+// GetRegistrationRequest retrieves a registration request by ID - exposed for public use
+func (s *OAuthService) GetRegistrationRequest(ctx context.Context, requestID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+	return s.oauthRepo.GetRegistrationRequest(ctx, requestID)
+}
+
+// GetRegistrationRequestByEmail retrieves a registration request by email - exposed for public login
+func (s *OAuthService) GetRegistrationRequestByEmail(ctx context.Context, email string) (*domain.UserRegistrationRequest, error) {
+	// Use the any status method to find registration requests regardless of status
+	return s.oauthRepo.GetRegistrationRequestByEmailAnyStatus(ctx, email)
+}
+
 
 // hashToken creates a SHA-256 hash of a token
 func hashToken(token string) string {

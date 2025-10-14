@@ -457,6 +457,7 @@ type Handlers struct {
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
+	PublicRegistration *handlers.PublicRegistrationHandler
 	Tag               *handlers.TagHandler
 	SDK               *handlers.SDKHandler
 	SDKToken          *handlers.SDKTokenHandler
@@ -529,6 +530,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.Auth,
 			keyVault,
+		),
+		PublicRegistration: handlers.NewPublicRegistrationHandler(
+			services.OAuth,
+			services.Auth,
+			jwtService,
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,
@@ -628,6 +634,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)   // 🚀 ONE-LINE agent registration
+	public.Post("/register", h.PublicRegistration.RegisterUser) // 🚀 User registration
+	public.Get("/register/:requestId/status", h.PublicRegistration.CheckRegistrationStatus) // Check registration status
+	public.Post("/login", h.PublicRegistration.Login) // 🚀 Public login
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")

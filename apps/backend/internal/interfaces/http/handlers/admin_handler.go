@@ -112,7 +112,12 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Role:                  "pending",
 			Status:                "pending_approval",
 			CreatedAt:             req.CreatedAt,
-			Provider:              string(req.OAuthProvider),
+			Provider:              func() string {
+			if req.OAuthProvider != nil {
+				return string(*req.OAuthProvider)
+			}
+			return "manual"
+		}(),
 			RequestedAt:           &req.RequestedAt,
 			PictureURL:            req.ProfilePictureURL,
 			IsRegistrationRequest: true,

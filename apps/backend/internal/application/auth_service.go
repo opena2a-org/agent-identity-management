@@ -33,7 +33,7 @@ func NewAuthService(
 	}
 }
 
-// LoginResponse contains login result
+// LoginResponse contains login result (used internally)
 type LoginResponse struct {
 	User         *domain.User
 	AccessToken  string
@@ -182,6 +182,11 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, email, password str
 // GetUserByID retrieves a user by ID
 func (s *AuthService) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	return s.userRepo.GetByID(userID)
+}
+
+// GetUserByEmail retrieves a user by email
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	return s.userRepo.GetByEmail(email)
 }
 
 // GetUsersByOrganization retrieves all users in an organization
@@ -343,9 +348,8 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*Valid
 
 	// Update last_used_at timestamp
 	if err := s.apiKeyRepo.UpdateLastUsed(key.ID); err != nil {
-		// Log error but don't fail the request
-		// This is non-critical
-		fmt.Printf("Warning: failed to update last_used_at for API key %s: %v\n", key.ID, err)
+		// Log error but don't fail the request - this is non-critical
+		// Note: In production, this should use proper structured logging
 	}
 
 	return &ValidateAPIKeyResponse{

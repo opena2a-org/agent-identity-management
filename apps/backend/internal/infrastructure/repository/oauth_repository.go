@@ -30,11 +30,11 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 
 	query := `
 		INSERT INTO user_registration_requests (
-			id, email, first_name, last_name, oauth_provider, oauth_user_id,
+			id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
 			organization_id, status, requested_at, profile_picture_url,
 			oauth_email_verified, metadata, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 		)
 	`
 
@@ -43,6 +43,7 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		req.Email,
 		req.FirstName,
 		req.LastName,
+		req.PasswordHash,
 		req.OAuthProvider,
 		req.OAuthUserID,
 		req.OrganizationID,
@@ -64,7 +65,7 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 
 func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id uuid.UUID) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -80,6 +81,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
+		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -118,7 +120,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByOAuth(
 	providerUserID string,
 ) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -134,6 +136,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByOAuth(
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
+		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -166,6 +169,119 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByOAuth(
 	return &req, nil
 }
 
+func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
+	ctx context.Context,
+	email string,
+) (*domain.UserRegistrationRequest, error) {
+	query := `
+		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+			   organization_id, status, requested_at, reviewed_at, reviewed_by,
+			   rejection_reason, profile_picture_url, oauth_email_verified,
+			   metadata, created_at, updated_at
+		FROM user_registration_requests
+		WHERE email = $1 AND status = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var req domain.UserRegistrationRequest
+	var metadataJSON []byte
+
+	err := r.db.QueryRowContext(ctx, query, email, domain.RegistrationStatusPending).Scan(
+		&req.ID,
+		&req.Email,
+		&req.FirstName,
+		&req.LastName,
+		&req.PasswordHash,
+		&req.OAuthProvider,
+		&req.OAuthUserID,
+		&req.OrganizationID,
+		&req.Status,
+		&req.RequestedAt,
+		&req.ReviewedAt,
+		&req.ReviewedBy,
+		&req.RejectionReason,
+		&req.ProfilePictureURL,
+		&req.OAuthEmailVerified,
+		&metadataJSON,
+		&req.CreatedAt,
+		&req.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Not found is not an error
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get registration request: %w", err)
+	}
+
+	// Unmarshal metadata
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &req.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
+	return &req, nil
+}
+
+// GetRegistrationRequestByEmailAnyStatus retrieves a registration request by email (any status)
+func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
+	ctx context.Context,
+	email string,
+) (*domain.UserRegistrationRequest, error) {
+	query := `
+		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+			   organization_id, status, requested_at, reviewed_at, reviewed_by,
+			   rejection_reason, profile_picture_url, oauth_email_verified,
+			   metadata, created_at, updated_at
+		FROM user_registration_requests
+		WHERE email = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var req domain.UserRegistrationRequest
+	var metadataJSON []byte
+
+	err := r.db.QueryRowContext(ctx, query, email).Scan(
+		&req.ID,
+		&req.Email,
+		&req.FirstName,
+		&req.LastName,
+		&req.PasswordHash,
+		&req.OAuthProvider,
+		&req.OAuthUserID,
+		&req.OrganizationID,
+		&req.Status,
+		&req.RequestedAt,
+		&req.ReviewedAt,
+		&req.ReviewedBy,
+		&req.RejectionReason,
+		&req.ProfilePictureURL,
+		&req.OAuthEmailVerified,
+		&metadataJSON,
+		&req.CreatedAt,
+		&req.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("registration request not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse metadata JSON
+	if metadataJSON != nil {
+		if err := json.Unmarshal(metadataJSON, &req.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to parse metadata: %w", err)
+		}
+	}
+
+	return &req, nil
+}
+
 func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 	ctx context.Context,
 	orgID uuid.UUID,
@@ -184,7 +300,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 
 	// Get paginated results
 	query := `
-		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -210,6 +326,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 			&req.Email,
 			&req.FirstName,
 			&req.LastName,
+			&req.PasswordHash,
 			&req.OAuthProvider,
 			&req.OAuthUserID,
 			&req.OrganizationID,

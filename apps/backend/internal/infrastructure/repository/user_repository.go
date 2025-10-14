@@ -27,9 +27,19 @@ func (r *UserRepository) Create(user *domain.User) error {
 	`
 
 	now := time.Now()
-	user.ID = uuid.New()
-	user.CreatedAt = now
-	user.UpdatedAt = now
+	
+	// Only set ID if not already set
+	if user.ID == uuid.Nil {
+		user.ID = uuid.New()
+	}
+	
+	// Only set timestamps if not already set
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = now
+	}
 
 	// Default status to active if not set (status column doesn't exist in DB)
 	if user.Status == "" {
@@ -102,7 +112,7 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
 		       password_hash, email_verified, force_password_change, last_login_at, 
-		       created_at, updated_at, oauth_provider, oauth_user_id
+		       created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE email = $1
 	`
@@ -127,6 +137,8 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		&user.UpdatedAt,
 		&oauthProvider,
 		&oauthUserID,
+		&user.ApprovedBy,
+		&user.ApprovedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -232,15 +244,13 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 }
 
 // GetByOrganizationAndStatus retrieves users in an organization with a specific status
-// Since status column doesn't exist, we return all users and filter by the requested status
 func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status domain.UserStatus) ([]*domain.User, error) {
-	// Get all users in organization
+	// Get all users in organization and filter by status
 	allUsers, err := r.GetByOrganization(orgID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter by status (all users are considered active since status column doesn't exist)
 	var filteredUsers []*domain.User
 	for _, user := range allUsers {
 		if user.Status == status {
