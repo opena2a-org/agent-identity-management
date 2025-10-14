@@ -31,7 +31,8 @@ func StoreCredentials(creds *Credentials) error {
 
 	// Store private key (base64 encoded)
 	if len(creds.PrivateKey) > 0 {
-		encodedKey := EncodePrivateKey(creds.PrivateKey)
+		kp := &KeyPair{PrivateKey: creds.PrivateKey}
+		encodedKey := kp.PrivateKeyBase64()
 		if err := keyring.Set(serviceName, "private_key", encodedKey); err != nil {
 			return fmt.Errorf("failed to store private_key: %w", err)
 		}
@@ -59,10 +60,12 @@ func LoadCredentials() (*Credentials, error) {
 	var privateKey ed25519.PrivateKey
 	privateKeyB64, err := keyring.Get(serviceName, "private_key")
 	if err == nil && privateKeyB64 != "" {
-		privateKey, err = DecodePrivateKey(privateKeyB64)
+		kp, err := NewKeyPairFromBase64(privateKeyB64)
 		if err != nil {
 			// Log warning but don't fail if private key is invalid
 			privateKey = nil
+		} else {
+			privateKey = kp.PrivateKey
 		}
 	}
 

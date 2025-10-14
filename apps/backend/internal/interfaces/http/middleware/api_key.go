@@ -15,14 +15,17 @@ import (
 // Used for SDK authentication and direct API calls
 func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		println("DEBUG: APIKeyMiddleware running for path:", c.Path())
 		var apiKey string
 
 		// Try Authorization header first (Bearer token format)
 		authHeader := c.Get("Authorization")
+		println("DEBUG: Authorization header:", authHeader)
 		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				apiKey = parts[1]
+				println("DEBUG: Extracted API key:", apiKey[:10]+"...")
 			}
 		}
 

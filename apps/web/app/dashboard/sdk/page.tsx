@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { SDKTestResults } from '@/components/agents/sdk-test-results'
 
 type SDKLanguage = 'python' | 'go' | 'javascript'
 
@@ -21,28 +20,20 @@ export default function SDKDownloadPage() {
       setSuccess(false)
       setSelectedSDK(sdk)
 
-      if (sdk === 'python') {
-        // Use API client with automatic token refresh on 401
-        const blob = await api.downloadSDK()
+      // Use API client with automatic token refresh on 401
+      const blob = await api.downloadSDK(sdk)
 
-        // Create blob and trigger download
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'aim-sdk-python.zip'
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
+      // Create blob and trigger download
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aim-sdk-${sdk}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
 
-        setSuccess(true)
-      } else {
-        // For Go and JavaScript, download from GitHub releases
-        const repoUrl = 'https://github.com/opena2a-org/agent-identity-management'
-        const sdkPath = sdk === 'go' ? 'sdks/go' : 'sdks/javascript'
-        window.open(`${repoUrl}/tree/main/${sdkPath}`, '_blank')
-        setSuccess(true)
-      }
+      setSuccess(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to download SDK')
     } finally {
@@ -53,9 +44,11 @@ export default function SDKDownloadPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Download SDK</h1>
-        <p className="text-gray-600">
-          Get started with AIM SDK in seconds. Zero configuration required!
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          Enterprise-Grade Agent Security
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 text-lg">
+          Secure your agents with 1 line of code. Zero configuration required.
         </p>
       </div>
 
@@ -87,22 +80,18 @@ export default function SDKDownloadPage() {
       <div className="grid md:grid-cols-3 gap-6 mb-8">
         {/* Python SDK - Full Featured */}
         <div className="bg-white border-2 border-blue-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-blue-50 px-4 py-2 border-b border-blue-200">
-            <span className="text-xs font-semibold text-blue-700">✨ RECOMMENDED</span>
-          </div>
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Python SDK</h2>
-                <p className="text-xs text-gray-500">Full featured</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
-              Zero config, OAuth, auto-detection, Ed25519 signing, keyring support.
+            <p className="text-sm text-gray-700 mb-4 h-20">
+              Official Python client for agent identity management with cryptographic verification.
             </p>
 
             <button
@@ -128,27 +117,27 @@ export default function SDKDownloadPage() {
               <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
               <span>Ed25519 crypto signing</span>
             </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
+              <span>System keyring integration</span>
+            </div>
           </div>
         </div>
 
         {/* Go SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-green-50 px-4 py-2 border-b border-green-200">
-            <span className="text-xs font-semibold text-green-700">✅ PRODUCTION READY</span>
-          </div>
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-cyan-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-cyan-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Go SDK</h2>
-                <p className="text-xs text-gray-500">100% feature parity • 9/9 tests passing</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
-              Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
+            <p className="text-sm text-gray-700 mb-4 h-20">
+              Official Go client for agent identity management with cryptographic verification.
             </p>
 
             <button
@@ -157,7 +146,7 @@ export default function SDKDownloadPage() {
               className="w-full bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 disabled:bg-cyan-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'go' ? 'Opening...' : 'View on GitHub →'}
+              {downloading && selectedSDK === 'go' ? 'Downloading...' : 'Download SDK'}
             </button>
           </div>
 
@@ -183,22 +172,18 @@ export default function SDKDownloadPage() {
 
         {/* JavaScript SDK - Production Ready */}
         <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="bg-green-50 px-4 py-2 border-b border-green-200">
-            <span className="text-xs font-semibold text-green-700">✅ PRODUCTION READY</span>
-          </div>
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 h-16">
               <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                 <Code className="h-6 w-6 text-yellow-600" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">JavaScript SDK</h2>
-                <p className="text-xs text-gray-500">100% feature parity • 36/37 tests passing</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-12">
-              Full featured with OAuth, auto-detection, Ed25519 signing, and keyring support.
+            <p className="text-sm text-gray-700 mb-4 h-20">
+              Official JavaScript/TypeScript client for agent identity management with cryptographic verification.
             </p>
 
             <button
@@ -207,7 +192,7 @@ export default function SDKDownloadPage() {
               className="w-full bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'javascript' ? 'Opening...' : 'View on GitHub →'}
+              {downloading && selectedSDK === 'javascript' ? 'Downloading...' : 'Download SDK'}
             </button>
           </div>
 
@@ -232,57 +217,22 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* SDK Test Results */}
-      <SDKTestResults />
-
       {/* Security Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 flex items-start gap-3">
-        <Shield className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+      <div className="bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/20 rounded-lg p-6 mb-8 flex items-start gap-3">
+        <Shield className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
         <div className="flex-1">
-          <p className="font-medium text-blue-900">Security Best Practices</p>
-          <p className="text-sm text-blue-700 mt-1">
-            Each SDK download generates a unique authentication token. You can monitor and revoke tokens anytime.
+          <p className="font-semibold text-gray-900 dark:text-white text-lg">Enterprise-Grade Security, Developer-Friendly UX</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
+            AIM SDK uses Ed25519 cryptographic signing for authentication - more secure than API keys.
+            Each agent gets a unique private key, and you can monitor and revoke access anytime.
           </p>
           <Link
-            href="/dashboard/sdk-tokens"
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium mt-2"
+            href="/dashboard/agents"
+            className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium mt-3"
           >
             <Lock className="h-4 w-4" />
-            Manage SDK Tokens →
+            View Agent Security Dashboard →
           </Link>
-        </div>
-      </div>
-
-      {/* Auto-Detection Features */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-5 mb-8">
-        <div className="flex items-start gap-3">
-          <CheckCircle className="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 Zero-Config Auto-Detection</h3>
-            <p className="text-gray-700 mb-3">
-              The SDK automatically detects <strong>everything</strong> - no manual configuration needed!
-            </p>
-            <div className="space-y-2 text-sm text-gray-700">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>Capabilities</strong> - Auto-detected from imports, decorators, and config files
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>MCP Servers</strong> - Auto-detected from Claude Desktop config and Python imports
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
-                <div>
-                  <strong>Security Packages</strong> - Cryptography and keyring auto-install with dependencies
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -311,37 +261,38 @@ export default function SDKDownloadPage() {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Register Your First Agent - ONE LINE!</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
+              <h4 className="font-medium text-gray-900 mb-2">2. Register Your Agent - ONE LINE!</h4>
+              <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <code className="text-sm text-green-400 font-mono">
-                  from aim_sdk import register_agent<br />
+                  from aim_sdk import secure<br />
                   <br />
-                  # ONE LINE - Everything auto-detected! 🚀<br />
-                  agent = register_agent("my-awesome-agent")<br />
+                  # ONE LINE - Enterprise security enabled! 🚀<br />
+                  agent = secure(&quot;your-agent-name&quot;)<br />
                   <br />
-                  # ✅ Credentials: Auto-loaded from SDK<br />
-                  # ✅ Capabilities: Auto-detected from imports<br />
-                  # ✅ MCP Servers: Auto-detected from Claude config<br />
-                  # ✅ Verification: Auto-completed via challenge-response<br />
+                  # ✨ That&apos;s it! Your agent is now secure.<br />
                   <br />
-                  print(f"Agent ID: {'{'}agent.agent_id{'}'}")<br />
-                  print(f"Trust Score: {'{'}agent.trust_score{'}'}")
+                  # Automatically enabled:<br />
+                  # ✅ Ed25519 cryptographic signing on every request<br />
+                  # ✅ Auto-MCP detection from Claude Desktop config<br />
+                  # ✅ Real-time trust scoring and behavior analytics<br />
+                  # ✅ Audit logging and compliance reporting<br />
+                  # ✅ Anomaly detection and security alerts
                 </code>
               </div>
-              <p className="text-sm text-gray-600 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                <span>That&apos;s it! One line. Zero configuration. The &quot;Stripe Moment&quot; for AI agents.</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <span>That&apos;s it! One line. Zero configuration. Enterprise-grade security.</span>
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. View in Dashboard</h4>
-              <p className="text-gray-700 mb-3">
-                Your agent appears automatically with full trust score, capabilities, and MCP server connections.
+              <h4 className="font-medium text-gray-900 mb-2">3. View Real-Time Security Analytics</h4>
+              <p className="text-gray-700 dark:text-gray-300 mb-3">
+                Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics in real-time.
               </p>
               <a
                 href="/dashboard/agents"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
               >
                 View Agents Dashboard →
               </a>
@@ -350,38 +301,6 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* Features */}
-      <div className="mt-8 grid md:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mb-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Zero Config</h4>
-          <p className="text-sm text-gray-600">
-            Credentials embedded. Dependencies auto-install. One line to register!
-          </p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
-            <Code className="h-5 w-5 text-blue-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Auto-Detection</h4>
-          <p className="text-sm text-gray-600">
-            Capabilities and MCP servers detected automatically from your code.
-          </p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-            <Shield className="h-5 w-5 text-purple-600" />
-          </div>
-          <h4 className="font-medium text-gray-900 mb-1">Auto-Verification</h4>
-          <p className="text-sm text-gray-600">
-            Challenge-response verification completes automatically with auto-approval.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

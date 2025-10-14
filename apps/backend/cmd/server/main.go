@@ -154,7 +154,16 @@ func main() {
 		})
 	})
 
-	// API v1 routes
+	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
+	// These routes use API key authentication for SDK/programmatic access
+	sdkAPI := app.Group("/api/v1/sdk-api")
+	sdkAPI.Use(middleware.APIKeyMiddleware(db))
+	sdkAPI.Use(middleware.RateLimitMiddleware())
+	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)  // SDK capability reporting
+	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)  // SDK MCP registration
+	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection) // SDK MCP detection and integration reporting
+
+	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
 	setupRoutes(v1, h, jwtService, repos.SDKToken, db)
 
@@ -254,11 +263,13 @@ type Repositories struct {
 	MCPServer         *repository.MCPServerRepository
 	MCPCapability     *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
 	Security          *repository.SecurityRepository
+	SecurityPolicy    *repository.SecurityPolicyRepository       // ✅ For configurable security policies
 	Webhook           *repository.WebhookRepository
 	VerificationEvent *repository.VerificationEventRepositorySimple
 	Tag               *repository.TagRepository
 	SDKToken          domain.SDKTokenRepository
 	Capability        domain.CapabilityRepository
+	CapabilityRequest domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 }
 
 func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
@@ -273,11 +284,13 @@ func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 		MCPServer:         repository.NewMCPServerRepository(db),
 		MCPCapability:     repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
 		Security:          repository.NewSecurityRepository(db),
+		SecurityPolicy:    repository.NewSecurityPolicyRepository(db),       // ✅ For configurable security policies
 		Webhook:           repository.NewWebhookRepository(db),
 		VerificationEvent: repository.NewVerificationEventRepository(db),
 		Tag:               repository.NewTagRepository(db),
 		SDKToken:          repository.NewSDKTokenRepository(db),
 		Capability:        repository.NewCapabilityRepository(dbx),
+		CapabilityRequest: repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 	}
 }
 
@@ -293,12 +306,14 @@ type Services struct {
 	MCP               *application.MCPService
 	MCPCapability     *application.MCPCapabilityService // ✅ For MCP server capability management
 	Security          *application.SecurityService
+	SecurityPolicy    *application.SecurityPolicyService // ✅ For policy-based enforcement
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
 	OAuth             *application.OAuthService
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
 	Capability        *application.CapabilityService
+	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
@@ -310,11 +325,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	}
 	log.Println("✅ KeyVault initialized for automatic key generation")
 
+	// ✅ Initialize Security Policy Service for policy-based enforcement
+	securityPolicyService := application.NewSecurityPolicyService(
+		repos.SecurityPolicy,
+		repos.Alert,
+	)
+
 	// Create services
 	authService := application.NewAuthService(
 		repos.User,
 		repos.Organization,
 		repos.APIKey,
+		securityPolicyService, // ✅ For auto-creating default policies
 	)
 
 	adminService := application.NewAdminService(
@@ -335,7 +357,10 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,
 		trustCalculator,
 		repos.TrustScore,
-		keyVault, // ✅ NEW: Inject KeyVault for automatic key generation
+		keyVault,              // ✅ NEW: Inject KeyVault for automatic key generation
+		repos.Alert,           // ✅ NEW: Inject AlertRepository for security alerts
+		securityPolicyService, // ✅ NEW: Inject SecurityPolicyService for policy evaluation
+		repos.Capability,      // ✅ NEW: Inject CapabilityRepository for capability checks
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -371,6 +396,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	securityService := application.NewSecurityService(
 		repos.Security,
 		repos.Agent,
+		repos.Alert,  // ✅ For converting alerts to threats (NO MOCK DATA!)
 	)
 
 	webhookService := application.NewWebhookService(
@@ -413,6 +439,14 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Capability,
 		repos.Agent,
 		repos.AuditLog,
+		trustCalculator,
+		repos.TrustScore,
+	)
+
+	capabilityRequestService := application.NewCapabilityRequestService(
+		repos.CapabilityRequest,
+		repos.Capability,
+		repos.Agent,
 	)
 
 	detectionService := application.NewDetectionService(
@@ -433,12 +467,14 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		MCP:               mcpService,
 		MCPCapability:     mcpCapabilityService, // ✅ For MCP server capability management
 		Security:          securityService,
+		SecurityPolicy:    securityPolicyService, // ✅ For policy-based enforcement
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
 		OAuth:             oauthService,
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
 		Capability:        capabilityService,
+		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService, // ✅ For MCP auto-detection (SDK + Direct API)
 	}, keyVault
 }
@@ -452,6 +488,7 @@ type Handlers struct {
 	Compliance        *handlers.ComplianceHandler
 	MCP               *handlers.MCPHandler
 	Security          *handlers.SecurityHandler
+	SecurityPolicy    *handlers.SecurityPolicyHandler // ✅ For policy management
 	Analytics         *handlers.AnalyticsHandler
 	Webhook           *handlers.WebhookHandler
 	VerificationEvent *handlers.VerificationEventHandler
@@ -463,6 +500,7 @@ type Handlers struct {
 	AuthRefresh       *handlers.AuthRefreshHandler
 	Capability        *handlers.CapabilityHandler
 	Detection         *handlers.DetectionHandler // ✅ For MCP auto-detection (SDK + Direct API)
+	CapabilityRequest *handlers.CapabilityRequestHandlers // ✅ For capability request approval
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
@@ -474,6 +512,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Agent: handlers.NewAgentHandler(
 			services.Agent,
+			services.MCP, // ✅ Inject MCPService for auto-detect MCPs feature
 			services.Audit,
 		),
 		APIKey: handlers.NewAPIKeyHandler(
@@ -507,6 +546,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Security: handlers.NewSecurityHandler(
 			services.Security,
 			services.Audit,
+		),
+		SecurityPolicy: handlers.NewSecurityPolicyHandler(
+			services.SecurityPolicy,
 		),
 		Analytics: handlers.NewAnalyticsHandler(
 			services.Agent,
@@ -550,6 +592,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Detection: handlers.NewDetectionHandler(
 			services.Detection,
 			services.Audit,
+		),
+		CapabilityRequest: handlers.NewCapabilityRequestHandlers(
+			services.CapabilityRequest,
 		),
 	}
 }
@@ -620,9 +665,9 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
-	// SDK Token Tracking Middleware - MUST be first to track all API requests
-	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
-	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
+	// SDK Token Tracking Middleware - TEMPORARILY DISABLED for debugging
+	// sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
+	// v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
 
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
@@ -656,13 +701,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)     // Revoke specific token
 	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens) // Revoke all tokens
 
+	// Note: SDK API routes moved to app level (main.go line 159) to avoid middleware inheritance
+
 	// ⭐ MCP Detection endpoints - Using DIFFERENT path to avoid agents group conflict
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
-	// Uses API key authentication for SDK-based reporting (NOT JWT)
+	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.APIKeyMiddleware(db)) // Apply middleware using Use() instead of inline
+	detection.Use(middleware.AuthMiddleware(jwtService)) // ✅ CHANGED: Use JWT middleware for web UI
+	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
-	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus)
+	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
 	// ⭐ Agent Capability Detection endpoints - Report detected agent capabilities
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 
@@ -741,24 +789,31 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// Dashboard stats
 	admin.Get("/dashboard/stats", h.Admin.GetDashboardStats)
 
+	// Security Policy Management routes (admin only)
+	admin.Get("/security-policies", h.SecurityPolicy.ListPolicies)
+	admin.Get("/security-policies/:id", h.SecurityPolicy.GetPolicy)
+	admin.Post("/security-policies", h.SecurityPolicy.CreatePolicy)
+	admin.Put("/security-policies/:id", h.SecurityPolicy.UpdatePolicy)
+	admin.Delete("/security-policies/:id", h.SecurityPolicy.DeletePolicy)
+	admin.Patch("/security-policies/:id/toggle", h.SecurityPolicy.TogglePolicy)
+
+	// Capability Request Management routes (admin only)
+	admin.Get("/capability-requests", h.CapabilityRequest.ListCapabilityRequests)
+	admin.Get("/capability-requests/:id", h.CapabilityRequest.GetCapabilityRequest)
+	admin.Post("/capability-requests/:id/approve", h.CapabilityRequest.ApproveCapabilityRequest)
+	admin.Post("/capability-requests/:id/reject", h.CapabilityRequest.RejectCapabilityRequest)
+
 	// Compliance routes (admin only)
+	// Basic compliance features - Advanced features (SOC 2, HIPAA, GDPR, ISO 27001) reserved for premium
 	compliance := v1.Group("/compliance")
 	compliance.Use(middleware.AuthMiddleware(jwtService))
 	compliance.Use(middleware.AdminMiddleware())
 	compliance.Use(middleware.StrictRateLimitMiddleware())
-	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
-	compliance.Get("/data-retention", h.Compliance.GetDataRetention)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
-	// NEW: Additional compliance endpoints
-	compliance.Get("/frameworks", h.Compliance.GetComplianceFrameworks)
-	compliance.Get("/reports/:framework", h.Compliance.GetComplianceReportByFramework)
-	compliance.Post("/scan/:framework", h.Compliance.RunComplianceScanByFramework)
-	compliance.Get("/violations", h.Compliance.GetComplianceViolations)
-	compliance.Post("/remediate/:violation_id", h.Compliance.RemediateViolation)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
@@ -854,6 +909,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Agent violation routes (under /agents/:id/violations)
 	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)
+
+	// Capability Request routes (authentication required)
+	capabilityRequests := v1.Group("/capability-requests")
+	capabilityRequests.Use(middleware.AuthMiddleware(jwtService))
+	capabilityRequests.Use(middleware.RateLimitMiddleware())
+	capabilityRequests.Post("/", h.CapabilityRequest.CreateCapabilityRequest) // Any authenticated user can request capabilities
 
 	// MCP server tag routes (under /mcp-servers/:id/tags)
 	mcpServers.Get("/:id/tags", h.Tag.GetMCPServerTags)

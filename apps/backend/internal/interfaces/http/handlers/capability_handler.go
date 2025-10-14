@@ -39,6 +39,7 @@ func NewCapabilityHandler(capabilityService *application.CapabilityService) *Cap
 func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
+		println("ERROR: Invalid agent ID:", err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
 		})
@@ -46,17 +47,30 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 
 	var req GrantCapabilityRequest
 	if err := c.Bind().JSON(&req); err != nil {
+		println("ERROR: Failed to bind request body:", err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid request body",
 		})
 	}
 
+	println("DEBUG: GrantCapability - AgentID:", agentID.String(), "CapabilityType:", req.CapabilityType)
+
 	// Get user ID from JWT claims
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
+		println("ERROR: Failed to get user ID:", err.Error())
 		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error: "Unauthorized",
 		})
+	}
+
+	println("DEBUG: UserID:", userID.String())
+
+	// For SDK/API key authentication, userID will be uuid.Nil
+	// Pass nil pointer instead of pointer to uuid.Nil to allow NULL in database
+	var userIDPtr *uuid.UUID
+	if userID != uuid.Nil {
+		userIDPtr = &userID
 	}
 
 	capability, err := h.capabilityService.GrantCapability(
@@ -64,14 +78,16 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		agentID,
 		req.CapabilityType,
 		req.Scope,
-		&userID,
+		userIDPtr,
 	)
 	if err != nil {
+		println("ERROR: GrantCapability service failed:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error: err.Error(),
 		})
 	}
 
+	println("DEBUG: Capability granted successfully:", capability.ID.String())
 	return c.Status(fiber.StatusCreated).JSON(capability)
 }
 
@@ -368,8 +384,19 @@ func (h *CapabilityHandler) GetRecentViolations(c fiber.Ctx) error {
 	return c.JSON(violations)
 }
 
-// Helper function to extract user ID from JWT claims
+// Helper function to extract user ID from JWT claims or use system user for API key auth
 func (h *CapabilityHandler) getUserIDFromContext(c fiber.Ctx) (uuid.UUID, error) {
+	// Check authentication method
+	authMethod := c.Locals("auth_method")
+
+	// If API key authentication, use the agent's agent_id as user_id
+	// (API keys are associated with agents, not users directly)
+	if authMethod != nil && authMethod.(string) == "api_key" {
+		// For SDK API key auth, we can use a system user ID or the agent's user
+		// For now, return a nil UUID to indicate system/SDK access
+		return uuid.Nil, nil
+	}
+
 	// Extract user ID from JWT claims stored in locals
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {

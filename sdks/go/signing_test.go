@@ -1,237 +1,279 @@
 package aimsdk
 
 import (
+	"encoding/base64"
 	"testing"
 )
 
-func TestGenerateEd25519Keypair(t *testing.T) {
-	privKey, pubKey, err := GenerateEd25519Keypair()
+func TestGenerateKeyPair(t *testing.T) {
+	kp, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
 	}
 
-	if privKey == nil {
-		t.Fatal("Private key is nil")
+	if kp == nil {
+		t.Fatal("GenerateKeyPair() returned nil keypair")
 	}
 
-	if pubKey == nil {
-		t.Fatal("Public key is nil")
+	if len(kp.PublicKey) != 32 {
+		t.Errorf("PublicKey length = %d, want 32", len(kp.PublicKey))
 	}
 
-	// Check key sizes
-	if len(privKey) != 64 {
-		t.Errorf("Expected private key size 64, got %d", len(privKey))
-	}
-
-	if len(pubKey) != 32 {
-		t.Errorf("Expected public key size 32, got %d", len(pubKey))
+	if len(kp.PrivateKey) != 64 {
+		t.Errorf("PrivateKey length = %d, want 64", len(kp.PrivateKey))
 	}
 }
 
-func TestSignRequest(t *testing.T) {
+func TestSignAndVerify(t *testing.T) {
 	// Generate keypair
-	privKey, pubKey, err := GenerateEd25519Keypair()
+	kp, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
 	}
 
-	// Test data
-	data := map[string]interface{}{
-		"agent_id":  "test-agent-123",
-		"timestamp": "2025-10-09T12:00:00Z",
-		"type":      "ai_agent",
-	}
+	// Test message
+	message := "test message for signing"
 
-	// Sign the data
-	signature, err := SignRequest(privKey, data)
+	// Sign message
+	signature, err := kp.Sign(message)
 	if err != nil {
-		t.Fatalf("Failed to sign request: %v", err)
+		t.Fatalf("Sign() failed: %v", err)
 	}
 
 	if signature == "" {
-		t.Fatal("Signature is empty")
+		t.Fatal("Sign() returned empty signature")
 	}
 
 	// Verify signature
-	valid := VerifySignature(pubKey, data, signature)
+	valid, err := kp.Verify(message, signature)
+	if err != nil {
+		t.Fatalf("Verify() failed: %v", err)
+	}
+
+	if !valid {
+		t.Error("Verify() returned false for valid signature")
+	}
+
+	// Test invalid signature
+	invalidSig := "invalid_signature_base64"
+	valid, err = kp.Verify(message, invalidSig)
+	if err == nil {
+		t.Error("Verify() should fail for invalid base64 signature")
+	}
+
+	// Test wrong message
+	validDifferentMsg, err := kp.Verify("different message", signature)
+	if err != nil {
+		t.Fatalf("Verify() failed: %v", err)
+	}
+
+	if validDifferentMsg {
+		t.Error("Verify() should return false for different message")
+	}
+}
+
+func TestKeyPairFromBase64(t *testing.T) {
+	// Generate original keypair
+	original, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+
+	// Export private key as base64
+	privateKeyB64 := original.PrivateKeyBase64()
+
+	// Import from base64
+	imported, err := NewKeyPairFromBase64(privateKeyB64)
+	if err != nil {
+		t.Fatalf("NewKeyPairFromBase64() failed: %v", err)
+	}
+
+	// Verify they match
+	if original.PublicKeyBase64() != imported.PublicKeyBase64() {
+		t.Error("Public keys don't match after import")
+	}
+
+	if original.PrivateKeyBase64() != imported.PrivateKeyBase64() {
+		t.Error("Private keys don't match after import")
+	}
+
+	// Test signing with both
+	message := "test message"
+
+	sig1, err := original.Sign(message)
+	if err != nil {
+		t.Fatalf("Original Sign() failed: %v", err)
+	}
+
+	sig2, err := imported.Sign(message)
+	if err != nil {
+		t.Fatalf("Imported Sign() failed: %v", err)
+	}
+
+	// Signatures should be deterministic for Ed25519
+	if sig1 != sig2 {
+		t.Error("Signatures don't match between original and imported keypairs")
+	}
+}
+
+func TestKeyPairFromPrivateKey32Bytes(t *testing.T) {
+	// Generate keypair
+	original, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+
+	// Get 32-byte seed
+	seedB64 := original.SeedBase64()
+	seedBytes, err := base64.StdEncoding.DecodeString(seedB64)
+	if err != nil {
+		t.Fatalf("Failed to decode seed: %v", err)
+	}
+
+	// Create keypair from 32-byte seed
+	kp, err := NewKeyPairFromPrivateKey(seedBytes)
+	if err != nil {
+		t.Fatalf("NewKeyPairFromPrivateKey(32 bytes) failed: %v", err)
+	}
+
+	// Public keys should match
+	if original.PublicKeyBase64() != kp.PublicKeyBase64() {
+		t.Error("Public keys don't match when created from 32-byte seed")
+	}
+}
+
+func TestKeyPairFromPrivateKey64Bytes(t *testing.T) {
+	// Generate keypair
+	original, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+
+	// Get 64-byte private key
+	privateKeyBytes, err := base64.StdEncoding.DecodeString(original.PrivateKeyBase64())
+	if err != nil {
+		t.Fatalf("Failed to decode private key: %v", err)
+	}
+
+	// Create keypair from 64-byte private key
+	kp, err := NewKeyPairFromPrivateKey(privateKeyBytes)
+	if err != nil {
+		t.Fatalf("NewKeyPairFromPrivateKey(64 bytes) failed: %v", err)
+	}
+
+	// Keys should match exactly
+	if original.PublicKeyBase64() != kp.PublicKeyBase64() {
+		t.Error("Public keys don't match when created from 64-byte private key")
+	}
+
+	if original.PrivateKeyBase64() != kp.PrivateKeyBase64() {
+		t.Error("Private keys don't match when created from 64-byte private key")
+	}
+}
+
+func TestSignPayload(t *testing.T) {
+	// Generate keypair
+	kp, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+
+	// Create test payload
+	payload := map[string]interface{}{
+		"name":       "test-agent",
+		"type":       "ai_agent",
+		"public_key": kp.PublicKeyBase64(),
+	}
+
+	// Sign payload
+	signature, err := kp.SignPayload(payload)
+	if err != nil {
+		t.Fatalf("SignPayload() failed: %v", err)
+	}
+
+	if signature == "" {
+		t.Fatal("SignPayload() returned empty signature")
+	}
+
+	// Verify signature is valid base64
+	_, err = base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		t.Errorf("SignPayload() returned invalid base64: %v", err)
+	}
+}
+
+func TestClientSignMessage(t *testing.T) {
+	// Create client
+	config := Config{
+		APIURL:  "http://localhost:8080",
+		APIKey:  "test-key",
+		AgentID: "test-agent-id",
+	}
+	client := NewClient(config)
+
+	// Test without keypair - should fail
+	_, err := client.SignMessage("test")
+	if err == nil {
+		t.Error("SignMessage() should fail when client has no keypair")
+	}
+
+	// Generate and set keypair
+	kp, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+	client.SetKeyPair(kp)
+
+	// Now signing should work
+	message := "test message"
+	signature, err := client.SignMessage(message)
+	if err != nil {
+		t.Fatalf("SignMessage() failed: %v", err)
+	}
+
+	if signature == "" {
+		t.Fatal("SignMessage() returned empty signature")
+	}
+
+	// Verify signature
+	valid, err := kp.Verify(message, signature)
+	if err != nil {
+		t.Fatalf("Verify() failed: %v", err)
+	}
+
 	if !valid {
 		t.Error("Signature verification failed")
 	}
 }
 
-func TestSignRequestWithSortedKeys(t *testing.T) {
-	// Generate keypair
-	privKey, pubKey, err := GenerateEd25519Keypair()
+func TestGetPublicKey(t *testing.T) {
+	// Create client without keypair
+	config := Config{
+		APIURL:  "http://localhost:8080",
+		APIKey:  "test-key",
+		AgentID: "test-agent-id",
+	}
+	client := NewClient(config)
+
+	// Should return empty string
+	if pk := client.GetPublicKey(); pk != "" {
+		t.Errorf("GetPublicKey() = %q, want empty string", pk)
+	}
+
+	// Generate and set keypair
+	kp, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
+		t.Fatalf("GenerateKeyPair() failed: %v", err)
+	}
+	client.SetKeyPair(kp)
+
+	// Should return public key
+	pk := client.GetPublicKey()
+	if pk == "" {
+		t.Error("GetPublicKey() returned empty string after setting keypair")
 	}
 
-	// Test data with different key order
-	data1 := map[string]interface{}{
-		"z_field": "last",
-		"a_field": "first",
-		"m_field": "middle",
-	}
-
-	data2 := map[string]interface{}{
-		"a_field": "first",
-		"m_field": "middle",
-		"z_field": "last",
-	}
-
-	// Sign both versions
-	sig1, err := SignRequest(privKey, data1)
-	if err != nil {
-		t.Fatalf("Failed to sign data1: %v", err)
-	}
-
-	sig2, err := SignRequest(privKey, data2)
-	if err != nil {
-		t.Fatalf("Failed to sign data2: %v", err)
-	}
-
-	// Signatures should be identical (sorted keys)
-	if sig1 != sig2 {
-		t.Error("Signatures differ for same data with different key order")
-	}
-
-	// Both should verify
-	if !VerifySignature(pubKey, data1, sig1) {
-		t.Error("Signature 1 verification failed")
-	}
-
-	if !VerifySignature(pubKey, data2, sig2) {
-		t.Error("Signature 2 verification failed")
-	}
-}
-
-func TestVerifySignatureWithInvalidSignature(t *testing.T) {
-	// Generate keypair
-	_, pubKey, err := GenerateEd25519Keypair()
-	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	data := map[string]interface{}{
-		"test": "data",
-	}
-
-	// Invalid signature
-	invalidSig := "invalid-signature-base64"
-
-	// Should fail verification
-	valid := VerifySignature(pubKey, data, invalidSig)
-	if valid {
-		t.Error("Invalid signature should not verify")
-	}
-}
-
-func TestVerifySignatureWithTamperedData(t *testing.T) {
-	// Generate keypair
-	privKey, pubKey, err := GenerateEd25519Keypair()
-	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	// Original data
-	originalData := map[string]interface{}{
-		"value": "original",
-	}
-
-	// Sign original data
-	signature, err := SignRequest(privKey, originalData)
-	if err != nil {
-		t.Fatalf("Failed to sign request: %v", err)
-	}
-
-	// Tampered data
-	tamperedData := map[string]interface{}{
-		"value": "tampered",
-	}
-
-	// Verification should fail for tampered data
-	valid := VerifySignature(pubKey, tamperedData, signature)
-	if valid {
-		t.Error("Tampered data should not verify with original signature")
-	}
-}
-
-func TestEncodeDecodePublicKey(t *testing.T) {
-	// Generate keypair
-	_, pubKey, err := GenerateEd25519Keypair()
-	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	// Encode to base64
-	encoded := EncodePublicKey(pubKey)
-	if encoded == "" {
-		t.Fatal("Encoded public key is empty")
-	}
-
-	// Decode back
-	decoded, err := DecodePublicKey(encoded)
-	if err != nil {
-		t.Fatalf("Failed to decode public key: %v", err)
-	}
-
-	// Should match original
-	if string(decoded) != string(pubKey) {
-		t.Error("Decoded public key does not match original")
-	}
-}
-
-func TestEncodeDecodePrivateKey(t *testing.T) {
-	// Generate keypair
-	privKey, _, err := GenerateEd25519Keypair()
-	if err != nil {
-		t.Fatalf("Failed to generate keypair: %v", err)
-	}
-
-	// Encode to base64
-	encoded := EncodePrivateKey(privKey)
-	if encoded == "" {
-		t.Fatal("Encoded private key is empty")
-	}
-
-	// Decode back
-	decoded, err := DecodePrivateKey(encoded)
-	if err != nil {
-		t.Fatalf("Failed to decode private key: %v", err)
-	}
-
-	// Should match original
-	if string(decoded) != string(privKey) {
-		t.Error("Decoded private key does not match original")
-	}
-}
-
-func TestDecodeInvalidPublicKey(t *testing.T) {
-	// Invalid base64
-	_, err := DecodePublicKey("!@#$%^&*()")
-	if err == nil {
-		t.Error("Should fail to decode invalid base64")
-	}
-
-	// Invalid size (too short)
-	shortKey := "aGVsbG8=" // "hello" in base64
-	_, err = DecodePublicKey(shortKey)
-	if err == nil {
-		t.Error("Should fail to decode key with invalid size")
-	}
-}
-
-func TestDecodeInvalidPrivateKey(t *testing.T) {
-	// Invalid base64
-	_, err := DecodePrivateKey("!@#$%^&*()")
-	if err == nil {
-		t.Error("Should fail to decode invalid base64")
-	}
-
-	// Invalid size (too short)
-	shortKey := "aGVsbG8=" // "hello" in base64
-	_, err = DecodePrivateKey(shortKey)
-	if err == nil {
-		t.Error("Should fail to decode key with invalid size")
+	if pk != kp.PublicKeyBase64() {
+		t.Error("GetPublicKey() doesn't match keypair's public key")
 	}
 }

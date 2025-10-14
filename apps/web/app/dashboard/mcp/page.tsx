@@ -424,7 +424,7 @@ export default function MCPServersPage() {
                       (server.trust_score || 0) >= 40 ? 'text-orange-600 dark:text-orange-400' :
                       'text-red-600 dark:text-red-400'
                     }`}>
-                      {(server.trust_score || 0).toFixed(1)}
+                      {(server.trust_score || 0).toFixed(1)}%
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Users,
   Shield,
@@ -145,11 +145,15 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 
 export default function AgentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Get filter parameter from URL (e.g., ?filter=low_trust)
+  const urlFilter = searchParams.get('filter');
 
   // Modal states
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -331,7 +335,16 @@ export default function AgentsPage() {
       agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       agent.display_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || agent.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    // Apply URL filter (e.g., ?filter=low_trust shows only agents with trust_score < 60)
+    let matchesUrlFilter = true;
+    if (urlFilter === 'low_trust') {
+      // Normalize trust score: convert decimal (0-1) to percentage (0-100) if needed
+      const normalizedScore = agent.trust_score <= 1 ? agent.trust_score * 100 : agent.trust_score;
+      matchesUrlFilter = normalizedScore < 60;
+    }
+
+    return matchesSearch && matchesStatus && matchesUrlFilter;
   }) || [];
 
   const formatDate = (dateString: string) => {

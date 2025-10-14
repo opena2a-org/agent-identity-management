@@ -246,13 +246,13 @@ export default function SecurityPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Monitor security threats and anomalies across all agents.
-        </p>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
+        </div>
+
         {error && (
-          <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <p className="text-sm text-yellow-800 dark:text-yellow-300">
               ⚠️ Using mock data - API connection failed: {error}
             </p>

@@ -126,7 +126,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"users",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -367,7 +367,7 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"audit_logs",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		metadata,
@@ -442,7 +442,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"alerts",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		metadata,
@@ -621,7 +621,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"dashboard_stats",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
@@ -679,7 +679,7 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 		userID,
 		domain.AuditActionView,
 		"pending_users",
-		uuid.Nil,
+		orgID, // Use orgID for collection operations
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{

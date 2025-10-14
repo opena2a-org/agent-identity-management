@@ -11,7 +11,6 @@ import {
   Key,
   Users,
   Bell,
-  FileText,
   LogOut,
   ChevronLeft,
   Menu,
@@ -19,6 +18,10 @@ import {
   Activity,
   Download,
   Lock,
+  ShieldCheck,
+  CheckSquare,
+  ClipboardCheck,
+  FileText,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -107,6 +110,24 @@ const navigationBase: NavSection[] = [
         icon: FileText,
         roles: ["admin"],
       },
+      {
+        name: "Capability Requests",
+        href: "/dashboard/admin/capability-requests",
+        icon: CheckSquare,
+        roles: ["admin"], // Admin-only capability approval
+      },
+      {
+        name: "Security Policies",
+        href: "/dashboard/admin/security-policies",
+        icon: ShieldCheck,
+        roles: ["admin"], // Admin-only policy management
+      },
+      {
+        name: "Compliance",
+        href: "/dashboard/admin/compliance",
+        icon: ClipboardCheck,
+        roles: ["admin"], // Admin-only compliance monitoring
+      },
     ],
   },
 ];
@@ -145,7 +166,7 @@ export function Sidebar() {
             if (payload.exp && payload.exp < now) {
               // Token expired - clear and redirect
               api.clearToken();
-              setTimeout(() => router.push("/login"), 0);
+              setTimeout(() => router.push("/auth/login"), 0);
               return;
             }
 
@@ -157,11 +178,11 @@ export function Sidebar() {
           } catch (e) {
             console.log("Token invalid, redirecting to login");
             api.clearToken();
-            setTimeout(() => router.push("/login"), 0);
+            setTimeout(() => router.push("/auth/login"), 0);
           }
         } else {
           // No token at all - redirect to login
-          setTimeout(() => router.push("/login"), 0);
+          setTimeout(() => router.push("/auth/login"), 0);
         }
       }
     };
@@ -216,7 +237,7 @@ export function Sidebar() {
       console.error("Logout failed:", error);
       // Force logout even if API call fails
       api.clearToken();
-      router.push("/login");
+      router.push("/auth/login");
     }
   };
 

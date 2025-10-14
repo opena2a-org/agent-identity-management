@@ -40,11 +40,11 @@ func main() {
 
     // Create client without credentials
     client := aimsdk.NewClient(aimsdk.Config{
-        APIURL: "http://localhost:8080",
+        APIURL: "https://aim.opena2a.org",
     })
 
     // Register new agent (generates Ed25519 keypair)
-    registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+    registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
         Name: "my-go-agent",
         Type: "ai_agent",
         Description: "My first Go agent",
@@ -79,7 +79,7 @@ func main() {
 
     // Create client with stored credentials
     client := aimsdk.NewClient(aimsdk.Config{
-        APIURL:  "http://localhost:8080",
+        APIURL:  "https://aim.opena2a.org",
         AgentID: creds.AgentID,
         APIKey:  creds.APIKey,
     })
@@ -127,7 +127,7 @@ Enterprise SSO authentication with Google, Microsoft, and Okta.
 
 ```go
 // Register agent with OAuth
-registration, err := client.RegisterAgentWithOAuth(ctx, aimsdk.RegisterOptions{
+registration, err := client.SecureWithOAuth(ctx, aimsdk.RegisterOptions{
     Name:          "oauth-agent",
     Type:          "ai_agent",
     OAuthProvider: aimsdk.OAuthProviderGoogle,
@@ -226,14 +226,14 @@ Complete agent onboarding workflow.
 
 ```go
 // Basic registration (Ed25519 only)
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name:        "my-agent",
     Type:        "ai_agent",
     Description: "My AI agent",
 })
 
 // OAuth registration
-registration, err := client.RegisterAgentWithOAuth(ctx, aimsdk.RegisterOptions{
+registration, err := client.SecureWithOAuth(ctx, aimsdk.RegisterOptions{
     Name:          "oauth-agent",
     Type:          "ai_agent",
     OAuthProvider: aimsdk.OAuthProviderGoogle,
@@ -250,7 +250,95 @@ registration, err := client.RegisterAgentWithOAuth(ctx, aimsdk.RegisterOptions{
 6. Store all credentials in system keyring
 7. Update client with new credentials
 
-### 6. MCP Reporting
+### 6. Capability Management - Auto-Grant Workflow 🔒
+
+#### Initial Registration: Auto-Grant (No Approval Needed!)
+
+When you register an agent, **capabilities are automatically granted** - no admin approval required!
+
+```go
+import aimsdk "github.com/opena2a/aim-sdk-go"
+
+// Capabilities detected and AUTO-GRANTED immediately
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
+    Name:        "my-agent",
+    Type:        "ai_agent",
+    Description: "My AI agent",
+})
+
+// ✅ Capabilities: Auto-detected from your code
+// ✅ Granted: Automatically during registration
+// ✅ Ready to use: Perform actions immediately!
+```
+
+**This is a game-changer**: Users can start using agents immediately without waiting for admin approval.
+
+#### Capability Updates: Admin Approval Required
+
+If you need to add NEW capabilities after registration, admins must approve:
+
+```go
+// Request new capability (requires admin approval)
+request, err := client.Capabilities.Request(ctx, &RequestCapabilityOptions{
+    CapabilityType: "delete_email",
+    Reason:         "Need to clean up spam automatically",
+})
+
+fmt.Printf("Request created: %s\n", request.ID)
+fmt.Printf("Status: %s\n", request.Status)  // "pending"
+
+// Admin reviews and approves via dashboard
+// Once approved, capability is automatically granted
+```
+
+**Why this workflow?**
+- **Fast onboarding**: Users start immediately
+- **Security**: Admins review capability expansions
+- **Scalability**: No bottleneck for thousands of agents
+
+#### How Enforcement Works
+
+AIM enforces capabilities using a **single source of truth**:
+
+```go
+// ✅ ENFORCEMENT: Only GRANTED capabilities are enforced
+// - agent.Capabilities (array) = DECLARED (reference only)
+// - agent_capabilities (table) = GRANTED (enforcement)
+
+// This action requires "read_email" capability
+result, err := client.VerifyAction(ctx, &VerifyActionRequest{
+    ActionType: "read_email",
+    Resource:   "inbox",
+})
+
+// ✅ Allowed if "read_email" was GRANTED
+// ❌ Denied if "read_email" not granted (even if declared)
+```
+
+**Security Benefits**:
+- Prevents CVE-2025-32711 (EchoLeak) attacks
+- Admin control over capability expansion
+- Full audit trail (who granted what, when)
+
+#### Alternative: Delete and Re-register
+
+Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
+
+```go
+// Delete existing agent
+err := client.Agents.Delete(ctx, agentID)
+
+// Re-register with updated capabilities
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
+    Name: "my-agent",
+    Type: "ai_agent",
+    Capabilities: []string{"read_email", "send_email", "delete_email"}, // ✅ All auto-granted
+})
+```
+
+**Trade-off**: Loses historical trust score and audit logs.
+
+### 7. MCP Reporting
 
 Report MCP usage to AIM backend.
 
@@ -298,10 +386,10 @@ type RegisterOptions struct {
 **`NewClient(config Config) *Client`**
 - Create new AIM client
 
-**`RegisterAgent(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
+**`Secure(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
 - Register new agent with Ed25519 signing
 
-**`RegisterAgentWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
+**`SecureWithOAuth(ctx context.Context, opts RegisterOptions) (*AgentRegistration, error)`**
 - Register agent with OAuth/OIDC
 
 **`ReportMCP(ctx context.Context, name string) error`**
@@ -409,7 +497,7 @@ go test -v -run TestSignRequest
 ### "No credentials found"
 ```go
 // Register a new agent first
-registration, err := client.RegisterAgent(ctx, aimsdk.RegisterOptions{
+registration, err := client.Secure(ctx, aimsdk.RegisterOptions{
     Name: "my-agent",
     Type: "ai_agent",
 })

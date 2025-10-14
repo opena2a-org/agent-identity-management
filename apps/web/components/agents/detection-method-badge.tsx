@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { DetectionMethod } from '@/lib/api'
-import { Brain, FileCode2, Package, Play, Terminal } from 'lucide-react'
+import { Brain, FileCode2, Package, Play, Terminal, Zap } from 'lucide-react'
 
 interface DetectionMethodBadgeProps {
   method: DetectionMethod
@@ -55,6 +55,13 @@ const detectionMethodConfig: Record<
     icon: Brain,
     variant: 'default',
     color: 'bg-purple-500',
+  },
+  sdk_integration: {
+    label: 'SDK Integration',
+    description: 'SDK successfully integrated with agent',
+    icon: Zap,
+    variant: 'success',
+    color: 'bg-green-600',
   },
 }
 

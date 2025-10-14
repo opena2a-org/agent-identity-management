@@ -25,6 +25,8 @@ type CapabilityService struct {
 	capabilityRepo domain.CapabilityRepository
 	agentRepo      domain.AgentRepository
 	auditRepo      domain.AuditLogRepository
+	trustCalc      domain.TrustScoreCalculator
+	trustScoreRepo domain.TrustScoreRepository
 }
 
 // NewCapabilityService creates a new capability service
@@ -32,11 +34,15 @@ func NewCapabilityService(
 	capabilityRepo domain.CapabilityRepository,
 	agentRepo domain.AgentRepository,
 	auditRepo domain.AuditLogRepository,
+	trustCalc domain.TrustScoreCalculator,
+	trustScoreRepo domain.TrustScoreRepository,
 ) *CapabilityService {
 	return &CapabilityService{
 		capabilityRepo: capabilityRepo,
 		agentRepo:      agentRepo,
 		auditRepo:      auditRepo,
+		trustCalc:      trustCalc,
+		trustScoreRepo: trustScoreRepo,
 	}
 }
 
@@ -227,6 +233,14 @@ func (s *CapabilityService) GrantCapability(
 		fmt.Printf("Warning: failed to create audit log: %v\n", err)
 	}
 
+	// Automatically recalculate trust score after capability is granted
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
+	}
+
 	return capability, nil
 }
 
@@ -277,6 +291,14 @@ func (s *CapabilityService) RevokeCapability(
 	if err := s.auditRepo.Create(auditLog); err != nil {
 		// Log error but don't fail the request
 		fmt.Printf("Warning: failed to create audit log: %v\n", err)
+	}
+
+	// Automatically recalculate trust score after capability is revoked
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
 	}
 
 	return nil
