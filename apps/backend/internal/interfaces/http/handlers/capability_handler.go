@@ -371,14 +371,14 @@ func (h *CapabilityHandler) GetRecentViolations(c fiber.Ctx) error {
 // Helper function to extract user ID from JWT claims
 func (h *CapabilityHandler) getUserIDFromContext(c fiber.Ctx) (uuid.UUID, error) {
 	// Extract user ID from JWT claims stored in locals
-	userIDStr := c.Locals("userID")
-	if userIDStr == nil {
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
 		return uuid.Nil, fiber.ErrUnauthorized
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return uuid.Nil, err
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return uuid.Nil, fiber.ErrUnauthorized
 	}
 
 	return userID, nil
