@@ -1,12 +1,27 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Shield, AlertTriangle, Check, X, Lock, Eye, AlertOctagon, Info } from 'lucide-react';
-import { api } from '@/lib/api';
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Shield,
+  AlertTriangle,
+  Check,
+  X,
+  Lock,
+  Eye,
+  AlertOctagon,
+  Info,
+} from "lucide-react";
+import { api } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -14,14 +29,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 
 interface SecurityPolicy {
   id: string;
@@ -29,7 +44,7 @@ interface SecurityPolicy {
   name: string;
   description: string;
   policy_type: string;
-  enforcement_action: 'alert_only' | 'block_and_alert' | 'allow';
+  enforcement_action: "alert_only" | "block_and_alert" | "allow";
   severity_threshold: string;
   rules: Record<string, any>;
   applies_to: string;
@@ -41,9 +56,9 @@ interface SecurityPolicy {
 }
 
 const enforcementColors = {
-  alert_only: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  block_and_alert: 'bg-red-100 text-red-800 border-red-300',
-  allow: 'bg-green-100 text-green-800 border-green-300',
+  alert_only: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  block_and_alert: "bg-red-100 text-red-800 border-red-300",
+  allow: "bg-green-100 text-green-800 border-green-300",
 };
 
 const enforcementIcons = {
@@ -53,18 +68,18 @@ const enforcementIcons = {
 };
 
 const enforcementLabels = {
-  alert_only: 'Alert Only',
-  block_and_alert: 'Block & Alert',
-  allow: 'Allow',
+  alert_only: "Alert Only",
+  block_and_alert: "Block & Alert",
+  allow: "Allow",
 };
 
 const policyTypeLabels: Record<string, string> = {
-  capability_violation: 'Capability Violation',
-  trust_score_low: 'Low Trust Score',
-  data_exfiltration: 'Data Exfiltration',
-  unusual_activity: 'Unusual Activity',
-  unauthorized_access: 'Unauthorized Access',
-  config_drift: 'Configuration Drift',
+  capability_violation: "Capability Violation",
+  trust_score_low: "Low Trust Score",
+  data_exfiltration: "Data Exfiltration",
+  unusual_activity: "Unusual Activity",
+  unauthorized_access: "Unauthorized Access",
+  config_drift: "Configuration Drift",
 };
 
 export default function SecurityPoliciesPage() {
@@ -79,7 +94,7 @@ export default function SecurityPoliciesPage() {
   const [pendingEnforcementChange, setPendingEnforcementChange] = useState<{
     policyId: string;
     policyName: string;
-    newAction: 'alert_only' | 'block_and_alert' | 'allow';
+    newAction: "alert_only" | "block_and_alert" | "allow";
   } | null>(null);
 
   useEffect(() => {
@@ -90,10 +105,12 @@ export default function SecurityPoliciesPage() {
     try {
       const data = await api.getSecurityPolicies();
       // Sort by priority (highest first)
-      const sorted = data.sort((a: SecurityPolicy, b: SecurityPolicy) => b.priority - a.priority);
+      const sorted = data.sort(
+        (a: SecurityPolicy, b: SecurityPolicy) => b.priority - a.priority
+      );
       setPolicies(sorted);
     } catch (error) {
-      console.error('Failed to fetch security policies:', error);
+      console.error("Failed to fetch security policies:", error);
     } finally {
       setLoading(false);
     }
@@ -102,18 +119,20 @@ export default function SecurityPoliciesPage() {
   const togglePolicy = async (policyId: string, currentlyEnabled: boolean) => {
     try {
       await api.toggleSecurityPolicy(policyId, !currentlyEnabled);
-      setPolicies(policies.map(p =>
-        p.id === policyId ? { ...p, is_enabled: !currentlyEnabled } : p
-      ));
+      setPolicies(
+        policies.map((p) =>
+          p.id === policyId ? { ...p, is_enabled: !currentlyEnabled } : p
+        )
+      );
     } catch (error) {
-      console.error('Failed to toggle policy:', error);
-      alert('Failed to toggle policy. Please try again.');
+      console.error("Failed to toggle policy:", error);
+      alert("Failed to toggle policy. Please try again.");
     }
   };
 
   const handlePolicyToggle = (policy: SecurityPolicy, newEnabled: boolean) => {
     // If enabling and enforcement is blocking mode, show warning
-    if (newEnabled && policy.enforcement_action === 'block_and_alert') {
+    if (newEnabled && policy.enforcement_action === "block_and_alert") {
       setPendingPolicyToggle({
         policyId: policy.id,
         policyName: policy.name,
@@ -142,10 +161,10 @@ export default function SecurityPoliciesPage() {
 
   const changeEnforcementAction = async (
     policyId: string,
-    newAction: 'alert_only' | 'block_and_alert' | 'allow'
+    newAction: "alert_only" | "block_and_alert" | "allow"
   ) => {
     try {
-      const policy = policies.find(p => p.id === policyId);
+      const policy = policies.find((p) => p.id === policyId);
       if (!policy) return;
 
       // Update the policy with new enforcement action
@@ -162,21 +181,23 @@ export default function SecurityPoliciesPage() {
       });
 
       // Update local state
-      setPolicies(policies.map(p =>
-        p.id === policyId ? { ...p, enforcement_action: newAction } : p
-      ));
+      setPolicies(
+        policies.map((p) =>
+          p.id === policyId ? { ...p, enforcement_action: newAction } : p
+        )
+      );
     } catch (error) {
-      console.error('Failed to update enforcement action:', error);
-      alert('Failed to update enforcement action. Please try again.');
+      console.error("Failed to update enforcement action:", error);
+      alert("Failed to update enforcement action. Please try again.");
     }
   };
 
   const handleEnforcementChange = (
     policy: SecurityPolicy,
-    newAction: 'alert_only' | 'block_and_alert' | 'allow'
+    newAction: "alert_only" | "block_and_alert" | "allow"
   ) => {
     // If changing to blocking mode, show warning
-    if (newAction === 'block_and_alert') {
+    if (newAction === "block_and_alert") {
       setPendingEnforcementChange({
         policyId: policy.id,
         policyName: policy.name,
@@ -204,12 +225,20 @@ export default function SecurityPoliciesPage() {
     }
   };
 
-  const enabledCount = policies.filter(p => p.is_enabled).length;
-  const blockingCount = policies.filter(p => p.is_enabled && p.enforcement_action === 'block_and_alert').length;
-  const monitoringCount = policies.filter(p => p.is_enabled && p.enforcement_action === 'alert_only').length;
+  const enabledCount = policies.filter((p) => p.is_enabled).length;
+  const blockingCount = policies.filter(
+    (p) => p.is_enabled && p.enforcement_action === "block_and_alert"
+  ).length;
+  const monitoringCount = policies.filter(
+    (p) => p.is_enabled && p.enforcement_action === "alert_only"
+  ).length;
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96">Loading security policies...</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        Loading security policies...
+      </div>
+    );
   }
 
   return (
@@ -217,7 +246,8 @@ export default function SecurityPoliciesPage() {
       <div>
         <h1 className="text-3xl font-bold">Security Policies</h1>
         <p className="text-muted-foreground mt-1">
-          Configure security enforcement policies for capability violations and threat detection
+          Configure security enforcement policies for capability violations and
+          threat detection
         </p>
       </div>
 
@@ -225,7 +255,9 @@ export default function SecurityPoliciesPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Policies</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Policies
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{policies.length}</div>
@@ -236,7 +268,9 @@ export default function SecurityPoliciesPage() {
             <CardTitle className="text-sm font-medium">Enabled</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{enabledCount}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {enabledCount}
+            </div>
           </CardContent>
         </Card>
         <Card className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800">
@@ -247,8 +281,12 @@ export default function SecurityPoliciesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{monitoringCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">Alert only mode</p>
+            <div className="text-2xl font-bold text-yellow-600">
+              {monitoringCount}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Alert only mode
+            </p>
           </CardContent>
         </Card>
         <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
@@ -259,8 +297,12 @@ export default function SecurityPoliciesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{blockingCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">Block & alert mode</p>
+            <div className="text-2xl font-bold text-red-600">
+              {blockingCount}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Block & alert mode
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -277,20 +319,25 @@ export default function SecurityPoliciesPage() {
               <ul className="space-y-1 text-blue-800 dark:text-blue-200">
                 <li className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  <strong>Alert Only:</strong> Generate security alerts but allow actions (monitoring mode)
+                  <strong>Alert Only:</strong> Generate security alerts but
+                  allow actions (monitoring mode)
                 </li>
                 <li className="flex items-center gap-2">
                   <Lock className="h-4 w-4" />
-                  <strong>Block & Alert:</strong> Prevent actions and generate alerts (enforcement mode)
+                  <strong>Block & Alert:</strong> Prevent actions and generate
+                  alerts (enforcement mode)
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4" />
-                  <strong>Allow:</strong> Permit actions without alerts (exception mode)
+                  <strong>Allow:</strong> Permit actions without alerts
+                  (exception mode)
                 </li>
               </ul>
               <p className="text-blue-700 dark:text-blue-300 mt-3">
-                ⚠️ <strong>Warning:</strong> Enabling "Block & Alert" mode will prevent agent actions in real-time.
-                This may impact production workflows. Start with "Alert Only" mode to monitor behavior first.
+                ⚠️ <strong>Warning:</strong> Enabling "Block & Alert" mode will
+                prevent agent actions in real-time. This may impact production
+                workflows. Start with "Alert Only" mode to monitor behavior
+                first.
               </p>
             </div>
           </div>
@@ -302,7 +349,8 @@ export default function SecurityPoliciesPage() {
         <CardHeader>
           <CardTitle>Security Policies ({policies.length})</CardTitle>
           <CardDescription>
-            Policies are evaluated by priority (highest first). Toggle policies on/off or adjust enforcement actions.
+            Policies are evaluated by priority (highest first). Toggle policies
+            on/off or adjust enforcement actions.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -310,52 +358,67 @@ export default function SecurityPoliciesPage() {
             {policies.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No security policies configured</p>
+                <p className="text-lg font-medium">
+                  No security policies configured
+                </p>
                 <p className="text-sm mt-1">
-                  Default policies are created automatically for new organizations.
+                  Default policies are created automatically for new
+                  organizations.
                 </p>
               </div>
             )}
 
             {policies.map((policy) => {
-              const EnforcementIcon = enforcementIcons[policy.enforcement_action];
-              const isBlocking = policy.enforcement_action === 'block_and_alert';
+              const EnforcementIcon =
+                enforcementIcons[policy.enforcement_action] || Shield;
+              const isBlocking =
+                policy.enforcement_action === "block_and_alert";
 
               return (
                 <div
                   key={policy.id}
                   className={`p-6 border rounded-lg transition-all ${
                     policy.is_enabled
-                      ? 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                      : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60'
+                      ? "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                      : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60"
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 space-y-3">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          policy.is_enabled
-                            ? 'bg-green-100 dark:bg-green-900/30'
-                            : 'bg-gray-100 dark:bg-gray-800'
-                        }`}>
-                          <Shield className={`h-5 w-5 ${
+                        <div
+                          className={`p-2 rounded-lg ${
                             policy.is_enabled
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-gray-400'
-                          }`} />
+                              ? "bg-green-100 dark:bg-green-900/30"
+                              : "bg-gray-100 dark:bg-gray-800"
+                          }`}
+                        >
+                          <Shield
+                            className={`h-5 w-5 ${
+                              policy.is_enabled
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-gray-400"
+                            }`}
+                          />
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-lg">{policy.name}</h3>
-                            <Badge className={`${enforcementColors[policy.enforcement_action]} border`}>
+                            <h3 className="font-semibold text-lg">
+                              {policy.name}
+                            </h3>
+                            <Badge
+                              className={`${enforcementColors[policy.enforcement_action] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
+                            >
                               <EnforcementIcon className="h-3 w-3 mr-1" />
-                              {enforcementLabels[policy.enforcement_action]}
+                              {enforcementLabels[policy.enforcement_action] ||
+                                policy.enforcement_action}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               Priority: {policy.priority}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
-                              {policyTypeLabels[policy.policy_type] || policy.policy_type}
+                              {policyTypeLabels[policy.policy_type] ||
+                                policy.policy_type}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">
@@ -366,26 +429,36 @@ export default function SecurityPoliciesPage() {
 
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pl-14">
                         <div>
-                          <span className="font-medium">Applies to:</span>{' '}
-                          <span className="capitalize">{policy.applies_to.replace('_', ' ')}</span>
+                          <span className="font-medium">Applies to:</span>{" "}
+                          <span className="capitalize">
+                            {policy.applies_to.replace("_", " ")}
+                          </span>
                         </div>
                         <div>
-                          <span className="font-medium">Severity threshold:</span>{' '}
-                          <span className="capitalize">{policy.severity_threshold}</span>
+                          <span className="font-medium">
+                            Severity threshold:
+                          </span>{" "}
+                          <span className="capitalize">
+                            {policy.severity_threshold}
+                          </span>
                         </div>
-                        {policy.rules && Object.keys(policy.rules).length > 0 && (
-                          <div>
-                            <span className="font-medium">Rules:</span>{' '}
-                            <span>{Object.keys(policy.rules).length} configured</span>
-                          </div>
-                        )}
+                        {policy.rules &&
+                          Object.keys(policy.rules).length > 0 && (
+                            <div>
+                              <span className="font-medium">Rules:</span>{" "}
+                              <span>
+                                {Object.keys(policy.rules).length} configured
+                              </span>
+                            </div>
+                          )}
                       </div>
 
                       {isBlocking && policy.is_enabled && (
                         <div className="flex items-center gap-2 pl-14 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
                           <AlertOctagon className="h-4 w-4 text-red-600" />
                           <p className="text-xs text-red-800 dark:text-red-200 font-medium">
-                            BLOCKING MODE ACTIVE: This policy will prevent agent actions in real-time
+                            BLOCKING MODE ACTIVE: This policy will prevent agent
+                            actions in real-time
                           </p>
                         </div>
                       )}
@@ -394,12 +467,14 @@ export default function SecurityPoliciesPage() {
                     <div className="flex flex-col gap-4 ml-6">
                       {/* Enforcement Action Selector */}
                       <div className="min-w-[180px]">
-                        <p className="text-xs text-muted-foreground mb-2">Enforcement Mode</p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Enforcement Mode
+                        </p>
                         <Select
                           value={policy.enforcement_action}
-                          onValueChange={(value: 'alert_only' | 'block_and_alert' | 'allow') =>
-                            handleEnforcementChange(policy, value)
-                          }
+                          onValueChange={(
+                            value: "alert_only" | "block_and_alert" | "allow"
+                          ) => handleEnforcementChange(policy, value)}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue />
@@ -430,18 +505,24 @@ export default function SecurityPoliciesPage() {
                       {/* Enable/Disable Toggle */}
                       <div className="flex items-center gap-4">
                         <div className="text-right mr-2">
-                          <p className="text-xs text-muted-foreground">Status</p>
-                          <p className={`text-sm font-medium ${
-                            policy.is_enabled
-                              ? 'text-green-600'
-                              : 'text-gray-500'
-                          }`}>
-                            {policy.is_enabled ? 'Enabled' : 'Disabled'}
+                          <p className="text-xs text-muted-foreground">
+                            Status
+                          </p>
+                          <p
+                            className={`text-sm font-medium ${
+                              policy.is_enabled
+                                ? "text-green-600"
+                                : "text-gray-500"
+                            }`}
+                          >
+                            {policy.is_enabled ? "Enabled" : "Disabled"}
                           </p>
                         </div>
                         <Switch
                           checked={policy.is_enabled}
-                          onCheckedChange={(checked) => handlePolicyToggle(policy, checked)}
+                          onCheckedChange={(checked) =>
+                            handlePolicyToggle(policy, checked)
+                          }
                           className="data-[state=checked]:bg-green-600"
                         />
                       </div>
@@ -464,31 +545,44 @@ export default function SecurityPoliciesPage() {
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-4">
               <p className="font-medium text-foreground">
-                You are about to {pendingEnforcementChange ? 'switch' : 'enable'}{' '}
-                <strong>"{pendingEnforcementChange?.policyName || pendingPolicyToggle?.policyName}"</strong>{' '}
-                {pendingEnforcementChange ? 'to' : 'in'} blocking mode.
+                You are about to{" "}
+                {pendingEnforcementChange ? "switch" : "enable"}{" "}
+                <strong>
+                  "
+                  {pendingEnforcementChange?.policyName ||
+                    pendingPolicyToggle?.policyName}
+                  "
+                </strong>{" "}
+                {pendingEnforcementChange ? "to" : "in"} blocking mode.
               </p>
               <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4 rounded-md space-y-2">
                 <p className="text-sm font-semibold text-red-800 dark:text-red-200">
                   ⚠️ Warning: Production Impact
                 </p>
                 <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
-                  <li>This policy will <strong>block agent actions in real-time</strong></li>
-                  <li>Blocked actions will return <strong>403 Forbidden</strong> responses</li>
-                  <li>This may <strong>disrupt production workflows</strong></li>
+                  <li>
+                    This policy will{" "}
+                    <strong>block agent actions in real-time</strong>
+                  </li>
+                  <li>
+                    Blocked actions will return <strong>403 Forbidden</strong>{" "}
+                    responses
+                  </li>
+                  <li>
+                    This may <strong>disrupt production workflows</strong>
+                  </li>
                   <li>Consider testing in "Alert Only" mode first</li>
                 </ul>
               </div>
               <p className="text-sm">
-                Are you sure you want to {pendingEnforcementChange ? 'switch to' : 'enable'} blocking mode for this policy?
+                Are you sure you want to{" "}
+                {pendingEnforcementChange ? "switch to" : "enable"} blocking
+                mode for this policy?
               </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={cancelBlockingMode}
-            >
+            <Button variant="outline" onClick={cancelBlockingMode}>
               <X className="h-4 w-4 mr-2" />
               Cancel
             </Button>
@@ -498,7 +592,9 @@ export default function SecurityPoliciesPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               <AlertOctagon className="h-4 w-4 mr-2" />
-              {pendingEnforcementChange ? 'Switch to Blocking Mode' : 'Enable Blocking Mode'}
+              {pendingEnforcementChange
+                ? "Switch to Blocking Mode"
+                : "Enable Blocking Mode"}
             </Button>
           </DialogFooter>
         </DialogContent>
