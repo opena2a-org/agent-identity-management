@@ -821,8 +821,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
+	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
+	compliance.Get("/audit-log/data-retention", h.Compliance.GetDataRetention)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
+	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
