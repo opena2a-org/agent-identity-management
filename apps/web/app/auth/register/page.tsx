@@ -3,14 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SSOButton } from "@/components/auth/sso-button";
-import {
-  Shield,
-  Mail,
-  User,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+import { Shield, Mail, User, Lock, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -26,8 +19,6 @@ export default function RegisterPage() {
     confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
-  const [requestId, setRequestId] = useState<string>("");
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -78,9 +69,11 @@ export default function RegisterPage() {
       });
 
       if (response.success) {
-        setRequestId(response.requestId);
-        setRegistrationSuccess(true);
         toast.success("Registration successful! Awaiting admin approval.");
+        // Redirect to pending page with request ID
+        router.push(
+          `/auth/registration-pending?request_id=${response.requestId}`
+        );
       }
     } catch (error: any) {
       console.log("error while signup", error);
@@ -97,40 +90,6 @@ export default function RegisterPage() {
       setIsLoading(false);
     }
   };
-
-  if (registrationSuccess) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                <CheckCircle2 className="w-8 h-8 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Registration Submitted!
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Your registration request has been submitted successfully. An
-                administrator will review your request shortly.
-              </p>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>Request ID:</strong> {requestId}
-                </p>
-                <p className="text-sm text-blue-700 mt-2">
-                  You'll receive an email notification once your account is
-                  approved.
-                </p>
-              </div>
-              <Link href="/auth/login">Go to Login</Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">

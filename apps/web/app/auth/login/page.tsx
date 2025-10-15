@@ -10,7 +10,6 @@ import {
   Lock,
   Mail,
   AlertCircle,
-  Info,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -24,7 +23,6 @@ export default function LoginPage() {
     password: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [pendingApproval, setPendingApproval] = useState(false);
 
   const handleOAuthLogin = (provider: "google" | "microsoft" | "okta") => {
     setIsLoadingOAuth(provider);
@@ -69,9 +67,9 @@ export default function LoginPage() {
           toast.success("Login successful!");
           router.push("/dashboard");
         } else {
-          // User exists but not approved yet
-          setPendingApproval(true);
+          // User exists but not approved yet - redirect to pending page
           toast.info("Your account is pending admin approval.");
+          router.push("/auth/registration-pending");
         }
       }
     } catch (error: any) {
@@ -82,39 +80,6 @@ export default function LoginPage() {
       setIsLoadingPassword(false);
     }
   };
-
-  if (pendingApproval) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-4">
-                <Info className="w-8 h-8 text-yellow-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Account Pending Approval
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Your account has been created but is awaiting administrator
-                approval. You'll receive an email notification once your account
-                is approved.
-              </p>
-
-              <button
-                onClick={() => {
-                  setPendingApproval(false);
-                }}
-                className="inline-flex items-center justify-center w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Go to Login
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
