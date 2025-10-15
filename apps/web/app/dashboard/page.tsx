@@ -28,6 +28,10 @@ import {
 import { api } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
 import { TimezoneIndicator } from "@/components/timezone-indicator";
+import {
+  DashboardSkeleton,
+  ChartSkeleton,
+} from "@/components/ui/content-loaders";
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -139,19 +143,6 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status}
     </span>
-  );
-}
-
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Loading dashboard data...
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -383,7 +374,7 @@ function DashboardContent() {
   });
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <DashboardSkeleton />;
   }
 
   if (error && !dashboardData) {
@@ -624,11 +615,25 @@ function DashboardContent() {
             </div>
             <div className="h-64">
               {trendsLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  <span className="ml-2 text-gray-600 dark:text-gray-400">
-                    Loading trends...
-                  </span>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(6)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div
+                          className="w-full animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
+                          style={{ height: `${Math.random() * 120 + 30}px` }}
+                        />
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-8 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : trustScoreTrends &&
                 trustScoreTrends.trends &&
@@ -731,11 +736,31 @@ function DashboardContent() {
             </div>
             <div className="h-64">
               {activityLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  <span className="ml-2 text-gray-600 dark:text-gray-400">
-                    Loading activity...
-                  </span>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div className="w-full flex gap-1">
+                          <div
+                            className="w-1/2 animate-pulse bg-green-200 dark:bg-green-800 rounded"
+                            style={{ height: `${Math.random() * 100 + 40}px` }}
+                          />
+                          <div
+                            className="w-1/2 animate-pulse bg-yellow-200 dark:bg-yellow-800 rounded"
+                            style={{ height: `${Math.random() * 80 + 30}px` }}
+                          />
+                        </div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-12 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : verificationActivity &&
                 verificationActivity.activity &&
@@ -1015,14 +1040,25 @@ function DashboardContent() {
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
                 {logsLoading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
-                      <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto" />
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        Loading recent activity...
-                      </p>
-                    </td>
-                  </tr>
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                      </td>
+                    </tr>
+                  ))
                 ) : auditLogs.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center">
@@ -1076,7 +1112,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<LoadingSpinner />}>
+    <Suspense fallback={<DashboardSkeleton />}>
       <DashboardContent />
     </Suspense>
   );

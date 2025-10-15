@@ -1,13 +1,29 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { api, SDKToken } from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Download, Key, Monitor, Trash2, Shield, Clock, MapPin } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useEffect, useState } from "react";
+import { api, SDKToken } from "@/lib/api";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertCircle,
+  Download,
+  Key,
+  Monitor,
+  Trash2,
+  Shield,
+  Clock,
+  MapPin,
+} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SDKTokensPageSkeleton } from "@/components/ui/content-loaders";
 import {
   Dialog,
   DialogContent,
@@ -15,96 +31,95 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function SDKTokensPage() {
-  const [tokens, setTokens] = useState<SDKToken[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [includeRevoked, setIncludeRevoked] = useState(false)
-  const [selectedToken, setSelectedToken] = useState<SDKToken | null>(null)
-  const [showRevokeDialog, setShowRevokeDialog] = useState(false)
-  const [showRevokeAllDialog, setShowRevokeAllDialog] = useState(false)
-  const [revokeReason, setRevokeReason] = useState('')
-  const [revoking, setRevoking] = useState(false)
+  const [tokens, setTokens] = useState<SDKToken[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [includeRevoked, setIncludeRevoked] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<SDKToken | null>(null);
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [showRevokeAllDialog, setShowRevokeAllDialog] = useState(false);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revoking, setRevoking] = useState(false);
 
   useEffect(() => {
-    loadTokens()
-  }, [includeRevoked])
+    loadTokens();
+  }, [includeRevoked]);
 
   const loadTokens = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       // Always fetch ALL tokens (including revoked) for accurate stats
       // We'll filter which ones to display based on includeRevoked state
-      const response = await api.listSDKTokens(true)
-      setTokens(response.tokens || [])
-      setError(null)
+      const response = await api.listSDKTokens(true);
+      setTokens(response.tokens || []);
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load SDK tokens')
+      setError(
+        err instanceof Error ? err.message : "Failed to load SDK tokens"
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleRevokeToken = async () => {
-    if (!selectedToken || !revokeReason.trim()) return
+    if (!selectedToken || !revokeReason.trim()) return;
 
     try {
-      setRevoking(true)
-      await api.revokeSDKToken(selectedToken.id, revokeReason)
-      setShowRevokeDialog(false)
-      setSelectedToken(null)
-      setRevokeReason('')
-      await loadTokens()
+      setRevoking(true);
+      await api.revokeSDKToken(selectedToken.id, revokeReason);
+      setShowRevokeDialog(false);
+      setSelectedToken(null);
+      setRevokeReason("");
+      await loadTokens();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke token')
+      setError(err instanceof Error ? err.message : "Failed to revoke token");
     } finally {
-      setRevoking(false)
+      setRevoking(false);
     }
-  }
+  };
 
   const handleRevokeAll = async () => {
-    if (!revokeReason.trim()) return
+    if (!revokeReason.trim()) return;
 
     try {
-      setRevoking(true)
-      await api.revokeAllSDKTokens(revokeReason)
-      setShowRevokeAllDialog(false)
-      setRevokeReason('')
-      await loadTokens()
+      setRevoking(true);
+      await api.revokeAllSDKTokens(revokeReason);
+      setShowRevokeAllDialog(false);
+      setRevokeReason("");
+      await loadTokens();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke all tokens')
+      setError(
+        err instanceof Error ? err.message : "Failed to revoke all tokens"
+      );
     } finally {
-      setRevoking(false)
+      setRevoking(false);
     }
-  }
+  };
 
-  const activeTokens = tokens.filter(t => !t.revokedAt)
-  const revokedTokens = tokens.filter(t => t.revokedAt)
+  const activeTokens = tokens.filter((t) => !t.revokedAt);
+  const revokedTokens = tokens.filter((t) => t.revokedAt);
 
   const isTokenExpired = (token: SDKToken) => {
-    return new Date(token.expiresAt) < new Date()
-  }
+    return new Date(token.expiresAt) < new Date();
+  };
 
   const getTokenStatus = (token: SDKToken) => {
-    if (token.revokedAt) return { label: 'Revoked', color: 'destructive' as const }
-    if (isTokenExpired(token)) return { label: 'Expired', color: 'secondary' as const }
-    return { label: 'Active', color: 'default' as const }
-  }
+    if (token.revokedAt)
+      return { label: "Revoked", color: "destructive" as const };
+    if (isTokenExpired(token))
+      return { label: "Expired", color: "secondary" as const };
+    return { label: "Active", color: "default" as const };
+  };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading SDK tokens...</p>
-        </div>
-      </div>
-    )
+    return <SDKTokensPageSkeleton />;
   }
 
   return (
@@ -122,7 +137,7 @@ export default function SDKTokensPage() {
             variant="outline"
             onClick={() => setIncludeRevoked(!includeRevoked)}
           >
-            {includeRevoked ? 'Hide Revoked' : 'Show Revoked'}
+            {includeRevoked ? "Hide Revoked" : "Show Revoked"}
           </Button>
           {activeTokens.length > 0 && (
             <Button
@@ -172,7 +187,9 @@ export default function SDKTokensPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revoked Tokens</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Revoked Tokens
+            </CardTitle>
             <Trash2 className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
@@ -191,7 +208,7 @@ export default function SDKTokensPage() {
             <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
               Download the SDK to automatically generate an authentication token
             </p>
-            <Button onClick={() => window.location.href = '/dashboard/sdk'}>
+            <Button onClick={() => (window.location.href = "/dashboard/sdk")}>
               <Download className="w-4 h-4 mr-2" />
               Download SDK
             </Button>
@@ -200,15 +217,18 @@ export default function SDKTokensPage() {
       ) : (
         <div className="space-y-4">
           {(includeRevoked ? tokens : activeTokens).map((token) => {
-            const status = getTokenStatus(token)
+            const status = getTokenStatus(token);
             return (
-              <Card key={token.id} className={token.revokedAt ? 'opacity-60' : ''}>
+              <Card
+                key={token.id}
+                className={token.revokedAt ? "opacity-60" : ""}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg">
-                          {token.deviceName || 'Unknown Device'}
+                          {token.deviceName || "Unknown Device"}
                         </CardTitle>
                         <Badge variant={status.color}>{status.label}</Badge>
                       </div>
@@ -221,8 +241,8 @@ export default function SDKTokensPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setSelectedToken(token)
-                          setShowRevokeDialog(true)
+                          setSelectedToken(token);
+                          setShowRevokeDialog(true);
                         }}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
@@ -239,7 +259,7 @@ export default function SDKTokensPage() {
                       <div>
                         <p className="text-sm font-medium">IP Address</p>
                         <p className="text-sm text-muted-foreground">
-                          {token.lastIpAddress || token.ipAddress || 'Unknown'}
+                          {token.lastIpAddress || token.ipAddress || "Unknown"}
                         </p>
                       </div>
                     </div>
@@ -249,8 +269,13 @@ export default function SDKTokensPage() {
                       <Monitor className="w-4 h-4 mt-0.5 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">User Agent</p>
-                        <p className="text-sm text-muted-foreground truncate max-w-[200px]" title={token.userAgent}>
-                          {token.userAgent ? token.userAgent.split(' ')[0] : 'Unknown'}
+                        <p
+                          className="text-sm text-muted-foreground truncate max-w-[200px]"
+                          title={token.userAgent}
+                        >
+                          {token.userAgent
+                            ? token.userAgent.split(" ")[0]
+                            : "Unknown"}
                         </p>
                       </div>
                     </div>
@@ -262,8 +287,10 @@ export default function SDKTokensPage() {
                         <p className="text-sm font-medium">Last Used</p>
                         <p className="text-sm text-muted-foreground">
                           {token.lastUsedAt
-                            ? formatDistanceToNow(new Date(token.lastUsedAt), { addSuffix: true })
-                            : 'Never'}
+                            ? formatDistanceToNow(new Date(token.lastUsedAt), {
+                                addSuffix: true,
+                              })
+                            : "Never"}
                         </p>
                       </div>
                     </div>
@@ -284,10 +311,16 @@ export default function SDKTokensPage() {
                   <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm">
                     <div className="flex items-center gap-6 text-muted-foreground">
                       <span>
-                        Created {formatDistanceToNow(new Date(token.createdAt), { addSuffix: true })}
+                        Created{" "}
+                        {formatDistanceToNow(new Date(token.createdAt), {
+                          addSuffix: true,
+                        })}
                       </span>
                       <span>
-                        Expires {formatDistanceToNow(new Date(token.expiresAt), { addSuffix: true })}
+                        Expires{" "}
+                        {formatDistanceToNow(new Date(token.expiresAt), {
+                          addSuffix: true,
+                        })}
                       </span>
                     </div>
                     {token.revokedAt && token.revokeReason && (
@@ -298,7 +331,7 @@ export default function SDKTokensPage() {
                   </div>
                 </CardContent>
               </Card>
-            )
+            );
           })}
         </div>
       )}
@@ -309,7 +342,8 @@ export default function SDKTokensPage() {
           <DialogHeader>
             <DialogTitle>Revoke SDK Token</DialogTitle>
             <DialogDescription>
-              This will immediately invalidate the token. Any applications using this token will lose access.
+              This will immediately invalidate the token. Any applications using
+              this token will lose access.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -325,7 +359,10 @@ export default function SDKTokensPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRevokeDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowRevokeDialog(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -333,7 +370,7 @@ export default function SDKTokensPage() {
               onClick={handleRevokeToken}
               disabled={!revokeReason.trim() || revoking}
             >
-              {revoking ? 'Revoking...' : 'Revoke Token'}
+              {revoking ? "Revoking..." : "Revoke Token"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -345,14 +382,16 @@ export default function SDKTokensPage() {
           <DialogHeader>
             <DialogTitle>Revoke All SDK Tokens</DialogTitle>
             <DialogDescription>
-              This will immediately invalidate all {activeTokens.length} active tokens. This action cannot be undone.
+              This will immediately invalidate all {activeTokens.length} active
+              tokens. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                All applications using SDK tokens will immediately lose access. You will need to download the SDK again.
+                All applications using SDK tokens will immediately lose access.
+                You will need to download the SDK again.
               </AlertDescription>
             </Alert>
             <div className="space-y-2">
@@ -367,7 +406,10 @@ export default function SDKTokensPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRevokeAllDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowRevokeAllDialog(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -375,11 +417,13 @@ export default function SDKTokensPage() {
               onClick={handleRevokeAll}
               disabled={!revokeReason.trim() || revoking}
             >
-              {revoking ? 'Revoking...' : `Revoke All ${activeTokens.length} Tokens`}
+              {revoking
+                ? "Revoking..."
+                : `Revoke All ${activeTokens.length} Tokens`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

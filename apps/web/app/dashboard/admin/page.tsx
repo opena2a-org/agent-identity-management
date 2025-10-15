@@ -1,34 +1,41 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import {
   Users,
   ShieldAlert,
   FileText,
   TrendingUp,
   AlertTriangle,
-  CheckCircle2
-} from 'lucide-react'
+  CheckCircle2,
+} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AdminStats {
-  totalUsers: number
-  totalOrganizations: number
-  pendingAgents: number
-  unacknowledgedAlerts: number
-  totalAuditLogs: number
-  recentActions24h: number
+  totalUsers: number;
+  totalOrganizations: number;
+  pendingAgents: number;
+  unacknowledgedAlerts: number;
+  totalAuditLogs: number;
+  recentActions24h: number;
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    fetchStats();
+  }, []);
 
   const fetchStats = async () => {
     try {
@@ -40,17 +47,53 @@ export default function AdminDashboard() {
         pendingAgents: 3,
         unacknowledgedAlerts: 7,
         totalAuditLogs: 1247,
-        recentActions24h: 156
-      })
+        recentActions24h: 156,
+      });
     } catch (error) {
-      console.error('Failed to fetch admin stats:', error)
+      console.error("Failed to fetch admin stats:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96">Loading...</div>
+    return (
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-40" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[...Array(4)].map((_, j) => (
+                  <Skeleton key={j} className="h-16 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -79,7 +122,9 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Agents</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Pending Agents
+            </CardTitle>
             <ShieldAlert className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
@@ -92,33 +137,39 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unacknowledged Alerts</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Unacknowledged Alerts
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.unacknowledgedAlerts}</div>
-            <p className="text-xs text-muted-foreground">
-              Require attention
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.unacknowledgedAlerts}
+            </div>
+            <p className="text-xs text-muted-foreground">Require attention</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Audit Logs</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Audit Logs
+            </CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalAuditLogs.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              All-time records
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.totalAuditLogs.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">All-time records</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Recent Activity
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -211,11 +262,13 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-4">
             <Link href="/dashboard/admin/audit-logs">
-              <Button variant="ghost" className="w-full">View All Activity</Button>
+              <Button variant="ghost" className="w-full">
+                View All Activity
+              </Button>
             </Link>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

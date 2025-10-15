@@ -1,20 +1,36 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Search, Check, X, Clock, Shield, AlertCircle, CheckCircle2, XCircle } from 'lucide-react'
-import { api } from '@/lib/api'
-import { formatDate } from '@/lib/date-utils'
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Search,
+  Check,
+  X,
+  Clock,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import { formatDate } from "@/lib/date-utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface CapabilityRequest {
   id: string
@@ -115,7 +131,63 @@ export default function CapabilityRequestsPage() {
   const rejectedCount = requests.filter(r => r.status === 'rejected').length
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96">Loading capability requests...</div>
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-56" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-6 w-48" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-10 flex-1 w-64" />
+                <Skeleton className="h-10 w-32" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-start justify-between p-4 border border-gray-200 rounded-lg"
+              >
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                    <Skeleton className="h-5 w-40" />
+                  </div>
+                  <Skeleton className="h-4 w-full" />
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-9 w-20" />
+                  <Skeleton className="h-9 w-20" />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

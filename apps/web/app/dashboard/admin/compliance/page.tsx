@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   Shield,
   CheckCircle,
@@ -12,10 +12,18 @@ import {
   FileText,
   Loader2,
   XCircle,
-} from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { api } from '@/lib/api';
-import { formatDateTime } from '@/lib/date-utils';
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/date-utils";
 
 // Backend response structure
 interface ComplianceStatus {
@@ -78,17 +86,25 @@ function StatCard({ stat }: { stat: any }) {
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="flex items-center">
         <div className="flex-shrink-0">
-          <stat.icon className={`h-6 w-6 ${stat.iconColor || 'text-gray-400'}`} />
+          <stat.icon
+            className={`h-6 w-6 ${stat.iconColor || "text-gray-400"}`}
+          />
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{stat.name}</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+              {stat.name}
+            </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{stat.value}</div>
+              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {stat.value}
+              </div>
               {stat.change && (
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+                    stat.changeType === "positive"
+                      ? "text-green-600"
+                      : "text-red-600"
                   }`}
                 >
                   {stat.change}
@@ -105,59 +121,162 @@ function StatCard({ stat }: { stat: any }) {
 function StatusBadge({ status }: { status: string }) {
   const getStatusStyles = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'compliant':
-      case 'active':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-      case 'warning':
-        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
-      case 'non_compliant':
-      case 'inactive':
-        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      case "compliant":
+      case "active":
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+      case "warning":
+        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+      case "non_compliant":
+      case "inactive":
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
       default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
     }
   };
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}>
-      {status.replace('_', ' ')}
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}
+    >
+      {status.replace("_", " ")}
     </span>
   );
 }
 
-function LoadingSpinner() {
+function CompliancePageSkeleton() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading compliance data...</p>
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div className="space-y-2">
+        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-48 rounded"></div>
+        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-96 rounded"></div>
+      </div>
+
+      {/* Stats Cards Skeleton */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+          >
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <div className="space-y-2">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                  <div className="flex items-baseline gap-2">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-12 rounded"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Compliance Records Table Skeleton */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-48 rounded"></div>
+            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-32 rounded-lg"></div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800">
+              <tr>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              {[...Array(6)].map((_, rowIndex) => (
+                <tr key={rowIndex}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-10 rounded-lg"></div>
+                      <div className="ml-4 space-y-1">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-20 rounded"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-24 rounded-full"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const is403 = message.includes('403');
+function ErrorDisplay({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  const is403 = message.includes("403");
 
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
-        <Shield className={`h-16 w-16 ${is403 ? 'text-amber-500' : 'text-red-500'}`} />
+        <Shield
+          className={`h-16 w-16 ${is403 ? "text-amber-500" : "text-red-500"}`}
+        />
         <div className="space-y-2">
           <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {is403 ? 'Access Restricted' : 'Failed to Load Compliance Data'}
+            {is403 ? "Access Restricted" : "Failed to Load Compliance Data"}
           </h3>
           {is403 ? (
             <div className="space-y-3">
               <p className="text-base text-gray-600 dark:text-gray-400">
-                Compliance monitoring is only available to <strong>Admin</strong> roles.
+                Compliance monitoring is only available to{" "}
+                <strong>Admin</strong> roles.
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-500">
-                To view compliance status and audit logs, please contact your organization administrator.
+                To view compliance status and audit logs, please contact your
+                organization administrator.
               </p>
             </div>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {message}
+            </p>
           )}
         </div>
         {!is403 && (
@@ -196,8 +315,10 @@ export default function CompliancePage() {
       setMetrics(metricsData);
       setAccessReview(accessData.users || []);
     } catch (err) {
-      console.error('Failed to fetch compliance data:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      console.error("Failed to fetch compliance data:", err);
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred"
+      );
     } finally {
       setLoading(false);
     }
@@ -212,16 +333,19 @@ export default function CompliancePage() {
       setExporting(true);
       const blob = await api.exportAuditLog();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `audit-log-${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Failed to export audit log:', err);
-      alert('Failed to export audit log: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      console.error("Failed to export audit log:", err);
+      alert(
+        "Failed to export audit log: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
     } finally {
       setExporting(false);
     }
@@ -233,15 +357,18 @@ export default function CompliancePage() {
       const result = await api.runComplianceCheck();
       setCheckResults(result.checks);
     } catch (err) {
-      console.error('Failed to run compliance check:', err);
-      alert('Failed to run compliance check: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      console.error("Failed to run compliance check:", err);
+      alert(
+        "Failed to run compliance check: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
     } finally {
       setRunningCheck(false);
     }
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <CompliancePageSkeleton />;
   }
 
   if (error && !status) {
@@ -255,24 +382,26 @@ export default function CompliancePage() {
 
   const stats = [
     {
-      name: 'System Health Score',
+      name: "System Health Score",
       value: `${complianceScore}%`,
-      iconColor: complianceScore >= 80 ? 'text-green-500' : 'text-yellow-500',
+      iconColor: complianceScore >= 80 ? "text-green-500" : "text-yellow-500",
       icon: Shield,
     },
     {
-      name: 'Audit Logs',
-      value: status?.recent_audit_count?.toLocaleString() || '0',
+      name: "Audit Logs",
+      value: status?.recent_audit_count?.toLocaleString() || "0",
       icon: FileText,
     },
     {
-      name: 'Verified Agents',
+      name: "Verified Agents",
       value: `${status?.verified_agents || 0} / ${status?.total_agents || 0}`,
       icon: CheckCircle,
     },
     {
-      name: 'Verification Rate',
-      value: status?.verification_rate ? `${Math.round(status.verification_rate)}%` : '0%',
+      name: "Verification Rate",
+      value: status?.verification_rate
+        ? `${Math.round(status.verification_rate)}%`
+        : "0%",
       icon: TrendingUp,
     },
   ];
@@ -282,7 +411,9 @@ export default function CompliancePage() {
       {/* Header */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Compliance Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Compliance Dashboard
+          </h1>
           <div className="flex gap-2">
             <button
               onClick={handleExportAuditLog}
@@ -332,7 +463,9 @@ export default function CompliancePage() {
       {/* Compliance Trend */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Trust Score Trend (30 Days)</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+            Trust Score Trend (30 Days)
+          </h3>
           <TrendingUp className="h-5 w-5 text-gray-400" />
         </div>
         <div className="h-64">
@@ -345,7 +478,10 @@ export default function CompliancePage() {
                 })) || []
               }
             >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                className="stroke-gray-200 dark:stroke-gray-700"
+              />
               <XAxis
                 dataKey="date"
                 className="text-xs text-gray-500 dark:text-gray-400"
@@ -358,13 +494,19 @@ export default function CompliancePage() {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '0.5rem',
-                  boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)'
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.5rem",
+                  boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
                 }}
               />
-              <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={2} name="Trust Score (%)" />
+              <Line
+                type="monotone"
+                dataKey="score"
+                stroke="#10b981"
+                strokeWidth={2}
+                name="Trust Score (%)"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -374,7 +516,9 @@ export default function CompliancePage() {
       {checkResults && (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Compliance Check Results</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              Compliance Check Results
+            </h3>
           </div>
           <div className="p-6 space-y-3">
             {checkResults.map((result, idx) => (
@@ -382,8 +526,8 @@ export default function CompliancePage() {
                 key={idx}
                 className={`flex items-start gap-3 p-4 rounded-lg ${
                   result.passed
-                    ? 'bg-green-50 dark:bg-green-900/20'
-                    : 'bg-red-50 dark:bg-red-900/20'
+                    ? "bg-green-50 dark:bg-green-900/20"
+                    : "bg-red-50 dark:bg-red-900/20"
                 }`}
               >
                 {result.passed ? (
@@ -392,19 +536,28 @@ export default function CompliancePage() {
                   <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1">
-                  <p className={`text-sm font-medium ${
-                    result.passed
-                      ? 'text-green-900 dark:text-green-100'
-                      : 'text-red-900 dark:text-red-100'
-                  }`}>
-                    {result.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  <p
+                    className={`text-sm font-medium ${
+                      result.passed
+                        ? "text-green-900 dark:text-green-100"
+                        : "text-red-900 dark:text-red-100"
+                    }`}
+                  >
+                    {result.name
+                      .replace(/_/g, " ")
+                      .replace(/\b\w/g, (l) => l.toUpperCase())}
                   </p>
-                  <p className={`text-sm mt-1 ${
-                    result.passed
-                      ? 'text-green-700 dark:text-green-300'
-                      : 'text-red-700 dark:text-red-300'
-                  }`}>
-                    {result.details || (result.passed ? 'Check passed successfully' : 'Check failed - requires attention')}
+                  <p
+                    className={`text-sm mt-1 ${
+                      result.passed
+                        ? "text-green-700 dark:text-green-300"
+                        : "text-red-700 dark:text-red-300"
+                    }`}
+                  >
+                    {result.details ||
+                      (result.passed
+                        ? "Check passed successfully"
+                        : "Check failed - requires attention")}
                   </p>
                   {result.action_url && !result.passed && (
                     <a
@@ -425,7 +578,9 @@ export default function CompliancePage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Access Review</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              Access Review
+            </h3>
             <Users className="h-5 w-5 text-gray-400" />
           </div>
         </div>
@@ -455,7 +610,10 @@ export default function CompliancePage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {accessReview.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <tr
+                  key={user.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                     {user.name}
                   </td>
@@ -471,7 +629,9 @@ export default function CompliancePage() {
                     <StatusBadge status={user.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {user.last_login ? formatDateTime(user.last_login) : 'Never'}
+                    {user.last_login
+                      ? formatDateTime(user.last_login)
+                      : "Never"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDateTime(user.created_at)}

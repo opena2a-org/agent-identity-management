@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   Key,
   Clock,
@@ -12,11 +12,11 @@ import {
   AlertCircle,
   Search,
   Filter,
-  Ban
-} from 'lucide-react';
-import { api, APIKey, Agent } from '@/lib/api';
-import { CreateAPIKeyModal } from '@/components/modals/create-api-key-modal';
-import { ConfirmDialog } from '@/components/modals/confirm-dialog';
+  Ban,
+} from "lucide-react";
+import { api, APIKey, Agent } from "@/lib/api";
+import { CreateAPIKeyModal } from "@/components/modals/create-api-key-modal";
+import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 
 interface APIKeyWithAgent extends APIKey {
   agent_name?: string;
@@ -31,13 +31,19 @@ function StatCard({ stat }: { stat: any }) {
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{stat.name}</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+              {stat.name}
+            </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{stat.value}</div>
+              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {stat.value}
+              </div>
               {stat.change && (
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+                    stat.changeType === "positive"
+                      ? "text-green-600"
+                      : "text-red-600"
                   }`}
                 >
                   {stat.change}
@@ -51,12 +57,110 @@ function StatCard({ stat }: { stat: any }) {
   );
 }
 
-function LoadingSpinner() {
+function APIKeysPageSkeleton() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading API keys...</p>
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-32 rounded"></div>
+          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-80 rounded"></div>
+        </div>
+        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-32 rounded-lg"></div>
+      </div>
+
+      {/* Stats Cards Skeleton */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+          >
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <div className="space-y-2">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                  <div className="flex items-baseline gap-2">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-12 rounded"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters Skeleton */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 flex-1 h-10 rounded-lg"></div>
+          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-40 rounded-lg"></div>
+        </div>
+      </div>
+
+      {/* API Keys Table Skeleton */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800">
+              <tr>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                </th>
+                <th className="px-6 py-3">
+                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              {[...Array(6)].map((_, rowIndex) => (
+                <tr key={rowIndex}>
+                  <td className="px-6 py-4">
+                    <div className="space-y-1">
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-20 rounded"></div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-28 rounded"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -67,8 +171,8 @@ export default function APIKeysPage() {
   const [error, setError] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<APIKeyWithAgent[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Modal states
@@ -88,76 +192,87 @@ export default function APIKeysPage() {
 
       const [keysData, agentsData] = await Promise.all([
         api.listAPIKeys(),
-        api.listAgents()
+        api.listAgents(),
       ]);
 
       // Map agent names to keys
       const keys = keysData?.api_keys || [];
       const agents = agentsData?.agents || [];
 
-      const keysWithAgents = keys.map(key => ({
+      const keysWithAgents = keys.map((key) => ({
         ...key,
         // Use backend-provided agent_name if available, otherwise look up from agents list
-        agent_name: key.agent_name || agents.find(a => a.id === key.agent_id)?.name
+        agent_name:
+          key.agent_name || agents.find((a) => a.id === key.agent_id)?.name,
       }));
 
       setApiKeys(keysWithAgents);
       setAgents(agents);
     } catch (err) {
-      console.error('Failed to fetch data:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      console.error("Failed to fetch data:", err);
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred"
+      );
 
       // Mock data for development
       const mockAgents = [
-        { id: 'agt_001', display_name: 'Claude Assistant', name: 'claude-assistant' } as Agent,
-        { id: 'agt_002', display_name: 'Data Processor', name: 'data-processor' } as Agent
+        {
+          id: "agt_001",
+          display_name: "Claude Assistant",
+          name: "claude-assistant",
+        } as Agent,
+        {
+          id: "agt_002",
+          display_name: "Data Processor",
+          name: "data-processor",
+        } as Agent,
       ];
 
       const mockKeys: APIKeyWithAgent[] = [
         {
-          id: 'key_001',
-          agent_id: 'agt_001',
-          agent_name: 'Claude Assistant',
-          name: 'Production API Key',
-          prefix: 'aim_abc123...',
-          last_used_at: '2025-01-20T10:30:00Z',
-          expires_at: '2025-04-20T10:30:00Z',
+          id: "key_001",
+          agent_id: "agt_001",
+          agent_name: "Claude Assistant",
+          name: "Production API Key",
+          prefix: "aim_abc123...",
+          last_used_at: "2025-01-20T10:30:00Z",
+          expires_at: "2025-04-20T10:30:00Z",
           is_active: true,
-          created_at: '2025-01-15T10:30:00Z'
+          created_at: "2025-01-15T10:30:00Z",
         },
         {
-          id: 'key_002',
-          agent_id: 'agt_002',
-          agent_name: 'Data Processor',
-          name: 'Development API Key',
-          prefix: 'aim_xyz789...',
-          last_used_at: '2025-01-19T14:22:00Z',
-          expires_at: '2025-07-19T14:22:00Z',
+          id: "key_002",
+          agent_id: "agt_002",
+          agent_name: "Data Processor",
+          name: "Development API Key",
+          prefix: "aim_xyz789...",
+          last_used_at: "2025-01-19T14:22:00Z",
+          expires_at: "2025-07-19T14:22:00Z",
           is_active: true,
-          created_at: '2025-01-10T14:22:00Z'
+          created_at: "2025-01-10T14:22:00Z",
         },
         {
-          id: 'key_003',
-          agent_id: 'agt_001',
-          agent_name: 'Claude Assistant',
-          name: 'Testing API Key',
-          prefix: 'aim_def456...',
+          id: "key_003",
+          agent_id: "agt_001",
+          agent_name: "Claude Assistant",
+          name: "Testing API Key",
+          prefix: "aim_def456...",
           last_used_at: undefined,
           expires_at: undefined,
           is_active: true,
-          created_at: '2025-01-18T09:00:00Z'
+          created_at: "2025-01-18T09:00:00Z",
         },
         {
-          id: 'key_004',
-          agent_id: 'agt_002',
-          agent_name: 'Data Processor',
-          name: 'Legacy API Key',
-          prefix: 'aim_old999...',
-          last_used_at: '2024-12-15T08:00:00Z',
-          expires_at: '2025-01-15T08:00:00Z',
+          id: "key_004",
+          agent_id: "agt_002",
+          agent_name: "Data Processor",
+          name: "Legacy API Key",
+          prefix: "aim_old999...",
+          last_used_at: "2024-12-15T08:00:00Z",
+          expires_at: "2025-01-15T08:00:00Z",
           is_active: false,
-          created_at: '2024-10-15T08:00:00Z'
-        }
+          created_at: "2024-10-15T08:00:00Z",
+        },
       ];
 
       setApiKeys(mockKeys);
@@ -170,52 +285,66 @@ export default function APIKeysPage() {
   // Calculate stats
   const stats = {
     total: apiKeys.length,
-    active: apiKeys.filter(k => k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())).length,
-    disabled: apiKeys.filter(k => !k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())).length,
-    expired: apiKeys.filter(k => k.expires_at && new Date(k.expires_at) < new Date()).length,
-    neverUsed: apiKeys.filter(k => !k.last_used_at).length
+    active: apiKeys.filter(
+      (k) =>
+        k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())
+    ).length,
+    disabled: apiKeys.filter(
+      (k) =>
+        !k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())
+    ).length,
+    expired: apiKeys.filter(
+      (k) => k.expires_at && new Date(k.expires_at) < new Date()
+    ).length,
+    neverUsed: apiKeys.filter((k) => !k.last_used_at).length,
   };
 
   const statCards = [
     {
-      name: 'Total Keys',
+      name: "Total Keys",
       value: stats.total.toLocaleString(),
       icon: Key,
     },
     {
-      name: 'Active Keys',
+      name: "Active Keys",
       value: stats.active.toLocaleString(),
-      change: '+2',
-      changeType: 'positive',
+      change: "+2",
+      changeType: "positive",
       icon: Check,
     },
     {
-      name: 'Expired',
+      name: "Expired",
       value: stats.expired.toLocaleString(),
       icon: Clock,
     },
     {
-      name: 'Never Used',
+      name: "Never Used",
       value: stats.neverUsed.toLocaleString(),
       icon: AlertCircle,
     },
   ];
 
   // Filter keys
-  const filteredKeys = apiKeys.filter(key => {
+  const filteredKeys = apiKeys.filter((key) => {
     const matchesSearch =
       key.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       key.prefix.toLowerCase().includes(searchTerm.toLowerCase()) ||
       key.agent_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
     let matchesStatus: boolean = true;
-    if (statusFilter === 'active') {
-      matchesStatus = key.is_active && (!key.expires_at || new Date(key.expires_at) > new Date());
-    } else if (statusFilter === 'disabled') {
-      matchesStatus = !key.is_active && (!key.expires_at || new Date(key.expires_at) > new Date());
-    } else if (statusFilter === 'expired') {
-      matchesStatus = key.expires_at ? new Date(key.expires_at) < new Date() : false;
-    } else if (statusFilter === 'never-used') {
+    if (statusFilter === "active") {
+      matchesStatus =
+        key.is_active &&
+        (!key.expires_at || new Date(key.expires_at) > new Date());
+    } else if (statusFilter === "disabled") {
+      matchesStatus =
+        !key.is_active &&
+        (!key.expires_at || new Date(key.expires_at) > new Date());
+    } else if (statusFilter === "expired") {
+      matchesStatus = key.expires_at
+        ? new Date(key.expires_at) < new Date()
+        : false;
+    } else if (statusFilter === "never-used") {
       matchesStatus = !key.last_used_at;
     }
 
@@ -223,9 +352,13 @@ export default function APIKeysPage() {
   });
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return "Never";
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
   const copyToClipboard = async (text: string, id: string) => {
@@ -245,11 +378,19 @@ export default function APIKeysPage() {
     try {
       await api.disableAPIKey(selectedKey.id);
       // Update the key's is_active status in the local state
-      setApiKeys(apiKeys.map(k => k.id === selectedKey.id ? { ...k, is_active: false } : k));
+      setApiKeys(
+        apiKeys.map((k) =>
+          k.id === selectedKey.id ? { ...k, is_active: false } : k
+        )
+      );
     } catch (err) {
-      console.error('Failed to disable API key:', err);
+      console.error("Failed to disable API key:", err);
       // Mock disable for development
-      setApiKeys(apiKeys.map(k => k.id === selectedKey.id ? { ...k, is_active: false } : k));
+      setApiKeys(
+        apiKeys.map((k) =>
+          k.id === selectedKey.id ? { ...k, is_active: false } : k
+        )
+      );
     } finally {
       setShowDisableConfirm(false);
       setSelectedKey(null);
@@ -267,10 +408,12 @@ export default function APIKeysPage() {
     try {
       await api.deleteAPIKey(selectedKey.id);
       // Remove the key from the local state
-      setApiKeys(apiKeys.filter(k => k.id !== selectedKey.id));
+      setApiKeys(apiKeys.filter((k) => k.id !== selectedKey.id));
     } catch (err) {
-      console.error('Failed to delete API key:', err);
-      alert(`Failed to delete API key: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error("Failed to delete API key:", err);
+      alert(
+        `Failed to delete API key: ${err instanceof Error ? err.message : "Unknown error"}`
+      );
     } finally {
       setShowDeleteConfirm(false);
       setSelectedKey(null);
@@ -288,7 +431,7 @@ export default function APIKeysPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <APIKeysPageSkeleton />;
   }
 
   return (
@@ -296,7 +439,9 @@ export default function APIKeysPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Keys</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            API Keys
+          </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Manage API keys for agent authentication and authorization.
           </p>
@@ -385,7 +530,10 @@ export default function APIKeysPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredKeys.map((key) => (
-                <tr key={key.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <tr
+                  key={key.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {key.name}
@@ -411,7 +559,7 @@ export default function APIKeysPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {key.agent_name || 'Unknown'}
+                      {key.agent_name || "Unknown"}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -420,19 +568,27 @@ export default function APIKeysPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={`text-sm ${isExpired(key.expires_at) ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <div
+                      className={`text-sm ${isExpired(key.expires_at) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
+                    >
                       {formatDate(key.expires_at)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      !key.is_active
-                        ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300'
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        !key.is_active
+                          ? "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300"
+                          : isExpired(key.expires_at)
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
+                            : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                      }`}
+                    >
+                      {!key.is_active
+                        ? "Disabled"
                         : isExpired(key.expires_at)
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-                        : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                    }`}>
-                      {!key.is_active ? 'Disabled' : isExpired(key.expires_at) ? 'Expired' : 'Active'}
+                          ? "Expired"
+                          : "Active"}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -464,11 +620,13 @@ export default function APIKeysPage() {
         {filteredKeys.length === 0 && (
           <div className="text-center py-12">
             <Key className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No API keys found</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+              No API keys found
+            </h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {searchTerm || statusFilter !== 'all'
-                ? 'Try adjusting your search or filters.'
-                : 'Get started by creating your first API key.'}
+              {searchTerm || statusFilter !== "all"
+                ? "Try adjusting your search or filters."
+                : "Get started by creating your first API key."}
             </p>
           </div>
         )}
