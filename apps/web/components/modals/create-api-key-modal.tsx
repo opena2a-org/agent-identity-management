@@ -11,7 +11,6 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { toast } from "sonner";
 import { api, Agent } from "@/lib/api";
 
 interface CreateAPIKeyModalProps {
@@ -78,35 +77,9 @@ export function CreateAPIKeyModal({
       setApiKey(result.api_key);
       setSuccess(true);
       onSuccess?.(result);
-
-      // Show success toast
-      toast.success("API Key Created Successfully", {
-        description: `API key "${formData.name}" has been created. Make sure to copy it now!`,
-      });
     } catch (err) {
       console.error("Failed to create API key:", err);
-
-      // Extract error message from different possible error formats
-      let errorMessage = "Failed to create API key";
-
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === "string") {
-        errorMessage = err;
-      } else if (err && typeof err === "object" && "message" in err) {
-        errorMessage = (err as any).message;
-      }
-
-      setError(errorMessage);
-
-      // Show error toast
-      toast.error("API Key Creation Failed", {
-        description: errorMessage,
-        action: {
-          label: "Retry",
-          onClick: () => handleSubmit(new Event("submit") as any),
-        },
-      });
+      setError(err instanceof Error ? err.message : "Failed to create API key");
     } finally {
       setLoading(false);
     }
@@ -114,21 +87,9 @@ export function CreateAPIKeyModal({
 
   const copyToClipboard = async () => {
     if (apiKey) {
-      try {
-        await navigator.clipboard.writeText(apiKey);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-
-        // Show success toast
-        toast.success("API Key Copied", {
-          description: "API key has been copied to your clipboard.",
-        });
-      } catch (err) {
-        toast.error("Copy Failed", {
-          description:
-            "Failed to copy API key to clipboard. Please copy manually.",
-        });
-      }
+      await navigator.clipboard.writeText(apiKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
