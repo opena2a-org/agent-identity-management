@@ -284,6 +284,63 @@ class APIClient {
     this.clearToken();
   }
 
+  // Public Registration & Login (Email/Password)
+  async register(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    requestId: string;
+  }> {
+    const response = await this.request<{
+      success: boolean;
+      message: string;
+      requestId: string;
+    }>("/api/v1/public/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  async loginWithPassword(data: { email: string; password: string }): Promise<{
+    success: boolean;
+    message: string;
+    user?: User;
+    accessToken?: string;
+    refreshToken?: string;
+    isApproved: boolean;
+  }> {
+    const response = await this.request<{
+      success: boolean;
+      message: string;
+      user?: User;
+      accessToken?: string;
+      refreshToken?: string;
+      isApproved: boolean;
+    }>("/api/v1/public/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+
+    // If login successful and user is approved, store tokens
+    if (response.success && response.isApproved && response.accessToken) {
+      this.setToken(response.accessToken, response.refreshToken);
+    }
+
+    return response;
+  }
+
+  async checkRegistrationStatus(requestId: string): Promise<{
+    status: "pending" | "approved" | "rejected";
+    message: string;
+  }> {
+    return this.request(`/api/v1/public/register/${requestId}/status`);
+  }
+
   // Agents
   async listAgents(): Promise<{ agents: Agent[] }> {
     return this.request("/api/v1/agents");

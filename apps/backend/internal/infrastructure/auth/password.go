@@ -10,7 +10,7 @@ import (
 
 const (
 	// MinPasswordLength is the minimum required password length
-	MinPasswordLength = 12
+	MinPasswordLength = 8
 
 	// BcryptCost is the cost factor for bcrypt hashing
 	BcryptCost = 12
@@ -18,7 +18,7 @@ const (
 
 var (
 	// ErrPasswordTooShort indicates password doesn't meet minimum length
-	ErrPasswordTooShort = errors.New("password must be at least 12 characters long")
+	ErrPasswordTooShort = errors.New("password must be at least 8 characters long")
 
 	// ErrPasswordTooWeak indicates password doesn't meet complexity requirements
 	ErrPasswordTooWeak = errors.New("password must contain uppercase, lowercase, number, and special character")
