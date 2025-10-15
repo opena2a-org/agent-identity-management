@@ -531,6 +531,52 @@ class APIClient {
     return this.request("/api/v1/analytics/dashboard");
   }
 
+  // Trust Score Trends - Get weekly or daily trust score trend data
+  async getTrustScoreTrends(
+    weeks = 4,
+    period: "weeks" | "days" = "weeks"
+  ): Promise<{
+    period: string;
+    current_average: number;
+    data_type: "weekly" | "daily";
+    trends: Array<{
+      date: string;
+      week_start?: string; // Only for weekly data
+      avg_score: number;
+      agent_count: number;
+    }>;
+  }> {
+    if (period === "weeks") {
+      return this.request(
+        `/api/v1/analytics/trends?period=weeks&weeks=${weeks}`
+      );
+    } else {
+      // Backward compatibility for days
+      const days = weeks * 7; // Convert weeks to days
+      return this.request(`/api/v1/analytics/trends?period=days&days=${days}`);
+    }
+  }
+
+  // Verification Activity - Get monthly verification activity data
+  async getVerificationActivity(months = 6): Promise<{
+    period: string;
+    activity: Array<{
+      month: string;
+      verified: number;
+      pending: number;
+      month_year: string;
+    }>;
+    current_stats: {
+      total_verified: number;
+      total_pending: number;
+      total_agents: number;
+    };
+  }> {
+    return this.request(
+      `/api/v1/analytics/verification-activity?months=${months}`
+    );
+  }
+
   // Verifications
   async listVerifications(
     limit = 100,

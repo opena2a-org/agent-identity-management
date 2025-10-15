@@ -863,6 +863,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	analytics.Get("/dashboard", h.Analytics.GetDashboardStats) // Viewer-accessible dashboard stats
 	analytics.Get("/usage", h.Analytics.GetUsageStatistics)
 	analytics.Get("/trends", h.Analytics.GetTrustScoreTrends)
+	analytics.Get("/verification-activity", h.Analytics.GetVerificationActivity) // New endpoint for chart
 	analytics.Get("/reports/generate", h.Analytics.GenerateReport)
 	analytics.Get("/agents/activity", h.Analytics.GetAgentActivity)
 

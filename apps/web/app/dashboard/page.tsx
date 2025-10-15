@@ -55,6 +55,35 @@ interface DashboardStats {
   organization_id: string;
 }
 
+interface TrustScoreTrend {
+  date: string;
+  week_start?: string; // Only for weekly data
+  avg_score: number;
+  agent_count: number;
+}
+
+interface TrustScoreTrendsData {
+  period: string;
+  current_average: number;
+  data_type: "weekly" | "daily";
+  trends: TrustScoreTrend[];
+}
+
+interface VerificationActivityData {
+  period: string;
+  activity: Array<{
+    month: string;
+    verified: number;
+    pending: number;
+    month_year: string;
+  }>;
+  current_stats: {
+    total_verified: number;
+    total_pending: number;
+    total_agents: number;
+  };
+}
+
 function StatCard({ stat }: { stat: any }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -169,6 +198,12 @@ function DashboardContent() {
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(
     null
   );
+  const [trustScoreTrends, setTrustScoreTrends] =
+    useState<TrustScoreTrendsData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+  const [verificationActivity, setVerificationActivity] =
+    useState<VerificationActivityData | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [userRole, setUserRole] = useState<UserRole>("viewer");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -212,6 +247,52 @@ function DashboardContent() {
       // No mock data fallback - show error instead
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrustScoreTrends = async () => {
+    try {
+      setTrendsLoading(true);
+      console.log("fetchTrustScoreTrends: Fetching 4-week trust score trends");
+      const data = await api.getTrustScoreTrends(4, "weeks"); // Request 4 weeks of data
+      console.log("fetchTrustScoreTrends data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.trends && data.trends.length > 0) {
+        setTrustScoreTrends(data);
+      } else {
+        console.warn("No trend data returned from API");
+        setTrustScoreTrends(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch trust score trends:", err);
+      setTrustScoreTrends(null); // Set to null to show error state, no dummy data
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
+  const fetchVerificationActivity = async () => {
+    try {
+      setActivityLoading(true);
+      console.log(
+        "fetchVerificationActivity: Fetching verification activity data"
+      );
+      const data = await api.getVerificationActivity(6); // Request 6 months of data
+      console.log("fetchVerificationActivity data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.activity && data.activity.length > 0) {
+        setVerificationActivity(data);
+      } else {
+        console.warn("No verification activity data returned from API");
+        setVerificationActivity(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch verification activity:", err);
+      setVerificationActivity(null); // Set to null to show error state, no dummy data
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -268,6 +349,8 @@ function DashboardContent() {
     }
     console.log("runing useEffect");
     fetchDashboardData();
+    fetchTrustScoreTrends();
+    fetchVerificationActivity();
     fetchAuditLogs();
   }, [searchParams]);
 
@@ -540,47 +623,100 @@ function DashboardContent() {
               <TrendingUp className="h-5 w-5 text-gray-400" />
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={[
-                    { day: "Week 1", score: 82 },
-                    { day: "Week 2", score: 85 },
-                    { day: "Week 3", score: 87 },
-                    { day: "Week 4", score: data.avg_trust_score || 0 },
-                  ]}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-gray-200 dark:stroke-gray-700"
-                  />
-                  <XAxis
-                    dataKey="day"
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <YAxis
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                    domain={[0, 100]}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                      boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    name="Trust Score"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {trendsLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">
+                    Loading trends...
+                  </span>
+                </div>
+              ) : trustScoreTrends &&
+                trustScoreTrends.trends &&
+                trustScoreTrends.trends.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={trustScoreTrends.trends.map((trend) => ({
+                      period: trend.date, // Backend provides "Week 1", "Week 2", etc.
+                      score: Math.round(trend.avg_score * 100), // Convert to percentage (0-100)
+                      agent_count: trend.agent_count,
+                      week_start: trend.week_start, // For tooltip info
+                    }))}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="period"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        `${value}%`,
+                        name === "score"
+                          ? "Trust Score"
+                          : name === "agent_count"
+                            ? "Agent Count"
+                            : name,
+                      ]}
+                      labelFormatter={(label, payload) => {
+                        if (
+                          payload &&
+                          payload[0] &&
+                          payload[0].payload.week_start
+                        ) {
+                          return `${label} (Starting ${payload[0].payload.week_start})`;
+                        }
+                        return label;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      name="Trust Score"
+                      dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Data Available
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Trust score trends will appear here once agents start
+                      generating activity
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
+            {/* Show period info only when we have valid data */}
+            {trustScoreTrends &&
+              trustScoreTrends.trends &&
+              trustScoreTrends.trends.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                  {trustScoreTrends.period} • Current Average:{" "}
+                  {Math.round(trustScoreTrends.current_average * 100)}%
+                </div>
+              )}
           </div>
         )}
 
@@ -594,44 +730,75 @@ function DashboardContent() {
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { month: "Jan", verified: 12, pending: 3 },
-                    { month: "Feb", verified: 18, pending: 2 },
-                    {
-                      month: "Mar",
-                      verified: data.verified_agents,
-                      pending: data.pending_agents,
-                    },
-                  ]}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-gray-200 dark:stroke-gray-700"
-                  />
-                  <XAxis
-                    dataKey="month"
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <YAxis
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                      boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Bar dataKey="verified" fill="#22c55e" name="Verified" />
-                  <Bar dataKey="pending" fill="#eab308" name="Pending" />
-                </BarChart>
-              </ResponsiveContainer>
+              {activityLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">
+                    Loading activity...
+                  </span>
+                </div>
+              ) : verificationActivity &&
+                verificationActivity.activity &&
+                verificationActivity.activity.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={verificationActivity.activity.slice(-3)} // Show last 3 months
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="month"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        value,
+                        name === "verified"
+                          ? "Verified Agents"
+                          : "Pending Agents",
+                      ]}
+                      labelFormatter={(label) => `Month: ${label}`}
+                    />
+                    <Bar dataKey="verified" fill="#22c55e" name="Verified" />
+                    <Bar dataKey="pending" fill="#eab308" name="Pending" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Activity Data
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Verification activity will appear here once agents are
+                      registered
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
+            {/* Show activity stats */}
+            {verificationActivity && verificationActivity.current_stats && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                Total: {verificationActivity.current_stats.total_agents} agents
+                • Verified: {verificationActivity.current_stats.total_verified}{" "}
+                • Pending: {verificationActivity.current_stats.total_pending}
+              </div>
+            )}
           </div>
         )}
       </div>
