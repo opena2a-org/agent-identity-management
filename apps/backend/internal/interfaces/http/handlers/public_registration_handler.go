@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -90,6 +91,9 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		req.Password,
 	)
 	if err != nil {
+		// Log the actual error for debugging
+		fmt.Printf("ERROR in RegisterUser: %v\n", err)
+		
 		// Handle specific error cases
 		switch err {
 		case application.ErrUserAlreadyExists:
@@ -105,7 +109,7 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
-				"error":   "Failed to create registration request",
+				"error":   fmt.Sprintf("Failed to create registration request: %v", err),
 			})
 		}
 	}

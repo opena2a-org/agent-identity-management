@@ -205,13 +205,13 @@ func main() {
 }
 
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
-	// Build connection string manually with explicit PostgreSQL URL format
-	// This ensures TCP connection even on Mac with local PostgreSQL
-	connStr := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Database.User,
-		cfg.Database.Password,
+	// Build connection string using key=value format to avoid URL encoding issues
+	// This format works better with passwords containing special characters
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
 		cfg.Database.Host,
 		cfg.Database.Port,
+		cfg.Database.User,
+		cfg.Database.Password,
 		cfg.Database.Database,
 		cfg.Database.SSLMode,
 	)
