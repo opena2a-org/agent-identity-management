@@ -1,15 +1,23 @@
-'use client';
+"use client";
 
-import { X, AlertTriangle, ExternalLink, Shield, Activity, FileText, User } from 'lucide-react';
-import Link from 'next/link';
-import { formatDateTime } from '@/lib/date-utils';
+import {
+  X,
+  AlertTriangle,
+  ExternalLink,
+  Shield,
+  Activity,
+  FileText,
+  User,
+} from "lucide-react";
+import Link from "next/link";
+import { formatDateTime } from "@/lib/date-utils";
 
 interface SecurityThreat {
   id: string;
   target_id: string;
   target_name?: string;
   threat_type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: "low" | "medium" | "high" | "critical";
   description: string;
   is_blocked: boolean;
   created_at: string;
@@ -26,29 +34,29 @@ interface ThreatDetailModalProps {
 export default function ThreatDetailModal({
   isOpen,
   onClose,
-  threat
+  threat,
 }: ThreatDetailModalProps) {
   if (!isOpen || !threat) return null;
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-      case 'high':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'low':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
+      case "critical":
+        return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
+      case "high":
+        return "bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
+      case "low":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
       default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
     }
   };
 
   const getStatusColor = (isBlocked: boolean) => {
     return isBlocked
-      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-      : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
+      : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
   };
 
   // Handle click on overlay (outside modal) - threat detail modal is read-only, so close immediately
@@ -67,7 +75,9 @@ export default function ThreatDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${getSeverityColor(threat.severity)}`}>
+            <div
+              className={`p-2 rounded-lg ${getSeverityColor(threat.severity)}`}
+            >
               <AlertTriangle className="h-5 w-5" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -87,7 +97,9 @@ export default function ThreatDetailModal({
           {/* Quick Actions Bar */}
           <div className="flex items-center gap-2 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
             <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-blue-900 dark:text-blue-100">Quick Actions:</span>
+            <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+              Quick Actions:
+            </span>
             <div className="flex items-center gap-2 ml-auto">
               <Link
                 href={`/dashboard/agents?search=${threat.target_id}`}
@@ -131,7 +143,9 @@ export default function ThreatDetailModal({
                 Severity
               </label>
               <p className="mt-1">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getSeverityColor(threat.severity)}`}>
+                <span
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getSeverityColor(threat.severity)}`}
+                >
                   {threat.severity}
                 </span>
               </p>
@@ -176,7 +190,7 @@ export default function ThreatDetailModal({
                 Source IP
               </label>
               <p className="mt-1 text-sm text-gray-900 dark:text-white font-mono">
-                {threat.source_ip || 'N/A'}
+                {threat.source_ip || "N/A"}
               </p>
             </div>
           </div>
@@ -188,8 +202,10 @@ export default function ThreatDetailModal({
                 Status
               </label>
               <p className="mt-1">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getStatusColor(threat.is_blocked)}`}>
-                  {threat.is_blocked ? 'Blocked' : 'Active'}
+                <span
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getStatusColor(threat.is_blocked)}`}
+                >
+                  {threat.is_blocked ? "Blocked" : "Active"}
                 </span>
               </p>
             </div>
@@ -229,7 +245,11 @@ export default function ThreatDetailModal({
                   <li>Review agent activity logs for suspicious patterns</li>
                   <li>Verify agent capabilities match registered scope</li>
                   <li>Check if trust score has decreased recently</li>
-                  {!threat.is_blocked && <li className="font-semibold">Consider blocking this agent if threat persists</li>}
+                  {!threat.is_blocked && (
+                    <li className="font-semibold">
+                      Consider blocking this agent if threat persists
+                    </li>
+                  )}
                 </ul>
               </div>
             </div>

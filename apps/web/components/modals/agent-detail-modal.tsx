@@ -19,7 +19,6 @@ import {
   ExternalLink,
   Loader2,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Agent, Tag, AgentCapability, api } from "@/lib/api";
 import { TagSelector } from "../ui/tag-selector";
 
@@ -82,13 +81,6 @@ export function AgentDetailModal({
       setSuggestedTags(suggestions || []);
     } catch (error) {
       console.error("Failed to load tags:", error);
-      toast.error("Failed to Load Tags", {
-        description: "Could not load agent tags. Please refresh the page.",
-        action: {
-          label: "Retry",
-          onClick: () => loadTags(),
-        },
-      });
     } finally {
       setLoadingTags(false);
     }
@@ -102,14 +94,6 @@ export function AgentDetailModal({
       setCapabilities(caps || []);
     } catch (error) {
       console.error("Failed to load capabilities:", error);
-      toast.error("Failed to Load Capabilities", {
-        description:
-          "Could not load agent capabilities. Please refresh the page.",
-        action: {
-          label: "Retry",
-          onClick: () => loadCapabilities(),
-        },
-      });
     } finally {
       setLoadingCapabilities(false);
     }
@@ -140,32 +124,8 @@ export function AgentDetailModal({
       }
 
       setAgentTags(newTags);
-
-      // Show success toast
-      toast.success("Tags Updated", {
-        description: "Agent tags have been updated successfully.",
-      });
     } catch (error) {
       console.error("Failed to update tags:", error);
-
-      // Extract error message from different possible error formats
-      let errorMessage = "Could not update agent tags. Please try again.";
-
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === "string") {
-        errorMessage = error;
-      } else if (error && typeof error === "object" && "message" in error) {
-        errorMessage = (error as any).message;
-      }
-
-      toast.error("Failed to Update Tags", {
-        description: errorMessage,
-        action: {
-          label: "Retry",
-          onClick: () => handleTagsChange(newTags),
-        },
-      });
     }
   };
 
@@ -197,21 +157,11 @@ export function AgentDetailModal({
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-
-      // Show success toast
-      toast.success("SDK Downloaded Successfully", {
-        description: `${agent.name} ${language} SDK has been downloaded and is ready to use.`,
-      });
     } catch (err) {
       console.error("Failed to download SDK:", err);
-      toast.error("SDK Download Failed", {
-        description:
-          "Failed to download SDK. Please try again or use Manual Integration.",
-        action: {
-          label: "Retry",
-          onClick: () => handleDownloadSDK(language),
-        },
-      });
+      alert(
+        "Failed to download SDK. Please try again or use Manual Integration."
+      );
     } finally {
       setDownloadingSDK(false);
     }
@@ -246,14 +196,9 @@ export function AgentDetailModal({
       });
     } catch (err) {
       console.error("Failed to fetch agent keys:", err);
-      toast.error("Failed to Load Credentials", {
-        description:
-          "Could not fetch agent credentials. Please try again or contact support.",
-        action: {
-          label: "Retry",
-          onClick: () => fetchAgentKeys(),
-        },
-      });
+      alert(
+        "Failed to fetch agent credentials. Please try again or contact support."
+      );
       setIntegrationMethod(null); // Reset to main selection
     } finally {
       setLoadingKeys(false);
@@ -265,22 +210,9 @@ export function AgentDetailModal({
       await navigator.clipboard.writeText(text);
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
-
-      // Show success toast
-      const fieldName =
-        field === "agent_id"
-          ? "Agent ID"
-          : field === "public_key"
-            ? "Public Key"
-            : "Private Key";
-      toast.success(`${fieldName} Copied`, {
-        description: `${fieldName} has been copied to your clipboard.`,
-      });
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
-      toast.error("Copy Failed", {
-        description: "Failed to copy to clipboard. Please copy manually.",
-      });
+      alert("Failed to copy to clipboard");
     }
   };
 

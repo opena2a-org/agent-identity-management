@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { SSOButton } from '@/components/auth/sso-button'
-import { Shield } from 'lucide-react'
-import Link from 'next/link'
+import { SSOButton } from "@/components/auth/sso-button";
+import { Shield } from "lucide-react";
+import Link from "next/link";
 
 export default function RegisterPage() {
   return (
@@ -51,15 +51,19 @@ export default function RegisterPage() {
           {/* Info Box */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              <strong>Note:</strong> After you sign up, an administrator will review and approve your account.
-              You'll receive an email notification once your account is ready.
+              <strong>Note:</strong> After you sign up, an administrator will
+              review and approve your account. You'll receive an email
+              notification once your account is ready.
             </p>
           </div>
 
           {/* Footer */}
           <div className="mt-6 text-center text-sm text-gray-600">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-blue-600 hover:text-blue-700 font-medium">
+            Already have an account?{" "}
+            <Link
+              href="/auth/login"
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
               Sign in
             </Link>
           </div>
@@ -67,12 +71,16 @@ export default function RegisterPage() {
 
         {/* Additional Info */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          By signing up, you agree to our{' '}
-          <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>
-          {' '}and{' '}
-          <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
+          By signing up, you agree to our{" "}
+          <a href="/terms" className="text-blue-600 hover:underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" className="text-blue-600 hover:underline">
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>
-  )
+  );
 }

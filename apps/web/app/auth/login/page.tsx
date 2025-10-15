@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { CheckCircle2, Shield, Users, Lock } from 'lucide-react'
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { CheckCircle2, Shield, Users, Lock } from "lucide-react";
 
 export default function LoginPage() {
-  const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<string | null>(null);
 
-  const handleOAuthLogin = (provider: 'google' | 'microsoft' | 'okta') => {
-    setIsLoading(provider)
+  const handleOAuthLogin = (provider: "google" | "microsoft" | "okta") => {
+    setIsLoading(provider);
     // Redirect directly to OAuth handler
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/oauth/${provider}/login`
-  }
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/oauth/${provider}/login`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
@@ -21,18 +21,24 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to manage your AI agents and MCP servers</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome Back
+          </h1>
+          <p className="text-gray-600">
+            Sign in to manage your AI agents and MCP servers
+          </p>
         </div>
 
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">
+              Sign in to your account
+            </h2>
 
             {/* OAuth Buttons */}
             <button
-              onClick={() => handleOAuthLogin('google')}
+              onClick={() => handleOAuthLogin("google")}
               disabled={isLoading !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
@@ -55,12 +61,14 @@ export default function LoginPage() {
                 />
               </svg>
               <span className="text-gray-700 font-medium group-hover:text-blue-600">
-                {isLoading === 'google' ? 'Redirecting...' : 'Sign in with Google'}
+                {isLoading === "google"
+                  ? "Redirecting..."
+                  : "Sign in with Google"}
               </span>
             </button>
 
             <button
-              onClick={() => handleOAuthLogin('microsoft')}
+              onClick={() => handleOAuthLogin("microsoft")}
               disabled={isLoading !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
@@ -71,12 +79,14 @@ export default function LoginPage() {
                 <path fill="#ffba08" d="M12 12h11v11H12z" />
               </svg>
               <span className="text-gray-700 font-medium group-hover:text-blue-600">
-                {isLoading === 'microsoft' ? 'Redirecting...' : 'Sign in with Microsoft'}
+                {isLoading === "microsoft"
+                  ? "Redirecting..."
+                  : "Sign in with Microsoft"}
               </span>
             </button>
 
             <button
-              onClick={() => handleOAuthLogin('okta')}
+              onClick={() => handleOAuthLogin("okta")}
               disabled={isLoading !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
@@ -84,7 +94,7 @@ export default function LoginPage() {
                 <Lock className="w-3 h-3 text-white" />
               </div>
               <span className="text-gray-700 font-medium">
-                {isLoading === 'okta' ? 'Redirecting...' : 'Sign in with Okta'}
+                {isLoading === "okta" ? "Redirecting..." : "Sign in with Okta"}
               </span>
             </button>
           </div>
@@ -95,7 +105,9 @@ export default function LoginPage() {
               <div className="w-full border-t border-gray-200" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">Existing users only</span>
+              <span className="px-4 bg-white text-gray-500">
+                Existing users only
+              </span>
             </div>
           </div>
 
@@ -106,7 +118,8 @@ export default function LoginPage() {
               <div className="text-sm text-blue-900">
                 <p className="font-medium mb-1">Already have an account?</p>
                 <p className="text-blue-700">
-                  Sign in with the same provider you used to register. Your session will be restored automatically.
+                  Sign in with the same provider you used to register. Your
+                  session will be restored automatically.
                 </p>
               </div>
             </div>
@@ -115,7 +128,7 @@ export default function LoginPage() {
           {/* New User Link */}
           <div className="text-center pt-4 border-t border-gray-200">
             <p className="text-gray-600">
-              Don't have an account?{' '}
+              Don't have an account?{" "}
               <Link
                 href="/auth/register"
                 className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
@@ -151,11 +164,11 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>
-            By signing in, you agree to our{' '}
+            By signing in, you agree to our{" "}
             <Link href="/terms" className="text-blue-600 hover:underline">
               Terms of Service
-            </Link>{' '}
-            and{' '}
+            </Link>{" "}
+            and{" "}
             <Link href="/privacy" className="text-blue-600 hover:underline">
               Privacy Policy
             </Link>
@@ -163,5 +176,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

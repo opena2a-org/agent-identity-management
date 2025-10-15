@@ -17,7 +17,6 @@ import {
   EyeOff,
   ExternalLink,
 } from "lucide-react";
-import { toast } from "sonner";
 import { api, Agent } from "@/lib/api";
 
 interface RegisterAgentModalProps {
@@ -179,49 +178,17 @@ export function RegisterAgentModal({
       setSuccess(true);
       setCreatedAgent(result);
 
-      // Show success toast
+      // Don't auto-close for new registrations - let user download SDK first
       if (editMode) {
-        toast.success("Agent Updated Successfully", {
-          description: `${result.display_name} has been updated.`,
-        });
-
         setTimeout(() => {
           onSuccess?.(result);
           onClose();
           resetForm();
         }, 1500);
-      } else {
-        toast.success("Agent Registered Successfully", {
-          description: `${result.display_name} has been registered with cryptographic keys generated automatically.`,
-        });
       }
     } catch (err) {
       console.error("Failed to save agent:", err);
-
-      // Extract error message from different possible error formats
-      let errorMessage = "Failed to save agent";
-
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === "string") {
-        errorMessage = err;
-      } else if (err && typeof err === "object" && "message" in err) {
-        errorMessage = (err as any).message;
-      }
-
-      setError(errorMessage);
-
-      // Show error toast
-      toast.error(
-        editMode ? "Agent Update Failed" : "Agent Registration Failed",
-        {
-          description: errorMessage,
-          action: {
-            label: "Retry",
-            onClick: () => handleSubmit(new Event("submit") as any),
-          },
-        }
-      );
+      setError(err instanceof Error ? err.message : "Failed to save agent");
     } finally {
       setLoading(false);
     }
@@ -256,11 +223,7 @@ export function RegisterAgentModal({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      // Show success toast and close modal
-      toast.success("SDK Downloaded Successfully", {
-        description: `${createdAgent.name} SDK has been downloaded and is ready to use.`,
-      });
-
+      // After successful download, close modal
       setTimeout(() => {
         onSuccess?.(createdAgent);
         onClose();
@@ -268,14 +231,9 @@ export function RegisterAgentModal({
       }, 1000);
     } catch (err) {
       console.error("Failed to download SDK:", err);
-      toast.error("SDK Download Failed", {
-        description:
-          "Failed to download SDK. Please try again from the agent details page.",
-        action: {
-          label: "Retry",
-          onClick: () => downloadSDK(),
-        },
-      });
+      alert(
+        "Failed to download SDK. Please try again from the agent details page."
+      );
     } finally {
       setDownloadingSDK(false);
     }
@@ -315,14 +273,9 @@ export function RegisterAgentModal({
       });
     } catch (err) {
       console.error("Failed to fetch agent keys:", err);
-      toast.error("Failed to Load Credentials", {
-        description:
-          "Could not fetch agent credentials. Please try again from the agent details page.",
-        action: {
-          label: "Retry",
-          onClick: () => fetchAgentKeys(),
-        },
-      });
+      alert(
+        "Failed to fetch credentials. Please try again from the agent details page."
+      );
       setIntegrationMethod(null); // Reset to selection screen
     } finally {
       setLoadingKeys(false);
@@ -334,22 +287,9 @@ export function RegisterAgentModal({
       await navigator.clipboard.writeText(text);
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
-
-      // Show success toast
-      const fieldName =
-        field === "agent_id"
-          ? "Agent ID"
-          : field === "public_key"
-            ? "Public Key"
-            : "Private Key";
-      toast.success(`${fieldName} Copied`, {
-        description: `${fieldName} has been copied to your clipboard.`,
-      });
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
-      toast.error("Copy Failed", {
-        description: "Failed to copy to clipboard. Please copy manually.",
-      });
+      alert("Failed to copy to clipboard");
     }
   };
 

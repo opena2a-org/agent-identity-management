@@ -150,7 +150,14 @@ export function Sidebar() {
     const fetchUser = async () => {
       try {
         const userData = await api.getCurrentUser();
-        setUser(userData);
+        const normalizedRole: UserRole | undefined =
+          userData.role === "pending" ? "viewer" : (userData.role as UserRole);
+        setUser({
+          email: userData.email,
+          display_name:
+            (userData as any).name || userData.email?.split("@")[0] || "User",
+          role: normalizedRole,
+        });
       } catch (error) {
         // Silently handle errors - don't throw to UI
         console.log("API call failed, using token fallback");
@@ -389,7 +396,7 @@ export function Sidebar() {
       <aside
         className={`
           hidden lg:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
-          transition-all duration-300 ease-in-out
+          transition-all duration-300 ease-in-out sticky top-0 h-screen
           ${collapsed ? "w-20" : "w-64"}
         `}
       >

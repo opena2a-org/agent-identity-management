@@ -16,16 +16,15 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 -- Create indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_alerts_organization_id ON alerts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_alerts_agent_id ON alerts(agent_id);
-CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
-CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
-CREATE INDEX IF NOT EXISTS idx_alerts_alert_type ON alerts(alert_type);
-CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_alerts_org_status ON alerts(organization_id, status);
+CREATE INDEX idx_alerts_organization_id ON alerts(organization_id);
+CREATE INDEX idx_alerts_agent_id ON alerts(agent_id);
+CREATE INDEX idx_alerts_status ON alerts(status);
+CREATE INDEX idx_alerts_severity ON alerts(severity);
+CREATE INDEX idx_alerts_alert_type ON alerts(alert_type);
+CREATE INDEX idx_alerts_created_at ON alerts(created_at DESC);
+CREATE INDEX idx_alerts_org_status ON alerts(organization_id, status);
 
 -- Create trigger to update updated_at
-DROP TRIGGER IF EXISTS update_alerts_updated_at ON alerts;
 CREATE TRIGGER update_alerts_updated_at
     BEFORE UPDATE ON alerts
     FOR EACH ROW
