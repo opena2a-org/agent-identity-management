@@ -259,7 +259,11 @@ class APIClient {
       const error = await response
         .json()
         .catch(() => ({ message: "Request failed" }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+
+      // Backend can return either 'error' or 'message' field
+      const errorMessage =
+        error.error || error.message || `HTTP ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     // Handle 204 No Content responses (e.g., DELETE operations)

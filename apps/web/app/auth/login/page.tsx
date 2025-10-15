@@ -73,8 +73,23 @@ export default function LoginPage() {
         }
       }
     } catch (error: any) {
-      const errorMessage = error.message || "Invalid email or password";
-      toast.error(errorMessage);
+      // Extract error message from different possible error formats
+      let errorMessage = "Invalid email or password";
+
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.error) {
+        errorMessage = error.error;
+      }
+
+      // Show toast notification with the exact backend error
+      toast.error("Login Failed", {
+        description: errorMessage,
+        duration: 5000,
+      });
+
       setErrors({ password: errorMessage });
     } finally {
       setIsLoadingPassword(false);
