@@ -17,6 +17,7 @@ import {
 import { api, APIKey, Agent } from "@/lib/api";
 import { CreateAPIKeyModal } from "@/components/modals/create-api-key-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
+import { getAgentPermissions, UserRole } from "@/lib/permissions";
 
 interface APIKeyWithAgent extends APIKey {
   agent_name?: string;
@@ -59,108 +60,12 @@ function StatCard({ stat }: { stat: any }) {
 
 function APIKeysPageSkeleton() {
   return (
-    <div className="space-y-6">
-      {/* Header Skeleton */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-32 rounded"></div>
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-80 rounded"></div>
-        </div>
-        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-32 rounded-lg"></div>
-      </div>
-
-      {/* Stats Cards Skeleton */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <div
-            key={i}
-            className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
-          >
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <div className="space-y-2">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
-                  <div className="flex items-baseline gap-2">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-16 rounded"></div>
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-12 rounded"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 flex-1 h-10 rounded-lg"></div>
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-40 rounded-lg"></div>
-        </div>
-      </div>
-
-      {/* API Keys Table Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                </th>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
-                </th>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
-                </th>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                </th>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
-                </th>
-                <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {[...Array(6)].map((_, rowIndex) => (
-                <tr key={rowIndex}>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-20 rounded"></div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-28 rounded"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Loading API keys...
+        </p>
       </div>
     </div>
   );
@@ -174,12 +79,30 @@ export default function APIKeysPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>("viewer");
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedKey, setSelectedKey] = useState<APIKeyWithAgent | null>(null);
+
+  // Extract user role from JWT token
+  useEffect(() => {
+    const token = api.getToken();
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUserRole((payload.role as UserRole) || "viewer");
+      } catch (e) {
+        console.error("Failed to decode JWT token:", e);
+        setUserRole("viewer");
+      }
+    }
+  }, []);
+
+  // Get role-based permissions
+  const permissions = getAgentPermissions(userRole);
 
   useEffect(() => {
     fetchData();
@@ -453,13 +376,15 @@ export default function APIKeysPage() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Create API Key
-        </button>
+        {permissions.canCreateAPIKey && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create API Key
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -601,7 +526,7 @@ export default function APIKeysPage() {
                         >
                           <Ban className="h-4 w-4" />
                         </button>
-                      ) : !key.is_active ? (
+                      ) : !key.is_active && permissions.canDeleteAPIKey ? (
                         <button
                           onClick={() => handleDeleteKey(key)}
                           className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"

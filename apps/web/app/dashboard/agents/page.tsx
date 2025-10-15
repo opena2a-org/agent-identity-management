@@ -23,6 +23,7 @@ import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { AgentDetailModal } from "@/components/modals/agent-detail-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { AgentsPageSkeleton } from "@/components/ui/content-loaders";
+import { getAgentPermissions, UserRole } from "@/lib/permissions";
 
 interface AgentStats {
   total: number;
@@ -128,6 +129,19 @@ function TrustScoreBar({ score }: { score: number }) {
   );
 }
 
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Loading agents...
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ErrorDisplay({
   message,
   onRetry,
@@ -172,6 +186,23 @@ export default function AgentsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+
+  // Extract user role from JWT token
+  useEffect(() => {
+    const token = api.getToken();
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUserRole((payload.role as UserRole) || "viewer");
+      } catch (e) {
+        console.error("Failed to decode JWT token:", e);
+        setUserRole("viewer");
+      }
+    }
+  }, []);
+
+  // Get role-based permissions
+  const permissions = getAgentPermissions(userRole);
 
   const fetchAgents = async () => {
     try {
@@ -448,13 +479,15 @@ export default function AgentsPage() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => setShowRegisterModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Register Agent
-        </button>
+        {permissions.canCreateAgent && (
+          <button
+            onClick={() => setShowRegisterModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Register Agent
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -585,27 +618,33 @@ export default function AgentsPage() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleViewAgent(agent)}
-                        className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                        title="View details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleEditAgent(agent)}
-                        className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
-                        title="Edit agent"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAgent(agent)}
-                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                        title="Delete agent"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {permissions.canViewAgent && (
+                        <button
+                          onClick={() => handleViewAgent(agent)}
+                          className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canEditAgent && (
+                        <button
+                          onClick={() => handleEditAgent(agent)}
+                          className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
+                          title="Edit agent"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canDeleteAgent && (
+                        <button
+                          onClick={() => handleDeleteAgent(agent)}
+                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          title="Delete agent"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -653,8 +692,8 @@ export default function AgentsPage() {
           setSelectedAgent(null);
         }}
         agent={selectedAgent}
-        onEdit={handleEditAgent}
-        onDelete={handleDeleteAgent}
+        onEdit={permissions.canEditAgent ? handleEditAgent : undefined}
+        onDelete={permissions.canDeleteAgent ? handleDeleteAgent : undefined}
       />
 
       <ConfirmDialog

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -46,16 +46,42 @@ export function RegisterMCPModal({
   const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
-    name: initialData?.name || "",
-    description: initialData?.description || "",
-    url: initialData?.url || "",
-    version: initialData?.version || "1.0.0",
-    public_key: initialData?.public_key || "",
-    verification_url: initialData?.verification_url || "",
-    capabilities: initialData?.capabilities || [],
+    name: "",
+    description: "",
+    url: "",
+    version: "1.0.0",
+    public_key: "",
+    verification_url: "",
+    capabilities: [],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Update form data when initialData or editMode changes
+  useEffect(() => {
+    if (isOpen && editMode && initialData) {
+      setFormData({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        url: initialData.url || "",
+        version: initialData.version || "1.0.0",
+        public_key: initialData.public_key || "",
+        verification_url: initialData.verification_url || "",
+        capabilities: initialData.capabilities || [],
+      });
+    } else if (isOpen && !editMode) {
+      // Reset form for new MCP server
+      setFormData({
+        name: "",
+        description: "",
+        url: "",
+        version: "1.0.0",
+        public_key: "",
+        verification_url: "",
+        capabilities: [],
+      });
+    }
+  }, [isOpen, editMode, initialData]);
 
   const validateURL = (url: string): boolean => {
     try {
@@ -239,6 +265,7 @@ export function RegisterMCPModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
