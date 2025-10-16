@@ -1,9 +1,6 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Enable TimescaleDB extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
 -- Organizations table
 CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -110,9 +107,7 @@ CREATE TABLE trust_scores (
 
 CREATE INDEX idx_trust_scores_agent_id ON trust_scores(agent_id);
 CREATE INDEX idx_trust_scores_last_calculated ON trust_scores(last_calculated);
-
--- Convert trust_scores to hypertable for time-series data
-SELECT create_hypertable('trust_scores', 'created_at');
+CREATE INDEX idx_trust_scores_created_at ON trust_scores(created_at DESC);
 
 -- Audit Logs table
 CREATE TABLE audit_logs (
@@ -133,9 +128,6 @@ CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
 CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
-
--- Convert audit_logs to hypertable for time-series data
-SELECT create_hypertable('audit_logs', 'timestamp');
 
 -- Alerts table
 CREATE TABLE alerts (

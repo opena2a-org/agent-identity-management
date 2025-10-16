@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Loader2,
@@ -76,11 +76,11 @@ export function RegisterAgentModal({
   const [loadingKeys, setLoadingKeys] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
-    name: initialData?.name || "",
-    display_name: initialData?.display_name || "",
-    description: initialData?.description || "",
-    agent_type: initialData?.agent_type || "ai_agent",
-    version: initialData?.version || "1.0.0",
+    name: "",
+    display_name: "",
+    description: "",
+    agent_type: "ai_agent",
+    version: "1.0.0",
     certificate_url: "",
     repository_url: "",
     documentation_url: "",
@@ -90,6 +90,38 @@ export function RegisterAgentModal({
 
   const [newMcpServer, setNewMcpServer] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Update form data when initialData or editMode changes
+  useEffect(() => {
+    if (isOpen && editMode && initialData) {
+      setFormData({
+        name: initialData.name || "",
+        display_name: initialData.display_name || "",
+        description: initialData.description || "",
+        agent_type: initialData.agent_type || "ai_agent",
+        version: initialData.version || "1.0.0",
+        certificate_url: initialData.certificate_url || "",
+        repository_url: initialData.repository_url || "",
+        documentation_url: initialData.documentation_url || "",
+        talks_to: (initialData as any).talks_to || [],
+        capabilities: (initialData as any).capabilities || [],
+      });
+    } else if (isOpen && !editMode) {
+      // Reset form for new agent
+      setFormData({
+        name: "",
+        display_name: "",
+        description: "",
+        agent_type: "ai_agent",
+        version: "1.0.0",
+        certificate_url: "",
+        repository_url: "",
+        documentation_url: "",
+        talks_to: [],
+        capabilities: [],
+      });
+    }
+  }, [isOpen, editMode, initialData]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -398,7 +430,8 @@ export function RegisterAgentModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+      style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
