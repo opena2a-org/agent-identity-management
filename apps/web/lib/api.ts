@@ -25,6 +25,7 @@ export interface User {
   status: "active" | "pending_approval" | "suspended" | "deactivated";
   created_at: string;
   provider?: string;
+  last_login_at?: string;
   requested_at?: string;
   picture_url?: string;
   is_registration_request?: boolean;
@@ -286,6 +287,16 @@ class APIClient {
   async logout(): Promise<void> {
     await this.request("/api/v1/auth/logout", { method: "POST" });
     this.clearToken();
+  }
+
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ message: string }> {
+    return this.request("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   // Public Registration & Login (Email/Password)

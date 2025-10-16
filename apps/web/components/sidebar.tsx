@@ -141,6 +141,7 @@ export function Sidebar() {
     email: string;
     display_name?: string;
     role?: UserRole;
+    provider?: string;
   } | null>(null);
   const [alertCount, setAlertCount] = useState<number>(0);
   const [navigation, setNavigation] = useState<NavSection[]>(navigationBase);
@@ -150,6 +151,7 @@ export function Sidebar() {
     const fetchUser = async () => {
       try {
         const userData = await api.getCurrentUser();
+        console.log("🚀 ~ fetchUser ~ userData:", userData);
         const normalizedRole: UserRole | undefined =
           userData.role === "pending" ? "viewer" : (userData.role as UserRole);
         setUser({
@@ -157,6 +159,7 @@ export function Sidebar() {
           display_name:
             (userData as any).name || userData.email?.split("@")[0] || "User",
           role: normalizedRole,
+          provider: (userData as any).provider || undefined,
         });
       } catch (error) {
         // Silently handle errors - don't throw to UI
@@ -354,13 +357,25 @@ export function Sidebar() {
           )}
         </div>
         {!collapsed && (
-          <button
-            onClick={handleLogout}
-            className="mt-3 w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Logout</span>
-          </button>
+          <div className="mt-3 space-y-1">
+            {/* Show Change Password link only for local users */}
+            {user?.provider === "local" && (
+              <Link
+                href="/change-password"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <Lock className="h-4 w-4" />
+                <span>Change Password</span>
+              </Link>
+            )}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </button>
+          </div>
         )}
         {collapsed && (
           <button
