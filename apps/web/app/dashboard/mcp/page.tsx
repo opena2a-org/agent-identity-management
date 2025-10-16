@@ -22,7 +22,6 @@ import { api } from "@/lib/api";
 import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
 import { MCPDetailModal } from "@/components/modals/mcp-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
-
 interface MCPServer {
   id: string;
   name: string;
@@ -392,22 +391,22 @@ export default function MCPServersPage() {
     {
       name: "Total MCP Servers",
       value: stats.total.toLocaleString(),
-      change: "+15.3%",
-      changeType: "positive",
+      // change: "+15.3%",
+      // changeType: "positive",
       icon: Server,
     },
     {
       name: "Active Servers",
       value: stats.active.toLocaleString(),
-      change: "+8.7%",
-      changeType: "positive",
+      // change: "+8.7%",
+      // changeType: "positive",
       icon: CheckCircle2,
     },
     {
       name: "Avg Trust Score",
       value: stats.avgTrustScore.toFixed(1),
-      change: stats.avgTrustScore >= 75 ? "+5.2%" : "-2.1%",
-      changeType: stats.avgTrustScore >= 75 ? "positive" : "negative",
+      // change: stats.avgTrustScore >= 75 ? "+5.2%" : "-2.1%",
+      // changeType: stats.avgTrustScore >= 75 ? "positive" : "negative",
       icon: Shield,
     },
     {
@@ -652,9 +651,9 @@ export default function MCPServersPage() {
                       >
                         <Eye className="h-4 w-4" />
                       </button>
-                      {(["admin", "manager", "member"] as const).includes(
-                        userRole
-                      ) && (
+                      {(userRole === "admin" ||
+                        userRole === "manager" ||
+                        userRole === "member") && (
                         <button
                           onClick={() => handleEditMCP(server)}
                           className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
@@ -663,7 +662,7 @@ export default function MCPServersPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                       )}
-                      {(["admin", "manager"] as const).includes(userRole) && (
+                      {(userRole === "admin" || userRole === "manager") && (
                         <button
                           onClick={() => handleDeleteMCP(server)}
                           className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
