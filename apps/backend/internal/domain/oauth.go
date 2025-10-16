@@ -13,6 +13,7 @@ const (
 	OAuthProviderGoogle    OAuthProvider = "google"
 	OAuthProviderMicrosoft OAuthProvider = "microsoft"
 	OAuthProviderOkta      OAuthProvider = "okta"
+	OAuthProviderLocal     OAuthProvider = "local" // For email/password registrations
 )
 
 // RegistrationRequestStatus represents the status of a registration request
@@ -112,6 +113,7 @@ func NewUserRegistrationRequestManual(
 	passwordHash string,
 ) *UserRegistrationRequest {
 	now := time.Now()
+	localProvider := OAuthProviderLocal
 
 	return &UserRegistrationRequest{
 		ID:                 uuid.New(),
@@ -119,7 +121,7 @@ func NewUserRegistrationRequestManual(
 		FirstName:          firstName,
 		LastName:           lastName,
 		PasswordHash:       &passwordHash,
-		OAuthProvider:      nil,
+		OAuthProvider:      &localProvider, // Mark as local/email authentication
 		OAuthUserID:        nil,
 		Status:             RegistrationStatusPending,
 		RequestedAt:        now,

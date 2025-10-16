@@ -294,6 +294,7 @@ class APIClient {
     firstName: string;
     lastName: string;
     password: string;
+    provider: string;
   }): Promise<{
     success: boolean;
     message: string;

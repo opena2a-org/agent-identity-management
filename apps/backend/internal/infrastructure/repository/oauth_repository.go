@@ -28,6 +28,16 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
+	// Handle nullable oauth_provider - convert pointer to value for SQL
+	var oauthProvider interface{}
+	if req.OAuthProvider != nil {
+		oauthProvider = string(*req.OAuthProvider)
+		fmt.Printf("DEBUG: Setting oauth_provider to: %v\n", oauthProvider)
+	} else {
+		oauthProvider = nil
+		fmt.Printf("DEBUG: oauth_provider is nil\n")
+	}
+
 	query := `
 		INSERT INTO user_registration_requests (
 			id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
@@ -44,7 +54,7 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		req.FirstName,
 		req.LastName,
 		req.PasswordHash,
-		req.OAuthProvider,
+		oauthProvider, // Use the dereferenced value
 		req.OAuthUserID,
 		req.OrganizationID,
 		req.Status,

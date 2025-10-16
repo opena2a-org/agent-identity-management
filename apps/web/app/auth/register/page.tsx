@@ -66,6 +66,7 @@ export default function RegisterPage() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         password: formData.password,
+        provider: "local",
       });
 
       if (response.success) {
