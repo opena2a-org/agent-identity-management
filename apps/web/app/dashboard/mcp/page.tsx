@@ -87,7 +87,7 @@ function StatCard({ stat }: { stat: any }) {
 function StatusBadge({ status }: { status: string }) {
   const getStatusStyles = (status: string) => {
     switch (status) {
-      case "active":
+      case "verified":
         return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
       case "pending":
         return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
