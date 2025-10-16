@@ -9,6 +9,10 @@ import {
   AlertTriangle,
   ExternalLink,
   Globe,
+  Edit,
+  Trash2,
+  CheckCircle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +26,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
+import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MCPServerDetailSkeleton } from "@/components/ui/content-loaders";
 
 interface MCPServer {
@@ -72,11 +87,28 @@ export default function MCPServerDetailsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [userRole, setUserRole] = useState<
+    "admin" | "manager" | "member" | "viewer"
+  >("viewer");
+  const [verifying, setVerifying] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Extract server ID from params Promise
   useEffect(() => {
     params.then(({ id }) => setServerId(id));
   }, [params]);
+
+  // Extract user role from JWT token
+  useEffect(() => {
+    const token = api.getToken?.();
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const role = (payload.role as any) || "viewer";
+      setUserRole(role);
+    } catch {}
+  }, []);
 
   // Fetch server data
   useEffect(() => {
@@ -180,6 +212,34 @@ export default function MCPServerDetailsPage({
     setRefreshKey((prev) => prev + 1);
   };
 
+  const canEdit = ["admin", "manager", "member"].includes(userRole);
+  const canManage = ["admin", "manager"].includes(userRole);
+
+  const handleVerify = async () => {
+    if (!serverId) return;
+    setVerifying(true);
+    try {
+      await api.verifyMCPServer(serverId);
+      handleRefresh();
+    } catch (e: any) {
+      alert(e?.message || "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!serverId) return;
+    try {
+      await api.deleteMCPServer(serverId);
+      router.push("/dashboard/mcp");
+    } catch (e: any) {
+      alert(e?.message || "Delete failed");
+    } finally {
+      setShowDeleteConfirm(false);
+    }
+  };
+
   // Get trust score color
   const getTrustColor = (score: number): string => {
     if (score >= 80) return "text-green-600 bg-green-500/10";
@@ -202,9 +262,8 @@ export default function MCPServerDetailsPage({
     }
   };
 
-  // Check if server is verified
-  const isVerified =
-    server?.status === "verified" || server?.status === "active";
+  // Check if server is verified (strict)
+  const isVerified = server?.status === "verified";
 
   // Loading state
   if (isLoading) {
@@ -294,6 +353,39 @@ export default function MCPServerDetailsPage({
                 </Badge>
               </div>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {canManage && !isVerified && (
+              <Button
+                onClick={handleVerify}
+                disabled={verifying}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {verifying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-1" /> Verify
+                  </>
+                )}
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" onClick={() => setShowEditModal(true)}>
+                <Edit className="h-4 w-4 mr-1" /> Edit
+              </Button>
+            )}
+            {canManage && (
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -595,6 +687,40 @@ export default function MCPServerDetailsPage({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Modal */}
+      <RegisterMCPModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={() => {
+          setShowEditModal(false);
+          handleRefresh();
+        }}
+        editMode={true}
+        initialData={server as any}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete MCP Server</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              server "{server?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

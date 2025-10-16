@@ -268,7 +268,7 @@ export function Sidebar() {
   const SidebarContent = () => (
     <>
       {/* Logo */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
             <Shield className="h-5 w-5 text-white" />
@@ -284,10 +284,19 @@ export function Sidebar() {
             </div>
           )}
         </Link>
+        {collapsed && (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="absolute top-1/2 -translate-y-1/2 right-0 z-10 translate-x-1/2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow p-1 text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+            aria-label="Expand sidebar"
+          >
+            <ChevronLeft className="h-4 w-4 rotate-180" />
+          </button>
+        )}
         {!collapsed && (
           <button
             onClick={() => setCollapsed(true)}
-            className="lg:flex hidden p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="lg:flex hidden p-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -383,14 +392,6 @@ export function Sidebar() {
             </button>
           </div>
         )}
-        {collapsed && (
-          <button
-            onClick={() => setCollapsed(false)}
-            className="mt-3 w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        )}
       </div>
     </>
   );
@@ -400,7 +401,7 @@ export function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
+        className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
       >
         {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </button>

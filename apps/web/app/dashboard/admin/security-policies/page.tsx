@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -84,6 +85,34 @@ const policyTypeLabels: Record<string, string> = {
 };
 
 export default function SecurityPoliciesPage() {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+  const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
+    "viewer"
+  );
+
+  // Admin-only guard
+  useEffect(() => {
+    try {
+      const token = (require("@/lib/api") as any).api.getToken?.();
+      if (!token) {
+        router.replace("/auth/login");
+        return;
+      }
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const userRole = (payload.role as any) || "viewer";
+      setRole(userRole);
+      if (userRole !== "admin") {
+        router.replace("/dashboard");
+        return;
+      }
+    } catch {
+      router.replace("/auth/login");
+      return;
+    } finally {
+      setAuthChecked(true);
+    }
+  }, [router]);
   const [policies, setPolicies] = useState<SecurityPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBlockingWarning, setShowBlockingWarning] = useState(false);

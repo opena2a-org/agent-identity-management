@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -100,6 +101,11 @@ const roleIcons = {
 };
 
 export default function UsersPage() {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+  const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
+    "viewer"
+  );
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,11 +117,35 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  // Admin-only guard
   useEffect(() => {
+    try {
+      const token = (require("@/lib/api") as any).api.getToken?.();
+      if (!token) {
+        router.replace("/auth/login");
+        return;
+      }
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const userRole = (payload.role as any) || "viewer";
+      setRole(userRole);
+      if (userRole !== "admin") {
+        router.replace("/dashboard");
+        return;
+      }
+    } catch {
+      router.replace("/auth/login");
+      return;
+    } finally {
+      setAuthChecked(true);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!authChecked || role !== "admin") return;
     fetchUsers();
     fetchSettings();
     fetchAPIKeysCount();
-  }, []);
+  }, [authChecked, role]);
 
   const fetchUsers = async () => {
     try {

@@ -28,7 +28,13 @@ interface MCPServer {
   name: string;
   url: string;
   description?: string;
-  status: "active" | "inactive" | "pending";
+  status:
+    | "active"
+    | "inactive"
+    | "pending"
+    | "verified"
+    | "suspended"
+    | "revoked";
   public_key?: string;
   key_type?: string;
   last_verified_at?: string;
@@ -91,6 +97,9 @@ function StatusBadge({ status }: { status: string }) {
         return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
       case "pending":
         return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+      case "suspended":
+      case "revoked":
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
       case "inactive":
         return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
       default:
@@ -250,6 +259,21 @@ export default function MCPServersPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedMCP, setSelectedMCP] = useState<MCPServer | null>(null);
   const [editingMCP, setEditingMCP] = useState<MCPServer | null>(null);
+
+  // Role (for action permissions)
+  const [userRole, setUserRole] = useState<
+    "admin" | "manager" | "member" | "viewer"
+  >("viewer");
+
+  useEffect(() => {
+    const token = api.getToken?.();
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const role = (payload.role as any) || "viewer";
+      setUserRole(role);
+    } catch {}
+  }, []);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -628,20 +652,26 @@ export default function MCPServersPage() {
                       >
                         <Eye className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => handleEditMCP(server)}
-                        className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
-                        title="Edit"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteMCP(server)}
-                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {(["admin", "manager", "member"] as const).includes(
+                        userRole
+                      ) && (
+                        <button
+                          onClick={() => handleEditMCP(server)}
+                          className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      )}
+                      {(["admin", "manager"] as const).includes(userRole) && (
+                        <button
+                          onClick={() => handleDeleteMCP(server)}
+                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

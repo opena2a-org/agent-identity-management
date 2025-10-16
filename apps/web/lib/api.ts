@@ -726,8 +726,14 @@ class APIClient {
       id: string;
       name: string;
       url: string;
-      status: "active" | "inactive" | "pending";
-      verification_status: "verified" | "unverified" | "failed";
+      status:
+        | "active"
+        | "inactive"
+        | "pending"
+        | "verified"
+        | "suspended"
+        | "revoked";
+      is_verified?: boolean;
       last_verified_at?: string;
       created_at: string;
     }>;
