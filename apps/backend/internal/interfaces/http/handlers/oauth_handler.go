@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -126,9 +127,10 @@ func (h *OAuthHandler) HandleOAuthCallback(c fiber.Ctx) error {
 	// Process OAuth callback - this will handle both login and registration
 	result, err := h.oauthService.ProcessOAuthCallback(c.Context(), provider, code)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to process OAuth callback: %v", err),
-		})
+		// Redirect to frontend with error message instead of returning JSON
+		// Extract clean error message (remove "Failed to process OAuth callback: " prefix if present)
+		errorMsg := err.Error()
+		return c.Redirect().To(fmt.Sprintf("http://localhost:3000/auth/callback?error=%s", url.QueryEscape(errorMsg)))
 	}
 
 	// Check if it's a login (existing user) or registration request

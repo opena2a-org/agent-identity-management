@@ -22,8 +22,8 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // Create creates a new user
 func (r *UserRepository) Create(user *domain.User) error {
 	query := `
-		INSERT INTO users (id, organization_id, email, name, avatar_url, role, provider, provider_id, password_hash, email_verified, oauth_provider, oauth_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO users (id, organization_id, email, name, avatar_url, role, provider, provider_id, password_hash, email_verified, status, oauth_provider, oauth_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	now := time.Now()
@@ -41,7 +41,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 		user.UpdatedAt = now
 	}
 
-	// Default status to active if not set (status column doesn't exist in DB)
+	// Default status to active if not set
 	if user.Status == "" {
 		user.Status = domain.UserStatusActive
 	}
@@ -57,6 +57,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 		user.ProviderID,
 		user.PasswordHash,
 		user.EmailVerified,
+		user.Status,
 		user.Provider,   // oauth_provider (duplicate of provider for compatibility)
 		user.ProviderID, // oauth_user_id (duplicate of provider_id for compatibility)
 		user.CreatedAt,
@@ -71,13 +72,14 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
 		       password_hash, email_verified, force_password_change, last_login_at, 
-		       created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		       status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE id = $1
 	`
 
 	user := &domain.User{}
 	var oauthProvider, oauthUserID sql.NullString
+	var status sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&user.ID,
@@ -92,6 +94,8 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.EmailVerified,
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
+		&status,
+		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -107,8 +111,12 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		return nil, err
 	}
 
-	// Set default status to active since the column doesn't exist
-	user.Status = domain.UserStatusActive
+	// Set status from database or default to active
+	if status.Valid {
+		user.Status = domain.UserStatus(status.String)
+	} else {
+		user.Status = domain.UserStatusActive
+	}
 
 	return user, nil
 }
@@ -118,13 +126,14 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
 		       password_hash, email_verified, force_password_change, last_login_at, 
-		       created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		       status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE email = $1
 	`
 
 	user := &domain.User{}
 	var oauthProvider, oauthUserID sql.NullString
+	var status sql.NullString
 
 	err := r.db.QueryRow(query, email).Scan(
 		&user.ID,
@@ -139,6 +148,8 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		&user.EmailVerified,
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
+		&status,
+		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -154,8 +165,12 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		return nil, err
 	}
 
-	// Set default status to active since the column doesn't exist
-	user.Status = domain.UserStatusActive
+	// Set status from database or default to active
+	if status.Valid {
+		user.Status = domain.UserStatus(status.String)
+	} else {
+		user.Status = domain.UserStatusActive
+	}
 
 	return user, nil
 }
@@ -164,13 +179,14 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, created_at, updated_at, oauth_provider, oauth_user_id
+		       last_login_at, status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id
 		FROM users
 		WHERE provider = $1 AND provider_id = $2
 	`
 
 	user := &domain.User{}
 	var oauthProvider, oauthUserID sql.NullString
+	var status sql.NullString
 
 	err := r.db.QueryRow(query, provider, providerID).Scan(
 		&user.ID,
@@ -182,6 +198,8 @@ func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.Use
 		&user.Provider,
 		&user.ProviderID,
 		&user.LastLoginAt,
+		&status,
+		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -195,8 +213,12 @@ func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.Use
 		return nil, err
 	}
 
-	// Set default status to active since the column doesn't exist
-	user.Status = domain.UserStatusActive
+	// Set status from database or default to active
+	if status.Valid {
+		user.Status = domain.UserStatus(status.String)
+	} else {
+		user.Status = domain.UserStatusActive
+	}
 
 	return user, nil
 }
@@ -205,7 +227,7 @@ func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.Use
 func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, created_at, updated_at, oauth_provider, oauth_user_id
+		       last_login_at, status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id
 		FROM users
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -221,6 +243,7 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 	for rows.Next() {
 		user := &domain.User{}
 		var oauthProvider, oauthUserID sql.NullString
+		var status sql.NullString
 
 		err := rows.Scan(
 			&user.ID,
@@ -232,6 +255,8 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 			&user.Provider,
 			&user.ProviderID,
 			&user.LastLoginAt,
+			&status,
+			&user.DeletedAt,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 			&oauthProvider,
@@ -241,8 +266,12 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 			return nil, err
 		}
 
-		// Set default status to active since the column doesn't exist
-		user.Status = domain.UserStatusActive
+		// Set status from database or default to active
+		if status.Valid {
+			user.Status = domain.UserStatus(status.String)
+		} else {
+			user.Status = domain.UserStatusActive
+		}
 		users = append(users, user)
 	}
 
@@ -272,8 +301,9 @@ func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
 		SET name = $1, avatar_url = $2, role = $3, password_hash = $4, 
-		    email_verified = $5, force_password_change = $6, last_login_at = $7, updated_at = $8
-		WHERE id = $9
+		    email_verified = $5, force_password_change = $6, last_login_at = $7, 
+		    status = $8, approved_by = $9, approved_at = $10, deleted_at = $11, updated_at = $12
+		WHERE id = $13
 	`
 
 	user.UpdatedAt = time.Now()
@@ -286,6 +316,10 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.EmailVerified,
 		user.ForcePasswordChange,
 		user.LastLoginAt,
+		user.Status,
+		user.ApprovedBy,
+		user.ApprovedAt,
+		user.DeletedAt,
 		user.UpdatedAt,
 		user.ID,
 	)

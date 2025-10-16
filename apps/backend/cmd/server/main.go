@@ -776,7 +776,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/users/:id/approve", h.Admin.ApproveUser)
 	admin.Post("/users/:id/reject", h.Admin.RejectUser)
 	admin.Put("/users/:id/role", h.Admin.UpdateUserRole)
-	admin.Delete("/users/:id", h.Admin.DeactivateUser)
+	
+	// User lifecycle management (soft delete and hard delete)
+	admin.Post("/users/:id/deactivate", h.Admin.DeactivateUser)   // Soft delete - sets deleted_at
+	admin.Post("/users/:id/activate", h.Admin.ActivateUser)       // Reactivate - clears deleted_at
+	admin.Delete("/users/:id", h.Admin.PermanentlyDeleteUser)     // Hard delete - removes from database
 
 	// Registration request management (for pending OAuth registrations)
 	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)

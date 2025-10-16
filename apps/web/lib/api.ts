@@ -439,6 +439,12 @@ class APIClient {
     });
   }
 
+  async activateUser(userId: string): Promise<void> {
+    return this.request(`/api/v1/admin/users/${userId}/activate`, {
+      method: "POST",
+    });
+  }
+
   async approveRegistrationRequest(requestId: string): Promise<void> {
     return this.request(
       `/api/v1/admin/registration-requests/${requestId}/approve`,

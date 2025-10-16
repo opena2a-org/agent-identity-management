@@ -52,6 +52,11 @@ func (s *AuthService) findOrCreateUser(ctx context.Context, oauthUser *auth.OAut
 	}
 
 	if user != nil {
+		// Check if user account is deactivated
+		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+			return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
+		}
+
 		// User exists, update profile and last_login_at
 		now := time.Now()
 		avatarChanged := (user.AvatarURL == nil && oauthUser.AvatarURL != "") ||
@@ -184,6 +189,11 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, email, password str
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
+	// Check if user account is deactivated
+	if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+		return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
+	}
+
 	// Check if user has a password (local authentication enabled)
 	if user.PasswordHash == nil || *user.PasswordHash == "" {
 		return nil, fmt.Errorf("local authentication not configured for this user")
@@ -254,7 +264,7 @@ func (s *AuthService) UpdateUserRole(
 	return user, nil
 }
 
-// DeactivateUser deactivates a user account
+// DeactivateUser deactivates a user account (soft delete)
 func (s *AuthService) DeactivateUser(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -276,8 +286,12 @@ func (s *AuthService) DeactivateUser(
 		return fmt.Errorf("cannot deactivate your own account")
 	}
 
-	// Delete user
-	return s.userRepo.Delete(userID)
+	// Update status to deactivated (soft delete) and set deleted_at timestamp
+	now := time.Now()
+	user.Status = domain.UserStatusDeactivated
+	user.DeletedAt = &now
+	user.UpdatedAt = now
+	return s.userRepo.Update(user)
 }
 
 // ChangePassword changes a user's password

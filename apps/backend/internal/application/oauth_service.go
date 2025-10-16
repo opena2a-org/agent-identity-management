@@ -206,6 +206,10 @@ func (s *OAuthService) ProcessOAuthCallback(
 	// Check if user exists
 	existingUser, err := s.userRepo.GetByEmail(profile.Email)
 	if err == nil && existingUser != nil {
+		if existingUser.Status == domain.UserStatusDeactivated || existingUser.DeletedAt != nil {
+			return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
+		}
+
 		// User exists - handle login
 		accessToken, refreshToken, err := s.jwtService.GenerateTokenPair(
 			existingUser.ID.String(),

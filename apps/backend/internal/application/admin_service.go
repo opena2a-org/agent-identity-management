@@ -117,23 +117,25 @@ func (s *AdminService) SuspendUser(ctx context.Context, userID, adminID uuid.UUI
 	return nil
 }
 
-// ActivateUser activates a suspended user account
+// ActivateUser activates a suspended or deactivated user account
 func (s *AdminService) ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
 	}
 
-	if user.Status == domain.UserStatusActive {
+	if user.Status == domain.UserStatusActive && user.DeletedAt == nil {
 		return fmt.Errorf("user is already active")
 	}
 
 	user.Status = domain.UserStatusActive
+	user.DeletedAt = nil // Clear deleted_at timestamp on activation
 	now := time.Now()
 	if user.ApprovedBy == nil {
 		user.ApprovedBy = &adminID
 		user.ApprovedAt = &now
 	}
+	user.UpdatedAt = now
 
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to activate user: %w", err)
@@ -142,16 +144,50 @@ func (s *AdminService) ActivateUser(ctx context.Context, userID, adminID uuid.UU
 	return nil
 }
 
-// DeactivateUser permanently deactivates a user account
+// DeactivateUser deactivates a user account (soft delete)
 func (s *AdminService) DeactivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
 	}
 
+	if user.Status == domain.UserStatusDeactivated && user.DeletedAt != nil {
+		return fmt.Errorf("user is already deactivated")
+	}
+
+	now := time.Now()
 	user.Status = domain.UserStatusDeactivated
+	user.DeletedAt = &now // Set deleted_at timestamp
+	user.UpdatedAt = now
+	
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to deactivate user: %w", err)
+	}
+
+	return nil
+}
+
+// PermanentlyDeleteUser permanently deletes a user from the database (hard delete)
+// This is irreversible and should only be used in specific circumstances
+func (s *AdminService) PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Prevent self-deletion
+	if userID == adminID {
+		return fmt.Errorf("cannot delete your own account")
+	}
+
+	// Recommend deactivation for active users
+	if user.Status == domain.UserStatusActive && user.DeletedAt == nil {
+		return fmt.Errorf("active users should be deactivated first. Use permanent delete only for already deactivated users")
+	}
+
+	// Permanently delete the user
+	if err := s.userRepo.Delete(userID); err != nil {
+		return fmt.Errorf("failed to permanently delete user: %w", err)
 	}
 
 	return nil

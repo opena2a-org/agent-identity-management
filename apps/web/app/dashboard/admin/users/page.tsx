@@ -41,6 +41,7 @@ import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableSkeleton } from "@/components/ui/content-loaders";
+import { toast } from "sonner";
 
 interface User {
   id: string;
@@ -605,6 +606,37 @@ export default function UsersPage() {
                               <X className="h-4 w-4 mr-1" /> Reject
                             </Button>
                           </div>
+                        ) : user.status === "deactivated" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              if (!confirm(`Activate user ${user.email}?`))
+                                return;
+                              try {
+                                await api.activateUser(user.id);
+                                setUsers((prev) =>
+                                  prev.map((u) =>
+                                    u.id === user.id
+                                      ? { ...u, status: "active" }
+                                      : u
+                                  )
+                                );
+                                toast.success("User Activated", {
+                                  description: `${user.email} has been activated successfully.`,
+                                });
+                              } catch (e: any) {
+                                toast.error("Activation Failed", {
+                                  description:
+                                    e?.message || "Failed to activate user",
+                                });
+                              }
+                            }}
+                            className="border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Activate
+                          </Button>
                         ) : (
                           <Button
                             size="sm"
@@ -621,14 +653,19 @@ export default function UsersPage() {
                                       : u
                                   )
                                 );
+                                toast.success("User Deactivated", {
+                                  description: `${user.email} has been deactivated successfully.`,
+                                });
                               } catch (e: any) {
-                                alert(
-                                  e?.message || "Failed to deactivate user"
-                                );
+                                toast.error("Deactivation Failed", {
+                                  description:
+                                    e?.message || "Failed to deactivate user",
+                                });
                               }
                             }}
                             className="border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                           >
+                            <UserX className="h-4 w-4 mr-1" />
                             Deactivate
                           </Button>
                         )}

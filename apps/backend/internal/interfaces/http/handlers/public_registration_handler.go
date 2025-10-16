@@ -236,6 +236,14 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 	// Check users table first - if user exists there, they are automatically approved
 	user, err := h.authService.GetUserByEmail(c.Context(), email)
 	if err == nil && user != nil {
+		// Check if user account is deactivated
+		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"success": false,
+				"error":   "Your account has been deactivated. Please contact your administrator for assistance.",
+			})
+		}
+
 		// Check if user has password hash for local authentication
 		if user.PasswordHash != nil && *user.PasswordHash != "" {
 			// Verify password from users table
