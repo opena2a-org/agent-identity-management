@@ -176,6 +176,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [userRole, setUserRole] = useState<UserRole>("viewer");
 
   // Get filter parameter from URL (e.g., ?filter=low_trust)
   const urlFilter = searchParams.get("filter");
