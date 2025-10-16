@@ -466,7 +466,7 @@ func (s *OAuthService) ApproveRegistrationRequest(
 
 	// Determine provider and provider ID based on registration type
 	provider := "local" // Default for manual registrations
-	providerID := ""
+	providerID := req.Email // Use email as provider_id for local/manual registrations to ensure uniqueness
 	emailVerified := false
 	
 	if req.OAuthProvider != nil && req.OAuthUserID != nil {
