@@ -517,53 +517,31 @@ function DashboardContent() {
     return then.toLocaleDateString();
   };
 
-  // Prepare stats for display using actual backend field names
+  // Prepare required stat cards
   const allStats = [
     {
       name: "Total Agents",
       value: data.total_agents.toLocaleString(),
-      change: `${data.verification_rate.toFixed(1)}% verified`,
-      changeType: "positive" as const,
-      icon: Shield,
+      icon: Users,
       permission: "canViewAgentStats" as const,
     },
     {
-      name: "MCP Servers",
-      value: data.total_mcp_servers.toLocaleString(),
-      change: `${data.active_mcp_servers} active`,
-      changeType: "positive" as const,
-      icon: Network,
-      permission: "canViewMCPStats" as const,
+      name: "Verified Agents",
+      value: data.verified_agents.toLocaleString(),
+      icon: CheckCircle,
+      permission: "canViewAgentStats" as const,
     },
     {
-      name: "Avg Trust Score",
-      value: data.avg_trust_score.toFixed(1),
-      change:
-        data.avg_trust_score >= 80
-          ? "Excellent"
-          : data.avg_trust_score >= 60
-            ? "Good"
-            : "Fair",
-      changeType:
-        data.avg_trust_score >= 80
-          ? ("positive" as const)
-          : ("negative" as const),
+      name: "Trust Score Average",
+      value: data.avg_trust_score.toFixed(2),
       icon: TrendingUp,
       permission: "canViewTrustScore" as const,
     },
     {
-      name: "Active Alerts",
-      value: data.active_alerts.toLocaleString(),
-      change:
-        data.critical_alerts > 0
-          ? `${data.critical_alerts} critical`
-          : "Normal",
-      changeType:
-        data.critical_alerts > 0
-          ? ("negative" as const)
-          : ("positive" as const),
-      icon: AlertTriangle,
-      permission: "canViewAlerts" as const,
+      name: "Recent Activity Count",
+      value: auditLogs.length.toLocaleString(),
+      icon: Activity,
+      permission: "canViewRecentActivity" as const,
     },
   ];
 

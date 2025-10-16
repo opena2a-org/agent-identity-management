@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SSOButton } from "@/components/auth/sso-button";
-import { Shield, Mail, User, Lock, AlertCircle } from "lucide-react";
+import {
+  Shield,
+  Mail,
+  User,
+  Lock,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -19,6 +27,8 @@ export default function RegisterPage() {
     confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -214,7 +224,7 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
@@ -224,6 +234,18 @@ export default function RegisterPage() {
                   }`}
                   placeholder="Min. 8 characters, uppercase, lowercase, number, special char"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
               </div>
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -250,7 +272,7 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   id="confirmPassword"
-                  type="password"
+                  type={showConfirm ? "text" : "password"}
                   value={formData.confirmPassword}
                   onChange={(e) =>
                     setFormData({
@@ -265,6 +287,18 @@ export default function RegisterPage() {
                   }`}
                   placeholder="Re-enter password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                >
+                  {showConfirm ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
               </div>
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600 flex items-center gap-1">

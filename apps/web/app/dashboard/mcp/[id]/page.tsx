@@ -103,7 +103,64 @@ export default function MCPServerDetailsPage({
         // Fetch connected agents
         try {
           const agentsData = await api.getMCPServerAgents(serverId!);
-          setConnectedAgents(agentsData.agents || []);
+          let agents = agentsData.agents || [];
+          // Robust client fallback: also match by talks_to entries containing id/name/url
+          if (
+            (!agents || agents.length === 0) &&
+            (serverData?.name || serverData?.url)
+          ) {
+            try {
+              const allAgentsResp = await api.listAgents();
+              const allAgents = allAgentsResp.agents || [];
+              const candidates = new Set<string>([
+                String(serverId),
+                String(serverData?.name || ""),
+                String(serverData?.url || ""),
+              ]);
+              const lc = new Set<string>(
+                Array.from(candidates).map((s) => s.toLowerCase())
+              );
+              const matches = (talks: any): boolean => {
+                if (!Array.isArray(talks)) return false;
+                return talks.some((entry) => {
+                  if (typeof entry === "string") {
+                    const v = entry.toLowerCase();
+                    return (
+                      lc.has(v) || Array.from(lc).some((c) => v.includes(c))
+                    );
+                  }
+                  if (entry && typeof entry === "object") {
+                    const idStr = (entry.id || entry.server_id || "")
+                      .toString()
+                      .toLowerCase();
+                    const nameStr = (entry.name || entry.server_name || "")
+                      .toString()
+                      .toLowerCase();
+                    const urlStr = (entry.url || entry.endpoint || "")
+                      .toString()
+                      .toLowerCase();
+                    if (idStr && lc.has(idStr)) return true;
+                    if (
+                      nameStr &&
+                      (lc.has(nameStr) ||
+                        Array.from(lc).some((c) => nameStr.includes(c)))
+                    )
+                      return true;
+                    if (
+                      urlStr &&
+                      Array.from(lc).some((c) => urlStr.includes(c))
+                    )
+                      return true;
+                  }
+                  return false;
+                });
+              };
+              agents = allAgents.filter((a: any) => matches(a.talks_to));
+            } catch (e) {
+              console.error("Fallback agent listing failed:", e);
+            }
+          }
+          setConnectedAgents(agents);
         } catch (err) {
           console.error("Failed to fetch connected agents:", err);
         }
