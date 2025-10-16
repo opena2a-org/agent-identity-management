@@ -469,13 +469,20 @@ func (s *OAuthService) ApproveRegistrationRequest(
 	providerID := req.Email // Use email as provider_id for local/manual registrations to ensure uniqueness
 	emailVerified := false
 	
-	if req.OAuthProvider != nil && req.OAuthUserID != nil {
-		// OAuth registration
+	if req.OAuthProvider != nil {
 		provider = string(*req.OAuthProvider)
-		providerID = *req.OAuthUserID
-		emailVerified = req.OAuthEmailVerified
+		
+		if provider != "local" && req.OAuthUserID != nil {
+			providerID = *req.OAuthUserID
+			emailVerified = req.OAuthEmailVerified
+		} else {
+			provider = "local"
+			providerID = req.Email
+			emailVerified = false
+		}
 	} else {
-		// Manual registration - email verification will be handled separately
+		provider = "local"
+		providerID = req.Email
 		emailVerified = false
 	}
 
@@ -493,6 +500,12 @@ func (s *OAuthService) ApproveRegistrationRequest(
 		ApprovedAt:     &time.Time{},
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
+	}
+	
+	if req.PasswordHash != nil && *req.PasswordHash != "" {
+		fmt.Printf("✅ Approving user with password hash (provider: %s)\n", provider)
+	} else {
+		fmt.Printf("ℹ️  Approving user without password hash (OAuth provider: %s)\n", provider)
 	}
 	
 	// Set approval timestamp

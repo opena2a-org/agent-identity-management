@@ -293,18 +293,20 @@ func (s *AuthService) ChangePassword(
 		return fmt.Errorf("user not found")
 	}
 
-	// Check if user has a password (local authentication)
-	if user.PasswordHash == nil || *user.PasswordHash == "" {
+
+	if user.Provider != "local" {
 		return fmt.Errorf("password change not available for OAuth users")
 	}
 
-	// Verify current password
+	if user.PasswordHash == nil || *user.PasswordHash == "" {
+		return fmt.Errorf("password not configured for this account, please contact administrator")
+	}
+
 	passwordHasher := auth.NewPasswordHasher()
 	if err := passwordHasher.VerifyPassword(currentPassword, *user.PasswordHash); err != nil {
 		return fmt.Errorf("current password is incorrect")
 	}
 
-	// Validate new password
 	if err := passwordHasher.ValidatePassword(newPassword); err != nil {
 		return err
 	}
@@ -315,9 +317,10 @@ func (s *AuthService) ChangePassword(
 		return fmt.Errorf("failed to hash new password: %w", err)
 	}
 
-	// Update password and clear force_password_change flag
+	// Update password in database
 	user.PasswordHash = &newHash
 	user.ForcePasswordChange = false
+	user.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)

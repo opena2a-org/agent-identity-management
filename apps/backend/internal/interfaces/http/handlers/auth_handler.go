@@ -243,6 +243,8 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 		"name":            user.Name,
 		"role":            user.Role,
 		"organization_id": user.OrganizationID,
+		"provider":        user.Provider,
+		"last_login_at":   user.LastLoginAt,
 		"created_at":      user.CreatedAt,
 	})
 }

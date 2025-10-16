@@ -70,7 +70,8 @@ func (r *UserRepository) Create(user *domain.User) error {
 func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, created_at, updated_at, oauth_provider, oauth_user_id
+		       password_hash, email_verified, force_password_change, last_login_at, 
+		       created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE id = $1
 	`
@@ -87,11 +88,16 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.Role,
 		&user.Provider,
 		&user.ProviderID,
+		&user.PasswordHash,
+		&user.EmailVerified,
+		&user.ForcePasswordChange,
 		&user.LastLoginAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
 		&oauthUserID,
+		&user.ApprovedBy,
+		&user.ApprovedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -265,8 +271,9 @@ func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status doma
 func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
-		SET name = $1, avatar_url = $2, role = $3, last_login_at = $4, updated_at = $5
-		WHERE id = $6
+		SET name = $1, avatar_url = $2, role = $3, password_hash = $4, 
+		    email_verified = $5, force_password_change = $6, last_login_at = $7, updated_at = $8
+		WHERE id = $9
 	`
 
 	user.UpdatedAt = time.Now()
@@ -275,6 +282,9 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.Name,
 		user.AvatarURL,
 		user.Role,
+		user.PasswordHash,
+		user.EmailVerified,
+		user.ForcePasswordChange,
 		user.LastLoginAt,
 		user.UpdatedAt,
 		user.ID,

@@ -71,6 +71,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		Status                string     `json:"status"`
 		CreatedAt             time.Time  `json:"created_at"`
 		Provider              string     `json:"provider,omitempty"`
+		LastLoginAt           *time.Time `json:"last_login_at,omitempty"`
 		RequestedAt           *time.Time `json:"requested_at,omitempty"`
 		PictureURL            *string    `json:"picture_url,omitempty"`
 		IsRegistrationRequest bool       `json:"is_registration_request"`
@@ -88,6 +89,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Status:                "active",
 			CreatedAt:             user.CreatedAt,
 			Provider:              user.Provider,
+			LastLoginAt:           user.LastLoginAt,
 			IsRegistrationRequest: false,
 		})
 	}
