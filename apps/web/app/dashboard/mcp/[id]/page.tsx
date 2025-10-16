@@ -1,132 +1,152 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Server, Shield, AlertTriangle, ExternalLink, Globe } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { api } from '@/lib/api'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Server,
+  Shield,
+  AlertTriangle,
+  ExternalLink,
+  Globe,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { api } from "@/lib/api";
 
 interface MCPServer {
-  id: string
-  name: string
-  url: string
-  description?: string
-  status: 'active' | 'inactive' | 'verified' | 'pending'
-  public_key?: string
-  key_type?: string
-  last_verified_at?: string
-  created_at: string
-  updated_at?: string
-  trust_score?: number
-  capability_count?: number
-  organization_id: string
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+  status: "active" | "inactive" | "verified" | "pending";
+  public_key?: string;
+  key_type?: string;
+  last_verified_at?: string;
+  created_at: string;
+  updated_at?: string;
+  trust_score?: number;
+  capability_count?: number;
+  organization_id: string;
 }
 
 interface Capability {
-  id: string
-  mcp_server_id: string
-  name: string
-  type: 'tool' | 'resource' | 'prompt'
-  description: string
-  schema: any
-  detected_at: string
-  last_verified_at?: string
-  is_active: boolean
+  id: string;
+  mcp_server_id: string;
+  name: string;
+  type: "tool" | "resource" | "prompt";
+  description: string;
+  schema: any;
+  detected_at: string;
+  last_verified_at?: string;
+  is_active: boolean;
 }
 
 interface Agent {
-  id: string
-  name: string
-  display_name: string
-  agent_type: string
+  id: string;
+  name: string;
+  display_name: string;
+  agent_type: string;
 }
 
-export default function MCPServerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter()
-  const [serverId, setServerId] = useState<string | null>(null)
-  const [server, setServer] = useState<MCPServer | null>(null)
-  const [capabilities, setCapabilities] = useState<Capability[]>([])
-  const [connectedAgents, setConnectedAgents] = useState<Agent[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
+export default function MCPServerDetailsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const router = useRouter();
+  const [serverId, setServerId] = useState<string | null>(null);
+  const [server, setServer] = useState<MCPServer | null>(null);
+  const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [connectedAgents, setConnectedAgents] = useState<Agent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Extract server ID from params Promise
   useEffect(() => {
-    params.then(({ id }) => setServerId(id))
-  }, [params])
+    params.then(({ id }) => setServerId(id));
+  }, [params]);
 
   // Fetch server data
   useEffect(() => {
-    if (!serverId) return
+    if (!serverId) return;
 
     async function fetchData() {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
 
       try {
         // Fetch MCP server details
-        const serverData = await api.getMCPServer(serverId!)
-        setServer(serverData)
+        const serverData = await api.getMCPServer(serverId!);
+        setServer(serverData);
 
         // Fetch capabilities
         try {
-          const capabilitiesData = await api.getMCPServerCapabilities(serverId!)
-          setCapabilities(capabilitiesData.capabilities || [])
+          const capabilitiesData = await api.getMCPServerCapabilities(
+            serverId!
+          );
+          setCapabilities(capabilitiesData.capabilities || []);
         } catch (err) {
-          console.error('Failed to fetch capabilities:', err)
+          console.error("Failed to fetch capabilities:", err);
         }
 
         // Fetch connected agents
         try {
-          const agentsData = await api.getMCPServerAgents(serverId!)
-          setConnectedAgents(agentsData.agents || [])
+          const agentsData = await api.getMCPServerAgents(serverId!);
+          setConnectedAgents(agentsData.agents || []);
         } catch (err) {
-          console.error('Failed to fetch connected agents:', err)
+          console.error("Failed to fetch connected agents:", err);
         }
       } catch (err: any) {
-        console.error('Failed to fetch MCP server data:', err)
-        setError(err.message || 'Failed to load MCP server details')
+        console.error("Failed to fetch MCP server data:", err);
+        setError(err.message || "Failed to load MCP server details");
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     }
 
-    fetchData()
-  }, [serverId, refreshKey])
+    fetchData();
+  }, [serverId, refreshKey]);
 
   const handleRefresh = () => {
-    setRefreshKey((prev) => prev + 1)
-  }
+    setRefreshKey((prev) => prev + 1);
+  };
 
   // Get trust score color
   const getTrustColor = (score: number): string => {
-    if (score >= 80) return 'text-green-600 bg-green-500/10'
-    if (score >= 60) return 'text-yellow-600 bg-yellow-500/10'
-    return 'text-red-600 bg-red-500/10'
-  }
+    if (score >= 80) return "text-green-600 bg-green-500/10";
+    if (score >= 60) return "text-yellow-600 bg-yellow-500/10";
+    return "text-red-600 bg-red-500/10";
+  };
 
   // Get status color
   const getStatusColor = (status: string): string => {
     switch (status) {
-      case 'active':
-      case 'verified':
-        return 'bg-green-500/10 text-green-600'
-      case 'pending':
-        return 'bg-yellow-500/10 text-yellow-600'
-      case 'inactive':
-        return 'bg-gray-500/10 text-gray-600'
+      case "active":
+      case "verified":
+        return "bg-green-500/10 text-green-600";
+      case "pending":
+        return "bg-yellow-500/10 text-yellow-600";
+      case "inactive":
+        return "bg-gray-500/10 text-gray-600";
       default:
-        return 'bg-gray-500/10 text-gray-600'
+        return "bg-gray-500/10 text-gray-600";
     }
-  }
+  };
 
   // Check if server is verified
-  const isVerified = server?.status === 'verified' || server?.status === 'active'
+  const isVerified =
+    server?.status === "verified" || server?.status === "active";
 
   // Loading state
   if (isLoading) {
@@ -137,7 +157,7 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
           <p className="text-muted-foreground">Loading MCP server details...</p>
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -153,16 +173,20 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-4">
-              {error || 'MCP server not found or you do not have permission to view it.'}
+              {error ||
+                "MCP server not found or you do not have permission to view it."}
             </p>
-            <Button variant="outline" onClick={() => router.push('/dashboard/mcp')}>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/dashboard/mcp")}
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to MCP Servers
             </Button>
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -172,7 +196,7 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.push('/dashboard/mcp')}
+          onClick={() => router.push("/dashboard/mcp")}
           className="mb-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -194,17 +218,25 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 )}
               </div>
               {server.description && (
-                <p className="text-muted-foreground mb-2">{server.description}</p>
+                <p className="text-muted-foreground mb-2">
+                  {server.description}
+                </p>
               )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Globe className="h-3 w-3" />
-                  <a href={server.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  <a
+                    href={server.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
                     {server.url}
                   </a>
                 </Badge>
                 <Badge className={getStatusColor(server.status)}>
-                  {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
+                  {server.status.charAt(0).toUpperCase() +
+                    server.status.slice(1)}
                 </Badge>
                 <Badge className={getTrustColor(server.trust_score ?? 0)}>
                   Trust: {(server.trust_score ?? 0).toFixed(1)}%
@@ -228,7 +260,7 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
           <CardContent>
             <div className="text-2xl font-bold">{connectedAgents.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Agent{connectedAgents.length !== 1 ? 's' : ''} using this server
+              Agent{connectedAgents.length !== 1 ? "s" : ""} using this server
             </p>
           </CardContent>
         </Card>
@@ -242,7 +274,8 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
           <CardContent>
             <div className="text-2xl font-bold">{capabilities.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Tool{capabilities.length !== 1 ? 's' : ''} and resource{capabilities.length !== 1 ? 's' : ''}
+              Tool{capabilities.length !== 1 ? "s" : ""} and resource
+              {capabilities.length !== 1 ? "s" : ""}
             </p>
           </CardContent>
         </Card>
@@ -254,15 +287,17 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${getTrustColor(server.trust_score ?? 0).split(' ')[0]}`}>
+            <div
+              className={`text-2xl font-bold ${getTrustColor(server.trust_score ?? 0).split(" ")[0]}`}
+            >
               {(server.trust_score ?? 0).toFixed(1)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {(server.trust_score ?? 0) >= 80
-                ? 'High trust'
+                ? "High trust"
                 : (server.trust_score ?? 0) >= 60
-                ? 'Medium trust'
-                : 'Low trust'}
+                  ? "Medium trust"
+                  : "Low trust"}
             </p>
           </CardContent>
         </Card>
@@ -275,9 +310,7 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
             <ExternalLink className="h-4 w-4 mr-2" />
             Capabilities
           </TabsTrigger>
-          <TabsTrigger value="agents">
-            Connected Agents
-          </TabsTrigger>
+          <TabsTrigger value="agents">Connected Agents</TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
@@ -292,7 +325,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
             <CardContent>
               {capabilities.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">No capabilities detected yet</p>
+                  <p className="text-muted-foreground">
+                    No capabilities detected yet
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -306,13 +341,18 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                       </Badge>
                       <div className="flex-1">
                         <h4 className="font-medium">{capability.name}</h4>
-                        <p className="text-sm text-muted-foreground">{capability.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {capability.description}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Detected: {new Date(capability.detected_at).toLocaleString()}
+                          Detected:{" "}
+                          {new Date(capability.detected_at).toLocaleString()}
                         </p>
                       </div>
-                      <Badge variant={capability.is_active ? 'default' : 'secondary'}>
-                        {capability.is_active ? 'Active' : 'Inactive'}
+                      <Badge
+                        variant={capability.is_active ? "default" : "secondary"}
+                      >
+                        {capability.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                   ))}
@@ -333,7 +373,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
             <CardContent>
               {connectedAgents.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">No agents connected yet</p>
+                  <p className="text-muted-foreground">
+                    No agents connected yet
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -341,14 +383,20 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                     <div
                       key={agent.id}
                       className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/dashboard/agents/${agent.id}`)}
+                      onClick={() =>
+                        router.push(`/dashboard/agents/${agent.id}`)
+                      }
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
                         <Server className="h-5 w-5 text-blue-600" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium">{agent.display_name || agent.name}</h4>
-                        <p className="text-sm text-muted-foreground">{agent.agent_type}</p>
+                        <h4 className="font-medium">
+                          {agent.display_name || agent.name}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          {agent.agent_type}
+                        </p>
                       </div>
                       <ExternalLink className="h-4 w-4 text-muted-foreground" />
                     </div>
@@ -363,22 +411,32 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
           <Card>
             <CardHeader>
               <CardTitle>MCP Server Details</CardTitle>
-              <CardDescription>Detailed information about this MCP server</CardDescription>
+              <CardDescription>
+                Detailed information about this MCP server
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4">
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Server ID:</span>
-                  <span className="col-span-2 text-sm font-mono">{server.id}</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Server ID:
+                  </span>
+                  <span className="col-span-2 text-sm font-mono">
+                    {server.id}
+                  </span>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Name:</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Name:
+                  </span>
                   <span className="col-span-2 text-sm">{server.name}</span>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">URL:</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    URL:
+                  </span>
                   <a
                     href={server.url}
                     target="_blank"
@@ -392,23 +450,32 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 {server.description && (
                   <>
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">Description:</span>
-                      <span className="col-span-2 text-sm">{server.description}</span>
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Description:
+                      </span>
+                      <span className="col-span-2 text-sm">
+                        {server.description}
+                      </span>
                     </div>
                     <Separator />
                   </>
                 )}
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Status:</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Status:
+                  </span>
                   <span className="col-span-2 text-sm">
                     <Badge className={getStatusColor(server.status)}>
-                      {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
+                      {server.status.charAt(0).toUpperCase() +
+                        server.status.slice(1)}
                     </Badge>
                   </span>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Trust Score:</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Trust Score:
+                  </span>
                   <span className="col-span-2 text-sm">
                     <Badge className={getTrustColor(server.trust_score ?? 0)}>
                       {(server.trust_score ?? 0).toFixed(1)}%
@@ -419,8 +486,12 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 {server.key_type && (
                   <>
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">Key Type:</span>
-                      <span className="col-span-2 text-sm">{server.key_type}</span>
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Key Type:
+                      </span>
+                      <span className="col-span-2 text-sm">
+                        {server.key_type}
+                      </span>
                     </div>
                     <Separator />
                   </>
@@ -428,7 +499,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                 {server.last_verified_at && (
                   <>
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">Last Verified:</span>
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Last Verified:
+                      </span>
                       <span className="col-span-2 text-sm">
                         {new Date(server.last_verified_at).toLocaleString()}
                       </span>
@@ -437,7 +510,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                   </>
                 )}
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Created:</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Created:
+                  </span>
                   <span className="col-span-2 text-sm">
                     {new Date(server.created_at).toLocaleString()}
                   </span>
@@ -446,7 +521,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                   <>
                     <Separator />
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">Last Updated:</span>
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Last Updated:
+                      </span>
                       <span className="col-span-2 text-sm">
                         {new Date(server.updated_at).toLocaleString()}
                       </span>
@@ -458,7 +535,9 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
                   <span className="text-sm font-medium text-muted-foreground">
                     Organization ID:
                   </span>
-                  <span className="col-span-2 text-sm font-mono">{server.organization_id}</span>
+                  <span className="col-span-2 text-sm font-mono">
+                    {server.organization_id}
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -466,5 +545,5 @@ export default function MCPServerDetailsPage({ params }: { params: Promise<{ id:
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

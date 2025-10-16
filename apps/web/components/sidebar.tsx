@@ -128,6 +128,12 @@ const navigationBase: NavSection[] = [
         icon: ClipboardCheck,
         roles: ["admin"], // Admin-only compliance monitoring
       },
+      {
+        name: "Admin Dashboard",
+        href: "/dashboard/admin",
+        icon: Shield,
+        roles: ["admin"], // Admin-only compliance monitoring
+      },
     ],
   },
 ];
