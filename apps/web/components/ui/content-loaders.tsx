@@ -366,3 +366,90 @@ export function SDKTokensPageSkeleton() {
     </div>
   );
 }
+
+// MCP Server Detail Page Skeleton
+export function MCPServerDetailSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Back Button Skeleton */}
+      <Skeleton className="h-9 w-44 rounded-lg" />
+
+      {/* Header Section Skeleton */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          {/* Icon */}
+          <Skeleton className="h-16 w-16 rounded-xl" />
+          
+          {/* Title and Details */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-64" />
+              <Skeleton className="h-6 w-6 rounded" />
+            </div>
+            <Skeleton className="h-4 w-96" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <Skeleton className="h-6 w-48 rounded-full" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-6 w-24 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Separator */}
+      <div className="border-t border-gray-200 dark:border-gray-700" />
+
+      {/* Info Cards Skeleton */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {[...Array(3)].map((_, i) => (
+          <div
+            key={i}
+            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+          >
+            <div className="p-6 pb-3">
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <div className="p-6 pt-0 space-y-2">
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs Skeleton */}
+      <div className="space-y-4">
+        {/* Tab Headers */}
+        <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700">
+          <Skeleton className="h-10 w-32 rounded-t-lg" />
+          <Skeleton className="h-10 w-36 rounded-t-lg" />
+          <Skeleton className="h-10 w-24 rounded-t-lg" />
+        </div>
+
+        {/* Tab Content - Card */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700 space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <div className="p-6 space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
+              >
+                <Skeleton className="h-6 w-16 rounded-full mt-1" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

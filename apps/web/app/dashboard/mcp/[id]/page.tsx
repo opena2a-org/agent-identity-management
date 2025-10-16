@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
+import { MCPServerDetailSkeleton } from "@/components/ui/content-loaders";
 
 interface MCPServer {
   id: string;
@@ -207,14 +208,7 @@ export default function MCPServerDetailsPage({
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Loading MCP server details...</p>
-        </div>
-      </div>
-    );
+    return <MCPServerDetailSkeleton />;
   }
 
   // Error state
