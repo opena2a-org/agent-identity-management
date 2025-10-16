@@ -107,6 +107,8 @@ export default function UsersPage() {
   const [autoApproveSSO, setAutoApproveSSO] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [apiKeysCount, setApiKeysCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     fetchUsers();
@@ -225,6 +227,9 @@ export default function UsersPage() {
 
       return matchesSearch && matchesOrg && matchesStatus;
     }) || [];
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const pageData = filteredUsers.slice((page - 1) * pageSize, page * pageSize);
 
   const organizations = Array.from(
     new Set(
@@ -460,142 +465,219 @@ export default function UsersPage() {
         <CardHeader>
           <CardTitle>Users ({filteredUsers.length})</CardTitle>
           <CardDescription>
-            Click on a role to change user permissions. Approve or reject
-            pending users.
+            Table supports search, role/status filters and pagination.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredUsers.map((user) => {
-              const RoleIcon = roleIcons[user.role];
-              const StatusIcon = statusIcons[user.status];
-              const isPending =
-                user.status === "pending" ||
-                user.status === "pending_approval" ||
-                user.is_registration_request;
-
-              return (
-                <div
-                  key={user.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                      {(user.email || "U")[0].toUpperCase()}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">
-                          {user.name || user.display_name || user.email}
-                        </p>
-                        <Badge variant="outline" className="text-xs">
-                          {user.provider}
-                        </Badge>
-                        <Badge
-                          className={`text-xs ${statusColors[user.status]}`}
-                        >
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {user.status.charAt(0).toUpperCase() +
-                            user.status.slice(1)}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Mail className="h-3 w-3" />
-                        {user.email}
-                      </div>
-                      {user.organization_name && (
-                        <p className="text-xs text-muted-foreground">
-                          {user.organization_name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Joined</p>
-                      <p className="text-sm">{formatDate(user.created_at)}</p>
-                    </div>
-
-                    {isPending && (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => approveUser(user)}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => rejectUser(user)}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Reject
-                          </Button>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Last Login
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                {pageData.map((user) => {
+                  const RoleIcon = roleIcons[user.role];
+                  const StatusIcon = statusIcons[user.status];
+                  const isPending =
+                    user.status === "pending" ||
+                    user.status === "pending_approval" ||
+                    user.is_registration_request;
+                  return (
+                    <tr
+                      key={user.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold">
+                            {(user.email || "U")[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {user.name || user.display_name || user.email}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Joined {formatDate(user.created_at)}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Role can be updated after approval
-                        </p>
-                      </div>
-                    )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                        {user.email}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isPending ? (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded ${roleColors[user.role]}`}
+                          >
+                            {user.role}
+                          </span>
+                        ) : (
+                          <Select
+                            value={user.role}
+                            onValueChange={(role) =>
+                              updateUserRole(user.id, role)
+                            }
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue>
+                                <div className="flex items-center gap-2">
+                                  <RoleIcon className="h-4 w-4" />
+                                  <span className="capitalize">
+                                    {user.role}
+                                  </span>
+                                </div>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4" /> Admin
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="manager">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Manager
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="member">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Member
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="viewer">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Viewer
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded inline-flex items-center gap-1 ${statusColors[user.status]}`}
+                        >
+                          <StatusIcon className="h-3 w-3" />
+                          {user.status.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {user.last_login_at
+                          ? new Date(user.last_login_at).toLocaleString()
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isPending ? (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => approveUser(user)}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <Check className="h-4 w-4 mr-1" /> Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => rejectUser(user)}
+                            >
+                              <X className="h-4 w-4 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              if (!confirm(`Deactivate user ${user.email}?`))
+                                return;
+                              try {
+                                await api.deactivateUser(user.id);
+                                setUsers((prev) =>
+                                  prev.map((u) =>
+                                    u.id === user.id
+                                      ? { ...u, status: "deactivated" }
+                                      : u
+                                  )
+                                );
+                              } catch (e: any) {
+                                alert(
+                                  e?.message || "Failed to deactivate user"
+                                );
+                              }
+                            }}
+                            className="border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {pageData.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+                    >
+                      No users found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-                    {!isPending && (
-                      <Select
-                        value={user.role}
-                        onValueChange={(role) => updateUserRole(user.id, role)}
-                      >
-                        <SelectTrigger className="w-[140px]">
-                          <SelectValue>
-                            <div className="flex items-center gap-2">
-                              <RoleIcon className="h-4 w-4" />
-                              <span className="capitalize">{user.role}</span>
-                            </div>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">
-                            <div className="flex items-center gap-2">
-                              <Shield className="h-4 w-4" />
-                              Admin
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="manager">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              Manager
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="member">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              Member
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="viewer">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              Viewer
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredUsers.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                No users found matching your search criteria
+          {/* Pagination */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {(page - 1) * pageSize + Math.min(1, pageData.length)}-
+              {Math.min(page * pageSize, filteredUsers.length)} of{" "}
+              {filteredUsers.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </Button>
+              <div className="text-sm">
+                Page {page} of {totalPages}
               </div>
-            )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

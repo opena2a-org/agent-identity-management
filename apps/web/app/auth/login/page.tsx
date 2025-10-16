@@ -256,9 +256,12 @@ export default function LoginPage() {
               disabled={isLoadingOAuth !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
-              <div className="w-5 h-5 bg-gradient-to-br from-blue-600 to-blue-800 rounded flex items-center justify-center">
-                <Lock className="w-3 h-3 text-white" />
-              </div>
+              <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+                <path
+                  fill="#007DC1"
+                  d="M12 2.5a9.5 9.5 0 1 0 9.5 9.5A9.5 9.5 0 0 0 12 2.5Zm0 3.3A6.2 6.2 0 1 1 5.8 12 6.2 6.2 0 0 1 12 5.8Z"
+                />
+              </svg>
               <span className="text-gray-700 font-medium group-hover:text-blue-600">
                 {isLoadingOAuth === "okta"
                   ? "Redirecting..."

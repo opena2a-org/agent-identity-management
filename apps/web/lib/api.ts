@@ -422,6 +422,12 @@ class APIClient {
     });
   }
 
+  async deactivateUser(userId: string): Promise<void> {
+    return this.request(`/api/v1/admin/users/${userId}/deactivate`, {
+      method: "POST",
+    });
+  }
+
   async approveRegistrationRequest(requestId: string): Promise<void> {
     return this.request(
       `/api/v1/admin/registration-requests/${requestId}/approve`,
