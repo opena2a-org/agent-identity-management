@@ -46,6 +46,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Agent {
   id: string;
@@ -211,10 +212,58 @@ export default function AgentDetailsPage({
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Loading agent details...</p>
+      <div className="space-y-6">
+        {/* Header skeleton */}
+        <div>
+          <Skeleton className="h-8 w-40 mb-4" />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <Skeleton className="h-16 w-16 rounded-xl" />
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Skeleton className="h-8 w-64" />
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-80 mb-2" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-6 w-28 rounded-full" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Info cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="p-4 border rounded-lg">
+              <Skeleton className="h-4 w-32 mb-3" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+          <div className="p-4 border rounded-lg space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
         </div>
       </div>
     );
