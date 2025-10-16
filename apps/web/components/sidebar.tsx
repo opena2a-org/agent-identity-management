@@ -143,6 +143,7 @@ export function Sidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // ✅ Add loading state
   const [user, setUser] = useState<{
     email: string;
     display_name?: string;
@@ -150,12 +151,13 @@ export function Sidebar() {
     provider?: string;
   } | null>(null);
   const [alertCount, setAlertCount] = useState<number>(0);
-  const [navigation, setNavigation] = useState<NavSection[]>(navigationBase);
+  const [navigation, setNavigation] = useState<NavSection[]>([]);
 
   useEffect(() => {
     // Fetch current user
     const fetchUser = async () => {
       try {
+        setIsLoading(true); // ✅ Start loading
         const userData = await api.getCurrentUser();
         console.log("🚀 ~ fetchUser ~ userData:", userData);
         const normalizedRole: UserRole | undefined =
@@ -200,6 +202,8 @@ export function Sidebar() {
           // No token at all - redirect to login
           setTimeout(() => router.push("/auth/login"), 0);
         }
+      } finally {
+        setIsLoading(false); // ✅ Stop loading
       }
     };
     fetchUser();
@@ -265,92 +269,152 @@ export function Sidebar() {
     return pathname === href || pathname.startsWith(href + "/");
   };
 
-  const SidebarContent = () => (
+  // ✅ Sidebar Loading Skeleton
+  const SidebarSkeleton = () => (
     <>
-      {/* Logo */}
-      <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <Shield className="h-5 w-5 text-white" />
-          </div>
+      {/* Logo Skeleton */}
+      <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
           {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-lg font-bold text-gray-900 dark:text-white">
-                AIM
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Agent Identity
-              </span>
+            <div className="flex flex-col gap-1 flex-1">
+              <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             </div>
           )}
-        </Link>
-        {collapsed && (
-          <button
-            onClick={() => setCollapsed(false)}
-            className="absolute top-1/2 -translate-y-1/2 right-0 z-10 translate-x-1/2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow p-1 text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
-            aria-label="Expand sidebar"
-          >
-            <ChevronLeft className="h-4 w-4 rotate-180" />
-          </button>
-        )}
-        {!collapsed && (
-          <button
-            onClick={() => setCollapsed(true)}
-            className="lg:flex hidden p-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-        )}
+        </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation Skeleton */}
       <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-        {navigation.map((section, idx) => (
-          <div key={idx} className="space-y-1">
-            {section.title && !collapsed && (
-              <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                {section.title}
-              </h3>
-            )}
-            <div className="space-y-1">
-              {section.items.map((item) => {
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`
-                      flex items-center gap-3 px-3 py-2 rounded-lg transition-all
-                      ${
-                        active
-                          ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                      }
-                      ${collapsed ? "justify-center" : ""}
-                    `}
-                    title={collapsed ? item.name : undefined}
-                  >
-                    <item.icon
-                      className={`h-5 w-5 flex-shrink-0 ${active ? "text-blue-600 dark:text-blue-400" : ""}`}
-                    />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1 font-medium">{item.name}</span>
-                        {item.badge && (
-                          <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">
-                            {item.badge}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </Link>
-                );
-              })}
+        {/* Main Section */}
+        <div className="space-y-1">
+          {[...Array(6)].map((_, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg ${collapsed ? "justify-center" : ""}`}
+            >
+              <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              {!collapsed && (
+                <div className="h-4 flex-1 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              )}
             </div>
+          ))}
+        </div>
+
+        {/* Administration Section */}
+        {!collapsed && (
+          <div className="space-y-1">
+            <div className="h-3 w-24 mx-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+            {[...Array(4)].map((_, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg"
+              >
+                <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </nav>
+    </>
+  );
+
+  const SidebarContent = () => (
+    <>
+      {isLoading ? (
+        <SidebarSkeleton />
+      ) : (
+        <>
+          {/* Logo */}
+          <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                <Shield className="h-5 w-5 text-white" />
+              </div>
+              {!collapsed && (
+                <div className="flex flex-col">
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                    AIM
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Agent Identity
+                  </span>
+                </div>
+              )}
+            </Link>
+            {collapsed && (
+              <button
+                onClick={() => setCollapsed(false)}
+                className="absolute top-1/2 -translate-y-1/2 right-0 z-10 translate-x-1/2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow p-1 text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+                aria-label="Expand sidebar"
+              >
+                <ChevronLeft className="h-4 w-4 rotate-180" />
+              </button>
+            )}
+            {!collapsed && (
+              <button
+                onClick={() => setCollapsed(true)}
+                className="lg:flex hidden p-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+            {navigation.map((section, idx) => (
+              <div key={idx} className="space-y-1">
+                {section.title && !collapsed && (
+                  <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {section.title}
+                  </h3>
+                )}
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const active = isActive(item.href);
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={`
+                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all
+                          ${
+                            active
+                              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          }
+                          ${collapsed ? "justify-center" : ""}
+                        `}
+                        title={collapsed ? item.name : undefined}
+                      >
+                        <item.icon
+                          className={`h-5 w-5 flex-shrink-0 ${active ? "text-blue-600 dark:text-blue-400" : ""}`}
+                        />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 font-medium">
+                              {item.name}
+                            </span>
+                            {item.badge && (
+                              <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">
+                                {item.badge}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </>
+      )}
 
       {/* User Profile */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-4">
