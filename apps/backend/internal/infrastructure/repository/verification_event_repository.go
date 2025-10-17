@@ -795,6 +795,48 @@ func (r *VerificationEventRepositorySimple) GetStatistics(orgID uuid.UUID, start
 	}, nil
 }
 
+// UpdateResult updates the result of a verification event
+func (r *VerificationEventRepositorySimple) UpdateResult(id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+	// Merge new metadata with existing metadata
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	query := `
+		UPDATE verification_events
+		SET
+			result = $1,
+			status = CASE
+				WHEN $1 = 'verified' THEN 'success'
+				WHEN $1 = 'denied' THEN 'failed'
+				ELSE 'failed'
+			END,
+			error_reason = COALESCE($2, error_reason),
+			metadata = COALESCE($3::jsonb, metadata),
+			completed_at = CASE
+				WHEN completed_at IS NULL THEN NOW()
+				ELSE completed_at
+			END
+		WHERE id = $4`
+
+	execResult, err := r.db.Exec(query, result, reason, metadataJSON, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := execResult.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("verification event not found")
+	}
+
+	return nil
+}
+
 // Delete removes a verification event
 func (r *VerificationEventRepositorySimple) Delete(id uuid.UUID) error {
 	query := `DELETE FROM verification_events WHERE id = $1`

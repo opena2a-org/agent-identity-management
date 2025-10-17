@@ -417,3 +417,146 @@ func (h *VerificationHandler) determineVerificationStatus(
 	// Auto-approve
 	return "approved", ""
 }
+
+// GetVerification retrieves verification status by ID
+// @Summary Get verification status
+// @Description Retrieve the status of a verification request by ID
+// @Tags verifications
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Success 200 {object} VerificationResponse "Verification found"
+// @Failure 400 {object} ErrorResponse "Invalid verification ID"
+// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/verifications/{id} [get]
+func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
+	verificationID := c.Params("id")
+	if verificationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verification_id is required",
+		})
+	}
+
+	// Parse UUID
+	vid, err := uuid.Parse(verificationID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verification_id format",
+		})
+	}
+
+	// Query verification event from database
+	event, err := h.verificationEventService.GetVerificationEvent(c.Context(), vid)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or expired",
+		})
+	}
+
+	// Build response
+	response := VerificationResponse{
+		ID:         event.ID.String(),
+		TrustScore: event.TrustScore,
+	}
+
+	// Map event status and result to verification status
+	if event.Result != nil {
+		switch *event.Result {
+		case domain.VerificationResultVerified:
+			response.Status = "approved"
+			response.ApprovedBy = "system"
+			response.ExpiresAt = event.CreatedAt.Add(24 * time.Hour)
+		case domain.VerificationResultDenied:
+			response.Status = "denied"
+			if event.ErrorReason != nil {
+				response.DenialReason = *event.ErrorReason
+			}
+		case domain.VerificationResultExpired:
+			response.Status = "expired"
+		default:
+			response.Status = "pending"
+		}
+	} else {
+		response.Status = "pending"
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}
+
+// SubmitVerificationResult handles verification result submission
+// @Summary Submit verification result
+// @Description Submit the result of a verification request (success/failure)
+// @Tags verifications
+// @Accept json
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Param result body object true "Verification result"
+// @Success 200 {object} map[string]interface{} "Result recorded"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/verifications/{id}/result [post]
+func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
+	verificationID := c.Params("id")
+	if verificationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verification_id is required",
+		})
+	}
+
+	var req struct {
+		Result   string                 `json:"result"` // "success", "failure"
+		Reason   string                 `json:"reason,omitempty"`
+		Metadata map[string]interface{} `json:"metadata,omitempty"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Parse UUID
+	vid, err := uuid.Parse(verificationID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verification_id format",
+		})
+	}
+
+	// Validate result value
+	if req.Result != "success" && req.Result != "failure" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "result must be either 'success' or 'failure'",
+		})
+	}
+
+	// Map result string to VerificationResult type
+	var result domain.VerificationResult
+	if req.Result == "success" {
+		result = domain.VerificationResultVerified
+	} else {
+		result = domain.VerificationResultDenied
+	}
+
+	// Prepare reason pointer
+	var reasonPtr *string
+	if req.Reason != "" {
+		reasonPtr = &req.Reason
+	}
+
+	// Update verification event in database
+	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, reasonPtr, req.Metadata)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or update failed",
+		})
+	}
+
+	// Return success response
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"id":     vid.String(),
+		"status": "result_recorded",
+		"result": req.Result,
+	})
+}

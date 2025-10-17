@@ -559,6 +559,34 @@ class APIClient {
     return this.request("/api/v1/analytics/dashboard");
   }
 
+  // Admin Dashboard stats - Admin-only endpoint with comprehensive platform metrics
+  async getAdminDashboardStats(): Promise<{
+    // Agent metrics
+    total_agents: number;
+    verified_agents: number;
+    pending_agents: number;
+    verification_rate: number;
+    avg_trust_score: number;
+
+    // MCP Server metrics
+    total_mcp_servers: number;
+    active_mcp_servers: number;
+
+    // User metrics
+    total_users: number;
+    active_users: number;
+
+    // Security metrics
+    active_alerts: number;
+    critical_alerts: number;
+    security_incidents: number;
+
+    // Organization
+    organization_id: string;
+  }> {
+    return this.request("/api/v1/admin/dashboard/stats");
+  }
+
   // Trust Score Trends - Get weekly or daily trust score trend data
   async getTrustScoreTrends(
     weeks = 4,

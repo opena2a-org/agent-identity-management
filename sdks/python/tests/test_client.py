@@ -82,7 +82,7 @@ class TestClientInitialization:
 
     def test_init_missing_public_key(self, test_keys):
         """Test initialization fails without public_key"""
-        with pytest.raises(ConfigurationError, match="public_key is required"):
+        with pytest.raises(ConfigurationError, match="Either api_key OR.*public_key.*private_key.*is required"):
             AIMClient(
                 agent_id="550e8400-e29b-41d4-a716-446655440000",
                 public_key="",

@@ -88,7 +88,7 @@ describe('AIMClient', () => {
 
       // Verify fetch was called
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/agents/test-agent-id/detection/report',
+        'http://localhost:8080/api/v1/detection/agents/test-agent-id/report',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({

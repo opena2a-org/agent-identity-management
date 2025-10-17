@@ -216,8 +216,7 @@ export default function AgentsPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // For development, use mock data as fallback
-      setAgents(getMockAgents());
+      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }
@@ -226,114 +225,6 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
   }, []);
-
-  // Mock data fallback for development
-  const getMockAgents = (): Agent[] => [
-    {
-      id: "agt_001",
-      organization_id: "org_123",
-      name: "claude-assistant",
-      display_name: "Claude AI Assistant",
-      description: "Advanced AI assistant for code analysis and support",
-      agent_type: "ai_agent",
-      status: "verified",
-      version: "2.1.0",
-      trust_score: 95,
-      created_at: "2025-01-15T10:30:00Z",
-      updated_at: "2025-01-20T14:22:00Z",
-    },
-    {
-      id: "agt_002",
-      organization_id: "org_123",
-      name: "data-processor",
-      display_name: "Data Processing Agent",
-      description: "Automated data transformation and analysis",
-      agent_type: "ai_agent",
-      status: "verified",
-      version: "1.5.2",
-      trust_score: 88,
-      created_at: "2025-01-10T09:15:00Z",
-      updated_at: "2025-01-19T11:45:00Z",
-    },
-    {
-      id: "agt_003",
-      organization_id: "org_123",
-      name: "security-monitor",
-      display_name: "Security Monitoring Agent",
-      description: "Real-time security threat detection and response",
-      agent_type: "ai_agent",
-      status: "verified",
-      version: "3.0.1",
-      trust_score: 92,
-      created_at: "2025-01-12T13:20:00Z",
-      updated_at: "2025-01-20T16:30:00Z",
-    },
-    {
-      id: "agt_004",
-      organization_id: "org_123",
-      name: "report-generator",
-      display_name: "Report Generator",
-      description: "Automated report creation and distribution",
-      agent_type: "ai_agent",
-      status: "pending",
-      version: "1.0.0",
-      trust_score: 65,
-      created_at: "2025-01-18T08:00:00Z",
-      updated_at: "2025-01-18T08:00:00Z",
-    },
-    {
-      id: "agt_005",
-      organization_id: "org_123",
-      name: "workflow-automation",
-      display_name: "Workflow Automation Agent",
-      description: "Business process automation and orchestration",
-      agent_type: "ai_agent",
-      status: "verified",
-      version: "2.3.0",
-      trust_score: 90,
-      created_at: "2025-01-14T11:00:00Z",
-      updated_at: "2025-01-20T10:15:00Z",
-    },
-    {
-      id: "mcp_001",
-      organization_id: "org_123",
-      name: "file-server",
-      display_name: "File Server MCP",
-      description: "MCP server for file operations and management",
-      agent_type: "mcp_server",
-      status: "verified",
-      version: "1.2.0",
-      trust_score: 85,
-      created_at: "2025-01-16T14:30:00Z",
-      updated_at: "2025-01-20T09:00:00Z",
-    },
-    {
-      id: "mcp_002",
-      organization_id: "org_123",
-      name: "database-connector",
-      display_name: "Database Connector MCP",
-      description: "MCP server for database queries and operations",
-      agent_type: "mcp_server",
-      status: "pending",
-      version: "0.9.0",
-      trust_score: 58,
-      created_at: "2025-01-19T16:00:00Z",
-      updated_at: "2025-01-19T16:00:00Z",
-    },
-    {
-      id: "agt_006",
-      organization_id: "org_123",
-      name: "analytics-engine",
-      display_name: "Analytics Engine",
-      description: "Advanced analytics and insights generation",
-      agent_type: "ai_agent",
-      status: "verified",
-      version: "2.0.5",
-      trust_score: 87,
-      created_at: "2025-01-11T12:00:00Z",
-      updated_at: "2025-01-20T15:00:00Z",
-    },
-  ];
 
   // Calculate stats (with null check)
   const stats: AgentStats = {
@@ -443,8 +334,7 @@ export default function AgentsPage() {
       setAgents(agents.filter((a) => a.id !== selectedAgent.id));
     } catch (err) {
       console.error("Failed to delete agent:", err);
-      // Mock delete for development
-      setAgents(agents.filter((a) => a.id !== selectedAgent.id));
+      setError(err instanceof Error ? err.message : "Failed to delete agent");
     } finally {
       setShowDeleteConfirm(false);
       setShowDetailModal(false);

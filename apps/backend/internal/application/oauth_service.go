@@ -203,10 +203,14 @@ func (s *OAuthService) ProcessOAuthCallback(
 		return nil, fmt.Errorf("failed to get user profile: %w", err)
 	}
 
+	// DEBUG: Log the email we're checking
+	fmt.Printf("🔍 DEBUG ProcessOAuthCallback: Checking for user with email: %s\n", profile.Email)
+
 	// Check if user exists
 	existingUser, err := s.userRepo.GetByEmail(profile.Email)
+	fmt.Printf("🔍 DEBUG ProcessOAuthCallback: GetByEmail result - User: %v, Error: %v\n", existingUser != nil, err)
 	if err == nil && existingUser != nil {
-		if existingUser.Status == domain.UserStatusDeactivated || existingUser.DeletedAt != nil {
+		if existingUser.Status == domain.UserStatusDeactivated {
 			return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
 		}
 

@@ -491,6 +491,7 @@ type Handlers struct {
 	SecurityPolicy    *handlers.SecurityPolicyHandler // ✅ For policy management
 	Analytics         *handlers.AnalyticsHandler
 	Webhook           *handlers.WebhookHandler
+	Verification      *handlers.VerificationHandler      // ✅ For POST /verifications endpoint
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
@@ -560,6 +561,12 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Webhook: handlers.NewWebhookHandler(
 			services.Webhook,
 			services.Audit,
+		),
+		Verification: handlers.NewVerificationHandler(
+			services.Agent,
+			services.Audit,
+			services.Trust,
+			services.VerificationEvent,
 		),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
@@ -880,6 +887,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	webhooks.Get("/:id", h.Webhook.GetWebhook)
 	webhooks.Delete("/:id", middleware.MemberMiddleware(), h.Webhook.DeleteWebhook)
 	webhooks.Post("/:id/test", middleware.MemberMiddleware(), h.Webhook.TestWebhook)
+
+	// Verification routes (authentication required) - Agent action verification
+	verifications := v1.Group("/verifications")
+	verifications.Use(middleware.AuthMiddleware(jwtService))
+	verifications.Use(middleware.RateLimitMiddleware())
+	verifications.Post("/", h.Verification.CreateVerification)                  // Request verification for agent action
+	verifications.Get("/:id", h.Verification.GetVerification)                   // Get verification status by ID
+	verifications.Post("/:id/result", h.Verification.SubmitVerificationResult)  // Submit verification result
 
 	// Verification Event routes (authentication required) - Real-time monitoring
 	verificationEvents := v1.Group("/verification-events")

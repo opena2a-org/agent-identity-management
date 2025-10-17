@@ -196,6 +196,17 @@ func (s *VerificationEventService) GetLast24HoursStatistics(ctx context.Context,
 	return s.eventRepo.GetStatistics(orgID, startTime, endTime)
 }
 
+// UpdateVerificationResult updates the result of a verification event
+func (s *VerificationEventService) UpdateVerificationResult(
+	ctx context.Context,
+	id uuid.UUID,
+	result domain.VerificationResult,
+	reason *string,
+	metadata map[string]interface{},
+) error {
+	return s.eventRepo.UpdateResult(id, result, reason, metadata)
+}
+
 // DeleteVerificationEvent deletes a verification event
 func (s *VerificationEventService) DeleteVerificationEvent(ctx context.Context, id uuid.UUID) error {
 	return s.eventRepo.Delete(id)
