@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle } from "lucide-react";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -8,7 +8,7 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'danger' | 'warning' | 'info';
+  variant?: "danger" | "warning" | "info";
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -17,30 +17,30 @@ export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  variant = 'warning',
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  variant = "warning",
   onConfirm,
-  onCancel
+  onCancel,
 }: ConfirmDialogProps) {
   if (!isOpen) return null;
 
   const getVariantStyles = () => {
     switch (variant) {
-      case 'danger':
+      case "danger":
         return {
-          icon: 'text-red-600 dark:text-red-400',
-          button: 'bg-red-600 hover:bg-red-700'
+          icon: "text-red-600 dark:text-red-400",
+          button: "bg-red-600 hover:bg-red-700",
         };
-      case 'warning':
+      case "warning":
         return {
-          icon: 'text-yellow-600 dark:text-yellow-400',
-          button: 'bg-yellow-600 hover:bg-yellow-700'
+          icon: "text-yellow-600 dark:text-yellow-400",
+          button: "bg-yellow-600 hover:bg-yellow-700",
         };
-      case 'info':
+      case "info":
         return {
-          icon: 'text-blue-600 dark:text-blue-400',
-          button: 'bg-blue-600 hover:bg-blue-700'
+          icon: "text-blue-600 dark:text-blue-400",
+          button: "bg-blue-600 hover:bg-blue-700",
         };
     }
   };
@@ -56,6 +56,7 @@ export function ConfirmDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full">
@@ -77,9 +78,7 @@ export function ConfirmDialog({
 
         {/* Body */}
         <div className="px-6 py-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {message}
-          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{message}</p>
         </div>
 
         {/* Footer */}

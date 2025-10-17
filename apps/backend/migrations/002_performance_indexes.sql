@@ -42,8 +42,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action
 
 -- Alerts: unacknowledged alerts are frequently queried
 CREATE INDEX IF NOT EXISTS idx_alerts_org_unack
-  ON alerts(organization_id, is_acknowledged)
-  WHERE is_acknowledged = false;
+  ON alerts(organization_id, acknowledged)
+  WHERE acknowledged = false;
 
 CREATE INDEX IF NOT EXISTS idx_alerts_severity
   ON alerts(severity, created_at DESC);
@@ -55,10 +55,10 @@ CREATE INDEX IF NOT EXISTS idx_alerts_resource
 CREATE INDEX IF NOT EXISTS idx_organizations_domain
   ON organizations(domain);
 
--- Add partial index for active API keys
+-- Add partial index for active API keys (simplified to avoid IMMUTABLE function requirement)
 CREATE INDEX IF NOT EXISTS idx_api_keys_active_only
   ON api_keys(agent_id)
-  WHERE is_active = true AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP);
+  WHERE is_active = true;
 
 -- Add GIN index for JSONB metadata in audit logs (for full-text search)
 CREATE INDEX IF NOT EXISTS idx_audit_logs_metadata

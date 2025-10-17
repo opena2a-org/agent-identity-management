@@ -1,13 +1,24 @@
-'use client';
+"use client";
 
-import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key, Download, TrendingUp } from 'lucide-react';
-import { formatDateTime } from '@/lib/date-utils';
+import {
+  X,
+  Shield,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Edit,
+  Trash2,
+  Key,
+  Download,
+  TrendingUp,
+} from "lucide-react";
+import { formatDateTime } from "@/lib/date-utils";
 
 interface MCPCapability {
   id: string;
   mcp_server_id: string;
   name: string;
-  type: 'tool' | 'resource' | 'prompt';
+  type: "tool" | "resource" | "prompt";
   description: string;
   schema: any;
   detected_at: string;
@@ -20,7 +31,7 @@ interface MCPServer {
   name: string;
   url: string;
   description?: string;
-  status: 'active' | 'inactive' | 'pending';
+  status: "active" | "inactive" | "pending";
   public_key?: string;
   key_type?: string;
   last_verified_at?: string;
@@ -44,45 +55,50 @@ export function MCPDetailModal({
   onClose,
   mcp,
   onEdit,
-  onDelete
+  onDelete,
 }: MCPDetailModalProps) {
   if (!isOpen || !mcp) return null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-      case 'pending':
-        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
-      case 'inactive':
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+      case "active":
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+      case "pending":
+        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+      case "inactive":
+        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
       default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
     }
   };
 
   const getTrustScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 dark:text-green-400';
-    if (score >= 60) return 'text-yellow-600 dark:text-yellow-400';
-    if (score >= 40) return 'text-orange-600 dark:text-orange-400';
-    return 'text-red-600 dark:text-red-400';
+    if (score >= 80) return "text-green-600 dark:text-green-400";
+    if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
+    if (score >= 40) return "text-orange-600 dark:text-orange-400";
+    return "text-red-600 dark:text-red-400";
   };
 
   const calculateFingerprint = (publicKey: string): string => {
-    if (!publicKey) return 'N/A';
+    if (!publicKey) return "N/A";
     // Simple mock fingerprint - in production this would use crypto.subtle.digest
     const hash = publicKey.substring(0, 64);
-    return hash.match(/.{1,2}/g)?.slice(0, 16).join(':') || 'N/A';
+    return (
+      hash
+        .match(/.{1,2}/g)
+        ?.slice(0, 16)
+        .join(":") || "N/A"
+    );
   };
 
   const handleDownloadKey = () => {
     if (!mcp.public_key) return;
 
-    const blob = new Blob([mcp.public_key], { type: 'text/plain' });
+    const blob = new Blob([mcp.public_key], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${mcp.name.replace(/\s+/g, '_')}_public_key.pem`;
+    a.download = `${mcp.name.replace(/\s+/g, "_")}_public_key.pem`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -112,7 +128,9 @@ export function MCPDetailModal({
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                 {mcp.name}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{mcp.id}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {mcp.id}
+              </p>
             </div>
           </div>
           <button
@@ -128,22 +146,34 @@ export function MCPDetailModal({
           {/* Status and Metrics */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Status</span>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(mcp.status)}`}>
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Status
+              </span>
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(mcp.status)}`}
+              >
                 {mcp.status}
               </span>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Trust Score</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Trust Score
+              </span>
               <div className="flex items-center gap-2">
-                <TrendingUp className={`h-4 w-4 ${getTrustScoreColor(mcp.trust_score || 0)}`} />
-                <span className={`text-lg font-semibold ${getTrustScoreColor(mcp.trust_score || 0)}`}>
+                <TrendingUp
+                  className={`h-4 w-4 ${getTrustScoreColor(mcp.trust_score || 0)}`}
+                />
+                <span
+                  className={`text-lg font-semibold ${getTrustScoreColor(mcp.trust_score || 0)}`}
+                >
                   {(mcp.trust_score || 0).toFixed(1)}
                 </span>
               </div>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Capabilities</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Capabilities
+              </span>
               <span className="text-lg font-semibold text-gray-900 dark:text-white">
                 {mcp.capabilities?.length || 0}
               </span>
@@ -153,8 +183,12 @@ export function MCPDetailModal({
           {/* Description */}
           {mcp.description && (
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{mcp.description}</p>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {mcp.description}
+              </p>
             </div>
           )}
 
@@ -168,9 +202,11 @@ export function MCPDetailModal({
               <div className="space-y-3">
                 {mcp.capabilities.map((capability) => {
                   const typeColors = {
-                    tool: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100',
-                    resource: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-100',
-                    prompt: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-900 dark:text-green-100'
+                    tool: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100",
+                    resource:
+                      "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-100",
+                    prompt:
+                      "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-900 dark:text-green-100",
                   };
 
                   return (
@@ -210,8 +246,18 @@ export function MCPDetailModal({
           {/* Talks To (Agents) */}
           <div>
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
               </svg>
               Talks To
             </h3>
@@ -236,8 +282,12 @@ export function MCPDetailModal({
           {/* Basic Details Grid */}
           <div className="grid grid-cols-2 gap-6">
             <div className="col-span-2">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Server URL</h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">{mcp.url}</p>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Server URL
+              </h3>
+              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">
+                {mcp.url}
+              </p>
             </div>
 
             <div>
@@ -245,7 +295,9 @@ export function MCPDetailModal({
                 <Calendar className="h-4 w-4" />
                 Registered
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100">{formatDateTime(mcp.created_at)}</p>
+              <p className="text-sm text-gray-900 dark:text-gray-100">
+                {formatDateTime(mcp.created_at)}
+              </p>
             </div>
 
             <div>
@@ -254,7 +306,9 @@ export function MCPDetailModal({
                 Last Activity
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100">
-                {mcp.last_verified_at ? formatDateTime(mcp.last_verified_at) : 'Never'}
+                {mcp.last_verified_at
+                  ? formatDateTime(mcp.last_verified_at)
+                  : "Never"}
               </p>
             </div>
           </div>
@@ -264,28 +318,36 @@ export function MCPDetailModal({
             <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cryptographic Identity</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Cryptographic Identity
+                </h3>
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public Key Fingerprint (SHA-256)</h4>
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Public Key Fingerprint (SHA-256)
+                    </h4>
                     <p className="text-xs text-gray-900 dark:text-gray-100 font-mono bg-white dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700 break-all">
                       {calculateFingerprint(mcp.public_key)}
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Key Type</h4>
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Key Type
+                    </h4>
                     <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                      {mcp.key_type || 'RSA-2048'}
+                      {mcp.key_type || "RSA-2048"}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public Key</h4>
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Public Key
+                  </h4>
                   <div className="relative">
                     <pre className="text-xs text-gray-900 dark:text-gray-100 font-mono bg-white dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto max-h-32">
                       {mcp.public_key}
@@ -317,21 +379,31 @@ export function MCPDetailModal({
 
           {/* Registration Timeline */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Registration Timeline</h3>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Registration Timeline
+            </h3>
             <div className="space-y-2">
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">MCP server registered & verified</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDateTime(mcp.created_at)}</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    MCP server registered & verified
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatDateTime(mcp.created_at)}
+                  </p>
                 </div>
               </div>
               {mcp.public_key && (
                 <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   <div className="flex-1">
-                    <p className="text-sm text-gray-900 dark:text-gray-100">Capabilities auto-detected from metadata</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{mcp.capability_count || 0} capabilities registered</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">
+                      Capabilities auto-detected from metadata
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {mcp.capability_count || 0} capabilities registered
+                    </p>
                   </div>
                 </div>
               )}
@@ -339,8 +411,12 @@ export function MCPDetailModal({
                 <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <Clock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   <div className="flex-1">
-                    <p className="text-sm text-gray-900 dark:text-gray-100">Last activity</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatDateTime(mcp.last_verified_at)}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">
+                      Last activity
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {formatDateTime(mcp.last_verified_at)}
+                    </p>
                   </div>
                 </div>
               )}

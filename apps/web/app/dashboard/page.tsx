@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Shield,
   Users,
@@ -12,12 +12,26 @@ import {
   Clock,
   Network,
   Loader2,
-  AlertCircle
-} from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { api } from '@/lib/api';
-import { getDashboardPermissions, type UserRole } from '@/lib/permissions';
-import { TimezoneIndicator } from '@/components/timezone-indicator';
+  AlertCircle,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from "recharts";
+import { api } from "@/lib/api";
+import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
+import { TimezoneIndicator } from "@/components/timezone-indicator";
+import {
+  DashboardSkeleton,
+  ChartSkeleton,
+} from "@/components/ui/content-loaders";
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -45,6 +59,35 @@ interface DashboardStats {
   organization_id: string;
 }
 
+interface TrustScoreTrend {
+  date: string;
+  week_start?: string; // Only for weekly data
+  avg_score: number;
+  agent_count: number;
+}
+
+interface TrustScoreTrendsData {
+  period: string;
+  current_average: number;
+  data_type: "weekly" | "daily";
+  trends: TrustScoreTrend[];
+}
+
+interface VerificationActivityData {
+  period: string;
+  activity: Array<{
+    month: string;
+    verified: number;
+    pending: number;
+    month_year: string;
+  }>;
+  current_stats: {
+    total_verified: number;
+    total_pending: number;
+    total_agents: number;
+  };
+}
+
 function StatCard({ stat }: { stat: any }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -54,13 +97,19 @@ function StatCard({ stat }: { stat: any }) {
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{stat.name}</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+              {stat.name}
+            </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{stat.value}</div>
+              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {stat.value}
+              </div>
               {stat.change && (
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+                    stat.changeType === "positive"
+                      ? "text-green-600"
+                      : "text-red-600"
                   }`}
                 >
                   {stat.change}
@@ -77,41 +126,40 @@ function StatCard({ stat }: { stat: any }) {
 function StatusBadge({ status }: { status: string }) {
   const getStatusStyles = (status: string) => {
     switch (status) {
-      case 'success':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-      case 'failed':
-        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
-      case 'pending':
-        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
+      case "success":
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+      case "failed":
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+      case "pending":
+        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
       default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
     }
   };
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}
+    >
       {status}
     </span>
   );
 }
 
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading dashboard data...</p>
-      </div>
-    </div>
-  );
-}
-
-function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorDisplay({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
         <AlertCircle className="h-12 w-12 text-red-500" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Failed to Load Dashboard</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Failed to Load Dashboard
+        </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
         <button
           onClick={onRetry}
@@ -138,27 +186,38 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
-  const [userRole, setUserRole] = useState<UserRole>('viewer');
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(
+    null
+  );
+  const [trustScoreTrends, setTrustScoreTrends] =
+    useState<TrustScoreTrendsData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+  const [verificationActivity, setVerificationActivity] =
+    useState<VerificationActivityData | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [userRole, setUserRole] = useState<UserRole>("viewer");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    email: string;
+  } | null>(null);
 
   // Extract user info from JWT token
   useEffect(() => {
     const token = api.getToken();
     if (token) {
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserRole((payload.role as UserRole) || 'viewer');
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUserRole((payload.role as UserRole) || "viewer");
         // Extract user ID and email from JWT
         setCurrentUser({
-          id: payload.sub || payload.user_id || '',
-          email: payload.email || ''
+          id: payload.sub || payload.user_id || "",
+          email: payload.email || "",
         });
       } catch (e) {
-        console.error('Failed to decode JWT token:', e);
-        setUserRole('viewer');
+        console.error("Failed to decode JWT token:", e);
+        setUserRole("viewer");
       }
     }
   }, []);
@@ -167,14 +226,64 @@ function DashboardContent() {
     try {
       setLoading(true);
       setError(null);
+      console.log("fetchDashboardData");
       const data = await api.getDashboardStats();
+      console.log("fetchDashboardData>>>>>>>>>>>>>>>>", data);
       setDashboardData(data);
     } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      console.error("Failed to fetch dashboard data:", err);
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred"
+      );
       // No mock data fallback - show error instead
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrustScoreTrends = async () => {
+    try {
+      setTrendsLoading(true);
+      console.log("fetchTrustScoreTrends: Fetching 4-week trust score trends");
+      const data = await api.getTrustScoreTrends(4, "weeks"); // Request 4 weeks of data
+      console.log("fetchTrustScoreTrends data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.trends && data.trends.length > 0) {
+        setTrustScoreTrends(data);
+      } else {
+        console.warn("No trend data returned from API");
+        setTrustScoreTrends(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch trust score trends:", err);
+      setTrustScoreTrends(null); // Set to null to show error state, no dummy data
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
+  const fetchVerificationActivity = async () => {
+    try {
+      setActivityLoading(true);
+      console.log(
+        "fetchVerificationActivity: Fetching verification activity data"
+      );
+      const data = await api.getVerificationActivity(6); // Request 6 months of data
+      console.log("fetchVerificationActivity data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.activity && data.activity.length > 0) {
+        setVerificationActivity(data);
+      } else {
+        console.warn("No verification activity data returned from API");
+        setVerificationActivity(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch verification activity:", err);
+      setVerificationActivity(null); // Set to null to show error state, no dummy data
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -190,11 +299,15 @@ function DashboardContent() {
       // Only show actual changes: create, update, delete, verify, grant, revoke, etc.
       const filtered = logs.filter((log: AuditLog) => {
         // Exclude ALL view actions completely
-        if (log.action === 'view') return false;
+        if (log.action === "view") return false;
 
         // Also exclude automated system actions that aren't interesting
-        if (log.resource_type === 'dashboard_stats') return false;
-        if (log.resource_type === 'organization_settings' && log.action === 'view') return false;
+        if (log.resource_type === "dashboard_stats") return false;
+        if (
+          log.resource_type === "organization_settings" &&
+          log.action === "view"
+        )
+          return false;
 
         // Keep only meaningful actions: create, update, delete, verify, grant, revoke, suspend, acknowledge
         return true;
@@ -202,13 +315,15 @@ function DashboardContent() {
 
       // Sort by timestamp DESC (most recent first) to show latest activities
       const sorted = filtered.sort((a, b) => {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return (
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
       });
 
       // Take first 10 most recent activities (agent/MCP creates, verifications, etc.)
       setAuditLogs(sorted.slice(0, 10));
     } catch (err) {
-      console.error('Failed to fetch audit logs:', err);
+      console.error("Failed to fetch audit logs:", err);
       // Fail silently - keep empty array
     } finally {
       setLogsLoading(false);
@@ -217,14 +332,16 @@ function DashboardContent() {
 
   useEffect(() => {
     // Check if OAuth returned with a token
-    const token = searchParams.get('token');
+    const token = searchParams.get("token");
     if (token) {
       api.setToken(token);
       // Clean up URL
-      window.history.replaceState({}, '', '/dashboard');
+      window.history.replaceState({}, "", "/dashboard");
     }
-
+    console.log("runing useEffect");
     fetchDashboardData();
+    fetchTrustScoreTrends();
+    fetchVerificationActivity();
     fetchAuditLogs();
   }, [searchParams]);
 
@@ -233,18 +350,18 @@ function DashboardContent() {
   // When backend is rebuilt, it will fetch actual MCP servers from mcp_servers table
   const getMockData = (): DashboardStats => ({
     // Agent metrics
-    total_agents: 3,       // Matches backend response
+    total_agents: 3, // Matches backend response
     verified_agents: 0,
     pending_agents: 3,
     verification_rate: 0,
     avg_trust_score: 0.38,
 
     // MCP Server metrics
-    total_mcp_servers: 7,  // Backend will return this after fix is deployed
+    total_mcp_servers: 7, // Backend will return this after fix is deployed
     active_mcp_servers: 0,
 
     // User metrics
-    total_users: 1,         // Current logged-in user
+    total_users: 1, // Current logged-in user
     active_users: 1,
 
     // Security metrics
@@ -253,11 +370,11 @@ function DashboardContent() {
     security_incidents: 0,
 
     // Organization
-    organization_id: '',
+    organization_id: "",
   });
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <DashboardSkeleton />;
   }
 
   if (error && !dashboardData) {
@@ -272,45 +389,46 @@ function DashboardContent() {
   // Helper function to format audit log event name with entity details
   const formatEventName = (log: AuditLog): string => {
     const action = log.action.charAt(0).toUpperCase() + log.action.slice(1);
-    const resource = log.resource_type.replace(/_/g, ' ');
+    const resource = log.resource_type.replace(/_/g, " ");
 
     // Extract entity name from metadata for more meaningful display
-    let entityName = '';
+    let entityName = "";
     if (log.metadata) {
       // Try to get specific entity name from metadata
-      entityName = log.metadata.agent_name ||
-                   log.metadata.server_name ||
-                   log.metadata.mcp_name ||
-                   log.metadata.key_name ||
-                   log.metadata.tag_name ||
-                   '';
+      entityName =
+        log.metadata.agent_name ||
+        log.metadata.server_name ||
+        log.metadata.mcp_name ||
+        log.metadata.key_name ||
+        log.metadata.tag_name ||
+        "";
     }
 
     // Format with entity name if available
-    const entityDisplay = entityName ? ` "${entityName}"` : '';
+    const entityDisplay = entityName ? ` "${entityName}"` : "";
 
     // Special handling for specific action types
-    if (log.action === 'view') {
+    if (log.action === "view") {
       return `Viewed ${resource}${entityDisplay}`;
-    } else if (log.action === 'create') {
+    } else if (log.action === "create") {
       return `Created ${resource}${entityDisplay}`;
-    } else if (log.action === 'verify') {
+    } else if (log.action === "verify") {
       return `Verified ${resource}${entityDisplay}`;
-    } else if (log.action === 'update') {
+    } else if (log.action === "update") {
       return `Updated ${resource}${entityDisplay}`;
-    } else if (log.action === 'delete') {
+    } else if (log.action === "delete") {
       return `Deleted ${resource}${entityDisplay}`;
-    } else if (log.action === 'grant') {
+    } else if (log.action === "grant") {
       return `Granted ${resource}${entityDisplay}`;
-    } else if (log.action === 'revoke') {
+    } else if (log.action === "revoke") {
       return `Revoked ${resource}${entityDisplay}`;
-    } else if (log.action === 'suspend') {
+    } else if (log.action === "suspend") {
       return `Suspended ${resource}${entityDisplay}`;
-    } else if (log.action === 'acknowledge') {
+    } else if (log.action === "acknowledge") {
       return `Acknowledged ${resource}${entityDisplay}`;
-    } else if (log.resource_type === 'agent_action') {
+    } else if (log.resource_type === "agent_action") {
       // For agent actions, use the action name as the event
-      return action.replace(/_/g, ' ');
+      return action.replace(/_/g, " ");
     }
 
     return `${action} ${resource}${entityDisplay}`;
@@ -347,32 +465,35 @@ function DashboardContent() {
 
     // Fallback: show user ID if available
     if (log.user_id) {
-      const shortId = log.user_id.split('-')[0];
+      const shortId = log.user_id.split("-")[0];
       return `User ${shortId}`;
     }
 
     // Last resort
-    return 'System';
+    return "System";
   };
 
   // Helper function to categorize the event type
   const getEventType = (log: AuditLog): string => {
-    if (log.resource_type.includes('agent')) {
-      return 'Agent Management';
-    } else if (log.resource_type.includes('mcp')) {
-      return 'MCP Servers';
-    } else if (log.resource_type.includes('auth') || log.action === 'login') {
-      return 'Authentication';
-    } else if (log.resource_type.includes('alert') || log.resource_type.includes('security')) {
-      return 'Security';
-    } else if (log.resource_type.includes('api_key')) {
-      return 'API Keys';
-    } else if (log.resource_type.includes('user')) {
-      return 'User Management';
-    } else if (log.action === 'view') {
-      return 'View';
+    if (log.resource_type.includes("agent")) {
+      return "Agent Management";
+    } else if (log.resource_type.includes("mcp")) {
+      return "MCP Servers";
+    } else if (log.resource_type.includes("auth") || log.action === "login") {
+      return "Authentication";
+    } else if (
+      log.resource_type.includes("alert") ||
+      log.resource_type.includes("security")
+    ) {
+      return "Security";
+    } else if (log.resource_type.includes("api_key")) {
+      return "API Keys";
+    } else if (log.resource_type.includes("user")) {
+      return "User Management";
+    } else if (log.action === "view") {
+      return "View";
     }
-    return 'System';
+    return "System";
   };
 
   // Helper function to format relative time
@@ -385,53 +506,47 @@ function DashboardContent() {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffSecs < 10) return 'Just now';
+    if (diffSecs < 10) return "Just now";
     if (diffSecs < 60) return `${diffSecs} seconds ago`;
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 60)
+      return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
+    if (diffHours < 24)
+      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 
     return then.toLocaleDateString();
   };
 
-  // Prepare stats for display using actual backend field names
+  // Prepare required stat cards
   const allStats = [
     {
-      name: 'Total Agents',
+      name: "Total Agents",
       value: data.total_agents.toLocaleString(),
-      change: `${data.verification_rate.toFixed(1)}% verified`,
-      changeType: 'positive' as const,
-      icon: Shield,
-      permission: 'canViewAgentStats' as const,
+      icon: Users,
+      permission: "canViewAgentStats" as const,
     },
     {
-      name: 'MCP Servers',
-      value: data.total_mcp_servers.toLocaleString(),
-      change: `${data.active_mcp_servers} active`,
-      changeType: 'positive' as const,
-      icon: Network,
-      permission: 'canViewMCPStats' as const,
+      name: "Verified Agents",
+      value: data.verified_agents.toLocaleString(),
+      icon: CheckCircle,
+      permission: "canViewAgentStats" as const,
     },
     {
-      name: 'Avg Trust Score',
-      value: data.avg_trust_score.toFixed(1),
-      change: data.avg_trust_score >= 80 ? 'Excellent' : data.avg_trust_score >= 60 ? 'Good' : 'Fair',
-      changeType: data.avg_trust_score >= 80 ? 'positive' as const : 'negative' as const,
+      name: "Trust Score Average",
+      value: data.avg_trust_score.toFixed(2),
       icon: TrendingUp,
-      permission: 'canViewTrustScore' as const,
+      permission: "canViewTrustScore" as const,
     },
     {
-      name: 'Active Alerts',
-      value: data.active_alerts.toLocaleString(),
-      change: data.critical_alerts > 0 ? `${data.critical_alerts} critical` : 'Normal',
-      changeType: data.critical_alerts > 0 ? 'negative' as const : 'positive' as const,
-      icon: AlertTriangle,
-      permission: 'canViewAlerts' as const,
+      name: "Recent Activity Count",
+      value: auditLogs.length.toLocaleString(),
+      icon: Activity,
+      permission: "canViewRecentActivity" as const,
     },
   ];
 
   // Filter stats based on role permissions
-  const stats = allStats.filter(stat => permissions[stat.permission]);
+  const stats = allStats.filter((stat) => permissions[stat.permission]);
 
   return (
     <div className="space-y-6">
@@ -439,9 +554,12 @@ function DashboardContent() {
       <div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Dashboard Overview
+            </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Monitor agent verification activities and system performance across all protocols.
+              Monitor agent verification activities and system performance
+              across all protocols.
             </p>
           </div>
           <TimezoneIndicator />
@@ -468,112 +586,272 @@ function DashboardContent() {
         {permissions.canViewTrustTrend && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Trust Score Trend (30 Days)</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Trust Score Trend (30 Days)
+              </h3>
               <TrendingUp className="h-5 w-5 text-gray-400" />
             </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={[
-                { day: 'Week 1', score: 82 },
-                { day: 'Week 2', score: 85 },
-                { day: 'Week 3', score: 87 },
-                { day: 'Week 4', score: data.avg_trust_score || 0 },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis
-                  dataKey="day"
-                  className="text-xs text-gray-500 dark:text-gray-400"
-                  stroke="#9CA3AF"
-                />
-                <YAxis
-                  className="text-xs text-gray-500 dark:text-gray-400"
-                  stroke="#9CA3AF"
-                  domain={[0, 100]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '0.5rem',
-                    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)'
-                  }}
-                />
-                <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={3} name="Trust Score" />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="h-64">
+              {trendsLoading ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(6)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div
+                          className="w-full animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
+                          style={{ height: `${Math.random() * 120 + 30}px` }}
+                        />
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-8 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : trustScoreTrends &&
+                trustScoreTrends.trends &&
+                trustScoreTrends.trends.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={trustScoreTrends.trends.map((trend) => ({
+                      period: trend.date, // Backend provides "Week 1", "Week 2", etc.
+                      score: Math.round(trend.avg_score * 100), // Convert to percentage (0-100)
+                      agent_count: trend.agent_count,
+                      week_start: trend.week_start, // For tooltip info
+                    }))}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="period"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        `${value}%`,
+                        name === "score"
+                          ? "Trust Score"
+                          : name === "agent_count"
+                            ? "Agent Count"
+                            : name,
+                      ]}
+                      labelFormatter={(label, payload) => {
+                        if (
+                          payload &&
+                          payload[0] &&
+                          payload[0].payload.week_start
+                        ) {
+                          return `${label} (Starting ${payload[0].payload.week_start})`;
+                        }
+                        return label;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      name="Trust Score"
+                      dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Data Available
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Trust score trends will appear here once agents start
+                      generating activity
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Show period info only when we have valid data */}
+            {trustScoreTrends &&
+              trustScoreTrends.trends &&
+              trustScoreTrends.trends.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                  {trustScoreTrends.period} • Current Average:{" "}
+                  {Math.round(trustScoreTrends.current_average * 100)}%
+                </div>
+              )}
           </div>
-        </div>
         )}
 
         {/* Agent Activity - All roles can see */}
         {permissions.canViewActivityChart && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agent Verification Activity</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Agent Verification Activity
+              </h3>
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[
-                { month: 'Jan', verified: 12, pending: 3 },
-                { month: 'Feb', verified: 18, pending: 2 },
-                { month: 'Mar', verified: data.verified_agents, pending: data.pending_agents },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis
-                  dataKey="month"
-                  className="text-xs text-gray-500 dark:text-gray-400"
-                  stroke="#9CA3AF"
-                />
-                <YAxis
-                  className="text-xs text-gray-500 dark:text-gray-400"
-                  stroke="#9CA3AF"
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '0.5rem',
-                    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)'
-                  }}
-                />
-                <Bar dataKey="verified" fill="#22c55e" name="Verified" />
-                <Bar dataKey="pending" fill="#eab308" name="Pending" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="h-64">
+              {activityLoading ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div className="w-full flex gap-1">
+                          <div
+                            className="w-1/2 animate-pulse bg-green-200 dark:bg-green-800 rounded"
+                            style={{ height: `${Math.random() * 100 + 40}px` }}
+                          />
+                          <div
+                            className="w-1/2 animate-pulse bg-yellow-200 dark:bg-yellow-800 rounded"
+                            style={{ height: `${Math.random() * 80 + 30}px` }}
+                          />
+                        </div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-12 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : verificationActivity &&
+                verificationActivity.activity &&
+                verificationActivity.activity.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={verificationActivity.activity.slice(-3)} // Show last 3 months
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="month"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        value,
+                        name === "verified"
+                          ? "Verified Agents"
+                          : "Pending Agents",
+                      ]}
+                      labelFormatter={(label) => `Month: ${label}`}
+                    />
+                    <Bar dataKey="verified" fill="#22c55e" name="Verified" />
+                    <Bar dataKey="pending" fill="#eab308" name="Pending" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Activity Data
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Verification activity will appear here once agents are
+                      registered
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Show activity stats */}
+            {verificationActivity && verificationActivity.current_stats && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                Total: {verificationActivity.current_stats.total_agents} agents
+                • Verified: {verificationActivity.current_stats.total_verified}{" "}
+                • Pending: {verificationActivity.current_stats.total_pending}
+              </div>
+            )}
           </div>
-        </div>
         )}
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 gap-6 ${permissions.canViewSecurityMetrics ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+      <div
+        className={`grid grid-cols-1 gap-6 ${permissions.canViewSecurityMetrics ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
+      >
         {/* Agent Metrics - All roles can see */}
         {permissions.canViewDetailedMetrics && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-blue-500" />
-            Agent Metrics
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Total Agents</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.total_agents}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Verified</span>
-              <span className="text-sm font-medium text-green-600">{data.verified_agents}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Pending</span>
-              <span className="text-sm font-medium text-yellow-600">{data.pending_agents}</span>
-            </div>
-            <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Verification Rate</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.verification_rate.toFixed(1)}%</span>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-500" />
+              Agent Metrics
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Total Agents
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {data.total_agents}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Verified
+                </span>
+                <span className="text-sm font-medium text-green-600">
+                  {data.verified_agents}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Pending
+                </span>
+                <span className="text-sm font-medium text-yellow-600">
+                  {data.pending_agents}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Verification Rate
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {data.verification_rate.toFixed(1)}%
+                </span>
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {/* Security Metrics - Manager+ Only */}
@@ -585,22 +863,38 @@ function DashboardContent() {
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Active Alerts</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.active_alerts}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Active Alerts
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {data.active_alerts}
+                </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Critical</span>
-                <span className="text-sm font-medium text-red-600">{data.critical_alerts}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Critical
+                </span>
+                <span className="text-sm font-medium text-red-600">
+                  {data.critical_alerts}
+                </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Incidents</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.security_incidents}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Incidents
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {data.security_incidents}
+                </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className="text-sm text-gray-500 dark:text-gray-400">System Status</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  System Status
+                </span>
                 <div className="flex items-center gap-1">
                   <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span className="text-sm font-medium text-green-600">Operational</span>
+                  <span className="text-sm font-medium text-green-600">
+                    Operational
+                  </span>
                 </div>
               </div>
             </div>
@@ -610,45 +904,81 @@ function DashboardContent() {
         {/* Platform/MCP Metrics - All roles see this */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            {permissions.canViewUserStats ? <Users className="h-5 w-5 text-purple-500" /> : <Network className="h-5 w-5 text-purple-500" />}
-            {permissions.canViewUserStats ? 'Platform Metrics' : 'MCP Servers'}
+            {permissions.canViewUserStats ? (
+              <Users className="h-5 w-5 text-purple-500" />
+            ) : (
+              <Network className="h-5 w-5 text-purple-500" />
+            )}
+            {permissions.canViewUserStats ? "Platform Metrics" : "MCP Servers"}
           </h3>
           <div className="space-y-3">
             {permissions.canViewUserStats && (
               <>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Total Users</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.total_users}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Total Users
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {data.total_users}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Active Users</span>
-                  <span className="text-sm font-medium text-green-600">{data.active_users}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Active Users
+                  </span>
+                  <span className="text-sm font-medium text-green-600">
+                    {data.active_users}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">MCP Servers</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.total_mcp_servers}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    MCP Servers
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {data.total_mcp_servers}
+                  </span>
                 </div>
               </>
             )}
             {!permissions.canViewUserStats && (
               <>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Total MCP Servers</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.total_mcp_servers}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Total MCP Servers
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {data.total_mcp_servers}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Active MCP Servers</span>
-                  <span className="text-sm font-medium text-green-600">{data.active_mcp_servers}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Active MCP Servers
+                  </span>
+                  <span className="text-sm font-medium text-green-600">
+                    {data.active_mcp_servers}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Total Agents</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data.total_agents}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Total Agents
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {data.total_agents}
+                  </span>
                 </div>
               </>
             )}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">{permissions.canViewUserStats ? 'Active MCPs' : 'Verified Agents'}</span>
-              <span className="text-sm font-medium text-green-600">{permissions.canViewUserStats ? data.active_mcp_servers : data.verified_agents}</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {permissions.canViewUserStats
+                  ? "Active MCPs"
+                  : "Verified Agents"}
+              </span>
+              <span className="text-sm font-medium text-green-600">
+                {permissions.canViewUserStats
+                  ? data.active_mcp_servers
+                  : data.verified_agents}
+              </span>
             </div>
           </div>
         </div>
@@ -657,91 +987,110 @@ function DashboardContent() {
       {/* Recent Activity Table - All roles can see */}
       {permissions.canViewRecentActivity && (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Recent Activity</h3>
-            <Clock className="h-5 w-5 text-gray-400" />
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Recent Activity
+              </h3>
+              <Clock className="h-5 w-5 text-gray-400" />
+            </div>
           </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Event
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Initiated By
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Timestamp
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {logsLoading ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto" />
-                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading recent activity...</p>
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Event
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Initiated By
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Timestamp
+                  </th>
                 </tr>
-              ) : auditLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity found</p>
-                  </td>
-                </tr>
-              ) : (
-                auditLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {formatEventName(log)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-700 dark:text-gray-300">
-                        {getInitiatedBy(log)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                        {getEventType(log)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                        ✓ success
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {formatRelativeTime(log.timestamp)}
-                      </div>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                {logsLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                      </td>
+                    </tr>
+                  ))
+                ) : auditLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        No recent activity found
+                      </p>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  auditLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {formatEventName(log)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          {getInitiatedBy(log)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                          {getEventType(log)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                          ✓ success
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {formatRelativeTime(log.timestamp)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
-
     </div>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<LoadingSpinner />}>
+    <Suspense fallback={<DashboardSkeleton />}>
       <DashboardContent />
     </Suspense>
   );

@@ -80,27 +80,27 @@ func Load() (*Config, error) {
 			Environment: getEnv("ENVIRONMENT", "development"),
 			LogLevel:    getEnv("LOG_LEVEL", "info"),
 		},
-		Database: DatabaseConfig{
-			Host:            getEnv("POSTGRES_HOST", "localhost"),
-			Port:            getEnvAsInt("POSTGRES_PORT", 5432),
-			User:            getEnv("POSTGRES_USER", "postgres"),
-			Password:        getEnv("POSTGRES_PASSWORD", "postgres"),
-			Database:        getEnv("POSTGRES_DB", "identity"),
-			SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
-			MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
-			ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
-		},
+	Database: DatabaseConfig{
+		Host:            getEnvRequired("POSTGRES_HOST"),
+		Port:            getEnvAsInt("POSTGRES_PORT", 5432),
+		User:            getEnvRequired("POSTGRES_USER"),
+		Password:        getEnvRequired("POSTGRES_PASSWORD"),
+		Database:        getEnvRequired("POSTGRES_DB"),
+		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
+		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
+		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
+	},
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
 		},
-		JWT: JWTConfig{
-			Secret:          getEnv("JWT_SECRET", ""),
-			AccessTokenTTL:  getEnvAsDuration("JWT_ACCESS_TTL", 24*time.Hour),
-			RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
-		},
+	JWT: JWTConfig{
+		Secret:          getEnvRequired("JWT_SECRET"),
+		AccessTokenTTL:  getEnvAsDuration("JWT_ACCESS_TTL", 24*time.Hour),
+		RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+	},
 		OAuth: OAuthConfig{
 			Google: OAuthProvider{
 				ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
@@ -187,6 +187,15 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 	value, err := time.ParseDuration(valueStr)
 	if err != nil {
 		return defaultValue
+	}
+	return value
+}
+
+// getEnvRequired gets environment variable and panics if not set
+func getEnvRequired(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		panic(fmt.Sprintf("Required environment variable %s is not set", key))
 	}
 	return value
 }

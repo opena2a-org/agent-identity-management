@@ -1,34 +1,76 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import {
   Users,
   ShieldAlert,
   FileText,
   TrendingUp,
   AlertTriangle,
-  CheckCircle2
-} from 'lucide-react'
+  CheckCircle2,
+} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/date-utils";
 
 interface AdminStats {
-  totalUsers: number
-  totalOrganizations: number
-  pendingAgents: number
-  unacknowledgedAlerts: number
-  totalAuditLogs: number
-  recentActions24h: number
+  totalUsers: number;
+  totalOrganizations: number;
+  pendingAgents: number;
+  unacknowledgedAlerts: number;
+  totalAuditLogs: number;
+  recentActions24h: number;
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
+    "viewer"
+  );
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
+
+  // Admin-only guard
+  useEffect(() => {
+    try {
+      const token = (require("@/lib/api") as any).api.getToken?.();
+      if (!token) {
+        router.replace("/auth/login");
+        return;
+      }
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const userRole = (payload.role as any) || "viewer";
+      setRole(userRole);
+      if (userRole !== "admin") {
+        router.replace("/dashboard");
+        return;
+      }
+    } catch {
+      router.replace("/auth/login");
+      return;
+    } finally {
+      setAuthChecked(true);
+    }
+  }, [router]);
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    if (!authChecked || role !== "admin") return;
+    fetchStats();
+    fetchRecent();
+  }, [authChecked, role]);
 
   const fetchStats = async () => {
     try {
@@ -40,17 +82,70 @@ export default function AdminDashboard() {
         pendingAgents: 3,
         unacknowledgedAlerts: 7,
         totalAuditLogs: 1247,
-        recentActions24h: 156
-      })
+        recentActions24h: 156,
+      });
     } catch (error) {
-      console.error('Failed to fetch admin stats:', error)
+      console.error("Failed to fetch admin stats:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
+  };
+
+  const fetchRecent = async () => {
+    try {
+      setRecentLoading(true);
+      const logs = await api.getAuditLogs(10, 0);
+      setRecentLogs(logs || []);
+    } catch (e) {
+      console.error("Failed to fetch recent audit logs", e);
+      setRecentLogs([]);
+    } finally {
+      setRecentLoading(false);
+    }
+  };
+
+  if (!authChecked || role !== "admin") {
+    return null;
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96">Loading...</div>
+    return (
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-40" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[...Array(4)].map((_, j) => (
+                  <Skeleton key={j} className="h-16 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -79,7 +174,9 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Agents</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Pending Agents
+            </CardTitle>
             <ShieldAlert className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
@@ -92,33 +189,39 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unacknowledged Alerts</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Unacknowledged Alerts
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.unacknowledgedAlerts}</div>
-            <p className="text-xs text-muted-foreground">
-              Require attention
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.unacknowledgedAlerts}
+            </div>
+            <p className="text-xs text-muted-foreground">Require attention</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Audit Logs</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Audit Logs
+            </CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalAuditLogs.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              All-time records
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.totalAuditLogs.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">All-time records</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Recent Activity
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -187,35 +290,60 @@ export default function AdminDashboard() {
           <CardDescription>Latest platform actions</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 text-sm">
-              <div className="h-2 w-2 rounded-full bg-green-600" />
-              <span className="text-muted-foreground">2 minutes ago</span>
-              <span>User john@acme.com verified agent "GPT Assistant"</span>
+          {recentLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-6 w-full" />
+              ))}
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="h-2 w-2 rounded-full bg-blue-600" />
-              <span className="text-muted-foreground">15 minutes ago</span>
-              <span>New organization "TechCorp" created</span>
+          ) : recentLogs.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No recent activity
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="h-2 w-2 rounded-full bg-yellow-600" />
-              <span className="text-muted-foreground">1 hour ago</span>
-              <span>Alert: API key "prod-key-1" expiring in 5 days</span>
+          ) : (
+            <div className="space-y-3">
+              {recentLogs.map((log: any) => {
+                const action = (log.action || "").toLowerCase();
+                const color = action.includes("delete")
+                  ? "bg-red-600"
+                  : action.includes("update")
+                    ? "bg-blue-600"
+                    : action.includes("verify") || action.includes("create")
+                      ? "bg-green-600"
+                      : action.includes("alert")
+                        ? "bg-yellow-600"
+                        : "bg-gray-500";
+                const when = log.timestamp
+                  ? formatDateTime(log.timestamp)
+                  : formatDateTime(log.created_at || new Date().toISOString());
+                const who = log.user_email || log.user || "system";
+                const resource = log.resource_type
+                  ? `${log.resource_type}${log.resource_id ? ` ${String(log.resource_id).toString().substring(0, 8)}…` : ""}`
+                  : "";
+                const message =
+                  log.message || log.details || `${who} ${action} ${resource}`;
+                return (
+                  <div
+                    key={log.id || `${log.timestamp}-${Math.random()}`}
+                    className="flex items-center gap-4 text-sm"
+                  >
+                    <div className={`h-2 w-2 rounded-full ${color}`} />
+                    <span className="text-muted-foreground">{when}</span>
+                    <span className="truncate">{message}</span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="h-2 w-2 rounded-full bg-green-600" />
-              <span className="text-muted-foreground">3 hours ago</span>
-              <span>User sarah@startup.io generated new API key</span>
-            </div>
-          </div>
+          )}
           <div className="mt-4">
             <Link href="/dashboard/admin/audit-logs">
-              <Button variant="ghost" className="w-full">View All Activity</Button>
+              <Button variant="ghost" className="w-full">
+                View All Activity
+              </Button>
             </Link>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

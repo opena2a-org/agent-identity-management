@@ -1,8 +1,17 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { X, Loader2, CheckCircle, AlertCircle, Copy, Check, Eye, EyeOff } from 'lucide-react';
-import { api, Agent } from '@/lib/api';
+import { useState } from "react";
+import {
+  X,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { api, Agent } from "@/lib/api";
 
 interface CreateAPIKeyModalProps {
   isOpen: boolean;
@@ -21,7 +30,7 @@ export function CreateAPIKeyModal({
   isOpen,
   onClose,
   onSuccess,
-  agents
+  agents,
 }: CreateAPIKeyModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +40,9 @@ export function CreateAPIKeyModal({
   const [showKey, setShowKey] = useState(true);
 
   const [formData, setFormData] = useState<FormData>({
-    name: '',
-    agent_id: '',
-    expires_in: '90'
+    name: "",
+    agent_id: "",
+    expires_in: "90",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -42,11 +51,11 @@ export function CreateAPIKeyModal({
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'API key name is required';
+      newErrors.name = "API key name is required";
     }
 
     if (!formData.agent_id) {
-      newErrors.agent_id = 'Please select an agent';
+      newErrors.agent_id = "Please select an agent";
     }
 
     setErrors(newErrors);
@@ -69,8 +78,8 @@ export function CreateAPIKeyModal({
       setSuccess(true);
       onSuccess?.(result);
     } catch (err) {
-      console.error('Failed to create API key:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create API key');
+      console.error("Failed to create API key:", err);
+      setError(err instanceof Error ? err.message : "Failed to create API key");
     } finally {
       setLoading(false);
     }
@@ -86,9 +95,9 @@ export function CreateAPIKeyModal({
 
   const resetForm = () => {
     setFormData({
-      name: '',
-      agent_id: '',
-      expires_in: '90'
+      name: "",
+      agent_id: "",
+      expires_in: "90",
     });
     setErrors({});
     setError(null);
@@ -109,14 +118,18 @@ export function CreateAPIKeyModal({
   const isFormDirty = () => {
     // If API key is already created, no confirmation needed
     if (success) return false;
-    return formData.name.trim() !== '' || formData.agent_id !== '';
+    return formData.name.trim() !== "" || formData.agent_id !== "";
   };
 
   // Handle click on overlay (outside modal)
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       if (isFormDirty()) {
-        if (confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+        if (
+          confirm(
+            "You have unsaved changes. Are you sure you want to close without saving?"
+          )
+        ) {
           handleClose();
         }
       } else {
@@ -127,10 +140,14 @@ export function CreateAPIKeyModal({
 
   const getExpirationDate = () => {
     const days = parseInt(formData.expires_in);
-    if (days === 0) return 'Never';
+    if (days === 0) return "Never";
     const date = new Date();
     date.setDate(date.getDate() + days);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
   if (!isOpen) return null;
@@ -138,6 +155,7 @@ export function CreateAPIKeyModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -168,7 +186,8 @@ export function CreateAPIKeyModal({
                       API Key Created Successfully
                     </p>
                     <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                      Make sure to copy your API key now. You won't be able to see it again!
+                      Make sure to copy your API key now. You won't be able to
+                      see it again!
                     </p>
                   </div>
                 </div>
@@ -181,14 +200,18 @@ export function CreateAPIKeyModal({
                 <div className="relative">
                   <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm">
                     <code className="flex-1 overflow-x-auto">
-                      {showKey ? apiKey : '•'.repeat(apiKey.length)}
+                      {showKey ? apiKey : "•".repeat(apiKey.length)}
                     </code>
                     <button
                       onClick={() => setShowKey(!showKey)}
                       className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                      title={showKey ? 'Hide key' : 'Show key'}
+                      title={showKey ? "Hide key" : "Show key"}
                     >
-                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                     <button
                       onClick={copyToClipboard}
@@ -244,10 +267,14 @@ export function CreateAPIKeyModal({
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   placeholder="e.g., Production API Key"
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
+                    errors.name
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                   disabled={loading}
                 />
@@ -263,9 +290,13 @@ export function CreateAPIKeyModal({
                 </label>
                 <select
                   value={formData.agent_id}
-                  onChange={(e) => setFormData({ ...formData, agent_id: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, agent_id: e.target.value })
+                  }
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.agent_id ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'
+                    errors.agent_id
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                   disabled={loading}
                 >
@@ -288,7 +319,9 @@ export function CreateAPIKeyModal({
                 </label>
                 <select
                   value={formData.expires_in}
-                  onChange={(e) => setFormData({ ...formData, expires_in: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, expires_in: e.target.value })
+                  }
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   disabled={loading}
                 >

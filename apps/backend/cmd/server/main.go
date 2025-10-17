@@ -15,6 +15,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/config"
 	"github.com/opena2a/identity/backend/internal/crypto"
@@ -25,7 +26,6 @@ import (
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/middleware"
-	"github.com/jmoiron/sqlx"
 )
 
 // @title Agent Identity Management API
@@ -205,13 +205,13 @@ func main() {
 }
 
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
-	// Build connection string manually with explicit PostgreSQL URL format
-	// This ensures TCP connection even on Mac with local PostgreSQL
-	connStr := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Database.User,
-		cfg.Database.Password,
+	// Build connection string using key=value format to avoid URL encoding issues
+	// This format works better with passwords containing special characters
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
 		cfg.Database.Host,
 		cfg.Database.Port,
+		cfg.Database.User,
+		cfg.Database.Password,
 		cfg.Database.Database,
 		cfg.Database.SSLMode,
 	)
@@ -418,6 +418,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	oauthService := application.NewOAuthService(
 		oauthRepo,
 		repos.User,
+		repos.Organization,
 		authService,
 		auditService,
 		jwtService,
@@ -450,8 +451,8 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 
 	detectionService := application.NewDetectionService(
 		db,
-		trustCalculator,  // ✅ NEW: Inject trust calculator for proper risk assessment
-		repos.Agent,      // ✅ NEW: Inject agent repository to fetch agent data
+		trustCalculator, // ✅ NEW: Inject trust calculator for proper risk assessment
+		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
 	return &Services{
@@ -493,6 +494,7 @@ type Handlers struct {
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
+	PublicRegistration *handlers.PublicRegistrationHandler
 	Tag               *handlers.TagHandler
 	SDK               *handlers.SDKHandler
 	SDKToken          *handlers.SDKTokenHandler
@@ -530,6 +532,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.MCP,
 			services.Audit,
 			services.Alert,
+			services.OAuth,
 		),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,
@@ -569,6 +572,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.Auth,
 			keyVault,
+		),
+		PublicRegistration: handlers.NewPublicRegistrationHandler(
+			services.OAuth,
+			services.Auth,
+			jwtService,
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,
@@ -670,13 +678,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
-	public.Post("/agents/register", h.PublicAgent.Register) // 🚀 ONE-LINE agent registration
+	public.Post("/agents/register", h.PublicAgent.Register)   // 🚀 ONE-LINE agent registration
+	public.Post("/register", h.PublicRegistration.RegisterUser) // 🚀 User registration
+	public.Get("/register/:requestId/status", h.PublicRegistration.CheckRegistrationStatus) // Check registration status
+	public.Post("/login", h.PublicRegistration.Login) // 🚀 Public login
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
-	auth.Post("/login/local", h.Auth.LocalLogin)      // Local email/password login
-	auth.Get("/login/:provider", h.Auth.Login)        // OAuth login
-	auth.Get("/callback/:provider", h.Auth.Callback)  // OAuth callback
+	auth.Post("/login/local", h.Auth.LocalLogin)     // Local email/password login
+	auth.Get("/login/:provider", h.Auth.Login)       // OAuth login
+	auth.Get("/callback/:provider", h.Auth.Callback) // OAuth callback
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
 
@@ -694,10 +705,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// SDK Token Management routes (authentication required)
 	sdkTokens := v1.Group("/users/me/sdk-tokens")
 	sdkTokens.Use(middleware.AuthMiddleware(jwtService))
-	sdkTokens.Get("/", h.SDKToken.ListUserTokens)                // List all SDK tokens
-	sdkTokens.Get("/count", h.SDKToken.GetActiveTokenCount)      // Get active token count
-	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)        // Revoke specific token
-	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens)    // Revoke all tokens
+	sdkTokens.Get("/", h.SDKToken.ListUserTokens)             // List all SDK tokens
+	sdkTokens.Get("/count", h.SDKToken.GetActiveTokenCount)   // Get active token count
+	sdkTokens.Post("/:id/revoke", h.SDKToken.RevokeToken)     // Revoke specific token
+	sdkTokens.Post("/revoke-all", h.SDKToken.RevokeAllTokens) // Revoke all tokens
 
 	// Note: SDK API routes moved to app level (main.go line 159) to avoid middleware inheritance
 
@@ -730,11 +741,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
 	agents.Get("/:id/credentials", h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
-	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                // Get MCP servers agent talks to
-	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)         // Add MCP servers (bulk)
+	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                   // Get MCP servers agent talks to
+	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                  // Add MCP servers (bulk)
 	agents.Delete("/:id/mcp-servers/bulk", middleware.MemberMiddleware(), h.Agent.BulkRemoveMCPServersFromAgent) // Remove multiple MCPs
-	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)  // Remove single MCP
-	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)       // Auto-detect MCPs from config
+	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)   // Remove single MCP
+	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)        // Auto-detect MCPs from config
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -765,7 +776,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/users/:id/approve", h.Admin.ApproveUser)
 	admin.Post("/users/:id/reject", h.Admin.RejectUser)
 	admin.Put("/users/:id/role", h.Admin.UpdateUserRole)
-	admin.Delete("/users/:id", h.Admin.DeactivateUser)
+	
+	// User lifecycle management (soft delete and hard delete)
+	admin.Post("/users/:id/deactivate", h.Admin.DeactivateUser)   // Soft delete - sets deleted_at
+	admin.Post("/users/:id/activate", h.Admin.ActivateUser)       // Reactivate - clears deleted_at
+	admin.Delete("/users/:id", h.Admin.PermanentlyDeleteUser)     // Hard delete - removes from database
+
+	// Registration request management (for pending OAuth registrations)
+	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)
+	admin.Post("/registration-requests/:id/reject", h.Admin.RejectRegistrationRequest)
 
 	// Organization settings
 	admin.Get("/organization/settings", h.Admin.GetOrganizationSettings)
@@ -806,8 +825,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
+	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
+	compliance.Get("/audit-log/data-retention", h.Compliance.GetDataRetention)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
+	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
@@ -845,6 +867,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	analytics.Get("/dashboard", h.Analytics.GetDashboardStats) // Viewer-accessible dashboard stats
 	analytics.Get("/usage", h.Analytics.GetUsageStatistics)
 	analytics.Get("/trends", h.Analytics.GetTrustScoreTrends)
+	analytics.Get("/verification-activity", h.Analytics.GetVerificationActivity) // New endpoint for chart
 	analytics.Get("/reports/generate", h.Analytics.GenerateReport)
 	analytics.Get("/agents/activity", h.Analytics.GetAgentActivity)
 

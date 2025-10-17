@@ -29,17 +29,26 @@ type JWTService struct {
 func NewJWTService() *JWTService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "development-secret-change-in-production"
+		panic("JWT_SECRET environment variable is required")
 	}
 
-	accessExpiry := 24 * time.Hour
-	refreshExpiry := 7 * 24 * time.Hour
+	// Get expiry durations from env or use defaults
+	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "24h"))
+	refreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
 
 	return &JWTService{
 		secret:        []byte(secret),
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
 	}
+}
+
+// getEnv is a helper function to get env var with fallback
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 // GenerateSDKRefreshToken generates a refresh token for SDK usage (90 days)

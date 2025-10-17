@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
@@ -55,13 +56,23 @@ func (p *GoogleProvider) ExchangeCode(ctx context.Context, code string) (accessT
 	data.Set("redirect_uri", p.redirectURI)
 	data.Set("grant_type", "authorization_code")
 
-	req, err := http.NewRequestWithContext(ctx, "POST", googleTokenURL, nil)
+	// Debug logging (can be removed in production)
+	fmt.Printf("🔍 Google OAuth Token Exchange Debug:\n")
+	fmt.Printf("   URL: %s\n", googleTokenURL)
+	fmt.Printf("   Client ID: %s\n", p.clientID)
+	fmt.Printf("   Redirect URI: %s\n", p.redirectURI)
+	codePreview := code
+	if len(code) > 20 {
+		codePreview = code[:20] + "..."
+	}
+	fmt.Printf("   Code: %s\n", codePreview)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", googleTokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.URL.RawQuery = data.Encode()
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -71,6 +82,7 @@ func (p *GoogleProvider) ExchangeCode(ctx context.Context, code string) (accessT
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("❌ Google OAuth Error Response (Status %d):\n%s\n", resp.StatusCode, string(body))
 		return "", "", 0, fmt.Errorf("token exchange failed: %s", string(body))
 	}
 

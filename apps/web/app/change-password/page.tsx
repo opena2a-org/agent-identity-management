@@ -1,134 +1,165 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Shield, Lock, AlertTriangle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Shield,
+  Lock,
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { api } from "@/lib/api";
 
 export default function ChangePasswordPage() {
-  const router = useRouter()
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
-  const [showNewPassword, setShowNewPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const router = useRouter();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('aim_token')
-    if (!token) {
-      router.push('/login')
-      return
-    }
+    const checkUserAuth = async () => {
+      try {
+        // Check if user is logged in by fetching current user
+        const token = api.getToken();
+        if (!token) {
+          router.push("/auth/login");
+          return;
+        }
 
-    // Check if user actually needs to change password
-    const userStr = localStorage.getItem('aim_user')
-    if (userStr) {
-      const user = JSON.parse(userStr)
-      if (!user.force_password_change) {
-        // User doesn't need to change password, redirect to dashboard
-        router.push('/dashboard')
+        // Fetch current user to verify token and get provider
+        const user = await api.getCurrentUser();
+
+        // Only allow password change for local users
+        if (user.provider && user.provider !== "local") {
+          setError(
+            "Password change is only available for users who registered with email and password. OAuth users should manage their password through their provider (Google, Microsoft, etc.)."
+          );
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 5000);
+          return;
+        }
+
+        setCheckingAuth(false);
+      } catch (error) {
+        console.error("Authentication check failed:", error);
+        // If API call fails, redirect to login
+        router.push("/auth/login");
       }
-    }
-  }, [router])
+    };
+
+    checkUserAuth();
+  }, [router]);
 
   const validatePassword = (password: string): string | null => {
-    if (password.length < 12) {
-      return 'Password must be at least 12 characters long'
+    if (password.length < 8) {
+      return "Password must be at least 8 characters long";
     }
     if (!/[A-Z]/.test(password)) {
-      return 'Password must contain at least one uppercase letter'
+      return "Password must contain at least one uppercase letter";
     }
     if (!/[a-z]/.test(password)) {
-      return 'Password must contain at least one lowercase letter'
+      return "Password must contain at least one lowercase letter";
     }
     if (!/[0-9]/.test(password)) {
-      return 'Password must contain at least one digit'
+      return "Password must contain at least one digit";
     }
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-      return 'Password must contain at least one special character'
+      return "Password must contain at least one special character";
     }
-    return null
-  }
+    return null;
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess(false)
+    e.preventDefault();
+    setError("");
+    setSuccess(false);
 
     // Validate passwords match
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match')
-      return
+      setError("New passwords do not match");
+      return;
     }
 
     // Validate new password strength
-    const validationError = validatePassword(newPassword)
+    const validationError = validatePassword(newPassword);
     if (validationError) {
-      setError(validationError)
-      return
+      setError(validationError);
+      return;
     }
 
     // Validate new password is different from current
     if (currentPassword === newPassword) {
-      setError('New password must be different from current password')
-      return
+      setError("New password must be different from current password");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
     try {
-      const token = localStorage.getItem('aim_token')
-      const response = await fetch('http://localhost:8080/api/v1/auth/change-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      })
+      // Use api client which handles token refresh automatically
+      await api.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Password change failed')
-      }
-
-      setSuccess(true)
+      setSuccess(true);
 
       // Update user object to remove force_password_change flag
-      const userStr = localStorage.getItem('aim_user')
+      const userStr = localStorage.getItem("aim_user");
       if (userStr) {
-        const user = JSON.parse(userStr)
-        user.force_password_change = false
-        localStorage.setItem('aim_user', JSON.stringify(user))
+        const user = JSON.parse(userStr);
+        user.force_password_change = false;
+        localStorage.setItem("aim_user", JSON.stringify(user));
       }
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
-        router.push('/dashboard')
-      }, 2000)
+        router.push("/dashboard");
+      }, 2000);
     } catch (error) {
-      console.error('Password change failed:', error)
-      setError(error instanceof Error ? error.message : 'Password change failed')
+      console.error("Password change failed:", error);
+      setError(
+        error instanceof Error ? error.message : "Password change failed"
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const passwordRequirements = [
-    { met: newPassword.length >= 12, text: 'At least 12 characters' },
-    { met: /[A-Z]/.test(newPassword), text: 'One uppercase letter' },
-    { met: /[a-z]/.test(newPassword), text: 'One lowercase letter' },
-    { met: /[0-9]/.test(newPassword), text: 'One number' },
-    { met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword), text: 'One special character' },
-  ]
+    { met: newPassword.length >= 8, text: "At least 8 characters" },
+    { met: /[A-Z]/.test(newPassword), text: "One uppercase letter" },
+    { met: /[a-z]/.test(newPassword), text: "One lowercase letter" },
+    { met: /[0-9]/.test(newPassword), text: "One number" },
+    {
+      met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword),
+      text: "One special character",
+    },
+  ];
+
+  // Show loading state while checking authentication
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-600 mb-4 animate-pulse">
+            <Shield className="w-8 h-8 text-white" />
+          </div>
+          <p className="text-slate-400">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -139,10 +170,10 @@ export default function ChangePasswordPage() {
             <Shield className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            Change Password Required
+            Change Password
           </h1>
           <p className="text-slate-400">
-            For security reasons, you must change your password before continuing
+            Update your password to keep your account secure
           </p>
         </div>
 
@@ -176,13 +207,16 @@ export default function ChangePasswordPage() {
 
                 {/* Current Password */}
                 <div>
-                  <label htmlFor="current-password" className="block text-sm font-medium text-slate-300 mb-2">
+                  <label
+                    htmlFor="current-password"
+                    className="block text-sm font-medium text-slate-300 mb-2"
+                  >
                     Current Password
                   </label>
                   <div className="relative">
                     <input
                       id="current-password"
-                      type={showCurrentPassword ? 'text' : 'password'}
+                      type={showCurrentPassword ? "text" : "password"}
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       required
@@ -191,7 +225,9 @@ export default function ChangePasswordPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      onClick={() =>
+                        setShowCurrentPassword(!showCurrentPassword)
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
                     >
                       {showCurrentPassword ? (
@@ -205,13 +241,16 @@ export default function ChangePasswordPage() {
 
                 {/* New Password */}
                 <div>
-                  <label htmlFor="new-password" className="block text-sm font-medium text-slate-300 mb-2">
+                  <label
+                    htmlFor="new-password"
+                    className="block text-sm font-medium text-slate-300 mb-2"
+                  >
                     New Password
                   </label>
                   <div className="relative">
                     <input
                       id="new-password"
-                      type={showNewPassword ? 'text' : 'password'}
+                      type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
@@ -234,13 +273,16 @@ export default function ChangePasswordPage() {
 
                 {/* Confirm Password */}
                 <div>
-                  <label htmlFor="confirm-password" className="block text-sm font-medium text-slate-300 mb-2">
+                  <label
+                    htmlFor="confirm-password"
+                    className="block text-sm font-medium text-slate-300 mb-2"
+                  >
                     Confirm New Password
                   </label>
                   <div className="relative">
                     <input
                       id="confirm-password"
-                      type={showConfirmPassword ? 'text' : 'password'}
+                      type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
@@ -249,7 +291,9 @@ export default function ChangePasswordPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
                     >
                       {showConfirmPassword ? (
@@ -264,15 +308,24 @@ export default function ChangePasswordPage() {
                 {/* Password Requirements */}
                 {newPassword && (
                   <div className="bg-slate-700/30 rounded-lg p-4 space-y-2">
-                    <p className="text-sm font-medium text-slate-300 mb-2">Password must have:</p>
+                    <p className="text-sm font-medium text-slate-300 mb-2">
+                      Password must have:
+                    </p>
                     {passwordRequirements.map((req, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 text-sm"
+                      >
                         {req.met ? (
                           <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
                         ) : (
                           <div className="w-4 h-4 rounded-full border-2 border-slate-500 flex-shrink-0" />
                         )}
-                        <span className={req.met ? 'text-green-400' : 'text-slate-400'}>
+                        <span
+                          className={
+                            req.met ? "text-green-400" : "text-slate-400"
+                          }
+                        >
                           {req.text}
                         </span>
                       </div>
@@ -286,7 +339,7 @@ export default function ChangePasswordPage() {
                   className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   <Lock className="w-5 h-5" />
-                  {loading ? 'Changing Password...' : 'Change Password'}
+                  {loading ? "Changing Password..." : "Change Password"}
                 </button>
               </form>
             </>
@@ -295,11 +348,9 @@ export default function ChangePasswordPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-slate-500 text-sm">
-          <p>
-            This is a security measure to protect your account
-          </p>
+          <p>This is a security measure to protect your account</p>
         </div>
       </div>
     </div>
-  )
+  );
 }

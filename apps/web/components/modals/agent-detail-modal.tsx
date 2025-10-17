@@ -1,9 +1,26 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { X, Shield, Calendar, CheckCircle, Clock, Edit, Trash2, Key, Package, Code, Download, Copy, Eye, EyeOff, ExternalLink, Loader2 } from 'lucide-react';
-import { Agent, Tag, AgentCapability, api } from '@/lib/api';
-import { TagSelector } from '../ui/tag-selector';
+import { useState, useEffect } from "react";
+import {
+  X,
+  Shield,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Edit,
+  Trash2,
+  Key,
+  Package,
+  Code,
+  Download,
+  Copy,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Loader2,
+} from "lucide-react";
+import { Agent, Tag, AgentCapability, api } from "@/lib/api";
+import { TagSelector } from "../ui/tag-selector";
 
 interface AgentDetailModalProps {
   isOpen: boolean;
@@ -18,7 +35,7 @@ export function AgentDetailModal({
   onClose,
   agent,
   onEdit,
-  onDelete
+  onDelete,
 }: AgentDetailModalProps) {
   const [agentTags, setAgentTags] = useState<Tag[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -28,10 +45,15 @@ export function AgentDetailModal({
   const [loadingCapabilities, setLoadingCapabilities] = useState(false);
 
   // Dual-path download state
-  const [integrationMethod, setIntegrationMethod] = useState<'sdk' | 'manual' | null>(null);
+  const [integrationMethod, setIntegrationMethod] = useState<
+    "sdk" | "manual" | null
+  >(null);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [agentKeys, setAgentKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
+  const [agentKeys, setAgentKeys] = useState<{
+    publicKey: string;
+    privateKey: string;
+  } | null>(null);
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [downloadingSDK, setDownloadingSDK] = useState(false);
   const [showCredentialsSection, setShowCredentialsSection] = useState(false);
@@ -58,7 +80,7 @@ export function AgentDetailModal({
       setAvailableTags(allTags || []);
       setSuggestedTags(suggestions || []);
     } catch (error) {
-      console.error('Failed to load tags:', error);
+      console.error("Failed to load tags:", error);
     } finally {
       setLoadingTags(false);
     }
@@ -71,7 +93,7 @@ export function AgentDetailModal({
       const caps = await api.getAgentCapabilities(agent.id, true);
       setCapabilities(caps || []);
     } catch (error) {
-      console.error('Failed to load capabilities:', error);
+      console.error("Failed to load capabilities:", error);
     } finally {
       setLoadingCapabilities(false);
     }
@@ -80,13 +102,20 @@ export function AgentDetailModal({
   const handleTagsChange = async (newTags: Tag[]) => {
     if (!agent) return;
 
-    const addedTags = newTags.filter(t => !agentTags.some(at => at.id === t.id));
-    const removedTags = agentTags.filter(t => !newTags.some(nt => nt.id === t.id));
+    const addedTags = newTags.filter(
+      (t) => !agentTags.some((at) => at.id === t.id)
+    );
+    const removedTags = agentTags.filter(
+      (t) => !newTags.some((nt) => nt.id === t.id)
+    );
 
     try {
       // Add new tags
       if (addedTags.length > 0) {
-        await api.addTagsToAgent(agent.id, addedTags.map(t => t.id));
+        await api.addTagsToAgent(
+          agent.id,
+          addedTags.map((t) => t.id)
+        );
       }
 
       // Remove tags
@@ -96,18 +125,18 @@ export function AgentDetailModal({
 
       setAgentTags(newTags);
     } catch (error) {
-      console.error('Failed to update tags:', error);
+      console.error("Failed to update tags:", error);
     }
   };
 
-  const handleDownloadSDK = async (language: 'python' | 'node' | 'go') => {
+  const handleDownloadSDK = async (language: "python" | "node" | "go") => {
     if (!agent) return;
 
     setDownloadingSDK(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${agent.id}/sdk?language=${language}`,
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agents/${agent.id}/sdk?language=${language}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -116,12 +145,12 @@ export function AgentDetailModal({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to download SDK');
+        throw new Error("Failed to download SDK");
       }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `${agent.name}-${language}-sdk.zip`;
       document.body.appendChild(a);
@@ -129,8 +158,10 @@ export function AgentDetailModal({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Failed to download SDK:', err);
-      alert('Failed to download SDK. Please try again or use Manual Integration.');
+      console.error("Failed to download SDK:", err);
+      alert(
+        "Failed to download SDK. Please try again or use Manual Integration."
+      );
     } finally {
       setDownloadingSDK(false);
     }
@@ -141,26 +172,33 @@ export function AgentDetailModal({
 
     setLoadingKeys(true);
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/agents/${agent.id}/credentials`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agents/${agent.id}/credentials`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to fetch agent keys: ${response.status} ${errorText}`);
+        throw new Error(
+          `Failed to fetch agent keys: ${response.status} ${errorText}`
+        );
       }
 
       const data = await response.json();
       setAgentKeys({
         publicKey: data.publicKey,
-        privateKey: data.privateKey
+        privateKey: data.privateKey,
       });
     } catch (err) {
-      console.error('Failed to fetch agent keys:', err);
-      alert('Failed to fetch agent credentials. Please try again or contact support.');
+      console.error("Failed to fetch agent keys:", err);
+      alert(
+        "Failed to fetch agent credentials. Please try again or contact support."
+      );
       setIntegrationMethod(null); // Reset to main selection
     } finally {
       setLoadingKeys(false);
@@ -173,21 +211,21 @@ export function AgentDetailModal({
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
     } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
-      alert('Failed to copy to clipboard');
+      console.error("Failed to copy to clipboard:", err);
+      alert("Failed to copy to clipboard");
     }
   };
 
   const handleManualIntegration = () => {
-    setIntegrationMethod('manual');
+    setIntegrationMethod("manual");
     fetchAgentKeys();
   };
 
   // Check if tags have been modified
   const hasUnsavedChanges = () => {
     if (initialTags.length !== agentTags.length) return true;
-    const initialIds = initialTags.map(t => t.id).sort();
-    const currentIds = agentTags.map(t => t.id).sort();
+    const initialIds = initialTags.map((t) => t.id).sort();
+    const currentIds = agentTags.map((t) => t.id).sort();
     return JSON.stringify(initialIds) !== JSON.stringify(currentIds);
   };
 
@@ -196,7 +234,11 @@ export function AgentDetailModal({
     // Only close if clicking the overlay itself, not its children
     if (e.target === e.currentTarget) {
       if (hasUnsavedChanges()) {
-        if (confirm('You have unsaved tag changes. Are you sure you want to close without saving?')) {
+        if (
+          confirm(
+            "You have unsaved tag changes. Are you sure you want to close without saving?"
+          )
+        ) {
           onClose();
         }
       } else {
@@ -209,38 +251,39 @@ export function AgentDetailModal({
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'verified':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-      case 'pending':
-        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
-      case 'suspended':
-      case 'revoked':
-        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      case "verified":
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+      case "pending":
+        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+      case "suspended":
+      case "revoked":
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
       default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
     }
   };
 
   const getTrustScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 dark:text-green-400';
-    if (score >= 60) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (score >= 80) return "text-green-600 dark:text-green-400";
+    if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -254,7 +297,9 @@ export function AgentDetailModal({
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                 {agent.display_name}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{agent.name}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {agent.name}
+              </p>
             </div>
           </div>
           <button
@@ -270,25 +315,40 @@ export function AgentDetailModal({
           {/* Status and Trust Score */}
           <div className="flex items-center gap-4">
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Status</span>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(agent.status)}`}>
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Status
+              </span>
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(agent.status)}`}
+              >
                 {agent.status}
               </span>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Trust Score</span>
-              <span className={`text-2xl font-bold ${getTrustScoreColor(agent.trust_score)}`}>
-                {agent.trust_score <= 1 ? Math.round(agent.trust_score * 100) : Math.round(agent.trust_score)}%
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Trust Score
+              </span>
+              <span
+                className={`text-2xl font-bold ${getTrustScoreColor(agent.trust_score)}`}
+              >
+                {agent.trust_score <= 1
+                  ? Math.round(agent.trust_score * 100)
+                  : Math.round(agent.trust_score)}
+                %
               </span>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">Type</span>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                agent.agent_type === 'ai_agent'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                  : 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300'
-              }`}>
-                {agent.agent_type === 'ai_agent' ? 'AI Agent' : 'MCP Server'}
+              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+                Type
+              </span>
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  agent.agent_type === "ai_agent"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+                    : "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
+                }`}
+              >
+                {agent.agent_type === "ai_agent" ? "AI Agent" : "MCP Server"}
               </span>
             </div>
           </div>
@@ -296,16 +356,24 @@ export function AgentDetailModal({
           {/* Description */}
           {agent.description && (
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{agent.description}</p>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {agent.description}
+              </p>
             </div>
           )}
 
           {/* Tags */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Tags</h3>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Tags
+            </h3>
             {loadingTags ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">Loading tags...</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Loading tags...
+              </div>
             ) : (
               <TagSelector
                 selectedTags={agentTags}
@@ -323,7 +391,9 @@ export function AgentDetailModal({
               Capabilities
             </h3>
             {loadingCapabilities ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">Loading capabilities...</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Loading capabilities...
+              </div>
             ) : capabilities && capabilities.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {capabilities.map((capability) => (
@@ -336,13 +406,14 @@ export function AgentDetailModal({
                       <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                         {capability.capabilityType}
                       </p>
-                      {capability.capabilityScope && Object.keys(capability.capabilityScope).length > 0 && (
-                        <p className="text-xs text-blue-600 dark:text-blue-400">
-                          {Object.entries(capability.capabilityScope)
-                            .map(([key, value]) => `${key}: ${value}`)
-                            .join(', ')}
-                        </p>
-                      )}
+                      {capability.capabilityScope &&
+                        Object.keys(capability.capabilityScope).length > 0 && (
+                          <p className="text-xs text-blue-600 dark:text-blue-400">
+                            {Object.entries(capability.capabilityScope)
+                              .map(([key, value]) => `${key}: ${value}`)
+                              .join(", ")}
+                          </p>
+                        )}
                     </div>
                   </div>
                 ))}
@@ -357,8 +428,18 @@ export function AgentDetailModal({
           {/* Talks To (MCP Servers) */}
           <div>
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
               </svg>
               Talks To (MCP Servers)
             </h3>
@@ -388,7 +469,9 @@ export function AgentDetailModal({
                 Download SDK / View Credentials
               </h3>
               <button
-                onClick={() => setShowCredentialsSection(!showCredentialsSection)}
+                onClick={() =>
+                  setShowCredentialsSection(!showCredentialsSection)
+                }
                 className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
                 title={showCredentialsSection ? "Hide details" : "Show details"}
               >
@@ -403,12 +486,13 @@ export function AgentDetailModal({
             {showCredentialsSection && !integrationMethod && (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  Access your agent's SDK or view credentials for manual integration
+                  Access your agent's SDK or view credentials for manual
+                  integration
                 </p>
 
                 {/* SDK Integration Option */}
                 <button
-                  onClick={() => setIntegrationMethod('sdk')}
+                  onClick={() => setIntegrationMethod("sdk")}
                   className="w-full p-4 border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
                 >
                   <div className="flex items-start gap-3">
@@ -418,7 +502,9 @@ export function AgentDetailModal({
                         📦 Download SDK (Recommended)
                       </h4>
                       <p className="text-xs text-blue-800 dark:text-blue-200">
-                        Download ready-to-use SDK for <strong>Python, Node.js, or Go</strong>. Includes cryptographic keys and automatic verification.
+                        Download ready-to-use SDK for{" "}
+                        <strong>Python, Node.js, or Go</strong>. Includes
+                        cryptographic keys and automatic verification.
                       </p>
                     </div>
                   </div>
@@ -436,7 +522,9 @@ export function AgentDetailModal({
                         🔧 View Credentials (Manual Integration)
                       </h4>
                       <p className="text-xs text-gray-700 dark:text-gray-300">
-                        Use <strong>any programming language</strong> (Rust, Ruby, PHP, Java, etc.). Get your credentials and API documentation.
+                        Use <strong>any programming language</strong> (Rust,
+                        Ruby, PHP, Java, etc.). Get your credentials and API
+                        documentation.
                       </p>
                     </div>
                   </div>
@@ -445,7 +533,7 @@ export function AgentDetailModal({
             )}
 
             {/* SDK Download UI */}
-            {showCredentialsSection && integrationMethod === 'sdk' && (
+            {showCredentialsSection && integrationMethod === "sdk" && (
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
                 <div className="flex items-start gap-3">
                   <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
@@ -454,32 +542,45 @@ export function AgentDetailModal({
                       📦 Download SDK
                     </h4>
                     <p className="text-xs text-blue-800 dark:text-blue-200 mb-4">
-                      Choose your preferred language. The SDK includes cryptographic keys and automatic verification.
+                      Choose your preferred language. The SDK includes
+                      cryptographic keys and automatic verification.
                     </p>
 
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => handleDownloadSDK('python')}
+                        onClick={() => handleDownloadSDK("python")}
                         disabled={downloadingSDK}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {downloadingSDK ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
                         Python SDK
                       </button>
                       <button
-                        onClick={() => handleDownloadSDK('node')}
+                        onClick={() => handleDownloadSDK("node")}
                         disabled={downloadingSDK}
                         className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {downloadingSDK ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
                         Node.js SDK
                       </button>
                       <button
-                        onClick={() => handleDownloadSDK('go')}
+                        onClick={() => handleDownloadSDK("go")}
                         disabled={downloadingSDK}
                         className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        {downloadingSDK ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {downloadingSDK ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
                         Go SDK
                       </button>
                     </div>
@@ -499,7 +600,7 @@ export function AgentDetailModal({
             )}
 
             {/* Manual Integration Credentials Display */}
-            {showCredentialsSection && integrationMethod === 'manual' && (
+            {showCredentialsSection && integrationMethod === "manual" && (
               <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4">
                 <div className="flex items-start gap-3">
                   <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
@@ -508,7 +609,8 @@ export function AgentDetailModal({
                       🔑 Agent Credentials & API Access
                     </h4>
                     <p className="text-xs text-gray-700 dark:text-gray-300 mb-4">
-                      Use these credentials to integrate AIM with any programming language. Keep your private key secure.
+                      Use these credentials to integrate AIM with any
+                      programming language. Keep your private key secure.
                     </p>
 
                     {loadingKeys ? (
@@ -531,10 +633,12 @@ export function AgentDetailModal({
                               className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
                             />
                             <button
-                              onClick={() => copyToClipboard(agent.id, 'agent_id')}
+                              onClick={() =>
+                                copyToClipboard(agent.id, "agent_id")
+                              }
                               className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
                             >
-                              {copiedField === 'agent_id' ? (
+                              {copiedField === "agent_id" ? (
                                 <CheckCircle className="h-4 w-4 text-green-600" />
                               ) : (
                                 <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
@@ -556,10 +660,15 @@ export function AgentDetailModal({
                               className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
                             />
                             <button
-                              onClick={() => copyToClipboard(agentKeys.publicKey, 'public_key')}
+                              onClick={() =>
+                                copyToClipboard(
+                                  agentKeys.publicKey,
+                                  "public_key"
+                                )
+                              }
                               className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
                             >
-                              {copiedField === 'public_key' ? (
+                              {copiedField === "public_key" ? (
                                 <CheckCircle className="h-4 w-4 text-green-600" />
                               ) : (
                                 <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
@@ -591,10 +700,15 @@ export function AgentDetailModal({
                               )}
                             </button>
                             <button
-                              onClick={() => copyToClipboard(agentKeys.privateKey, 'private_key')}
+                              onClick={() =>
+                                copyToClipboard(
+                                  agentKeys.privateKey,
+                                  "private_key"
+                                )
+                              }
                               className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
                             >
-                              {copiedField === 'private_key' ? (
+                              {copiedField === "private_key" ? (
                                 <CheckCircle className="h-4 w-4 text-green-600" />
                               ) : (
                                 <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
@@ -602,7 +716,8 @@ export function AgentDetailModal({
                             </button>
                           </div>
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            Never commit this to version control or share publicly
+                            Never commit this to version control or share
+                            publicly
                           </p>
                         </div>
 
@@ -643,13 +758,21 @@ export function AgentDetailModal({
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Version</h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">{agent.version}</p>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Version
+              </h3>
+              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">
+                {agent.version}
+              </p>
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Organization ID</h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">{agent.organization_id}</p>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Organization ID
+              </h3>
+              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">
+                {agent.organization_id}
+              </p>
             </div>
 
             <div>
@@ -657,7 +780,9 @@ export function AgentDetailModal({
                 <Calendar className="h-4 w-4" />
                 Created
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100">{formatDate(agent.created_at)}</p>
+              <p className="text-sm text-gray-900 dark:text-gray-100">
+                {formatDate(agent.created_at)}
+              </p>
             </div>
 
             <div>
@@ -665,26 +790,38 @@ export function AgentDetailModal({
                 <Clock className="h-4 w-4" />
                 Last Updated
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100">{formatDate(agent.updated_at)}</p>
+              <p className="text-sm text-gray-900 dark:text-gray-100">
+                {formatDate(agent.updated_at)}
+              </p>
             </div>
           </div>
 
           {/* Audit History */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Recent Activity</h3>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Recent Activity
+            </h3>
             <div className="space-y-2">
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">Agent registered</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(agent.created_at)}</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    Agent registered
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatDate(agent.created_at)}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">Agent updated</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(agent.updated_at)}</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    Agent updated
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatDate(agent.updated_at)}
+                  </p>
                 </div>
               </div>
             </div>
