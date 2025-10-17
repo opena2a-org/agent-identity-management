@@ -205,13 +205,13 @@ func main() {
 }
 
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
-	// Build connection string manually with explicit PostgreSQL URL format
-	// This ensures TCP connection even on Mac with local PostgreSQL
-	connStr := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Database.User,
-		cfg.Database.Password,
+	// Build connection string using key=value format to avoid URL encoding issues
+	// This format works better with passwords containing special characters
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
 		cfg.Database.Host,
 		cfg.Database.Port,
+		cfg.Database.User,
+		cfg.Database.Password,
 		cfg.Database.Database,
 		cfg.Database.SSLMode,
 	)
@@ -494,6 +494,7 @@ type Handlers struct {
 	VerificationEvent *handlers.VerificationEventHandler
 	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
+	PublicRegistration *handlers.PublicRegistrationHandler
 	Tag               *handlers.TagHandler
 	SDK               *handlers.SDKHandler
 	SDKToken          *handlers.SDKTokenHandler
@@ -571,6 +572,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.Auth,
 			keyVault,
+		),
+		PublicRegistration: handlers.NewPublicRegistrationHandler(
+			services.OAuth,
+			services.Auth,
+			jwtService,
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,
@@ -673,6 +679,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService)) // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)   // 🚀 ONE-LINE agent registration
+	public.Post("/register", h.PublicRegistration.RegisterUser) // 🚀 User registration
+	public.Get("/register/:requestId/status", h.PublicRegistration.CheckRegistrationStatus) // Check registration status
+	public.Post("/login", h.PublicRegistration.Login) // 🚀 Public login
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
@@ -767,7 +776,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/users/:id/approve", h.Admin.ApproveUser)
 	admin.Post("/users/:id/reject", h.Admin.RejectUser)
 	admin.Put("/users/:id/role", h.Admin.UpdateUserRole)
-	admin.Delete("/users/:id", h.Admin.DeactivateUser)
+	
+	// User lifecycle management (soft delete and hard delete)
+	admin.Post("/users/:id/deactivate", h.Admin.DeactivateUser)   // Soft delete - sets deleted_at
+	admin.Post("/users/:id/activate", h.Admin.ActivateUser)       // Reactivate - clears deleted_at
+	admin.Delete("/users/:id", h.Admin.PermanentlyDeleteUser)     // Hard delete - removes from database
 
 	// Registration request management (for pending OAuth registrations)
 	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)
@@ -812,8 +825,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
+	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
+	compliance.Get("/audit-log/data-retention", h.Compliance.GetDataRetention)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
+	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
@@ -851,6 +867,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	analytics.Get("/dashboard", h.Analytics.GetDashboardStats) // Viewer-accessible dashboard stats
 	analytics.Get("/usage", h.Analytics.GetUsageStatistics)
 	analytics.Get("/trends", h.Analytics.GetTrustScoreTrends)
+	analytics.Get("/verification-activity", h.Analytics.GetVerificationActivity) // New endpoint for chart
 	analytics.Get("/reports/generate", h.Analytics.GenerateReport)
 	analytics.Get("/agents/activity", h.Analytics.GetAgentActivity)
 

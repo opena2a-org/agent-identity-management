@@ -119,20 +119,23 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		return nil, err
 	}
 
-	// Automatic verification: If server has a public key, trigger verification automatically
-	if server.PublicKey != "" {
-		// Run verification asynchronously to avoid blocking the creation response
-		go func() {
-			// Use a background context for async operation
-			bgCtx := context.Background()
-			// Use localhost IP for system-initiated verification
-			if err := s.VerifyMCPServer(bgCtx, server.ID, userID, "127.0.0.1"); err != nil {
-				fmt.Printf("⚠️  Automatic verification failed for MCP server %s: %v\n", server.Name, err)
-			} else {
-				fmt.Printf("✅ Automatic verification succeeded for MCP server %s\n", server.Name)
-			}
-		}()
-	}
+	// if server.PublicKey != "" {
+	//	// Run verification asynchronously to avoid blocking the creation response
+	//	go func() {
+	//		// Use a background context for async operation
+	//		bgCtx := context.Background()
+	//		// Use localhost IP for system-initiated verification
+	//		if err := s.VerifyMCPServer(bgCtx, server.ID, userID, "127.0.0.1"); err != nil {
+	//			fmt.Printf("⚠️  Automatic verification failed for MCP server %s: %v\n", server.Name, err)
+	//		} else {
+	//			fmt.Printf("✅ Automatic verification succeeded for MCP server %s\n", server.Name)
+	//		}
+	//	}()
+	// }
+	// ✅ Manual verification required
+	// MCP servers are created with status="pending" and is_verified=false
+	// Admins must manually verify servers by clicking the "Verify" button in the UI
+	// This ensures proper security review before servers are trusted
 
 	return server, nil
 }

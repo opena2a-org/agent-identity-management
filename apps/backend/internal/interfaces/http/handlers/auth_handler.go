@@ -167,8 +167,9 @@ func (h *AuthHandler) Callback(c fiber.Ctx) error {
 	// Login or create user (this also updates last_login_at)
 	user, err := h.authService.LoginWithOAuth(c.Context(), oauthUser)
 	if err != nil {
+		fmt.Printf("ERROR in LoginWithOAuth: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to process login",
+			"error": fmt.Sprintf("Failed to process login: %v", err),
 		})
 	}
 
@@ -242,7 +243,10 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 		"name":            user.Name,
 		"role":            user.Role,
 		"organization_id": user.OrganizationID,
+		"provider":        user.Provider,
+		"last_login_at":   user.LastLoginAt,
 		"created_at":      user.CreatedAt,
+		"status":          user.Status,
 	})
 }
 

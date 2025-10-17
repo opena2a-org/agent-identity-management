@@ -45,6 +45,7 @@ type User struct {
 	ApprovedBy            *uuid.UUID  `json:"approved_by,omitempty"` // Admin who approved this user
 	ApprovedAt            *time.Time  `json:"approved_at,omitempty"` // When user was approved
 	LastLoginAt           *time.Time  `json:"last_login_at"`
+	DeletedAt             *time.Time  `json:"deleted_at,omitempty"` // When user was soft-deleted (deactivated)
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
 }

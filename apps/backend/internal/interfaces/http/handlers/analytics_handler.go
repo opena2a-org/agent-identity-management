@@ -78,12 +78,27 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 // @Description Get trust score trends over time
 // @Tags analytics
 // @Produce json
-// @Param days query int false "Number of days" default(30)
+// @Param weeks query int false "Number of weeks" default(4)
+// @Param period query string false "Period type (weeks, days)" default(weeks)
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/trends [get]
 func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
-	days, _ := strconv.Atoi(c.Query("days", "30"))
+	
+	// Support both days and weeks parameters for backward compatibility
+	period := c.Query("period", "weeks")
+	weeks := 4
+	days := 30
+	
+	if period == "weeks" {
+		weeks, _ = strconv.Atoi(c.Query("weeks", "4"))
+	} else {
+		days, _ = strconv.Atoi(c.Query("days", "30"))
+		weeks = days / 7 // Convert days to weeks
+		if weeks == 0 {
+			weeks = 1
+		}
+	}
 
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
@@ -102,22 +117,63 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		avgScore = totalScore / float64(len(agents))
 	}
 
-	// Generate trend data (simulated)
+	// Generate weekly trend data (simulated)
 	trends := []map[string]interface{}{}
-	for i := days; i >= 0; i-- {
-		date := time.Now().AddDate(0, 0, -i)
-		trends = append(trends, map[string]interface{}{
-			"date":        date.Format("2006-01-02"),
-			"avg_score":   avgScore + float64(i)*0.1,
-			"agent_count": len(agents),
+	
+	if period == "weeks" {
+		// Generate weekly data
+		for i := weeks; i >= 1; i-- {
+			// Calculate the start of each week (Monday)
+			now := time.Now()
+			weeksAgo := time.Duration(i-1) * 7 * 24 * time.Hour
+			weekStart := now.Add(-weeksAgo)
+			
+			// Find the Monday of this week
+			for weekStart.Weekday() != time.Monday {
+				weekStart = weekStart.AddDate(0, 0, -1)
+			}
+			
+			// Create simulated trend with some variation
+			scoreVariation := avgScore + float64(i)*0.05 - 0.1 + (float64(weeks-i)*0.02)
+			if scoreVariation < 0 {
+				scoreVariation = avgScore * 0.8
+			}
+			if scoreVariation > 1.0 {
+				scoreVariation = 1.0
+			}
+			
+			trends = append(trends, map[string]interface{}{
+				"date":        fmt.Sprintf("Week %d", weeks-i+1),
+				"week_start":  weekStart.Format("2006-01-02"),
+				"avg_score":   scoreVariation,
+				"agent_count": len(agents),
+			})
+		}
+		
+		return c.JSON(fiber.Map{
+			"period":          fmt.Sprintf("Last %d weeks", weeks),
+			"trends":          trends,
+			"current_average": avgScore,
+			"data_type":       "weekly",
+		})
+	} else {
+		// Generate daily data (backward compatibility)
+		for i := days; i >= 0; i-- {
+			date := time.Now().AddDate(0, 0, -i)
+			trends = append(trends, map[string]interface{}{
+				"date":        date.Format("2006-01-02"),
+				"avg_score":   avgScore + float64(i)*0.01,
+				"agent_count": len(agents),
+			})
+		}
+		
+		return c.JSON(fiber.Map{
+			"period":          fmt.Sprintf("Last %d days", days),
+			"trends":          trends,
+			"current_average": avgScore,
+			"data_type":       "daily",
 		})
 	}
-
-	return c.JSON(fiber.Map{
-		"period":          fmt.Sprintf("Last %d days", days),
-		"trends":          trends,
-		"current_average": avgScore,
-	})
 }
 
 // GenerateReport generates a custom analytics report
@@ -156,6 +212,87 @@ func (h *AnalyticsHandler) GenerateReport(c fiber.Ctx) error {
 	}
 
 	return c.JSON(report)
+}
+
+// GetVerificationActivity retrieves monthly verification activity trends
+// @Summary Get verification activity trends  
+// @Description Get monthly verification activity showing verified vs pending agents
+// @Tags analytics
+// @Produce json
+// @Param months query int false "Number of months" default(6)
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/analytics/verification-activity [get]
+func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	months, _ := strconv.Atoi(c.Query("months", "6"))
+
+	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch verification activity",
+		})
+	}
+
+	// Calculate current verified and pending counts
+	verifiedCount := 0
+	pendingCount := 0
+	for _, agent := range agents {
+		if agent.Status == "verified" {
+			verifiedCount++
+		} else if agent.Status == "pending" {
+			pendingCount++
+		}
+	}
+
+	// Generate monthly verification activity data
+	activity := []map[string]interface{}{}
+	now := time.Now()
+	
+	for i := months - 1; i >= 0; i-- {
+		monthDate := now.AddDate(0, -i, 0)
+		monthName := monthDate.Format("Jan")
+		
+		// Simulate historical data with some variation
+		// Current month uses real data, previous months are simulated
+		if i == 0 {
+			// Current month - use real data
+			activity = append(activity, map[string]interface{}{
+				"month":     monthName,
+				"verified":  verifiedCount,
+				"pending":   pendingCount,
+				"month_year": monthDate.Format("2006-01"),
+			})
+		} else {
+			// Historical months - simulate data based on current state
+			historicalVerified := verifiedCount - (i * 2) + ((i % 3) * 3)
+			historicalPending := pendingCount + (i % 2) + 1
+			
+			// Ensure non-negative values
+			if historicalVerified < 0 {
+				historicalVerified = verifiedCount / 2
+			}
+			if historicalPending < 0 {
+				historicalPending = 1
+			}
+			
+			activity = append(activity, map[string]interface{}{
+				"month":     monthName,
+				"verified":  historicalVerified,
+				"pending":   historicalPending,
+				"month_year": monthDate.Format("2006-01"),
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"period":   fmt.Sprintf("Last %d months", months),
+		"activity": activity,
+		"current_stats": map[string]interface{}{
+			"total_verified": verifiedCount,
+			"total_pending":  pendingCount,
+			"total_agents":   len(agents),
+		},
+	})
 }
 
 // GetAgentActivity retrieves agent activity metrics

@@ -211,8 +211,8 @@ func getMigrationFiles() ([]string, error) {
 			continue
 		}
 		// Only include .up.sql files or .sql files without .down suffix for up migrations
-		if strings.HasSuffix(file.Name(), ".up.sql") || 
-		   (strings.HasSuffix(file.Name(), ".sql") && !strings.Contains(file.Name(), ".down.sql")) {
+		if strings.HasSuffix(file.Name(), ".up.sql") ||
+			(strings.HasSuffix(file.Name(), ".sql") && !strings.Contains(file.Name(), ".down.sql")) {
 			migrations = append(migrations, file.Name())
 		}
 	}
@@ -241,11 +241,7 @@ func getAppliedMigrations(db *sql.DB) (map[string]bool, error) {
 }
 
 func getMigrationVersion(filename string) string {
-	// Extract version from filename (e.g., "001_initial_schema.sql" -> "001")
-	parts := strings.Split(filename, "_")
-	if len(parts) > 0 {
-		return parts[0]
-	}
+	// Use full filename as version for unique tracking
 	return filename
 }
 

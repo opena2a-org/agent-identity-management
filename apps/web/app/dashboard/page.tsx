@@ -28,6 +28,10 @@ import {
 import { api } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
 import { TimezoneIndicator } from "@/components/timezone-indicator";
+import {
+  DashboardSkeleton,
+  ChartSkeleton,
+} from "@/components/ui/content-loaders";
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -53,6 +57,35 @@ interface DashboardStats {
 
   // Organization
   organization_id: string;
+}
+
+interface TrustScoreTrend {
+  date: string;
+  week_start?: string; // Only for weekly data
+  avg_score: number;
+  agent_count: number;
+}
+
+interface TrustScoreTrendsData {
+  period: string;
+  current_average: number;
+  data_type: "weekly" | "daily";
+  trends: TrustScoreTrend[];
+}
+
+interface VerificationActivityData {
+  period: string;
+  activity: Array<{
+    month: string;
+    verified: number;
+    pending: number;
+    month_year: string;
+  }>;
+  current_stats: {
+    total_verified: number;
+    total_pending: number;
+    total_agents: number;
+  };
 }
 
 function StatCard({ stat }: { stat: any }) {
@@ -113,19 +146,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Loading dashboard data...
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ErrorDisplay({
   message,
   onRetry,
@@ -169,6 +189,12 @@ function DashboardContent() {
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(
     null
   );
+  const [trustScoreTrends, setTrustScoreTrends] =
+    useState<TrustScoreTrendsData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+  const [verificationActivity, setVerificationActivity] =
+    useState<VerificationActivityData | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [userRole, setUserRole] = useState<UserRole>("viewer");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -212,6 +238,52 @@ function DashboardContent() {
       // No mock data fallback - show error instead
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrustScoreTrends = async () => {
+    try {
+      setTrendsLoading(true);
+      console.log("fetchTrustScoreTrends: Fetching 4-week trust score trends");
+      const data = await api.getTrustScoreTrends(4, "weeks"); // Request 4 weeks of data
+      console.log("fetchTrustScoreTrends data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.trends && data.trends.length > 0) {
+        setTrustScoreTrends(data);
+      } else {
+        console.warn("No trend data returned from API");
+        setTrustScoreTrends(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch trust score trends:", err);
+      setTrustScoreTrends(null); // Set to null to show error state, no dummy data
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
+  const fetchVerificationActivity = async () => {
+    try {
+      setActivityLoading(true);
+      console.log(
+        "fetchVerificationActivity: Fetching verification activity data"
+      );
+      const data = await api.getVerificationActivity(6); // Request 6 months of data
+      console.log("fetchVerificationActivity data:", data);
+
+      // Check if we actually have valid data
+      if (data && data.activity && data.activity.length > 0) {
+        setVerificationActivity(data);
+      } else {
+        console.warn("No verification activity data returned from API");
+        setVerificationActivity(null); // Set to null to show "no data" state
+      }
+    } catch (err) {
+      console.error("Failed to fetch verification activity:", err);
+      setVerificationActivity(null); // Set to null to show error state, no dummy data
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -268,6 +340,8 @@ function DashboardContent() {
     }
     console.log("runing useEffect");
     fetchDashboardData();
+    fetchTrustScoreTrends();
+    fetchVerificationActivity();
     fetchAuditLogs();
   }, [searchParams]);
 
@@ -300,7 +374,7 @@ function DashboardContent() {
   });
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <DashboardSkeleton />;
   }
 
   if (error && !dashboardData) {
@@ -443,53 +517,31 @@ function DashboardContent() {
     return then.toLocaleDateString();
   };
 
-  // Prepare stats for display using actual backend field names
+  // Prepare required stat cards
   const allStats = [
     {
       name: "Total Agents",
       value: data.total_agents.toLocaleString(),
-      change: `${data.verification_rate.toFixed(1)}% verified`,
-      changeType: "positive" as const,
-      icon: Shield,
+      icon: Users,
       permission: "canViewAgentStats" as const,
     },
     {
-      name: "MCP Servers",
-      value: data.total_mcp_servers.toLocaleString(),
-      change: `${data.active_mcp_servers} active`,
-      changeType: "positive" as const,
-      icon: Network,
-      permission: "canViewMCPStats" as const,
+      name: "Verified Agents",
+      value: data.verified_agents.toLocaleString(),
+      icon: CheckCircle,
+      permission: "canViewAgentStats" as const,
     },
     {
-      name: "Avg Trust Score",
-      value: data.avg_trust_score.toFixed(1),
-      change:
-        data.avg_trust_score >= 80
-          ? "Excellent"
-          : data.avg_trust_score >= 60
-            ? "Good"
-            : "Fair",
-      changeType:
-        data.avg_trust_score >= 80
-          ? ("positive" as const)
-          : ("negative" as const),
+      name: "Trust Score Average",
+      value: data.avg_trust_score.toFixed(2),
       icon: TrendingUp,
       permission: "canViewTrustScore" as const,
     },
     {
-      name: "Active Alerts",
-      value: data.active_alerts.toLocaleString(),
-      change:
-        data.critical_alerts > 0
-          ? `${data.critical_alerts} critical`
-          : "Normal",
-      changeType:
-        data.critical_alerts > 0
-          ? ("negative" as const)
-          : ("positive" as const),
-      icon: AlertTriangle,
-      permission: "canViewAlerts" as const,
+      name: "Recent Activity Count",
+      value: auditLogs.length.toLocaleString(),
+      icon: Activity,
+      permission: "canViewRecentActivity" as const,
     },
   ];
 
@@ -540,47 +592,114 @@ function DashboardContent() {
               <TrendingUp className="h-5 w-5 text-gray-400" />
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={[
-                    { day: "Week 1", score: 82 },
-                    { day: "Week 2", score: 85 },
-                    { day: "Week 3", score: 87 },
-                    { day: "Week 4", score: data.avg_trust_score || 0 },
-                  ]}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-gray-200 dark:stroke-gray-700"
-                  />
-                  <XAxis
-                    dataKey="day"
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <YAxis
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                    domain={[0, 100]}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                      boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    name="Trust Score"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {trendsLoading ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(6)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div
+                          className="w-full animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
+                          style={{ height: `${Math.random() * 120 + 30}px` }}
+                        />
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-8 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : trustScoreTrends &&
+                trustScoreTrends.trends &&
+                trustScoreTrends.trends.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={trustScoreTrends.trends.map((trend) => ({
+                      period: trend.date, // Backend provides "Week 1", "Week 2", etc.
+                      score: Math.round(trend.avg_score * 100), // Convert to percentage (0-100)
+                      agent_count: trend.agent_count,
+                      week_start: trend.week_start, // For tooltip info
+                    }))}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="period"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        `${value}%`,
+                        name === "score"
+                          ? "Trust Score"
+                          : name === "agent_count"
+                            ? "Agent Count"
+                            : name,
+                      ]}
+                      labelFormatter={(label, payload) => {
+                        if (
+                          payload &&
+                          payload[0] &&
+                          payload[0].payload.week_start
+                        ) {
+                          return `${label} (Starting ${payload[0].payload.week_start})`;
+                        }
+                        return label;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      name="Trust Score"
+                      dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Data Available
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Trust score trends will appear here once agents start
+                      generating activity
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
+            {/* Show period info only when we have valid data */}
+            {trustScoreTrends &&
+              trustScoreTrends.trends &&
+              trustScoreTrends.trends.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                  {trustScoreTrends.period} • Current Average:{" "}
+                  {Math.round(trustScoreTrends.current_average * 100)}%
+                </div>
+              )}
           </div>
         )}
 
@@ -594,44 +713,95 @@ function DashboardContent() {
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { month: "Jan", verified: 12, pending: 3 },
-                    { month: "Feb", verified: 18, pending: 2 },
-                    {
-                      month: "Mar",
-                      verified: data.verified_agents,
-                      pending: data.pending_agents,
-                    },
-                  ]}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-gray-200 dark:stroke-gray-700"
-                  />
-                  <XAxis
-                    dataKey="month"
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <YAxis
-                    className="text-xs text-gray-500 dark:text-gray-400"
-                    stroke="#9CA3AF"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                      boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Bar dataKey="verified" fill="#22c55e" name="Verified" />
-                  <Bar dataKey="pending" fill="#eab308" name="Pending" />
-                </BarChart>
-              </ResponsiveContainer>
+              {activityLoading ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                  </div>
+                  <div className="h-56 flex items-end justify-between gap-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 flex-1"
+                      >
+                        <div className="w-full flex gap-1">
+                          <div
+                            className="w-1/2 animate-pulse bg-green-200 dark:bg-green-800 rounded"
+                            style={{ height: `${Math.random() * 100 + 40}px` }}
+                          />
+                          <div
+                            className="w-1/2 animate-pulse bg-yellow-200 dark:bg-yellow-800 rounded"
+                            style={{ height: `${Math.random() * 80 + 30}px` }}
+                          />
+                        </div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-12 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : verificationActivity &&
+                verificationActivity.activity &&
+                verificationActivity.activity.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={verificationActivity.activity.slice(-3)} // Show last 3 months
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-gray-200 dark:stroke-gray-700"
+                    />
+                    <XAxis
+                      dataKey="month"
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis
+                      className="text-xs text-gray-500 dark:text-gray-400"
+                      stroke="#9CA3AF"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        value,
+                        name === "verified"
+                          ? "Verified Agents"
+                          : "Pending Agents",
+                      ]}
+                      labelFormatter={(label) => `Month: ${label}`}
+                    />
+                    <Bar dataKey="verified" fill="#22c55e" name="Verified" />
+                    <Bar dataKey="pending" fill="#eab308" name="Pending" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                  <div className="text-center">
+                    <p className="text-base font-medium mb-1">
+                      No Activity Data
+                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Verification activity will appear here once agents are
+                      registered
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
+            {/* Show activity stats */}
+            {verificationActivity && verificationActivity.current_stats && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                Total: {verificationActivity.current_stats.total_agents} agents
+                • Verified: {verificationActivity.current_stats.total_verified}{" "}
+                • Pending: {verificationActivity.current_stats.total_pending}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -848,14 +1018,25 @@ function DashboardContent() {
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
                 {logsLoading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
-                      <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto" />
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        Loading recent activity...
-                      </p>
-                    </td>
-                  </tr>
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                      </td>
+                    </tr>
+                  ))
                 ) : auditLogs.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center">
@@ -909,7 +1090,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<LoadingSpinner />}>
+    <Suspense fallback={<DashboardSkeleton />}>
       <DashboardContent />
     </Suspense>
   );

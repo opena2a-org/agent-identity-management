@@ -14,7 +14,8 @@ func main() {
 	orgID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "development-secret-key-change-in-production"
+		fmt.Fprintf(os.Stderr, "Error: JWT_SECRET environment variable is required\n")
+		os.Exit(1)
 	}
 
 	claims := jwt.MapClaims{

@@ -71,6 +71,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		Status                string     `json:"status"`
 		CreatedAt             time.Time  `json:"created_at"`
 		Provider              string     `json:"provider,omitempty"`
+		LastLoginAt           *time.Time `json:"last_login_at,omitempty"`
 		RequestedAt           *time.Time `json:"requested_at,omitempty"`
 		PictureURL            *string    `json:"picture_url,omitempty"`
 		IsRegistrationRequest bool       `json:"is_registration_request"`
@@ -85,9 +86,10 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Email:                 user.Email,
 			Name:                  user.Name,
 			Role:                  string(user.Role),
-			Status:                "active",
+			Status:                string(user.Status),
 			CreatedAt:             user.CreatedAt,
 			Provider:              user.Provider,
+			LastLoginAt:           user.LastLoginAt,
 			IsRegistrationRequest: false,
 		})
 	}
@@ -112,7 +114,12 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Role:                  "pending",
 			Status:                "pending_approval",
 			CreatedAt:             req.CreatedAt,
-			Provider:              string(req.OAuthProvider),
+			Provider:              func() string {
+			if req.OAuthProvider != nil {
+				return string(*req.OAuthProvider)
+			}
+			return "manual"
+		}(),
 			RequestedAt:           &req.RequestedAt,
 			PictureURL:            req.ProfilePictureURL,
 			IsRegistrationRequest: true,
@@ -242,15 +249,138 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 		c.Context(),
 		orgID,
 		adminID,
+		domain.AuditActionUpdate,
+		"user",
+		targetUserID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action": "deactivate",
+			"type":   "soft_delete",
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User deactivated successfully",
+	})
+}
+
+// ActivateUser reactivates a deactivated user account
+func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	adminID := c.Locals("user_id").(uuid.UUID)
+	targetUserID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Verify user belongs to the same organization
+	user, err := h.authService.GetUserByID(c.Context(), targetUserID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	if user.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "User not found in organization",
+		})
+	}
+
+	// Activate user using admin service
+	if err := h.adminService.ActivateUser(c.Context(), targetUserID, adminID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		adminID,
+		domain.AuditActionUpdate,
+		"user",
+		targetUserID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action": "activate",
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User activated successfully",
+	})
+}
+
+// PermanentlyDeleteUser permanently deletes a user from the database (hard delete)
+func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	adminID := c.Locals("user_id").(uuid.UUID)
+	targetUserID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Verify user belongs to the same organization
+	user, err := h.authService.GetUserByID(c.Context(), targetUserID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	if user.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "User not found in organization",
+		})
+	}
+
+	// Cannot delete yourself
+	if targetUserID == adminID {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Cannot delete your own account",
+		})
+	}
+
+	// Store user info for audit log before deletion
+	userEmail := user.Email
+	userName := user.Name
+
+	// Permanently delete user using admin service
+	if err := h.adminService.PermanentlyDeleteUser(c.Context(), targetUserID, adminID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		adminID,
 		domain.AuditActionDelete,
 		"user",
 		targetUserID,
 		c.IP(),
 		c.Get("User-Agent"),
-		nil,
+		map[string]interface{}{
+			"action":     "permanent_delete",
+			"user_email": userEmail,
+			"user_name":  userName,
+			"warning":    "irreversible_hard_delete",
+		},
 	)
 
-	return c.SendStatus(fiber.StatusNoContent)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User permanently deleted",
+	})
 }
 
 // GetAuditLogs returns audit logs with filtering

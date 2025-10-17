@@ -13,6 +13,7 @@ const (
 	OAuthProviderGoogle    OAuthProvider = "google"
 	OAuthProviderMicrosoft OAuthProvider = "microsoft"
 	OAuthProviderOkta      OAuthProvider = "okta"
+	OAuthProviderLocal     OAuthProvider = "local" // For email/password registrations
 )
 
 // RegistrationRequestStatus represents the status of a registration request
@@ -24,14 +25,15 @@ const (
 	RegistrationStatusRejected RegistrationRequestStatus = "rejected"
 )
 
-// UserRegistrationRequest represents a user's request to register via OAuth
+// UserRegistrationRequest represents a user's request to register via OAuth or email/password
 type UserRegistrationRequest struct {
 	ID                   uuid.UUID                 `json:"id" db:"id"`
 	Email                string                    `json:"email" db:"email"`
 	FirstName            string                    `json:"firstName" db:"first_name"`
 	LastName             string                    `json:"lastName" db:"last_name"`
-	OAuthProvider        OAuthProvider             `json:"oauthProvider" db:"oauth_provider"`
-	OAuthUserID          string                    `json:"oauthUserId" db:"oauth_user_id"`
+	PasswordHash         *string                   `json:"-" db:"password_hash"` // Only for email/password registrations
+	OAuthProvider        *OAuthProvider            `json:"oauthProvider,omitempty" db:"oauth_provider"` // Nullable for manual registrations
+	OAuthUserID          *string                   `json:"oauthUserId,omitempty" db:"oauth_user_id"` // Nullable for manual registrations
 	OrganizationID       *uuid.UUID                `json:"organizationId,omitempty" db:"organization_id"`
 	Status               RegistrationRequestStatus `json:"status" db:"status"`
 	RequestedAt          time.Time                 `json:"requestedAt" db:"requested_at"`
@@ -74,8 +76,8 @@ type OAuthProfile struct {
 	RawProfile     map[string]interface{}
 }
 
-// CreateRegistrationRequest creates a new registration request
-func NewUserRegistrationRequest(
+// NewUserRegistrationRequestOAuth creates a new OAuth registration request
+func NewUserRegistrationRequestOAuth(
 	email, firstName, lastName string,
 	provider OAuthProvider,
 	providerUserID string,
@@ -88,8 +90,8 @@ func NewUserRegistrationRequest(
 		Email:              email,
 		FirstName:          firstName,
 		LastName:           lastName,
-		OAuthProvider:      provider,
-		OAuthUserID:        providerUserID,
+		OAuthProvider:      &provider,
+		OAuthUserID:        &providerUserID,
 		Status:             RegistrationStatusPending,
 		RequestedAt:        now,
 		OAuthEmailVerified: profile.EmailVerified,
@@ -103,6 +105,30 @@ func NewUserRegistrationRequest(
 	}
 
 	return req
+}
+
+// NewUserRegistrationRequestManual creates a new manual (email/password) registration request
+func NewUserRegistrationRequestManual(
+	email, firstName, lastName string,
+	passwordHash string,
+) *UserRegistrationRequest {
+	now := time.Now()
+	localProvider := OAuthProviderLocal
+
+	return &UserRegistrationRequest{
+		ID:                 uuid.New(),
+		Email:              email,
+		FirstName:          firstName,
+		LastName:           lastName,
+		PasswordHash:       &passwordHash,
+		OAuthProvider:      &localProvider, // Mark as local/email authentication
+		OAuthUserID:        nil,
+		Status:             RegistrationStatusPending,
+		RequestedAt:        now,
+		OAuthEmailVerified: false, // Manual registrations require email verification
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
 }
 
 // Approve marks the registration request as approved

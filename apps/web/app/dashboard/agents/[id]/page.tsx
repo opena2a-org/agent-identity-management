@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -9,6 +9,12 @@ import {
   AlertTriangle,
   ExternalLink,
   Network,
+  Edit,
+  Trash2,
+  CheckCircle,
+  Loader2,
+  Download,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +35,18 @@ import { DetectionStatus } from "@/components/agents/detection-status";
 import { SDKSetupGuide } from "@/components/agents/sdk-setup-guide";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
 import { api } from "@/lib/api";
+import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Agent {
   id: string;
@@ -74,6 +92,14 @@ export default function AgentDetailsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [userRole, setUserRole] = useState<
+    "admin" | "manager" | "member" | "viewer"
+  >("viewer");
+  const [verifying, setVerifying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [events, setEvents] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
   useEffect(() => {
@@ -100,6 +126,14 @@ export default function AgentDetailsPage({
         // Fetch all MCP servers (for graph visualization)
         const mcpServersResponse = await api.listMCPServers(100, 0);
         setAllMCPServers(mcpServersResponse.mcp_servers || []);
+
+        // Fetch verification events (for trust score chart)
+        try {
+          const ev = await api.getRecentVerificationEvents(60);
+          setEvents(ev.events?.filter((e: any) => e.agentId === agentId) || []);
+        } catch (e) {
+          // non-fatal
+        }
       } catch (err: any) {
         console.error("Failed to fetch agent data:", err);
         setError(err.message || "Failed to load agent details");
@@ -111,8 +145,49 @@ export default function AgentDetailsPage({
     fetchData();
   }, [agentId, refreshKey]);
 
+  // Extract user role from token for permissions
+  useEffect(() => {
+    const token = api.getToken?.();
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const role = (payload.role as any) || "viewer";
+      setUserRole(role);
+    } catch {}
+  }, []);
+
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
+  };
+
+  const canEdit = ["admin", "manager", "member"].includes(userRole);
+  const canManage = ["admin", "manager"].includes(userRole);
+
+  const handleVerify = async () => {
+    if (!agentId) return;
+    setVerifying(true);
+    try {
+      await api.verifyAgent(agentId);
+      handleRefresh();
+    } catch (e: any) {
+      alert(e?.message || "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!agentId) return;
+    setDeleting(true);
+    try {
+      await api.deleteAgent(agentId);
+      router.push("/dashboard/agents");
+    } catch (e: any) {
+      alert(e?.message || "Delete failed");
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   // Get trust score color
@@ -137,10 +212,58 @@ export default function AgentDetailsPage({
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Loading agent details...</p>
+      <div className="space-y-6">
+        {/* Header skeleton */}
+        <div>
+          <Skeleton className="h-8 w-40 mb-4" />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <Skeleton className="h-16 w-16 rounded-xl" />
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Skeleton className="h-8 w-64" />
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-80 mb-2" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-6 w-28 rounded-full" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Info cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="p-4 border rounded-lg">
+              <Skeleton className="h-4 w-32 mb-3" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+          <div className="p-4 border rounded-lg space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -235,6 +358,54 @@ export default function AgentDetailsPage({
               onSelectionComplete={handleRefresh}
               variant="outline"
             />
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-1" /> Download SDK
+            </Button>
+            <Button variant="outline">
+              <KeyRound className="h-4 w-4 mr-1" /> Get Credentials
+            </Button>
+            {canEdit && (
+              <Button variant="outline" onClick={() => setShowEditModal(true)}>
+                <Edit className="h-4 w-4 mr-1" /> Edit
+              </Button>
+            )}
+            {canManage && (
+              <Button
+                onClick={handleVerify}
+                disabled={verifying || isVerified}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {verifying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-1" />{" "}
+                    {isVerified ? "Verified" : "Verify Agent"}
+                  </>
+                )}
+              </Button>
+            )}
+            {canManage && (
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-1" /> Delete
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -314,6 +485,8 @@ export default function AgentDetailsPage({
             <Shield className="h-4 w-4 mr-2" />
             Capabilities
           </TabsTrigger>
+          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+          <TabsTrigger value="trust">Trust History</TabsTrigger>
           <TabsTrigger value="graph">
             <Network className="h-4 w-4 mr-2" />
             Graph View
@@ -356,6 +529,92 @@ export default function AgentDetailsPage({
             agentId={agent.id}
             agentCapabilities={agent.capabilities}
           />
+        </TabsContent>
+
+        <TabsContent value="activity">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>
+                Latest verification events and actions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        When
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Type
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Status
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Confidence
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {events.slice(0, 10).map((ev) => (
+                      <tr key={ev.id}>
+                        <td className="px-4 py-2 text-sm">
+                          {new Date(ev.startedAt).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {ev.verificationType}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{ev.status}</td>
+                        <td className="px-4 py-2 text-sm">
+                          {(ev.confidence * 100).toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                    {events.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-4 py-6 text-center text-sm text-muted-foreground"
+                        >
+                          No recent activity
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trust">
+          <Card>
+            <CardHeader>
+              <CardTitle>Trust Score History</CardTitle>
+              <CardDescription>
+                Recent verification confidence levels
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="w-full h-28 flex items-end gap-2">
+                {events.slice(0, 20).map((ev, idx) => (
+                  <div
+                    key={ev.id || idx}
+                    className="flex-1 bg-blue-500/20"
+                    style={{
+                      height: `${Math.max(4, Math.min(100, Math.round(ev.confidence * 100)))}%`,
+                    }}
+                  />
+                ))}
+                {events.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No data</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="graph">
@@ -506,6 +765,40 @@ export default function AgentDetailsPage({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Modal */}
+      <RegisterAgentModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={() => {
+          setShowEditModal(false);
+          handleRefresh();
+        }}
+        editMode={true}
+        initialData={agent as any}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              agent "{agent.name}" and remove associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,16 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Shield, Users, Lock } from "lucide-react";
+import {
+  CheckCircle2,
+  Shield,
+  Users,
+  Lock,
+  Mail,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function LoginPage() {
-  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const router = useRouter();
+  const [isLoadingOAuth, setIsLoadingOAuth] = useState<string | null>(null);
+  const [isLoadingPassword, setIsLoadingPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleOAuthLogin = (provider: "google" | "microsoft" | "okta") => {
-    setIsLoading(provider);
+    setIsLoadingOAuth(provider);
     // Redirect directly to OAuth handler
     window.location.href = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/oauth/${provider}/login`;
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Invalid email address";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    setIsLoadingPassword(true);
+    setErrors({});
+
+    try {
+      const response = await api.loginWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (response.success) {
+        if (response.isApproved) {
+          // User is approved, redirect to dashboard
+          toast.success("Login successful!");
+          router.push("/dashboard");
+        } else {
+          // User exists but not approved yet - redirect to pending page
+          toast.info("Your account is pending admin approval.");
+          router.push("/auth/registration-pending");
+        }
+      }
+    } catch (error: any) {
+      // Extract error message from different possible error formats
+      let errorMessage = "Invalid email or password";
+
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.error) {
+        errorMessage = error.error;
+      }
+
+      // Show toast notification with the exact backend error
+      toast.error("Login Failed", {
+        description: errorMessage,
+        duration: 5000,
+      });
+
+      setErrors({ password: errorMessage });
+    } finally {
+      setIsLoadingPassword(false);
+    }
   };
 
   return (
@@ -31,15 +117,110 @@ export default function LoginPage() {
 
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">
-              Sign in to your account
-            </h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">
+            Sign in to your account
+          </h2>
 
-            {/* OAuth Buttons */}
+          {/* Email/Password Form */}
+          <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.email ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="you@example.com"
+                />
+              </div>
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {errors.email}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.password ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {errors.password}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoadingPassword}
+              className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoadingPassword ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          {/* OAuth Buttons */}
+          <div className="space-y-3">
             <button
               onClick={() => handleOAuthLogin("google")}
-              disabled={isLoading !== null}
+              disabled={isLoadingOAuth !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -61,7 +242,7 @@ export default function LoginPage() {
                 />
               </svg>
               <span className="text-gray-700 font-medium group-hover:text-blue-600">
-                {isLoading === "google"
+                {isLoadingOAuth === "google"
                   ? "Redirecting..."
                   : "Sign in with Google"}
               </span>
@@ -69,7 +250,7 @@ export default function LoginPage() {
 
             <button
               onClick={() => handleOAuthLogin("microsoft")}
-              disabled={isLoading !== null}
+              disabled={isLoadingOAuth !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
               <svg className="w-5 h-5" viewBox="0 0 23 23">
@@ -79,7 +260,7 @@ export default function LoginPage() {
                 <path fill="#ffba08" d="M12 12h11v11H12z" />
               </svg>
               <span className="text-gray-700 font-medium group-hover:text-blue-600">
-                {isLoading === "microsoft"
+                {isLoadingOAuth === "microsoft"
                   ? "Redirecting..."
                   : "Sign in with Microsoft"}
               </span>
@@ -87,38 +268,31 @@ export default function LoginPage() {
 
             <button
               onClick={() => handleOAuthLogin("okta")}
-              disabled={isLoading !== null}
+              disabled={isLoadingOAuth !== null}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
-              <div className="w-5 h-5 bg-gradient-to-br from-blue-600 to-blue-800 rounded flex items-center justify-center">
-                <Lock className="w-3 h-3 text-white" />
-              </div>
-              <span className="text-gray-700 font-medium">
-                {isLoading === "okta" ? "Redirecting..." : "Sign in with Okta"}
+              <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+                <path
+                  fill="#007DC1"
+                  d="M12 2.5a9.5 9.5 0 1 0 9.5 9.5A9.5 9.5 0 0 0 12 2.5Zm0 3.3A6.2 6.2 0 1 1 5.8 12 6.2 6.2 0 0 1 12 5.8Z"
+                />
+              </svg>
+              <span className="text-gray-700 font-medium group-hover:text-blue-600">
+                {isLoadingOAuth === "okta"
+                  ? "Redirecting..."
+                  : "Sign in with Okta"}
               </span>
             </button>
           </div>
 
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">
-                Existing users only
-              </span>
-            </div>
-          </div>
-
           {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mt-6">
             <div className="flex gap-3">
               <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-blue-900">
                 <p className="font-medium mb-1">Already have an account?</p>
                 <p className="text-blue-700">
-                  Sign in with the same provider you used to register. Your
+                  Sign in with the same method you used to register. Your
                   session will be restored automatically.
                 </p>
               </div>
@@ -126,14 +300,14 @@ export default function LoginPage() {
           </div>
 
           {/* New User Link */}
-          <div className="text-center pt-4 border-t border-gray-200">
+          <div className="text-center pt-4 border-t border-gray-200 mt-6">
             <p className="text-gray-600">
               Don't have an account?{" "}
               <Link
                 href="/auth/register"
                 className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
               >
-                Request Access
+                Sign Up
               </Link>
             </p>
           </div>

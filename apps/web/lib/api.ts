@@ -25,6 +25,7 @@ export interface User {
   status: "active" | "pending_approval" | "suspended" | "deactivated";
   created_at: string;
   provider?: string;
+  last_login_at?: string;
   requested_at?: string;
   picture_url?: string;
   is_registration_request?: boolean;
@@ -259,7 +260,11 @@ class APIClient {
       const error = await response
         .json()
         .catch(() => ({ message: "Request failed" }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+
+      // Backend can return either 'error' or 'message' field
+      const errorMessage =
+        error.error || error.message || `HTTP ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     // Handle 204 No Content responses (e.g., DELETE operations)
@@ -282,6 +287,74 @@ class APIClient {
   async logout(): Promise<void> {
     await this.request("/api/v1/auth/logout", { method: "POST" });
     this.clearToken();
+  }
+
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ message: string }> {
+    return this.request("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Public Registration & Login (Email/Password)
+  async register(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    provider: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    requestId: string;
+  }> {
+    const response = await this.request<{
+      success: boolean;
+      message: string;
+      requestId: string;
+    }>("/api/v1/public/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  async loginWithPassword(data: { email: string; password: string }): Promise<{
+    success: boolean;
+    message: string;
+    user?: User;
+    accessToken?: string;
+    refreshToken?: string;
+    isApproved: boolean;
+  }> {
+    const response = await this.request<{
+      success: boolean;
+      message: string;
+      user?: User;
+      accessToken?: string;
+      refreshToken?: string;
+      isApproved: boolean;
+    }>("/api/v1/public/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+
+    // If login successful and user is approved, store tokens
+    if (response.success && response.isApproved && response.accessToken) {
+      this.setToken(response.accessToken, response.refreshToken);
+    }
+
+    return response;
+  }
+
+  async checkRegistrationStatus(requestId: string): Promise<{
+    status: "pending" | "approved" | "rejected";
+    message: string;
+  }> {
+    return this.request(`/api/v1/public/register/${requestId}/status`);
   }
 
   // Agents
@@ -357,6 +430,18 @@ class APIClient {
     return this.request(`/api/v1/admin/users/${userId}/role`, {
       method: "PUT",
       body: JSON.stringify({ role }),
+    });
+  }
+
+  async deactivateUser(userId: string): Promise<void> {
+    return this.request(`/api/v1/admin/users/${userId}/deactivate`, {
+      method: "POST",
+    });
+  }
+
+  async activateUser(userId: string): Promise<void> {
+    return this.request(`/api/v1/admin/users/${userId}/activate`, {
+      method: "POST",
     });
   }
 
@@ -472,6 +557,52 @@ class APIClient {
     organization_id: string;
   }> {
     return this.request("/api/v1/analytics/dashboard");
+  }
+
+  // Trust Score Trends - Get weekly or daily trust score trend data
+  async getTrustScoreTrends(
+    weeks = 4,
+    period: "weeks" | "days" = "weeks"
+  ): Promise<{
+    period: string;
+    current_average: number;
+    data_type: "weekly" | "daily";
+    trends: Array<{
+      date: string;
+      week_start?: string; // Only for weekly data
+      avg_score: number;
+      agent_count: number;
+    }>;
+  }> {
+    if (period === "weeks") {
+      return this.request(
+        `/api/v1/analytics/trends?period=weeks&weeks=${weeks}`
+      );
+    } else {
+      // Backward compatibility for days
+      const days = weeks * 7; // Convert weeks to days
+      return this.request(`/api/v1/analytics/trends?period=days&days=${days}`);
+    }
+  }
+
+  // Verification Activity - Get monthly verification activity data
+  async getVerificationActivity(months = 6): Promise<{
+    period: string;
+    activity: Array<{
+      month: string;
+      verified: number;
+      pending: number;
+      month_year: string;
+    }>;
+    current_stats: {
+      total_verified: number;
+      total_pending: number;
+      total_agents: number;
+    };
+  }> {
+    return this.request(
+      `/api/v1/analytics/verification-activity?months=${months}`
+    );
   }
 
   // Verifications
@@ -595,8 +726,14 @@ class APIClient {
       id: string;
       name: string;
       url: string;
-      status: "active" | "inactive" | "pending";
-      verification_status: "verified" | "unverified" | "failed";
+      status:
+        | "active"
+        | "inactive"
+        | "pending"
+        | "verified"
+        | "suspended"
+        | "revoked";
+      is_verified?: boolean;
       last_verified_at?: string;
       created_at: string;
     }>;

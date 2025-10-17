@@ -24,15 +24,24 @@ type PostgresConfig struct {
 // NewPostgresConfig creates config from environment variables
 func NewPostgresConfig() *PostgresConfig {
 	return &PostgresConfig{
-		Host:            getEnv("DB_HOST", "localhost"),
-		Port:            getEnv("DB_PORT", "5432"),
-		Database:        getEnv("DB_NAME", "agent_identity"),
-		User:            getEnv("DB_USER", "aim_user"),
-		Password:        getEnv("DB_PASSWORD", "aim_password_dev"),
-		SSLMode:         getEnv("DB_SSL_MODE", "disable"),
+		Host:            getEnvRequired("POSTGRES_HOST"),
+		Port:            getEnv("POSTGRES_PORT", "5432"),
+		Database:        getEnvRequired("POSTGRES_DB"),
+		User:            getEnvRequired("POSTGRES_USER"),
+		Password:        getEnvRequired("POSTGRES_PASSWORD"),
+		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
 		MaxConnections:  100,
 		ConnMaxLifetime: 5 * time.Minute,
 	}
+}
+
+// getEnvRequired gets environment variable and panics if not set
+func getEnvRequired(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		panic("Required environment variable " + key + " is not set")
+	}
+	return value
 }
 
 // Connect establishes a connection to PostgreSQL
