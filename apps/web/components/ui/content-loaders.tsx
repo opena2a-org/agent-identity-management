@@ -24,6 +24,9 @@ export function StatCardSkeleton() {
 
 // Chart Skeleton
 export function ChartSkeleton({ title }: { title?: string }) {
+  // Use deterministic heights to prevent hydration mismatches
+  const heights = [120, 80, 160, 100, 140, 90];
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
@@ -36,12 +39,9 @@ export function ChartSkeleton({ title }: { title?: string }) {
           <Skeleton className="h-4 w-20" />
         </div>
         <div className="h-64 flex items-end justify-between gap-2">
-          {[...Array(6)].map((_, i) => (
+          {heights.map((height, i) => (
             <div key={i} className="flex flex-col items-center gap-2 flex-1">
-              <Skeleton
-                className="w-full"
-                style={{ height: `${Math.random() * 150 + 50}px` }}
-              />
+              <Skeleton className="w-full" style={{ height: `${height}px` }} />
               <Skeleton className="h-3 w-8" />
             </div>
           ))}
@@ -379,7 +379,7 @@ export function MCPServerDetailSkeleton() {
         <div className="flex items-start gap-4">
           {/* Icon */}
           <Skeleton className="h-16 w-16 rounded-xl" />
-          
+
           {/* Title and Details */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">

@@ -159,7 +159,6 @@ export function Sidebar() {
       try {
         setIsLoading(true); // ✅ Start loading
         const userData = await api.getCurrentUser();
-        console.log("🚀 ~ fetchUser ~ userData:", userData);
         const normalizedRole: UserRole | undefined =
           userData?.role === "pending"
             ? "viewer"
