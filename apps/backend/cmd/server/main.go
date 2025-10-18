@@ -22,6 +22,7 @@ import (
 	"github.com/opena2a/identity/backend/internal/domain"
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
+	"github.com/opena2a/identity/backend/internal/infrastructure/email"
 	"github.com/opena2a/identity/backend/internal/infrastructure/oauth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
@@ -90,8 +91,16 @@ func main() {
 	// Initialize OAuth providers
 	oauthProviders := initOAuthProviders(cfg)
 
+	// Initialize email service
+	emailService, err := initEmailService()
+	if err != nil {
+		log.Printf("⚠️  Email service initialization failed: %v", err)
+		log.Println("ℹ️  AIM will continue without email notifications")
+		emailService = nil // Continue without email
+	}
+
 	// Initialize application services
-	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, oauthProviders)
+	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, oauthProviders, emailService)
 
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, legacyOAuthService, keyVault)
@@ -318,7 +327,7 @@ type Services struct {
 	Detection         *application.DetectionService // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
-func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider) (*Services, *crypto.KeyVault) {
+func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -338,6 +347,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Organization,
 		repos.APIKey,
 		securityPolicyService, // ✅ For auto-creating default policies
+		emailService,          // ✅ For sending welcome/approval emails
 	)
 
 	adminService := application.NewAdminService(
@@ -676,6 +686,29 @@ func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application
 	}
 
 	return providers
+}
+
+func initEmailService() (domain.EmailService, error) {
+	// Initialize email service from environment variables
+	service, err := email.NewEmailService()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize email service: %w", err)
+	}
+
+	// Validate connection
+	if err := service.ValidateConnection(); err != nil {
+		return nil, fmt.Errorf("email service connection validation failed: %w", err)
+	}
+
+	// Log successful initialization
+	provider := os.Getenv("EMAIL_PROVIDER")
+	if provider == "" {
+		provider = "azure"
+	}
+	fromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
+	log.Printf("✅ Email service initialized (provider: %s, from: %s)", provider, fromAddress)
+
+	return service, nil
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {

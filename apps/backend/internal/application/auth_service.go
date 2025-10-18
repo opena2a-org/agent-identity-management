@@ -19,6 +19,7 @@ type AuthService struct {
 	orgRepo       domain.OrganizationRepository
 	apiKeyRepo    domain.APIKeyRepository
 	policyService *SecurityPolicyService
+	emailService  domain.EmailService
 }
 
 // NewAuthService creates a new auth service
@@ -27,12 +28,14 @@ func NewAuthService(
 	orgRepo domain.OrganizationRepository,
 	apiKeyRepo domain.APIKeyRepository,
 	policyService *SecurityPolicyService,
+	emailService domain.EmailService,
 ) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
 		orgRepo:       orgRepo,
 		apiKeyRepo:    apiKeyRepo,
 		policyService: policyService,
+		emailService:  emailService,
 	}
 }
 
