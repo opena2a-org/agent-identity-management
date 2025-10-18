@@ -159,15 +159,16 @@ export function Sidebar() {
       try {
         setIsLoading(true); // ✅ Start loading
         const userData = await api.getCurrentUser();
-        console.log("🚀 ~ fetchUser ~ userData:", userData);
         const normalizedRole: UserRole | undefined =
-          userData.role === "pending" ? "viewer" : (userData.role as UserRole);
+          userData?.role === "pending"
+            ? "viewer"
+            : (userData?.role as UserRole);
         setUser({
-          email: userData.email,
+          email: userData?.email || "",
           display_name:
-            (userData as any).name || userData.email?.split("@")[0] || "User",
+            (userData as any)?.name || userData?.email?.split("@")[0] || "User",
           role: normalizedRole,
-          provider: (userData as any).provider || undefined,
+          provider: (userData as any)?.provider || undefined,
         });
       } catch (error) {
         // Silently handle errors - don't throw to UI
@@ -181,7 +182,7 @@ export function Sidebar() {
 
             // Check if token is expired
             const now = Math.floor(Date.now() / 1000);
-            if (payload.exp && payload.exp < now) {
+            if (payload?.exp && payload.exp < now) {
               // Token expired - clear and redirect
               api.clearToken();
               setTimeout(() => router.push("/auth/login"), 0);
@@ -189,9 +190,9 @@ export function Sidebar() {
             }
 
             setUser({
-              email: payload.email || "",
-              display_name: payload.email?.split("@")[0] || "User",
-              role: (payload.role as UserRole) || "viewer",
+              email: payload?.email || "",
+              display_name: payload?.email?.split("@")[0] || "User",
+              role: (payload?.role as UserRole) || "viewer",
             });
           } catch (e) {
             console.log("Token invalid, redirecting to login");

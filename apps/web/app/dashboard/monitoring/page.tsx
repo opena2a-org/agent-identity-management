@@ -274,10 +274,10 @@ export default function MonitoringPage() {
               <Activity className="h-5 w-5 text-blue-600" />
             </div>
             <p className="text-3xl font-bold text-gray-900">
-              {statistics.totalVerifications.toLocaleString()}
+              {statistics?.totalVerifications?.toLocaleString() || "0"}
             </p>
             <p className="text-sm text-gray-500 mt-1">
-              {statistics.verificationsPerMinute.toFixed(2)} per minute
+              {statistics?.verificationsPerMinute?.toFixed(2) || "0"} per minute
             </p>
           </div>
 
@@ -290,11 +290,11 @@ export default function MonitoringPage() {
               <CheckCircle className="h-5 w-5 text-green-600" />
             </div>
             <p className="text-3xl font-bold text-gray-900">
-              {statistics.successRate.toFixed(1)}%
+              {statistics?.successRate?.toFixed(1) || "0"}%
             </p>
             <p className="text-sm text-gray-500 mt-1">
-              {statistics.successCount} / {statistics.totalVerifications}{" "}
-              successful
+              {statistics?.successCount || 0} /{" "}
+              {statistics?.totalVerifications || 0} successful
             </p>
           </div>
 
@@ -305,7 +305,10 @@ export default function MonitoringPage() {
               <Clock className="h-5 w-5 text-purple-600" />
             </div>
             <p className="text-3xl font-bold text-gray-900">
-              {Math.round(statistics.avgDurationMs)}ms
+              {statistics?.avgDurationMs
+                ? Math.round(statistics.avgDurationMs)
+                : "0"}
+              ms
             </p>
             <p className="text-sm text-gray-500 mt-1">Average duration</p>
           </div>
@@ -319,7 +322,7 @@ export default function MonitoringPage() {
               <Activity className="h-5 w-5 text-indigo-600" />
             </div>
             <p className="text-3xl font-bold text-gray-900">
-              {statistics.uniqueAgentsVerified}
+              {statistics?.uniqueAgentsVerified || "0"}
             </p>
             <p className="text-sm text-gray-500 mt-1">Verified agents</p>
           </div>

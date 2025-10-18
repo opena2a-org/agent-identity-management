@@ -225,7 +225,7 @@ class APIClient {
 
       const data = await response.json();
       // Store new tokens (token rotation - old refresh token is now invalid)
-      this.setToken(data.access_token, data.refresh_token);
+      this.setToken(data?.access_token, data?.refresh_token);
       return data;
     } catch (error) {
       // Network error or other issue
@@ -244,8 +244,6 @@ class APIClient {
       ...(options.headers as Record<string, string>),
     };
 
-    console.log("token>>>>>>>>>>", token);
-
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -263,7 +261,7 @@ class APIClient {
 
       // Backend can return either 'error' or 'message' field
       const errorMessage =
-        error.error || error.message || `HTTP ${response.status}`;
+        error?.error || error?.message || `HTTP ${response.status}`;
       throw new Error(errorMessage);
     }
 

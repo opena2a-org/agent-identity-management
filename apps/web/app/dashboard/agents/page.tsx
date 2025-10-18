@@ -24,6 +24,7 @@ import { AgentDetailModal } from "@/components/modals/agent-detail-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { AgentsPageSkeleton } from "@/components/ui/content-loaders";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
+import { getErrorMessage } from "@/lib/error-messages";
 
 interface AgentStats {
   total: number;
@@ -213,10 +214,11 @@ export default function AgentsPage() {
       setAgents(data.agents);
     } catch (err) {
       console.error("Failed to fetch agents:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-      // NO MOCK DATA - show error state to user
+      const errorMessage = getErrorMessage(err, {
+        resource: "agents",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -362,13 +364,6 @@ export default function AgentsPage() {
             Manage and monitor all registered AI agents and MCP servers in your
             organization.
           </p>
-          {error && (
-            <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠️ Using mock data - API connection failed: {error}
-              </p>
-            </div>
-          )}
         </div>
         {permissions.canCreateAgent && (
           <button
@@ -448,16 +443,16 @@ export default function AgentsPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredAgents.map((agent) => (
+              {filteredAgents?.map((agent) => (
                 <tr
-                  key={agent.id}
+                  key={agent?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
                   onClick={() => handleViewAgent(agent)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                        {agent.agent_type === "ai_agent" ? (
+                        {agent?.agent_type === "ai_agent" ? (
                           <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         ) : (
                           <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -465,10 +460,10 @@ export default function AgentsPage() {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {agent.display_name}
+                          {agent?.display_name}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {agent.name}
+                          {agent?.name}
                         </div>
                       </div>
                     </div>
@@ -476,32 +471,32 @@ export default function AgentsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        agent.agent_type === "ai_agent"
+                        agent?.agent_type === "ai_agent"
                           ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
                           : "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
                       }`}
                     >
-                      {agent.agent_type === "ai_agent"
+                      {agent?.agent_type === "ai_agent"
                         ? "AI Agent"
                         : "MCP Server"}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {agent.version}
+                      {agent?.version}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={agent.status} />
+                    <StatusBadge status={agent?.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="w-40">
-                      <TrustScoreBar score={agent.trust_score} />
+                      <TrustScoreBar score={agent?.trust_score} />
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(agent.updated_at)}
+                      {agent?.updated_at && formatDate(agent.updated_at)}
                     </div>
                   </td>
                   <td

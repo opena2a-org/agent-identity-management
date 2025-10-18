@@ -28,6 +28,7 @@ import {
 import { api } from "@/lib/api";
 import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
+import { getErrorMessage } from "@/lib/error-messages";
 
 interface SecurityThreat {
   id: string;
@@ -303,10 +304,11 @@ export default function SecurityPage() {
       setMetrics(metricsData);
     } catch (err) {
       console.error("Failed to fetch security data:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-      // No mock data fallback - show error instead
+      const errorMessage = getErrorMessage(err, {
+        resource: "security data",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -370,17 +372,8 @@ export default function SecurityPage() {
             Security Dashboard
           </h1>
         </div>
-
-        {error && (
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              ⚠️ Using mock data - API connection failed: {error}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <StatCard key={stat.name} stat={stat} />
@@ -524,39 +517,39 @@ export default function SecurityPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {threats.slice(0, 5).map((threat) => (
+              {threats?.slice(0, 5)?.map((threat) => (
                 <tr
-                  key={threat.id}
+                  key={threat?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <td className="px-4 py-3">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
-                      {threat.threat_type}
+                      {threat?.threat_type}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                      {threat.description}
+                      {threat?.description}
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <div
                       className="text-sm text-gray-900 dark:text-gray-100 truncate"
-                      title={threat.target_name || threat.target_id}
+                      title={threat?.target_name || threat?.target_id}
                     >
-                      {threat.target_name ||
-                        `ID: ${threat.target_id.substring(0, 8)}...`}
+                      {threat?.target_name ||
+                        `ID: ${threat?.target_id?.substring(0, 8)}...`}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <SeverityBadge severity={threat.severity} />
+                    <SeverityBadge severity={threat?.severity} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <StatusBadge
-                      status={threat.is_blocked ? "resolved" : "active"}
+                      status={threat?.is_blocked ? "resolved" : "active"}
                     />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatDateTime(threat.created_at)}
+                      {threat?.created_at && formatDateTime(threat.created_at)}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

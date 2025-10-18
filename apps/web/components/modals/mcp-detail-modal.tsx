@@ -92,13 +92,13 @@ export function MCPDetailModal({
   };
 
   const handleDownloadKey = () => {
-    if (!mcp.public_key) return;
+    if (!mcp?.public_key) return;
 
     const blob = new Blob([mcp.public_key], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${mcp.name.replace(/\s+/g, "_")}_public_key.pem`;
+    a.download = `${mcp?.name?.replace(/\s+/g, "_") || "mcp"}_public_key.pem`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -126,10 +126,10 @@ export function MCPDetailModal({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {mcp.name}
+                {mcp?.name || "Unknown MCP"}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                {mcp.id}
+                {mcp?.id || "Unknown ID"}
               </p>
             </div>
           </div>
@@ -150,9 +150,9 @@ export function MCPDetailModal({
                 Status
               </span>
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(mcp.status)}`}
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(mcp?.status || "unknown")}`}
               >
-                {mcp.status}
+                {mcp?.status || "unknown"}
               </span>
             </div>
             <div>

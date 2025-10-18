@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
 import { MCPDetailModal } from "@/components/modals/mcp-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
+import { getErrorMessage } from "@/lib/error-messages";
 interface MCPServer {
   id: string;
   name: string;
@@ -286,10 +287,11 @@ export default function MCPServersPage() {
       setMcpServers(data.mcp_servers || []);
     } catch (err) {
       console.error("Failed to fetch MCP servers:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-      // NO MOCK DATA - show error state to user
+      const errorMessage = getErrorMessage(err, {
+        resource: "MCP servers",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -423,13 +425,6 @@ export default function MCPServersPage() {
             Manage Model Context Protocol (MCP) servers and their cryptographic
             verification status.
           </p>
-          {error && (
-            <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-800 dark:text-red-300">
-                ⚠️ API connection failed: {error}
-              </p>
-            </div>
-          )}
         </div>
         <button
           onClick={() => {
@@ -508,9 +503,9 @@ export default function MCPServersPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredServers.map((server) => (
+              {filteredServers?.map((server) => (
                 <tr
-                  key={server.id}
+                  key={server?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
                   onClick={() => handleViewMCP(server)}
                 >
@@ -521,13 +516,13 @@ export default function MCPServersPage() {
                       </div>
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {server.name}
+                          {server?.name}
                         </div>
                         <div
                           className="text-xs text-gray-500 dark:text-gray-400"
-                          title={server.id}
+                          title={server?.id}
                         >
-                          {server.id.substring(0, 8)}...
+                          {server?.id?.substring(0, 8)}...
                         </div>
                       </div>
                     </div>
@@ -536,22 +531,22 @@ export default function MCPServersPage() {
                     <div className="flex items-center text-sm text-gray-900 dark:text-gray-100">
                       <Globe className="h-3 w-3 mr-1 text-gray-400 flex-shrink-0" />
                       <a
-                        href={server.url}
+                        href={server?.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="truncate max-w-[200px] hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors text-xs"
-                        title={server.url}
+                        title={server?.url}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {server.url}
+                        {server?.url}
                       </a>
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <StatusBadge status={server.status} />
+                    <StatusBadge status={server?.status} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {server.last_verified_at ? (
+                    {server?.last_verified_at ? (
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <span className="text-sm text-gray-900 dark:text-gray-100">

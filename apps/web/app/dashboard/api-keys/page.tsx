@@ -18,6 +18,7 @@ import { api, APIKey, Agent } from "@/lib/api";
 import { CreateAPIKeyModal } from "@/components/modals/create-api-key-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
+import { getErrorMessage } from "@/lib/error-messages";
 
 interface APIKeyWithAgent extends APIKey {
   agent_name?: string;
@@ -133,10 +134,11 @@ export default function APIKeysPage() {
       setAgents(agents);
     } catch (err) {
       console.error("Failed to fetch data:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-      // NO MOCK DATA - show error state to user
+      const errorMessage = getErrorMessage(err, {
+        resource: "API keys",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -245,7 +247,9 @@ export default function APIKeysPage() {
       );
     } catch (err) {
       console.error("Failed to disable API key:", err);
-      setError(err instanceof Error ? err.message : "Failed to disable API key");
+      setError(
+        err instanceof Error ? err.message : "Failed to disable API key"
+      );
     } finally {
       setShowDisableConfirm(false);
       setSelectedKey(null);
@@ -300,13 +304,6 @@ export default function APIKeysPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Manage API keys for agent authentication and authorization.
           </p>
-          {error && (
-            <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-800 dark:text-red-300">
-                ⚠️ API connection failed: {error}
-              </p>
-            </div>
-          )}
         </div>
         {permissions.canCreateAPIKey && (
           <button
@@ -386,27 +383,27 @@ export default function APIKeysPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredKeys.map((key) => (
+              {filteredKeys?.map((key) => (
                 <tr
-                  key={key.id}
+                  key={key?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {key.name}
+                      {key?.name}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <code className="text-sm text-gray-600 dark:text-gray-400 font-mono">
-                        {key.prefix}
+                        {key?.prefix}
                       </code>
                       <button
-                        onClick={() => copyToClipboard(key.prefix, key.id)}
+                        onClick={() => copyToClipboard(key?.prefix, key?.id)}
                         className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                         title="Copy prefix"
                       >
-                        {copiedId === key.id ? (
+                        {copiedId === key?.id ? (
                           <Check className="h-4 w-4 text-green-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
@@ -416,41 +413,42 @@ export default function APIKeysPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {key.agent_name || "Unknown"}
+                      {key?.agent_name || "Unknown"}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(key.last_used_at)}
+                      {key?.last_used_at && formatDate(key.last_used_at)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div
-                      className={`text-sm ${isExpired(key.expires_at) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
+                      className={`text-sm ${key?.expires_at && isExpired(key.expires_at) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
                     >
-                      {formatDate(key.expires_at)}
+                      {key?.expires_at && formatDate(key.expires_at)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        !key.is_active
+                        !key?.is_active
                           ? "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300"
-                          : isExpired(key.expires_at)
+                          : key?.expires_at && isExpired(key.expires_at)
                             ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
                             : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
                       }`}
                     >
-                      {!key.is_active
+                      {!key?.is_active
                         ? "Disabled"
-                        : isExpired(key.expires_at)
+                        : key?.expires_at && isExpired(key.expires_at)
                           ? "Expired"
                           : "Active"}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      {key.is_active && !isExpired(key.expires_at) ? (
+                      {key?.is_active &&
+                      (!key?.expires_at || !isExpired(key.expires_at)) ? (
                         <button
                           onClick={() => handleDisableKey(key)}
                           className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
@@ -458,7 +456,7 @@ export default function APIKeysPage() {
                         >
                           <Ban className="h-4 w-4" />
                         </button>
-                      ) : !key.is_active && permissions.canDeleteAPIKey ? (
+                      ) : !key?.is_active && permissions.canDeleteAPIKey ? (
                         <button
                           onClick={() => handleDeleteKey(key)}
                           className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"

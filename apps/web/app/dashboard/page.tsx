@@ -28,6 +28,7 @@ import {
 import { api } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
 import { TimezoneIndicator } from "@/components/timezone-indicator";
+import { getErrorMessage } from "@/lib/error-messages";
 import {
   DashboardSkeleton,
   ChartSkeleton,
@@ -123,29 +124,6 @@ function StatCard({ stat }: { stat: any }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const getStatusStyles = (status: string) => {
-    switch (status) {
-      case "success":
-        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
-      case "failed":
-        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
-      case "pending":
-        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
-      default:
-        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
-    }
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}
-    >
-      {status}
-    </span>
-  );
-}
-
 function ErrorDisplay({
   message,
   onRetry,
@@ -158,7 +136,7 @@ function ErrorDisplay({
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
         <AlertCircle className="h-12 w-12 text-red-500" />
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Failed to Load Dashboard
+          Something went wrong!
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
         <button
@@ -226,16 +204,15 @@ function DashboardContent() {
     try {
       setLoading(true);
       setError(null);
-      console.log("fetchDashboardData");
       const data = await api.getDashboardStats();
-      console.log("fetchDashboardData>>>>>>>>>>>>>>>>", data);
       setDashboardData(data);
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-      // No mock data fallback - show error instead
+      const errorMessage = getErrorMessage(err, {
+        resource: "dashboard data",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -257,7 +234,7 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch trust score trends:", err);
-      setTrustScoreTrends(null); // Set to null to show error state, no dummy data
+      setTrustScoreTrends(null); // Set to null to show error state
     } finally {
       setTrendsLoading(false);
     }
@@ -281,7 +258,7 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch verification activity:", err);
-      setVerificationActivity(null); // Set to null to show error state, no dummy data
+      setVerificationActivity(null); // Set to null to show error state
     } finally {
       setActivityLoading(false);
     }
@@ -493,25 +470,25 @@ function DashboardContent() {
   const allStats = [
     {
       name: "Total Agents",
-      value: data.total_agents.toLocaleString(),
+      value: data?.total_agents?.toLocaleString() || 0,
       icon: Users,
       permission: "canViewAgentStats" as const,
     },
     {
       name: "Verified Agents",
-      value: data.verified_agents.toLocaleString(),
+      value: data?.verified_agents?.toLocaleString() || 0,
       icon: CheckCircle,
       permission: "canViewAgentStats" as const,
     },
     {
       name: "Trust Score Average",
-      value: data.avg_trust_score.toFixed(2),
+      value: data?.avg_trust_score?.toFixed(2) || 0,
       icon: TrendingUp,
       permission: "canViewTrustScore" as const,
     },
     {
       name: "Recent Activity Count",
-      value: auditLogs.length.toLocaleString(),
+      value: auditLogs?.length?.toLocaleString() || 0,
       icon: Activity,
       permission: "canViewRecentActivity" as const,
     },
@@ -685,7 +662,13 @@ function DashboardContent() {
                     <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
                   </div>
                   <div className="h-56 flex items-end justify-between gap-2">
-                    {[[90, 60], [110, 80], [70, 50], [120, 90], [100, 70]].map(([verifiedHeight, pendingHeight], i) => (
+                    {[
+                      [90, 60],
+                      [110, 80],
+                      [70, 50],
+                      [120, 90],
+                      [100, 70],
+                    ].map(([verifiedHeight, pendingHeight], i) => (
                       <div
                         key={i}
                         className="flex flex-col items-center gap-2 flex-1"
@@ -788,7 +771,7 @@ function DashboardContent() {
                   Total Agents
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data.total_agents}
+                  {data?.total_agents}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -796,7 +779,7 @@ function DashboardContent() {
                   Verified
                 </span>
                 <span className="text-sm font-medium text-green-600">
-                  {data.verified_agents}
+                  {data?.verified_agents}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -804,7 +787,7 @@ function DashboardContent() {
                   Pending
                 </span>
                 <span className="text-sm font-medium text-yellow-600">
-                  {data.pending_agents}
+                  {data?.pending_agents}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -812,7 +795,7 @@ function DashboardContent() {
                   Verification Rate
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data.verification_rate.toFixed(1)}%
+                  {data?.verification_rate?.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -832,7 +815,7 @@ function DashboardContent() {
                   Active Alerts
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data.active_alerts}
+                  {data?.active_alerts}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -840,7 +823,7 @@ function DashboardContent() {
                   Critical
                 </span>
                 <span className="text-sm font-medium text-red-600">
-                  {data.critical_alerts}
+                  {data?.critical_alerts}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -848,7 +831,7 @@ function DashboardContent() {
                   Incidents
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data.security_incidents}
+                  {data?.security_incidents}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -884,7 +867,7 @@ function DashboardContent() {
                     Total Users
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data.total_users}
+                    {data?.total_users}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -892,7 +875,7 @@ function DashboardContent() {
                     Active Users
                   </span>
                   <span className="text-sm font-medium text-green-600">
-                    {data.active_users}
+                    {data?.active_users}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -900,7 +883,7 @@ function DashboardContent() {
                     MCP Servers
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data.total_mcp_servers}
+                    {data?.total_mcp_servers}
                   </span>
                 </div>
               </>
@@ -928,7 +911,7 @@ function DashboardContent() {
                     Total Agents
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data.total_agents}
+                    {data?.total_agents}
                   </span>
                 </div>
               </>
@@ -941,8 +924,8 @@ function DashboardContent() {
               </span>
               <span className="text-sm font-medium text-green-600">
                 {permissions.canViewUserStats
-                  ? data.active_mcp_servers
-                  : data.verified_agents}
+                  ? data?.active_mcp_servers
+                  : data?.verified_agents}
               </span>
             </div>
           </div>

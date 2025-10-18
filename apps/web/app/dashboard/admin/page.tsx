@@ -22,6 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
+import { getErrorMessage } from "@/lib/error-messages";
 
 interface AdminStats {
   totalAgents: number;
@@ -104,7 +105,11 @@ export default function AdminDashboard() {
       });
     } catch (err) {
       console.error("Failed to fetch admin stats:", err);
-      setError(err instanceof Error ? err.message : "Failed to load statistics");
+      const errorMessage = getErrorMessage(err, {
+        resource: "admin statistics",
+        action: "load",
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -278,7 +283,9 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Security Alerts</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Security Alerts
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
