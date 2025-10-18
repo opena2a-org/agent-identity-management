@@ -358,10 +358,16 @@ export default function AgentDetailsPage({
               onSelectionComplete={handleRefresh}
               variant="outline"
             />
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/dashboard/sdk')}
+            >
               <Download className="h-4 w-4 mr-1" /> Download SDK
             </Button>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/dashboard/sdk-tokens`)}
+            >
               <KeyRound className="h-4 w-4 mr-1" /> Get Credentials
             </Button>
             {canEdit && (

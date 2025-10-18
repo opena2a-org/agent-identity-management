@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to AIM</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1f2937;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #111827;
+            font-size: 24px;
+            margin-top: 0;
+        }
+        .content p {
+            color: #4b5563;
+            font-size: 16px;
+            line-height: 1.8;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 20px 0;
+            transition: transform 0.2s;
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        .features {
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+        .features h3 {
+            color: #111827;
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .features ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .features li {
+            padding: 8px 0;
+            color: #4b5563;
+        }
+        .features li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>🎉 Welcome to AIM</h1>
+            <p>Agent Identity Management Platform</p>
+        </div>
+
+        <div class="content">
+            <h2>Hi {{.UserName}},</h2>
+
+            <p>We're excited to have you on board! Your account has been approved and you're ready to start managing AI agents with enterprise-grade security.</p>
+
+            <div style="text-align: center;">
+                <a href="{{.DashboardURL}}" class="cta-button">Go to Dashboard</a>
+            </div>
+
+            <div class="features">
+                <h3>What you can do with AIM:</h3>
+                <ul>
+                    <li>Register and manage AI agents with cryptographic verification</li>
+                    <li>Monitor agent trust scores and security metrics</li>
+                    <li>Configure MCP servers with public key authentication</li>
+                    <li>Track API key usage and expiration</li>
+                    <li>Get real-time security alerts and compliance reports</li>
+                </ul>
+            </div>
+
+            <p>If you have any questions or need assistance, our support team is here to help.</p>
+
+            <p>Best regards,<br>
+            <strong>The AIM Team</strong></p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 OpenA2A | Agent Identity Management</p>
+            {{if .SupportEmail}}
+            <p><a href="mailto:{{.SupportEmail}}">Contact Support</a></p>
+            {{end}}
+            <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">
+                You're receiving this email because your account was created on the AIM platform.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

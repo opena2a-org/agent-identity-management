@@ -1,0 +1,6 @@
+# AIM SDK (local installation)
+# Install from ../../sdks/python
+
+# Additional dependencies for flight agent
+requests>=2.31.0
+python-dateutil>=2.8.2
