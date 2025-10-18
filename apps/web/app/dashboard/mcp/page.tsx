@@ -289,7 +289,6 @@ export default function MCPServersPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }

@@ -136,7 +136,6 @@ export default function APIKeysPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }
@@ -245,7 +244,9 @@ export default function APIKeysPage() {
       );
     } catch (err) {
       console.error("Failed to disable API key:", err);
-      setError(err instanceof Error ? err.message : "Failed to disable API key");
+      setError(
+        err instanceof Error ? err.message : "Failed to disable API key"
+      );
     } finally {
       setShowDisableConfirm(false);
       setSelectedKey(null);

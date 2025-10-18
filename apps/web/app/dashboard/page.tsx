@@ -228,14 +228,12 @@ function DashboardContent() {
       setError(null);
       console.log("fetchDashboardData");
       const data = await api.getDashboardStats();
-      console.log("fetchDashboardData>>>>>>>>>>>>>>>>", data);
       setDashboardData(data);
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // No mock data fallback - show error instead
     } finally {
       setLoading(false);
     }
@@ -685,7 +683,13 @@ function DashboardContent() {
                     <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
                   </div>
                   <div className="h-56 flex items-end justify-between gap-2">
-                    {[[90, 60], [110, 80], [70, 50], [120, 90], [100, 70]].map(([verifiedHeight, pendingHeight], i) => (
+                    {[
+                      [90, 60],
+                      [110, 80],
+                      [70, 50],
+                      [120, 90],
+                      [100, 70],
+                    ].map(([verifiedHeight, pendingHeight], i) => (
                       <div
                         key={i}
                         className="flex flex-col items-center gap-2 flex-1"

@@ -216,7 +216,6 @@ export default function AgentsPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }
@@ -362,13 +361,6 @@ export default function AgentsPage() {
             Manage and monitor all registered AI agents and MCP servers in your
             organization.
           </p>
-          {error && (
-            <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠️ Using mock data - API connection failed: {error}
-              </p>
-            </div>
-          )}
         </div>
         {permissions.canCreateAgent && (
           <button

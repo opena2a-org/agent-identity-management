@@ -306,7 +306,6 @@ export default function SecurityPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // No mock data fallback - show error instead
     } finally {
       setLoading(false);
     }
@@ -370,17 +369,8 @@ export default function SecurityPage() {
             Security Dashboard
           </h1>
         </div>
-
-        {error && (
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              ⚠️ Using mock data - API connection failed: {error}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <StatCard key={stat.name} stat={stat} />
