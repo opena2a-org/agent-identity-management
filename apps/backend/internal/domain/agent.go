@@ -65,6 +65,7 @@ type Agent struct {
 type AgentRepository interface {
 	Create(agent *Agent) error
 	GetByID(id uuid.UUID) (*Agent, error)
+	GetByName(orgID uuid.UUID, name string) (*Agent, error)
 	GetByOrganization(orgID uuid.UUID) ([]*Agent, error)
 	Update(agent *Agent) error
 	Delete(id uuid.UUID) error

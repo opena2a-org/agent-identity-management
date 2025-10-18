@@ -486,3 +486,142 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 
 	return agents, nil
 }
+
+
+// GetByName gets an agent by name within an organization
+func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
+	query := `
+		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
+		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
+		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
+		       talks_to, capabilities, last_capability_check_at, capability_violation_count, is_compromised
+		FROM agents
+		WHERE organization_id = $1 AND name = $2
+		LIMIT 1
+	`
+
+	agent := &domain.Agent{}
+	var publicKey sql.NullString
+	var certificateURL sql.NullString
+	var repositoryURL sql.NullString
+	var documentationURL sql.NullString
+	var version sql.NullString
+	var verifiedAt sql.NullTime
+	var encryptedPrivateKey sql.NullString
+	var keyAlgorithm sql.NullString
+	var keyCreatedAt sql.NullTime
+	var keyExpiresAt sql.NullTime
+	var keyRotationGraceUntil sql.NullTime
+	var previousPublicKey sql.NullString
+	var rotationCount sql.NullInt32
+	var talksToJSON []byte
+	var capabilitiesJSON []byte
+	var lastCapabilityCheckAt sql.NullTime
+	var capabilityViolationCount sql.NullInt32
+	var isCompromised sql.NullBool
+
+	err := r.db.QueryRow(query, orgID, name).Scan(
+		&agent.ID,
+		&agent.OrganizationID,
+		&agent.Name,
+		&agent.DisplayName,
+		&agent.Description,
+		&agent.AgentType,
+		&agent.Status,
+		&version,
+		&publicKey,
+		&certificateURL,
+		&repositoryURL,
+		&documentationURL,
+		&agent.TrustScore,
+		&verifiedAt,
+		&agent.CreatedAt,
+		&agent.UpdatedAt,
+		&agent.CreatedBy,
+		&encryptedPrivateKey,
+		&keyAlgorithm,
+		&keyCreatedAt,
+		&keyExpiresAt,
+		&keyRotationGraceUntil,
+		&previousPublicKey,
+		&rotationCount,
+		&talksToJSON,
+		&capabilitiesJSON,
+		&lastCapabilityCheckAt,
+		&capabilityViolationCount,
+		&isCompromised,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("agent not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert nullable fields
+	if version.Valid {
+		agent.Version = version.String
+	}
+	if publicKey.Valid {
+		agent.PublicKey = &publicKey.String
+	}
+	if certificateURL.Valid {
+		agent.CertificateURL = certificateURL.String
+	}
+	if repositoryURL.Valid {
+		agent.RepositoryURL = repositoryURL.String
+	}
+	if documentationURL.Valid {
+		agent.DocumentationURL = documentationURL.String
+	}
+	if verifiedAt.Valid {
+		agent.VerifiedAt = &verifiedAt.Time
+	}
+	if encryptedPrivateKey.Valid {
+		agent.EncryptedPrivateKey = &encryptedPrivateKey.String
+	}
+	if keyAlgorithm.Valid {
+		agent.KeyAlgorithm = keyAlgorithm.String
+	}
+	if keyCreatedAt.Valid {
+		agent.KeyCreatedAt = &keyCreatedAt.Time
+	}
+	if keyExpiresAt.Valid {
+		agent.KeyExpiresAt = &keyExpiresAt.Time
+	}
+	if keyRotationGraceUntil.Valid {
+		agent.KeyRotationGraceUntil = &keyRotationGraceUntil.Time
+	}
+	if previousPublicKey.Valid {
+		agent.PreviousPublicKey = &previousPublicKey.String
+	}
+	if rotationCount.Valid {
+		agent.RotationCount = int(rotationCount.Int32)
+	}
+	if capabilityViolationCount.Valid {
+		agent.CapabilityViolationCount = int(capabilityViolationCount.Int32)
+	}
+	if isCompromised.Valid {
+		agent.IsCompromised = isCompromised.Bool
+	}
+	if lastCapabilityCheckAt.Valid {
+		agent.LastCapabilityCheckAt = &lastCapabilityCheckAt.Time
+	}
+
+	// Unmarshal JSONB fields
+	if len(talksToJSON) > 0 {
+		if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+		}
+	}
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &agent.Capabilities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+		}
+	}
+
+	return agent, nil
+}
+
