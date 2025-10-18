@@ -863,3 +863,8 @@ func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMC
 
 	return detectedServers, nil
 }
+
+// GetAgentByName retrieves an agent by name within an organization
+func (s *AgentService) GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error) {
+return s.agentRepo.GetByName(orgID, name)
+}

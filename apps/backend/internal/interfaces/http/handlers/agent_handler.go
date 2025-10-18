@@ -976,3 +976,87 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 
 	return c.JSON(result)
 }
+
+// GetAgentByIdentifier returns agent by ID or name (SDK API endpoint with API key auth)
+// @Summary Get agent by ID or name
+// @Description Get agent details by UUID or name. Works with API key authentication for SDK usage.
+// @Tags sdk-api
+// @Accept json
+// @Produce json
+// @Param identifier path string true "Agent ID (UUID) or name"
+// @Success 200 {object} domain.Agent
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security ApiKeyAuth
+// @Router /api/v1/sdk-api/agents/{identifier} [get]
+func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
+	// Get organization ID from API key middleware
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	identifier := c.Params("identifier")
+
+	if identifier == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Agent identifier (ID or name) is required",
+		})
+	}
+
+	// Try to parse as UUID first
+	agentID, err := uuid.Parse(identifier)
+	var agent *domain.Agent
+
+	if err == nil {
+		// It's a UUID, get by ID
+		agent, err = h.agentService.GetAgent(c.Context(), agentID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Agent not found",
+			})
+		}
+
+		// Verify agent belongs to the organization
+		if agent.OrganizationID != orgID {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Agent does not belong to your organization",
+			})
+		}
+	} else {
+		// It's a name, get by name
+		agent, err = h.agentService.GetAgentByName(c.Context(), orgID, identifier)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":   "Agent not found",
+				"message": fmt.Sprintf("No agent found with name '%s' in your organization", identifier),
+			})
+		}
+	}
+
+	// Return agent details (excluding sensitive private key)
+	return c.JSON(fiber.Map{
+		"success": true,
+		"agent": fiber.Map{
+			"id":                   agent.ID,
+			"organization_id":      agent.OrganizationID,
+			"name":                 agent.Name,
+			"display_name":         agent.DisplayName,
+			"description":          agent.Description,
+			"agent_type":           agent.AgentType,
+			"status":               agent.Status,
+			"version":              agent.Version,
+			"public_key":           agent.PublicKey,
+			"trust_score":          agent.TrustScore,
+			"verified_at":          agent.VerifiedAt,
+			"created_at":           agent.CreatedAt,
+			"updated_at":           agent.UpdatedAt,
+			"key_algorithm":        agent.KeyAlgorithm,
+			"key_created_at":       agent.KeyCreatedAt,
+			"key_expires_at":       agent.KeyExpiresAt,
+			"rotation_count":       agent.RotationCount,
+			"talks_to":             agent.TalksTo,
+			"capabilities":         agent.Capabilities,
+			"capability_violation_count": agent.CapabilityViolationCount,
+			"is_compromised":       agent.IsCompromised,
+		},
+	})
+}
+

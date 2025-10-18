@@ -159,6 +159,7 @@ func main() {
 	sdkAPI := app.Group("/api/v1/sdk-api")
 	sdkAPI.Use(middleware.APIKeyMiddleware(db))
 	sdkAPI.Use(middleware.RateLimitMiddleware())
+	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)       // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)  // SDK capability reporting
 	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)  // SDK MCP registration
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection) // SDK MCP detection and integration reporting
