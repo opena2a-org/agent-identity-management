@@ -1,5 +1,6 @@
 #!/bin/bash
 set -a
-source .env
+[ -f .env ] && source .env
 set +a
-exec ./bin/server
+cd apps/backend
+exec go run cmd/server/main.go
