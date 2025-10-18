@@ -152,7 +152,7 @@ export function AgentDetailModal({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${agent.name}-${language}-sdk.zip`;
+      a.download = `${agent?.name || "agent"}-${language}-sdk.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -191,8 +191,8 @@ export function AgentDetailModal({
 
       const data = await response.json();
       setAgentKeys({
-        publicKey: data.publicKey,
-        privateKey: data.privateKey,
+        publicKey: data?.publicKey || "",
+        privateKey: data?.privateKey || "",
       });
     } catch (err) {
       console.error("Failed to fetch agent keys:", err);
