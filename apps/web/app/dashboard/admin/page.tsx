@@ -24,18 +24,26 @@ import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 
 interface AdminStats {
-  totalUsers: number;
-  totalOrganizations: number;
+  totalAgents: number;
+  verifiedAgents: number;
   pendingAgents: number;
-  unacknowledgedAlerts: number;
-  totalAuditLogs: number;
-  recentActions24h: number;
+  verificationRate: number;
+  avgTrustScore: number;
+  totalMcpServers: number;
+  activeMcpServers: number;
+  totalUsers: number;
+  activeUsers: number;
+  activeAlerts: number;
+  criticalAlerts: number;
+  securityIncidents: number;
+  organizationId: string;
 }
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
     "viewer"
@@ -74,18 +82,29 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      // In real implementation, fetch from API
-      // For now, mock data
+      setLoading(true);
+      setError(null);
+      const data = await api.getAdminDashboardStats();
+
+      // Convert snake_case backend response to camelCase frontend
       setStats({
-        totalUsers: 24,
-        totalOrganizations: 5,
-        pendingAgents: 3,
-        unacknowledgedAlerts: 7,
-        totalAuditLogs: 1247,
-        recentActions24h: 156,
+        totalAgents: data.total_agents,
+        verifiedAgents: data.verified_agents,
+        pendingAgents: data.pending_agents,
+        verificationRate: data.verification_rate,
+        avgTrustScore: data.avg_trust_score,
+        totalMcpServers: data.total_mcp_servers,
+        activeMcpServers: data.active_mcp_servers,
+        totalUsers: data.total_users,
+        activeUsers: data.active_users,
+        activeAlerts: data.active_alerts,
+        criticalAlerts: data.critical_alerts,
+        securityIncidents: data.security_incidents,
+        organizationId: data.organization_id,
       });
-    } catch (error) {
-      console.error("Failed to fetch admin stats:", error);
+    } catch (err) {
+      console.error("Failed to fetch admin stats:", err);
+      setError(err instanceof Error ? err.message : "Failed to load statistics");
     } finally {
       setLoading(false);
     }
@@ -148,6 +167,33 @@ export default function AdminDashboard() {
     );
   }
 
+  // Error state - show error with retry button
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Platform overview and management
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertTriangle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                Failed to Load Statistics
+              </h3>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={fetchStats}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -161,86 +207,84 @@ export default function AdminDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Agents</CardTitle>
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalAgents}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.verifiedAgents} verified, {stats?.pendingAgents} pending
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Verification Rate
+            </CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats?.verificationRate.toFixed(1)}%
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Of all registered agents
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Average Trust Score
+            </CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats?.avgTrustScore.toFixed(1)}
+            </div>
+            <p className="text-xs text-muted-foreground">Out of 100</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MCP Servers</CardTitle>
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalMcpServers}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.activeMcpServers} active
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.totalUsers}</div>
             <p className="text-xs text-muted-foreground">
-              Across {stats?.totalOrganizations} organizations
+              {stats?.activeUsers} active
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Agents
-            </CardTitle>
-            <ShieldAlert className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingAgents}</div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting verification
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Unacknowledged Alerts
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Security Alerts</CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.unacknowledgedAlerts}
-            </div>
-            <p className="text-xs text-muted-foreground">Require attention</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Audit Logs
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.totalAuditLogs.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">All-time records</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Recent Activity
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.recentActions24h}</div>
+            <div className="text-2xl font-bold">{stats?.activeAlerts}</div>
             <p className="text-xs text-muted-foreground">
-              Actions in last 24 hours
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Status</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Healthy</div>
-            <p className="text-xs text-muted-foreground">
-              All services operational
+              {stats?.criticalAlerts} critical
             </p>
           </CardContent>
         </Card>

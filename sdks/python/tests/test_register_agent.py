@@ -192,7 +192,8 @@ class TestRegisterAgent:
                     agent_id=existing_creds["agent_id"],
                     public_key=existing_creds["public_key"],
                     private_key=existing_creds["private_key"],
-                    aim_url=existing_creds["aim_url"]
+                    aim_url=existing_creds["aim_url"],
+                    oauth_token_manager=None
                 )
 
     def test_register_agent_force_new_registration(self):

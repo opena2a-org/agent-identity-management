@@ -127,6 +127,7 @@ type VerificationEventRepository interface {
 	GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*VerificationEvent, int, error)
 	GetRecentEvents(orgID uuid.UUID, minutes int) ([]*VerificationEvent, error)
 	GetStatistics(orgID uuid.UUID, startTime, endTime time.Time) (*VerificationStatistics, error)
+	UpdateResult(id uuid.UUID, result VerificationResult, reason *string, metadata map[string]interface{}) error
 	Delete(id uuid.UUID) error
 }
 

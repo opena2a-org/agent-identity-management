@@ -345,34 +345,6 @@ function DashboardContent() {
     fetchAuditLogs();
   }, [searchParams]);
 
-  // Mock data fallback matching backend response structure
-  // NOTE: Backend MCP stats fix committed but not deployed due to compilation errors
-  // When backend is rebuilt, it will fetch actual MCP servers from mcp_servers table
-  const getMockData = (): DashboardStats => ({
-    // Agent metrics
-    total_agents: 3, // Matches backend response
-    verified_agents: 0,
-    pending_agents: 3,
-    verification_rate: 0,
-    avg_trust_score: 0.38,
-
-    // MCP Server metrics
-    total_mcp_servers: 7, // Backend will return this after fix is deployed
-    active_mcp_servers: 0,
-
-    // User metrics
-    total_users: 1, // Current logged-in user
-    active_users: 1,
-
-    // Security metrics
-    active_alerts: 0,
-    critical_alerts: 0,
-    security_incidents: 0,
-
-    // Organization
-    organization_id: "",
-  });
-
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -564,13 +536,6 @@ function DashboardContent() {
           </div>
           <TimezoneIndicator />
         </div>
-        {error && (
-          <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              ⚠️ Using mock data - API connection failed: {error}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Stats */}
@@ -599,14 +564,14 @@ function DashboardContent() {
                     <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
                   </div>
                   <div className="h-56 flex items-end justify-between gap-2">
-                    {[...Array(6)].map((_, i) => (
+                    {[60, 90, 120, 80, 110, 70].map((height, i) => (
                       <div
                         key={i}
                         className="flex flex-col items-center gap-2 flex-1"
                       >
                         <div
                           className="w-full animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
-                          style={{ height: `${Math.random() * 120 + 30}px` }}
+                          style={{ height: `${height}px` }}
                         />
                         <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-8 rounded"></div>
                       </div>
@@ -720,7 +685,7 @@ function DashboardContent() {
                     <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
                   </div>
                   <div className="h-56 flex items-end justify-between gap-2">
-                    {[...Array(5)].map((_, i) => (
+                    {[[90, 60], [110, 80], [70, 50], [120, 90], [100, 70]].map(([verifiedHeight, pendingHeight], i) => (
                       <div
                         key={i}
                         className="flex flex-col items-center gap-2 flex-1"
@@ -728,11 +693,11 @@ function DashboardContent() {
                         <div className="w-full flex gap-1">
                           <div
                             className="w-1/2 animate-pulse bg-green-200 dark:bg-green-800 rounded"
-                            style={{ height: `${Math.random() * 100 + 40}px` }}
+                            style={{ height: `${verifiedHeight}px` }}
                           />
                           <div
                             className="w-1/2 animate-pulse bg-yellow-200 dark:bg-yellow-800 rounded"
-                            style={{ height: `${Math.random() * 80 + 30}px` }}
+                            style={{ height: `${pendingHeight}px` }}
                           />
                         </div>
                         <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-12 rounded"></div>

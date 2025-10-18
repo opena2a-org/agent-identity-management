@@ -289,8 +289,7 @@ export default function MCPServersPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-      // For development, use mock data as fallback
-      setMcpServers(getMockMCPServers());
+      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }
@@ -299,77 +298,6 @@ export default function MCPServersPage() {
   useEffect(() => {
     fetchMCPServers();
   }, []);
-
-  // Mock data fallback for development
-  const getMockMCPServers = (): MCPServer[] => [
-    {
-      id: "mcp_001",
-      name: "File Operations Server",
-      url: "https://mcp.example.com/filesystem",
-      description: "Provides secure file system operations and management",
-      status: "active",
-      public_key:
-        "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----",
-      key_type: "RSA-2048",
-      last_verified_at: "2025-01-20T14:30:00Z",
-      created_at: "2025-01-15T10:00:00Z",
-      trust_score: 95.0,
-      capability_count: 8,
-    },
-    {
-      id: "mcp_002",
-      name: "Database Connector",
-      url: "https://mcp.example.com/database",
-      description: "Database access and query execution service",
-      status: "active",
-      public_key:
-        "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----",
-      key_type: "Ed25519",
-      last_verified_at: "2025-01-20T12:15:00Z",
-      created_at: "2025-01-16T11:30:00Z",
-      trust_score: 88.5,
-      capability_count: 12,
-    },
-    {
-      id: "mcp_003",
-      name: "Cloud Storage Gateway",
-      url: "https://mcp.example.com/cloud-storage",
-      status: "active",
-      last_verified_at: "2025-01-20T16:00:00Z",
-      created_at: "2025-01-17T09:00:00Z",
-      trust_score: 92.0,
-      capability_count: 6,
-    },
-    {
-      id: "mcp_004",
-      name: "API Integration Hub",
-      url: "https://mcp.example.com/api-hub",
-      status: "inactive",
-      created_at: "2025-01-19T15:45:00Z",
-      trust_score: 45.0,
-      capability_count: 0,
-    },
-    {
-      id: "mcp_005",
-      name: "Analytics Service",
-      url: "https://mcp.example.com/analytics",
-      status: "active",
-      last_verified_at: "2025-01-20T10:30:00Z",
-      created_at: "2025-01-18T14:20:00Z",
-      trust_score: 78.5,
-      capability_count: 15,
-    },
-    {
-      id: "mcp_006",
-      name: "Legacy Systems Bridge",
-      url: "https://mcp.example.com/legacy",
-      status: "inactive",
-      last_verified_at: "2025-01-19T08:00:00Z",
-      created_at: "2025-01-12T16:00:00Z",
-      trust_score: 35.0,
-      capability_count: 4,
-    },
-  ];
 
   // Calculate stats
   const stats = {
@@ -496,9 +424,9 @@ export default function MCPServersPage() {
             verification status.
           </p>
           {error && (
-            <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠️ Using mock data - API connection failed: {error}
+            <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-800 dark:text-red-300">
+                ⚠️ API connection failed: {error}
               </p>
             </div>
           )}

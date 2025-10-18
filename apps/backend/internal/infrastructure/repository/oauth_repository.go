@@ -40,11 +40,11 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 
 	query := `
 		INSERT INTO user_registration_requests (
-			id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+			id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			organization_id, status, requested_at, profile_picture_url,
 			oauth_email_verified, metadata, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		)
 	`
 
@@ -53,7 +53,6 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		req.Email,
 		req.FirstName,
 		req.LastName,
-		req.PasswordHash,
 		oauthProvider, // Use the dereferenced value
 		req.OAuthUserID,
 		req.OrganizationID,
@@ -75,7 +74,7 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 
 func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id uuid.UUID) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -91,7 +90,6 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
-		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -130,7 +128,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByOAuth(
 	providerUserID string,
 ) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -146,7 +144,6 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByOAuth(
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
-		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -184,7 +181,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 	email string,
 ) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -202,7 +199,6 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
-		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -241,7 +237,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 	email string,
 ) (*domain.UserRegistrationRequest, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -259,7 +255,6 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 		&req.Email,
 		&req.FirstName,
 		&req.LastName,
-		&req.PasswordHash,
 		&req.OAuthProvider,
 		&req.OAuthUserID,
 		&req.OrganizationID,
@@ -310,7 +305,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 
 	// Get paginated results
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, oauth_provider, oauth_user_id,
+		SELECT id, email, first_name, last_name, oauth_provider, oauth_user_id,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
 			   rejection_reason, profile_picture_url, oauth_email_verified,
 			   metadata, created_at, updated_at
@@ -336,7 +331,6 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 			&req.Email,
 			&req.FirstName,
 			&req.LastName,
-			&req.PasswordHash,
 			&req.OAuthProvider,
 			&req.OAuthUserID,
 			&req.OrganizationID,

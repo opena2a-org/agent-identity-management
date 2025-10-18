@@ -71,8 +71,8 @@ func (r *UserRepository) Create(user *domain.User) error {
 func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       password_hash, email_verified, force_password_change, last_login_at, 
-		       status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		       password_hash, email_verified, force_password_change, last_login_at,
+		       status, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE id = $1
 	`
@@ -95,7 +95,6 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
 		&status,
-		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -125,8 +124,8 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       password_hash, email_verified, force_password_change, last_login_at, 
-		       status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		       password_hash, email_verified, force_password_change, last_login_at,
+		       status, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
 		FROM users
 		WHERE email = $1
 	`
@@ -149,7 +148,6 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
 		&status,
-		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -179,7 +177,7 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id
+		       last_login_at, status, created_at, updated_at, oauth_provider, oauth_user_id
 		FROM users
 		WHERE provider = $1 AND provider_id = $2
 	`
@@ -199,7 +197,6 @@ func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.Use
 		&user.ProviderID,
 		&user.LastLoginAt,
 		&status,
-		&user.DeletedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&oauthProvider,
@@ -227,7 +224,7 @@ func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.Use
 func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, status, deleted_at, created_at, updated_at, oauth_provider, oauth_user_id
+		       last_login_at, status, created_at, updated_at, oauth_provider, oauth_user_id
 		FROM users
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -256,7 +253,6 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 			&user.ProviderID,
 			&user.LastLoginAt,
 			&status,
-			&user.DeletedAt,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 			&oauthProvider,
@@ -300,10 +296,10 @@ func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status doma
 func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
-		SET name = $1, avatar_url = $2, role = $3, password_hash = $4, 
-		    email_verified = $5, force_password_change = $6, last_login_at = $7, 
-		    status = $8, approved_by = $9, approved_at = $10, deleted_at = $11, updated_at = $12
-		WHERE id = $13
+		SET name = $1, avatar_url = $2, role = $3, password_hash = $4,
+		    email_verified = $5, force_password_change = $6, last_login_at = $7,
+		    status = $8, approved_by = $9, approved_at = $10, updated_at = $11
+		WHERE id = $12
 	`
 
 	user.UpdatedAt = time.Now()
@@ -319,7 +315,6 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.Status,
 		user.ApprovedBy,
 		user.ApprovedAt,
-		user.DeletedAt,
 		user.UpdatedAt,
 		user.ID,
 	)

@@ -136,70 +136,7 @@ export default function APIKeysPage() {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );
-
-      // Mock data for development
-      const mockAgents = [
-        {
-          id: "agt_001",
-          display_name: "Claude Assistant",
-          name: "claude-assistant",
-        } as Agent,
-        {
-          id: "agt_002",
-          display_name: "Data Processor",
-          name: "data-processor",
-        } as Agent,
-      ];
-
-      const mockKeys: APIKeyWithAgent[] = [
-        {
-          id: "key_001",
-          agent_id: "agt_001",
-          agent_name: "Claude Assistant",
-          name: "Production API Key",
-          prefix: "aim_abc123...",
-          last_used_at: "2025-01-20T10:30:00Z",
-          expires_at: "2025-04-20T10:30:00Z",
-          is_active: true,
-          created_at: "2025-01-15T10:30:00Z",
-        },
-        {
-          id: "key_002",
-          agent_id: "agt_002",
-          agent_name: "Data Processor",
-          name: "Development API Key",
-          prefix: "aim_xyz789...",
-          last_used_at: "2025-01-19T14:22:00Z",
-          expires_at: "2025-07-19T14:22:00Z",
-          is_active: true,
-          created_at: "2025-01-10T14:22:00Z",
-        },
-        {
-          id: "key_003",
-          agent_id: "agt_001",
-          agent_name: "Claude Assistant",
-          name: "Testing API Key",
-          prefix: "aim_def456...",
-          last_used_at: undefined,
-          expires_at: undefined,
-          is_active: true,
-          created_at: "2025-01-18T09:00:00Z",
-        },
-        {
-          id: "key_004",
-          agent_id: "agt_002",
-          agent_name: "Data Processor",
-          name: "Legacy API Key",
-          prefix: "aim_old999...",
-          last_used_at: "2024-12-15T08:00:00Z",
-          expires_at: "2025-01-15T08:00:00Z",
-          is_active: false,
-          created_at: "2024-10-15T08:00:00Z",
-        },
-      ];
-
-      setApiKeys(mockKeys);
-      setAgents(mockAgents);
+      // NO MOCK DATA - show error state to user
     } finally {
       setLoading(false);
     }
@@ -308,12 +245,7 @@ export default function APIKeysPage() {
       );
     } catch (err) {
       console.error("Failed to disable API key:", err);
-      // Mock disable for development
-      setApiKeys(
-        apiKeys.map((k) =>
-          k.id === selectedKey.id ? { ...k, is_active: false } : k
-        )
-      );
+      setError(err instanceof Error ? err.message : "Failed to disable API key");
     } finally {
       setShowDisableConfirm(false);
       setSelectedKey(null);
@@ -369,9 +301,9 @@ export default function APIKeysPage() {
             Manage API keys for agent authentication and authorization.
           </p>
           {error && (
-            <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠️ Using mock data - API connection failed: {error}
+            <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-800 dark:text-red-300">
+                ⚠️ API connection failed: {error}
               </p>
             </div>
           )}
