@@ -74,7 +74,17 @@ export function CreateAPIKeyModal({
 
     try {
       const result = await api.createAPIKey(formData.agent_id, formData.name);
-      setApiKey(result.api_key);
+      console.log("API Key creation result:", result);
+      
+      // Handle both api_key and key field names
+      const key = result.api_key || result.key;
+      
+      if (!key) {
+        console.error("No API key in response:", result);
+        throw new Error("API key not returned from server");
+      }
+      
+      setApiKey(key);
       setSuccess(true);
       onSuccess?.(result);
     } catch (err) {
@@ -193,18 +203,34 @@ export function CreateAPIKeyModal({
                 </div>
               </div>
 
+              {/* Critical Warning */}
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-yellow-900 dark:text-yellow-300">
+                      ⚠️ IMPORTANT: Copy the Full API Key Now!
+                    </p>
+                    <p className="text-xs text-yellow-800 dark:text-yellow-400 mt-1">
+                      This is the complete API key (~52 characters). The API Keys page will only show a shortened prefix for security. 
+                      <strong className="block mt-1">You must copy the entire key below - it will never be shown again!</strong>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Your API Key
+                  Your Complete API Key ({apiKey.length} characters)
                 </label>
                 <div className="relative">
-                  <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm">
-                    <code className="flex-1 overflow-x-auto">
+                  <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 border-2 border-blue-500 dark:border-blue-400 rounded-lg font-mono text-sm">
+                    <code className="flex-1 overflow-x-auto break-all">
                       {showKey ? apiKey : "•".repeat(apiKey.length)}
                     </code>
                     <button
                       onClick={() => setShowKey(!showKey)}
-                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
                       title={showKey ? "Hide key" : "Show key"}
                     >
                       {showKey ? (
@@ -215,22 +241,25 @@ export function CreateAPIKeyModal({
                     </button>
                     <button
                       onClick={copyToClipboard}
-                      className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex-shrink-0"
                     >
                       {copied ? (
                         <>
                           <Check className="h-4 w-4" />
-                          <span className="text-xs">Copied!</span>
+                          <span className="text-xs font-bold">Copied!</span>
                         </>
                       ) : (
                         <>
                           <Copy className="h-4 w-4" />
-                          <span className="text-xs">Copy</span>
+                          <span className="text-xs font-bold">Copy Full Key</span>
                         </>
                       )}
                     </button>
                   </div>
                 </div>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  💡 Tip: Save this key in a secure location (e.g., environment variables, password manager)
+                </p>
               </div>
 
               <div className="flex items-center justify-end pt-4 border-t border-gray-200 dark:border-gray-700">

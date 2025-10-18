@@ -1,0 +1,17 @@
+{
+  "name": "aim-sample-agent",
+  "version": "1.0.0",
+  "description": "Simple sample agent using AIM JavaScript SDK",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "mcp": "node mcp-server.js",
+    "connect-mcp": "node connect-mcp-to-agent.js",
+    "activity": "node agent-with-activity.js"
+  },
+  "dependencies": {
+    "@aim/sdk": "file:../sdks/javascript",
+    "axios": "^1.6.0",
+    "express": "^4.18.0"
+  }
+}

@@ -12,6 +12,11 @@ import {
 export interface RegisterOptions {
   name: string;
   type?: string;
+  description?: string;
+  version?: string;
+  repositoryUrl?: string;
+  documentationUrl?: string;
+  apiKey?: string;
   oauthProvider?: OAuthProvider;
   redirectUrl?: string;
 }
@@ -21,6 +26,9 @@ export interface AgentRegistration {
   name: string;
   apiKey: string;
   publicKey: string;
+  privateKey?: string; // Only returned on initial registration
+  trustScore?: number;
+  status?: string;
 }
 
 /**
@@ -36,43 +44,77 @@ export async function secure(
 
 /**
  * Register a new agent with the AIM backend
- * Generates Ed25519 keypair, signs the request, and stores credentials securely
+ * 
+ * IMPORTANT: Agent registration requires a valid API key from a registered user.
+ * 
+ * To get an API key:
+ * 1. Register/login to the AIM dashboard
+ * 2. Navigate to Dashboard → API Keys
+ * 3. Generate a new API key
+ * 4. Pass the API key in the options.apiKey field
+ * 
+ * The backend generates Ed25519 keypairs automatically and returns credentials.
+ * 
+ * @param apiUrl - The AIM backend URL (e.g., http://localhost:8080)
+ * @param options - Registration options including name, type, and API key
+ * @returns Agent registration details including credentials (private key only returned once!)
  */
 export async function registerAgent(
   apiUrl: string,
-  options: RegisterOptions
+  options: RegisterOptions & { apiKey: string }
 ): Promise<AgentRegistration> {
-  const { name, type = 'ai_agent' } = options;
+  const { name, type = 'ai_agent', apiKey } = options;
 
-  // Generate Ed25519 keypair for agent identity
-  const keyPair = KeyPair.generate();
+  if (!apiKey) {
+    throw new Error(
+      'API key is required for agent registration. ' +
+      'Get your API key from the AIM dashboard: Dashboard → API Keys'
+    );
+  }
 
   // Prepare registration payload
   const payload: Record<string, any> = {
     name,
-    type,
-    public_key: keyPair.publicKeyBase64(),
+    display_name: name,
+    description: options.description || `${name} - AI Agent`,
+    agent_type: type,
+    version: options.version || '1.0.0',
+    repository_url: options.repositoryUrl || '',
+    documentation_url: options.documentationUrl || '',
   };
 
-  // Sign the payload for cryptographic verification
-  const signature = keyPair.signPayload(payload);
-  payload.signature = signature;
-
-  // Send registration request
-  const response = await axios.post(`${apiUrl}/api/v1/agents/register`, payload, {
-    headers: { 'Content-Type': 'application/json' },
+  // Send registration request with API key
+  const response = await axios.post(`${apiUrl}/api/v1/public/agents/register`, payload, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-AIM-API-Key': apiKey,
+    },
   });
 
-  const result: AgentRegistration = response.data;
+  const result = response.data;
+
+  // Extract credentials from response
+  const agentRegistration: AgentRegistration = {
+    id: result.agent_id || result.agentID,
+    name: result.name,
+    apiKey: apiKey, // Use the same API key for subsequent operations
+    publicKey: result.public_key || result.publicKey,
+    privateKey: result.private_key || result.privateKey, // ⚠️ Only returned once!
+  };
 
   // Store credentials securely in system keyring
-  await storeCredentials({
-    agentId: result.id,
-    apiKey: result.apiKey,
-    privateKey: keyPair.privateKey,
-  });
+  try {
+    await storeCredentials({
+      agentId: agentRegistration.id,
+      apiKey: agentRegistration.apiKey,
+      privateKey: Buffer.from(agentRegistration.privateKey || '', 'base64'),
+    });
+  } catch (error) {
+    console.warn('Warning: Could not store credentials in system keyring:', error);
+    console.warn('You will need to manage credentials manually.');
+  }
 
-  return result;
+  return agentRegistration;
 }
 
 /**
