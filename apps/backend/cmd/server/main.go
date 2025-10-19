@@ -61,26 +61,39 @@ func main() {
 	// Wrap database with sqlx for OAuth repository
 	dbx := sqlx.NewDb(db, "postgres")
 
-	// Initialize Redis
+	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
 	if err != nil {
-		log.Fatal("Failed to connect to Redis:", err)
+		log.Printf("⚠️  Redis connection failed: %v", err)
+		log.Println("ℹ️  AIM will continue without caching (Redis is optional)")
+		redisClient = nil // Continue without Redis
+	} else {
+		defer redisClient.Close()
 	}
-	defer redisClient.Close()
 
 	// Initialize repositories
 	repos := initRepositories(db, dbx)
 	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
 
-	// Initialize cache
-	cacheService, err := cache.NewRedisCache(&cache.CacheConfig{
-		Host:     cfg.Redis.Host,
-		Port:     cfg.Redis.Port,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-	})
-	if err != nil {
-		log.Fatal("Failed to initialize cache:", err)
+	// Initialize cache (optional - skip if Redis is unavailable)
+	var cacheService *cache.RedisCache
+	if redisClient != nil {
+		cacheService, err = cache.NewRedisCache(&cache.CacheConfig{
+			Host:     cfg.Redis.Host,
+			Port:     cfg.Redis.Port,
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		})
+		if err != nil {
+			log.Printf("⚠️  Cache initialization failed: %v", err)
+			log.Println("ℹ️  AIM will continue without caching")
+			cacheService = nil
+		} else {
+			log.Println("✅ Cache service initialized")
+		}
+	} else {
+		log.Println("ℹ️  Cache service skipped (Redis unavailable)")
+		cacheService = nil
 	}
 
 	// Initialize infrastructure services
@@ -146,20 +159,22 @@ func main() {
 			})
 		}
 
-		// Check Redis
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ready": false,
-				"error": "redis unavailable",
-			})
+		// Check Redis (optional - skip if not configured)
+		redisStatus := "not configured"
+		if redisClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := redisClient.Ping(ctx).Err(); err != nil {
+				redisStatus = "unavailable (optional)"
+			} else {
+				redisStatus = "connected"
+			}
 		}
 
 		return c.JSON(fiber.Map{
 			"ready":    true,
 			"database": "connected",
-			"redis":    "connected",
+			"redis":    redisStatus,
 		})
 	})
 
@@ -181,7 +196,11 @@ func main() {
 	port := cfg.Server.Port
 	log.Printf("🚀 Agent Identity Management API starting on port %s", port)
 	log.Printf("📊 Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port)
-	log.Printf("💾 Redis: %s:%d", cfg.Redis.Host, cfg.Redis.Port)
+	if redisClient != nil {
+		log.Printf("💾 Redis: %s:%d (connected)", cfg.Redis.Host, cfg.Redis.Port)
+	} else {
+		log.Printf("💾 Redis: disabled (running without caching)")
+	}
 
 	// Check OAuth configuration from environment
 	googleConfigured := os.Getenv("GOOGLE_CLIENT_ID") != ""
