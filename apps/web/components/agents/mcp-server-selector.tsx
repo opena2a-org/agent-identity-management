@@ -21,8 +21,14 @@ interface MCPServer {
   id: string
   name: string
   url: string
-  status: 'active' | 'inactive' | 'pending'
-  verification_status: 'verified' | 'unverified' | 'failed'
+  status:
+    | "active"
+    | "inactive"
+    | "pending"
+    | "verified"
+    | "suspended"
+    | "revoked"
+  is_verified?: boolean
   description?: string
   last_verified_at?: string
   created_at: string
@@ -330,7 +336,7 @@ export function MCPServerSelector({
                                     </span>
                                     <span>
                                       <span className="font-medium">Status:</span>{' '}
-                                      {server.verification_status}
+                                      {server.status}
                                     </span>
                                   </div>
                                 </div>

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/domain"
 )
 
 // SMTPEmailService implements email sending using standard SMTP
@@ -215,7 +215,6 @@ func (s *SMTPEmailService) SendBulkEmail(recipients []string, subject, body stri
 func (s *SMTPEmailService) ValidateConnection() error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 
-	var err error
 	if s.tlsEnabled {
 		// Test TLS connection
 		tlsConfig := &tls.Config{

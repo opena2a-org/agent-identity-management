@@ -75,16 +75,13 @@ export function CreateAPIKeyModal({
     try {
       const result = await api.createAPIKey(formData.agent_id, formData.name);
       console.log("API Key creation result:", result);
-      
-      // Handle both api_key and key field names
-      const key = result.api_key || result.key;
-      
-      if (!key) {
+
+      if (!result.api_key) {
         console.error("No API key in response:", result);
         throw new Error("API key not returned from server");
       }
-      
-      setApiKey(key);
+
+      setApiKey(result.api_key);
       setSuccess(true);
       onSuccess?.(result);
     } catch (err) {

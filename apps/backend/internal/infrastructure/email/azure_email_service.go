@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/domain"
 )
 
 // AzureEmailService implements email sending using Azure Communication Services
@@ -59,7 +59,7 @@ func NewAzureEmailService(config domain.EmailConfig) (*AzureEmailService, error)
 
 // SendEmail sends a plain text or HTML email
 func (s *AzureEmailService) SendEmail(to, subject, body string, isHTML bool) error {
-	ctx := context.Background()
+	_ = context.Background() // Will be used when Azure SDK is implemented
 	startTime := time.Now()
 
 	// TODO: Implement actual Azure Communication Services SDK call

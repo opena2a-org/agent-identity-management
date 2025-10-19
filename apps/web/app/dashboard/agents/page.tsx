@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
@@ -169,7 +169,7 @@ function ErrorDisplay({
   );
 }
 
-export default function AgentsPage() {
+function AgentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -596,5 +596,13 @@ export default function AgentsPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function AgentsPage() {
+  return (
+    <Suspense fallback={<AgentsPageSkeleton />}>
+      <AgentsPageContent />
+    </Suspense>
   );
 }

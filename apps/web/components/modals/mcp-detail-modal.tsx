@@ -31,7 +31,13 @@ interface MCPServer {
   name: string;
   url: string;
   description?: string;
-  status: "active" | "inactive" | "pending";
+  status:
+    | "active"
+    | "inactive"
+    | "pending"
+    | "verified"
+    | "suspended"
+    | "revoked";
   public_key?: string;
   key_type?: string;
   last_verified_at?: string;

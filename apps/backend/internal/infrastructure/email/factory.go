@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/domain"
 )
 
 // NewEmailService creates an email service based on configuration

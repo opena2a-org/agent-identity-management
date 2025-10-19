@@ -100,9 +100,9 @@ export function RegisterAgentModal({
         description: initialData.description || "",
         agent_type: initialData.agent_type || "ai_agent",
         version: initialData.version || "1.0.0",
-        certificate_url: initialData.certificate_url || "",
-        repository_url: initialData.repository_url || "",
-        documentation_url: initialData.documentation_url || "",
+        certificate_url: (initialData as any).certificate_url || "",
+        repository_url: (initialData as any).repository_url || "",
+        documentation_url: (initialData as any).documentation_url || "",
         talks_to: (initialData as any).talks_to || [],
         capabilities: (initialData as any).capabilities || [],
       });

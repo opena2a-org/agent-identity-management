@@ -5,10 +5,9 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"path/filepath"
 	"sync"
 
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/domain"
 )
 
 //go:embed templates/*.html
