@@ -35,10 +35,7 @@ type User struct {
 	AvatarURL             *string     `json:"avatar_url"` // Nullable for local users
 	Role                  UserRole    `json:"role"`
 	Status                UserStatus  `json:"status"` // pending, active, suspended, deactivated
-	Provider              string      `json:"provider"` // google, microsoft, okta, local
-	ProviderID            string      `json:"provider_id"`
 	PasswordHash          *string     `json:"-"` // Never expose in JSON
-	EmailVerified         bool        `json:"email_verified"`
 	ForcePasswordChange   bool        `json:"force_password_change"`
 	PasswordResetToken    *string     `json:"-"` // Never expose in JSON
 	PasswordResetExpiresAt *time.Time `json:"-"` // Never expose in JSON
@@ -55,7 +52,6 @@ type UserRepository interface {
 	Create(user *User) error
 	GetByID(id uuid.UUID) (*User, error)
 	GetByEmail(email string) (*User, error)
-	GetByProvider(provider, providerID string) (*User, error)
 	GetByOrganization(orgID uuid.UUID) ([]*User, error)
 	GetByOrganizationAndStatus(orgID uuid.UUID, status UserStatus) ([]*User, error)
 	Update(user *User) error

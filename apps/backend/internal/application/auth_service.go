@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,143 +45,7 @@ type LoginResponse struct {
 	RefreshToken string
 }
 
-// findOrCreateUser finds existing user or creates new one with auto-provisioning
-func (s *AuthService) findOrCreateUser(ctx context.Context, oauthUser *auth.OAuthUser) (*domain.User, error) {
-	// Try to find existing user by provider ID
-	user, err := s.userRepo.GetByProvider(oauthUser.Provider, oauthUser.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if user != nil {
-		// Check if user account is deactivated
-		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
-			return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
-		}
-
-		// User exists, update profile and last_login_at
-		now := time.Now()
-		avatarChanged := (user.AvatarURL == nil && oauthUser.AvatarURL != "") ||
-			(user.AvatarURL != nil && *user.AvatarURL != oauthUser.AvatarURL)
-
-		// Always update last_login_at on successful login
-		needsUpdate := user.Name != oauthUser.Name || avatarChanged
-		user.LastLoginAt = &now
-		user.UpdatedAt = now
-
-		if needsUpdate {
-			user.Name = oauthUser.Name
-			user.AvatarURL = &oauthUser.AvatarURL
-		}
-
-		// Update user with new login timestamp (and profile if changed)
-		if err := s.userRepo.Update(user); err != nil {
-			// Log error but don't fail the login - this is non-critical
-			fmt.Printf("Warning: failed to update user on login for %s: %v\n", user.ID, err)
-		}
-
-		return user, nil
-	}
-
-	// User doesn't exist, auto-provision
-	return s.autoProvisionUser(ctx, oauthUser)
-}
-
-// autoProvisionUser creates a new user and organization if needed
-func (s *AuthService) autoProvisionUser(ctx context.Context, oauthUser *auth.OAuthUser) (*domain.User, error) {
-	// Extract domain from email
-	emailDomain := extractDomain(oauthUser.Email)
-	if emailDomain == "" {
-		return nil, fmt.Errorf("invalid email format")
-	}
-
-	// Find or create organization by domain
-	org, err := s.orgRepo.GetByDomain(emailDomain)
-	if err != nil {
-		return nil, err
-	}
-
-	if org == nil {
-		// Create new organization
-		org = &domain.Organization{
-			Name:      emailDomain,
-			Domain:    emailDomain,
-			PlanType:  "free",
-			MaxAgents: 100,
-			MaxUsers:  10,
-			IsActive:  true,
-		}
-
-		if err := s.orgRepo.Create(org); err != nil {
-			return nil, fmt.Errorf("failed to create organization: %w", err)
-		}
-	}
-
-	// Check if this is the first user (make them admin)
-	existingUsers, err := s.userRepo.GetByOrganization(org.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	role := domain.RoleMember
-	userStatus := domain.UserStatusActive
-	isFirstUser := len(existingUsers) == 0
-
-	if isFirstUser {
-		// First user is always admin and active
-		role = domain.RoleAdmin
-		userStatus = domain.UserStatusActive
-	} else {
-		// Subsequent users: check organization's auto_approve_sso setting
-		if !org.AutoApproveSSO {
-			userStatus = domain.UserStatusPending
-		}
-	}
-
-	// Create new user
-	avatarURL := oauthUser.AvatarURL
-	user := &domain.User{
-		OrganizationID: org.ID,
-		Email:          oauthUser.Email,
-		Name:           oauthUser.Name,
-		AvatarURL:      &avatarURL,
-		Role:           role,
-		Status:         userStatus,
-		Provider:       oauthUser.Provider,
-		ProviderID:     oauthUser.ID,
-	}
-
-	if err := s.userRepo.Create(user); err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	// 🛡️ Create default security policies for new organizations
-	if isFirstUser {
-		fmt.Printf("✅ Creating default security policies for new organization %s\n", org.ID)
-		if err := s.policyService.CreateDefaultPolicies(ctx, org.ID, user.ID); err != nil {
-			// Log error but don't fail user creation - policies can be created manually later
-			fmt.Printf("⚠️  Warning: failed to create default security policies: %v\n", err)
-		} else {
-			fmt.Printf("✅ Successfully created default security policies for organization %s\n", org.ID)
-		}
-	}
-
-	return user, nil
-}
-
-// extractDomain extracts domain from email address
-func extractDomain(email string) string {
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return ""
-	}
-	return parts[1]
-}
-
-// LoginWithOAuth logs in or creates user using OAuth data
-func (s *AuthService) LoginWithOAuth(ctx context.Context, oauthUser *auth.OAuthUser) (*domain.User, error) {
-	return s.findOrCreateUser(ctx, oauthUser)
-}
+// OAuth functions removed - OAuth infrastructure has been completely removed
 
 // LoginWithPassword authenticates a user with email and password
 func (s *AuthService) LoginWithPassword(ctx context.Context, email, password string) (*domain.User, error) {
@@ -208,10 +71,7 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, email, password str
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	// Check if email is verified
-	if !user.EmailVerified {
-		return nil, fmt.Errorf("email not verified")
-	}
+	// Email verification removed - handled during registration approval
 
 	// Update last login timestamp
 	now := time.Now()
@@ -308,11 +168,6 @@ func (s *AuthService) ChangePassword(
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("user not found")
-	}
-
-
-	if user.Provider != "local" {
-		return fmt.Errorf("password change not available for OAuth users")
 	}
 
 	if user.PasswordHash == nil || *user.PasswordHash == "" {

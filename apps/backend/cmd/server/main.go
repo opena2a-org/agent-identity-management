@@ -23,7 +23,6 @@ import (
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
 	"github.com/opena2a/identity/backend/internal/infrastructure/email"
-	"github.com/opena2a/identity/backend/internal/infrastructure/oauth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/middleware"
@@ -58,9 +57,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Wrap database with sqlx for OAuth repository
-	dbx := sqlx.NewDb(db, "postgres")
-
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
 	if err != nil {
@@ -72,8 +68,7 @@ func main() {
 	}
 
 	// Initialize repositories
-	repos := initRepositories(db, dbx)
-	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
+	repos, oauthRepo := initRepositories(db)
 
 	// Initialize cache (optional - skip if Redis is unavailable)
 	var cacheService *cache.RedisCache
@@ -99,11 +94,6 @@ func main() {
 	// Initialize infrastructure services
 	jwtService := auth.NewJWTService()
 
-	legacyOAuthService := auth.NewOAuthService()
-
-	// Initialize OAuth providers
-	oauthProviders := initOAuthProviders(cfg)
-
 	// Initialize email service
 	emailService, err := initEmailService()
 	if err != nil {
@@ -113,18 +103,21 @@ func main() {
 	}
 
 	// Initialize application services
-	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, oauthProviders, emailService)
+	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, emailService)
 
 	// Initialize handlers
-	h := initHandlers(services, repos, jwtService, legacyOAuthService, keyVault)
+	h := initHandlers(services, repos, jwtService, keyVault, cfg)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
-		AppName:      "Agent Identity Management",
-		ServerHeader: "AIM/1.0",
-		ErrorHandler: customErrorHandler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		AppName:          "Agent Identity Management",
+		ServerHeader:     "AIM/1.0",
+		ErrorHandler:     customErrorHandler,
+		ReadTimeout:      30 * time.Second,
+		WriteTimeout:     30 * time.Second,
+		ReadBufferSize:   16384, // 16KB header buffer (default is 4096) for OAuth callback URLs
+		DisableKeepalive: false,
+		StreamRequestBody: false,
 	})
 
 	// Global middleware
@@ -201,16 +194,6 @@ func main() {
 	} else {
 		log.Printf("💾 Redis: disabled (running without caching)")
 	}
-
-	// Check OAuth configuration from environment
-	googleConfigured := os.Getenv("GOOGLE_CLIENT_ID") != ""
-	microsoftConfigured := os.Getenv("MICROSOFT_CLIENT_ID") != ""
-	oktaConfigured := os.Getenv("OKTA_CLIENT_ID") != ""
-	log.Printf("🔐 OAuth Providers: Google=%v, Microsoft=%v, Okta=%v",
-		googleConfigured,
-		microsoftConfigured,
-		oktaConfigured,
-	)
 
 	// Graceful shutdown
 	go func() {
@@ -301,7 +284,13 @@ type Repositories struct {
 	CapabilityRequest domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 }
 
-func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
+func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
+	// Wrap database with sqlx for repositories that need it (OAuth repository and capability repositories)
+	dbx := sqlx.NewDb(db, "postgres")
+
+	// Initialize OAuth repository (TODO: Rename to RegistrationRepository after OAuth removal)
+	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
+
 	return &Repositories{
 		User:              repository.NewUserRepository(db),
 		Organization:      repository.NewOrganizationRepository(db),
@@ -320,7 +309,7 @@ func initRepositories(db *sql.DB, dbx *sqlx.DB) *Repositories {
 		SDKToken:          repository.NewSDKTokenRepository(db),
 		Capability:        repository.NewCapabilityRepository(dbx),
 		CapabilityRequest: repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
-	}
+	}, oauthRepo
 }
 
 type Services struct {
@@ -338,7 +327,7 @@ type Services struct {
 	SecurityPolicy    *application.SecurityPolicyService // ✅ For policy-based enforcement
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
-	OAuth             *application.OAuthService
+	Registration      *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
 	Capability        *application.CapabilityService
@@ -346,7 +335,7 @@ type Services struct {
 	Detection         *application.DetectionService // ✅ For MCP auto-detection (SDK + Direct API)
 }
 
-func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, oauthProviders map[domain.OAuthProvider]application.OAuthProvider, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
+func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -445,14 +434,11 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		driftDetectionService,
 	)
 
-	oauthService := application.NewOAuthService(
-		oauthRepo,
+	// Initialize RegistrationService for email/password user registration workflow
+	registrationService := application.NewRegistrationService(
+		oauthRepo, // Still uses oauth_repository for now (will be renamed in later step)
 		repos.User,
-		repos.Organization,
-		authService,
 		auditService,
-		jwtService,
-		oauthProviders,
 	)
 
 	tagService := application.NewTagService(
@@ -500,7 +486,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		SecurityPolicy:    securityPolicyService, // ✅ For policy-based enforcement
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
-		OAuth:             oauthService,
+		Registration:      registrationService, // ✅ Email/password registration workflow (replaced OAuth)
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
 		Capability:        capabilityService,
@@ -523,7 +509,6 @@ type Handlers struct {
 	Webhook           *handlers.WebhookHandler
 	Verification      *handlers.VerificationHandler      // ✅ For POST /verifications endpoint
 	VerificationEvent *handlers.VerificationEventHandler
-	OAuth             *handlers.OAuthHandler
 	PublicAgent       *handlers.PublicAgentHandler
 	PublicRegistration *handlers.PublicRegistrationHandler
 	Tag               *handlers.TagHandler
@@ -535,11 +520,10 @@ type Handlers struct {
 	CapabilityRequest *handlers.CapabilityRequestHandlers // ✅ For capability request approval
 }
 
-func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, oauthService *auth.OAuthService, keyVault *crypto.KeyVault) *Handlers {
+func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config) *Handlers {
 	return &Handlers{
 		Auth: handlers.NewAuthHandler(
 			services.Auth,
-			oauthService,
 			jwtService,
 		),
 		Agent: handlers.NewAgentHandler(
@@ -563,7 +547,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.MCP,
 			services.Audit,
 			services.Alert,
-			services.OAuth,
+			services.Registration, // ✅ Renamed from OAuth to Registration
 		),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,
@@ -601,17 +585,13 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
 		),
-		OAuth: handlers.NewOAuthHandler(
-			services.OAuth,
-			services.Auth,
-		),
 		PublicAgent: handlers.NewPublicAgentHandler(
 			services.Agent,
 			services.Auth,
 			keyVault,
 		),
 		PublicRegistration: handlers.NewPublicRegistrationHandler(
-			services.OAuth,
+			services.Registration, // ✅ Renamed from OAuth to Registration
 			services.Auth,
 			jwtService,
 		),
@@ -640,71 +620,6 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.CapabilityRequest,
 		),
 	}
-}
-
-func initOAuthProviders(cfg *config.Config) map[domain.OAuthProvider]application.OAuthProvider {
-	providers := make(map[domain.OAuthProvider]application.OAuthProvider)
-
-	// Google OAuth
-	if googleClientID := os.Getenv("GOOGLE_CLIENT_ID"); googleClientID != "" {
-		googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-		googleRedirectURI := os.Getenv("GOOGLE_REDIRECT_URI")
-		if googleRedirectURI == "" {
-			googleRedirectURI = "http://localhost:8080/api/v1/oauth/google/callback"
-		}
-
-		providers[domain.OAuthProviderGoogle] = oauth.NewGoogleProvider(
-			googleClientID,
-			googleClientSecret,
-			googleRedirectURI,
-		)
-		log.Println("✅ Google OAuth provider configured")
-	}
-
-	// Microsoft OAuth
-	if microsoftClientID := os.Getenv("MICROSOFT_CLIENT_ID"); microsoftClientID != "" {
-		microsoftClientSecret := os.Getenv("MICROSOFT_CLIENT_SECRET")
-		microsoftTenantID := os.Getenv("MICROSOFT_TENANT_ID")
-		if microsoftTenantID == "" {
-			microsoftTenantID = "common"
-		}
-		microsoftRedirectURI := os.Getenv("MICROSOFT_REDIRECT_URI")
-		if microsoftRedirectURI == "" {
-			microsoftRedirectURI = "http://localhost:8080/api/v1/oauth/microsoft/callback"
-		}
-
-		providers[domain.OAuthProviderMicrosoft] = oauth.NewMicrosoftProvider(
-			microsoftClientID,
-			microsoftClientSecret,
-			microsoftRedirectURI,
-			microsoftTenantID,
-		)
-		log.Println("✅ Microsoft OAuth provider configured")
-	}
-
-	// Okta OAuth
-	if oktaClientID := os.Getenv("OKTA_CLIENT_ID"); oktaClientID != "" {
-		oktaClientSecret := os.Getenv("OKTA_CLIENT_SECRET")
-		oktaDomain := os.Getenv("OKTA_DOMAIN")
-		oktaRedirectURI := os.Getenv("OKTA_REDIRECT_URI")
-		if oktaRedirectURI == "" {
-			oktaRedirectURI = "http://localhost:8080/api/v1/oauth/okta/callback"
-		}
-
-		if oktaDomain != "" {
-			providers[domain.OAuthProviderOkta] = oauth.NewOktaProvider(
-				oktaDomain,
-				oktaClientID,
-				oktaClientSecret,
-				oktaRedirectURI,
-			)
-			log.Println("✅ Okta OAuth provider configured")
-		} else {
-			log.Println("⚠️  Okta OAuth provider not configured: missing OKTA_DOMAIN")
-		}
-	}
-
-	return providers
 }
 
 func initEmailService() (domain.EmailService, error) {
@@ -746,8 +661,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
 	auth.Post("/login/local", h.Auth.LocalLogin)     // Local email/password login
-	auth.Get("/login/:provider", h.Auth.Login)       // OAuth login
-	auth.Get("/callback/:provider", h.Auth.Callback) // OAuth callback
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
 
@@ -959,19 +872,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	verificationEvents.Get("/:id", h.VerificationEvent.GetVerificationEvent)
 	verificationEvents.Post("/", middleware.MemberMiddleware(), h.VerificationEvent.CreateVerificationEvent)
 	verificationEvents.Delete("/:id", middleware.ManagerMiddleware(), h.VerificationEvent.DeleteVerificationEvent)
-
-	// OAuth routes (self-registration and admin approval)
-	oauth := v1.Group("/oauth")
-	oauth.Get("/:provider/login", h.OAuth.InitiateOAuth)
-	oauth.Get("/:provider/callback", h.OAuth.HandleOAuthCallback)
-
-	// Admin registration approval routes
-	adminRegistrations := v1.Group("/admin/registration-requests")
-	adminRegistrations.Use(middleware.AuthMiddleware(jwtService))
-	adminRegistrations.Use(middleware.AdminMiddleware())
-	adminRegistrations.Get("/", h.OAuth.ListPendingRegistrationRequests)
-	adminRegistrations.Post("/:id/approve", h.OAuth.ApproveRegistrationRequest)
-	adminRegistrations.Post("/:id/reject", h.OAuth.RejectRegistrationRequest)
 
 	// Tag routes (authentication required)
 	tags := v1.Group("/tags")

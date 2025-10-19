@@ -12,13 +12,13 @@ import (
 )
 
 type AdminHandler struct {
-	authService  *application.AuthService
-	adminService *application.AdminService
-	agentService *application.AgentService
-	mcpService   *application.MCPService
-	auditService *application.AuditService
-	alertService *application.AlertService
-	oauthService *application.OAuthService
+	authService         *application.AuthService
+	adminService        *application.AdminService
+	agentService        *application.AgentService
+	mcpService          *application.MCPService
+	auditService        *application.AuditService
+	alertService        *application.AlertService
+	registrationService *application.RegistrationService
 }
 
 func NewAdminHandler(
@@ -28,16 +28,16 @@ func NewAdminHandler(
 	mcpService *application.MCPService,
 	auditService *application.AuditService,
 	alertService *application.AlertService,
-	oauthService *application.OAuthService,
+	registrationService *application.RegistrationService,
 ) *AdminHandler {
 	return &AdminHandler{
-		authService:  authService,
-		adminService: adminService,
-		agentService: agentService,
-		mcpService:   mcpService,
-		auditService: auditService,
-		alertService: alertService,
-		oauthService: oauthService,
+		authService:         authService,
+		adminService:        adminService,
+		agentService:        agentService,
+		mcpService:          mcpService,
+		auditService:        auditService,
+		alertService:        alertService,
+		registrationService: registrationService,
 	}
 }
 
@@ -55,7 +55,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	}
 
 	// Get pending registration requests
-	pendingRequests, _, err := h.oauthService.ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
+	pendingRequests, _, err := h.registrationService.ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch pending registration requests",
@@ -88,7 +88,6 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Role:                  string(user.Role),
 			Status:                string(user.Status),
 			CreatedAt:             user.CreatedAt,
-			Provider:              user.Provider,
 			LastLoginAt:           user.LastLoginAt,
 			IsRegistrationRequest: false,
 		})
@@ -919,7 +918,7 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 	}
 
 	// Approve registration request
-	newUser, err := h.oauthService.ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
+	newUser, err := h.registrationService.ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to approve registration: %v", err),
@@ -970,7 +969,7 @@ func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
 	}
 
 	// Reject registration request
-	if err := h.oauthService.RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
+	if err := h.registrationService.RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to reject registration: %v", err),
 		})

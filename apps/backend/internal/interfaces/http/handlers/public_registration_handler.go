@@ -13,21 +13,21 @@ import (
 
 // PublicRegistrationHandler handles public user registration and login (no auth required)
 type PublicRegistrationHandler struct {
-	oauthService *application.OAuthService
-	authService  *application.AuthService
-	jwtService   *auth.JWTService
+	registrationService *application.RegistrationService
+	authService         *application.AuthService
+	jwtService          *auth.JWTService
 }
 
 // NewPublicRegistrationHandler creates a new public registration handler
 func NewPublicRegistrationHandler(
-	oauthService *application.OAuthService,
+	registrationService *application.RegistrationService,
 	authService *application.AuthService,
 	jwtService *auth.JWTService,
 ) *PublicRegistrationHandler {
 	return &PublicRegistrationHandler{
-		oauthService: oauthService,
-		authService:  authService,
-		jwtService:   jwtService,
+		registrationService: registrationService,
+		authService:         authService,
+		jwtService:          jwtService,
 	}
 }
 
@@ -83,7 +83,7 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	lastName := strings.TrimSpace(req.LastName)
 
 	// Create manual registration request with password
-	registrationRequest, err := h.oauthService.CreateManualRegistrationRequest(
+	registrationRequest, err := h.registrationService.CreateManualRegistrationRequest(
 		c.Context(),
 		email,
 		firstName,
@@ -150,7 +150,7 @@ func (h *PublicRegistrationHandler) CheckRegistrationStatus(c fiber.Ctx) error {
 		})
 	}
 
-	registrationRequest, err := h.oauthService.GetRegistrationRequest(c.Context(), requestID)
+	registrationRequest, err := h.registrationService.GetRegistrationRequest(c.Context(), requestID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
@@ -249,6 +249,16 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 			// Verify password from users table
 			passwordHasher := auth.NewPasswordHasher()
 			if err := passwordHasher.VerifyPassword(req.Password, *user.PasswordHash); err == nil {
+				// Check if user must change password (e.g., default admin on first login)
+				if user.ForcePasswordChange {
+					return c.JSON(&LoginResponse{
+						Success:      false,
+						User:         user,
+						IsApproved:   true,
+						Message:      "You must change your password before continuing",
+					})
+				}
+
 				// User in users table = automatically approved, generate tokens
 				return h.generateApprovedLoginResponse(c, user)
 			}
@@ -257,7 +267,7 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 	}
 
 	// Not found in users table or password mismatch, check registration_requests table
-	regRequest, err := h.oauthService.GetRegistrationRequestByEmail(c.Context(), email)
+	regRequest, err := h.registrationService.GetRegistrationRequestByEmail(c.Context(), email)
 	if err == nil && regRequest != nil {
 		// Check if registration request has password hash
 		if regRequest.PasswordHash != nil && *regRequest.PasswordHash != "" {
@@ -357,12 +367,97 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 	return c.JSON(response)
 }
 
+// ChangePasswordRequest represents the password change request
+type ChangePasswordRequest struct {
+	Email       string `json:"email" validate:"required,email"`
+	OldPassword string `json:"oldPassword" validate:"required"`
+	NewPassword string `json:"newPassword" validate:"required,min=8"`
+}
+
+// ChangePassword handles password changes (including forced changes for default admin)
+// @Summary Change user password
+// @Description Change password for a user (supports forced password changes)
+// @Tags public
+// @Accept json
+// @Produce json
+// @Param request body ChangePasswordRequest true "Password change details"
+// @Success 200 {object} LoginResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/v1/public/change-password [post]
+func (h *PublicRegistrationHandler) ChangePassword(c fiber.Ctx) error {
+	var req ChangePasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.OldPassword) == "" || strings.TrimSpace(req.NewPassword) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Email, old password, and new password are required",
+		})
+	}
+
+	// Validate new password strength
+	if len(req.NewPassword) < 8 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "New password must be at least 8 characters",
+		})
+	}
+
+	// Normalize email
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Get user from database
+	user, err := h.authService.GetUserByEmail(c.Context(), email)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid email or password",
+		})
+	}
+
+	// Check if user account is deactivated
+	if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"error":   "Your account has been deactivated",
+		})
+	}
+
+	// Use AuthService.ChangePassword (handles validation, hashing, and force_password_change flag)
+	if err := h.authService.ChangePassword(c.Context(), user.ID, req.OldPassword, req.NewPassword); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   err.Error(),
+		})
+	}
+
+	// Fetch updated user (password was changed)
+	user, err = h.authService.GetUserByEmail(c.Context(), email)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"error":   "Failed to retrieve user after password change",
+		})
+	}
+
+	// Generate new tokens and return successful login response
+	return h.generateApprovedLoginResponse(c, user)
+}
+
 // RegisterRoutes registers the public registration and login routes
 func (h *PublicRegistrationHandler) RegisterRoutes(app *fiber.App) {
 	public := app.Group("/api/v1/public")
-	
+
 	// User registration and login endpoints
 	public.Post("/register", h.RegisterUser)
 	public.Get("/register/:requestId/status", h.CheckRegistrationStatus)
 	public.Post("/login", h.Login)
+	public.Post("/change-password", h.ChangePassword)
 }

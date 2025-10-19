@@ -22,17 +22,17 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // Create creates a new user
 func (r *UserRepository) Create(user *domain.User) error {
 	query := `
-		INSERT INTO users (id, organization_id, email, name, avatar_url, role, provider, provider_id, password_hash, email_verified, status, oauth_provider, oauth_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		INSERT INTO users (id, organization_id, email, name, avatar_url, role, password_hash, status, force_password_change, approved_by, approved_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	now := time.Now()
-	
+
 	// Only set ID if not already set
 	if user.ID == uuid.Nil {
 		user.ID = uuid.New()
 	}
-	
+
 	// Only set timestamps if not already set
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = now
@@ -53,13 +53,11 @@ func (r *UserRepository) Create(user *domain.User) error {
 		user.Name,
 		user.AvatarURL,
 		user.Role,
-		user.Provider,
-		user.ProviderID,
 		user.PasswordHash,
-		user.EmailVerified,
 		user.Status,
-		user.Provider,   // oauth_provider (duplicate of provider for compatibility)
-		user.ProviderID, // oauth_user_id (duplicate of provider_id for compatibility)
+		user.ForcePasswordChange,
+		user.ApprovedBy,
+		user.ApprovedAt,
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
@@ -70,15 +68,14 @@ func (r *UserRepository) Create(user *domain.User) error {
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       password_hash, email_verified, force_password_change, last_login_at,
-		       status, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		SELECT id, organization_id, email, name, avatar_url, role,
+		       password_hash, force_password_change, last_login_at,
+		       status, created_at, updated_at, approved_by, approved_at
 		FROM users
 		WHERE id = $1
 	`
 
 	user := &domain.User{}
-	var oauthProvider, oauthUserID sql.NullString
 	var status sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
@@ -88,17 +85,12 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.Name,
 		&user.AvatarURL,
 		&user.Role,
-		&user.Provider,
-		&user.ProviderID,
 		&user.PasswordHash,
-		&user.EmailVerified,
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
 		&status,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&oauthProvider,
-		&oauthUserID,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
 	)
@@ -123,15 +115,14 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 // GetByEmail retrieves a user by email (includes password_hash for authentication)
 func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	query := `
-		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       password_hash, email_verified, force_password_change, last_login_at,
-		       status, created_at, updated_at, oauth_provider, oauth_user_id, approved_by, approved_at
+		SELECT id, organization_id, email, name, avatar_url, role,
+		       password_hash, force_password_change, last_login_at,
+		       status, created_at, updated_at, approved_by, approved_at
 		FROM users
 		WHERE email = $1
 	`
 
 	user := &domain.User{}
-	var oauthProvider, oauthUserID sql.NullString
 	var status sql.NullString
 
 	err := r.db.QueryRow(query, email).Scan(
@@ -141,17 +132,12 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		&user.Name,
 		&user.AvatarURL,
 		&user.Role,
-		&user.Provider,
-		&user.ProviderID,
 		&user.PasswordHash,
-		&user.EmailVerified,
 		&user.ForcePasswordChange,
 		&user.LastLoginAt,
 		&status,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&oauthProvider,
-		&oauthUserID,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
 	)
@@ -173,58 +159,11 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	return user, nil
 }
 
-// GetByProvider retrieves a user by provider and provider ID
-func (r *UserRepository) GetByProvider(provider, providerID string) (*domain.User, error) {
-	query := `
-		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, status, created_at, updated_at, oauth_provider, oauth_user_id
-		FROM users
-		WHERE provider = $1 AND provider_id = $2
-	`
-
-	user := &domain.User{}
-	var oauthProvider, oauthUserID sql.NullString
-	var status sql.NullString
-
-	err := r.db.QueryRow(query, provider, providerID).Scan(
-		&user.ID,
-		&user.OrganizationID,
-		&user.Email,
-		&user.Name,
-		&user.AvatarURL,
-		&user.Role,
-		&user.Provider,
-		&user.ProviderID,
-		&user.LastLoginAt,
-		&status,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&oauthProvider,
-		&oauthUserID,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, nil // User doesn't exist yet
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// Set status from database or default to active
-	if status.Valid {
-		user.Status = domain.UserStatus(status.String)
-	} else {
-		user.Status = domain.UserStatusActive
-	}
-
-	return user, nil
-}
-
 // GetByOrganization retrieves all users in an organization
 func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, error) {
 	query := `
-		SELECT id, organization_id, email, name, avatar_url, role, provider, provider_id,
-		       last_login_at, status, created_at, updated_at, oauth_provider, oauth_user_id
+		SELECT id, organization_id, email, name, avatar_url, role,
+		       last_login_at, status, created_at, updated_at
 		FROM users
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -239,7 +178,6 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 	var users []*domain.User
 	for rows.Next() {
 		user := &domain.User{}
-		var oauthProvider, oauthUserID sql.NullString
 		var status sql.NullString
 
 		err := rows.Scan(
@@ -249,14 +187,10 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 			&user.Name,
 			&user.AvatarURL,
 			&user.Role,
-			&user.Provider,
-			&user.ProviderID,
 			&user.LastLoginAt,
 			&status,
 			&user.CreatedAt,
 			&user.UpdatedAt,
-			&oauthProvider,
-			&oauthUserID,
 		)
 		if err != nil {
 			return nil, err
@@ -297,9 +231,9 @@ func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
 		SET name = $1, avatar_url = $2, role = $3, password_hash = $4,
-		    email_verified = $5, force_password_change = $6, last_login_at = $7,
-		    status = $8, approved_by = $9, approved_at = $10, updated_at = $11
-		WHERE id = $12
+		    force_password_change = $5, last_login_at = $6,
+		    status = $7, approved_by = $8, approved_at = $9, updated_at = $10
+		WHERE id = $11
 	`
 
 	user.UpdatedAt = time.Now()
@@ -309,7 +243,6 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.AvatarURL,
 		user.Role,
 		user.PasswordHash,
-		user.EmailVerified,
 		user.ForcePasswordChange,
 		user.LastLoginAt,
 		user.Status,

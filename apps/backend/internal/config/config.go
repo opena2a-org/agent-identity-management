@@ -21,6 +21,7 @@ type ServerConfig struct {
 	Port        string
 	Environment string
 	LogLevel    string
+	FrontendURL string
 }
 
 // DatabaseConfig holds database configuration
@@ -79,6 +80,7 @@ func Load() (*Config, error) {
 			Port:        getEnv("APP_PORT", "8080"),
 			Environment: getEnv("ENVIRONMENT", "development"),
 			LogLevel:    getEnv("LOG_LEVEL", "info"),
+			FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
 		},
 	Database: DatabaseConfig{
 		Host:            getEnvRequired("POSTGRES_HOST"),

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SSOButton } from "@/components/auth/sso-button";
 import {
   Shield,
   Mail,
@@ -316,25 +315,6 @@ export default function RegisterPage() {
               {isLoading ? "Creating Account..." : "Create Account"}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          {/* SSO Buttons */}
-          <div className="space-y-3 mb-6">
-            <SSOButton provider="google" />
-            <SSOButton provider="microsoft" />
-            <SSOButton provider="okta" />
-          </div>
 
           {/* Info Box */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
