@@ -17,7 +17,7 @@ ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
 
 -- Recreate oauth_connections table
 CREATE TABLE IF NOT EXISTS oauth_connections (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider VARCHAR(50) NOT NULL,
     provider_user_id TEXT NOT NULL,

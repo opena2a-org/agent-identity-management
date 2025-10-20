@@ -1,6 +1,6 @@
 -- Security Threats table
 CREATE TABLE IF NOT EXISTS security_threats (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     threat_type VARCHAR(100) NOT NULL,
     severity VARCHAR(50) NOT NULL,
@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_security_threats_is_blocked ON security_threats(i
 
 -- Security Anomalies table
 CREATE TABLE IF NOT EXISTS security_anomalies (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     anomaly_type VARCHAR(100) NOT NULL,
     severity VARCHAR(50) NOT NULL,
@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_security_anomalies_created_at ON security_anomali
 
 -- Security Incidents table
 CREATE TABLE IF NOT EXISTS security_incidents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     incident_type VARCHAR(100) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'open',
@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_security_incidents_assigned_to ON security_incide
 
 -- Security Scans table
 CREATE TABLE IF NOT EXISTS security_scans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     scan_type VARCHAR(50) NOT NULL DEFAULT 'full',
     status VARCHAR(50) NOT NULL DEFAULT 'pending',

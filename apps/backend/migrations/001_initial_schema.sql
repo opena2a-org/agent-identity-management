@@ -1,9 +1,9 @@
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Azure PostgreSQL has gen_random_uuid() built-in (no extension needed)
+-- Note: Both uuid-ossp and pgcrypto are not allow-listed in Azure PostgreSQL
 
 -- Organizations table
 CREATE TABLE organizations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     domain VARCHAR(255) UNIQUE NOT NULL,
     plan_type VARCHAR(50) NOT NULL DEFAULT 'free',
@@ -19,7 +19,7 @@ CREATE INDEX idx_organizations_is_active ON organizations(is_active);
 
 -- Users table
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -40,7 +40,7 @@ CREATE INDEX idx_users_provider ON users(provider, provider_id);
 
 -- Agents table
 CREATE TABLE agents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     display_name VARCHAR(255) NOT NULL,
@@ -68,7 +68,7 @@ CREATE INDEX idx_agents_created_by ON agents(created_by);
 
 -- API Keys table
 CREATE TABLE api_keys (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -89,7 +89,7 @@ CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
 
 -- Trust Scores table
 CREATE TABLE trust_scores (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     score DECIMAL(4,3) NOT NULL,
     verification_status DECIMAL(4,3) NOT NULL,
@@ -111,7 +111,7 @@ CREATE INDEX idx_trust_scores_created_at ON trust_scores(created_at DESC);
 
 -- Audit Logs table
 CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     action VARCHAR(100) NOT NULL,
@@ -131,7 +131,7 @@ CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
 
 -- Alerts table
 CREATE TABLE alerts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     alert_type VARCHAR(100) NOT NULL,
     severity VARCHAR(50) NOT NULL,

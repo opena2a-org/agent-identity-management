@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -60,6 +64,13 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
+
+	// ⚡ Run database migrations automatically on startup
+	// This ensures production deployments have correct schema without manual intervention
+	if err := runMigrations(db); err != nil {
+		log.Fatal("❌ Database migrations failed:", err)
+	}
+	log.Println("✅ Database migrations completed successfully")
 
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
@@ -1017,4 +1028,150 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 		"message":   message,
 		"timestamp": time.Now().UTC(),
 	})
+}
+
+// runMigrations executes all pending database migrations automatically on startup
+// This ensures production deployments have the correct schema without manual intervention
+func runMigrations(db *sql.DB) error {
+	log.Println("🔄 Running database migrations...")
+
+	// Create migrations table if it doesn't exist
+	if err := createMigrationsTable(db); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Get migration files from migrations directory
+	files, err := getMigrationFiles()
+	if err != nil {
+		return fmt.Errorf("failed to read migration files: %w", err)
+	}
+
+	if len(files) == 0 {
+		log.Println("ℹ️  No migration files found")
+		return nil
+	}
+
+	// Get applied migrations from database
+	applied, err := getAppliedMigrations(db)
+	if err != nil {
+		return fmt.Errorf("failed to get applied migrations: %w", err)
+	}
+
+	// Apply pending migrations
+	pendingCount := 0
+	for _, file := range files {
+		version := getMigrationVersion(file)
+		if applied[version] {
+			log.Printf("⏭️  Skipping %s (already applied)", file)
+			continue
+		}
+
+		log.Printf("🔄 Applying %s...", file)
+
+		// Read migration file
+		content, err := ioutil.ReadFile(filepath.Join("migrations", file))
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", file, err)
+		}
+
+		// Execute migration in a transaction for safety
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction for %s: %w", file, err)
+		}
+
+		// Execute migration SQL
+		if _, err := tx.Exec(string(content)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to execute %s: %w", file, err)
+		}
+
+		// Record migration
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to record migration %s: %w", version, err)
+		}
+
+		// Commit transaction
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit migration %s: %w", file, err)
+		}
+
+		log.Printf("✅ Applied %s", file)
+		pendingCount++
+	}
+
+	if pendingCount == 0 {
+		log.Println("ℹ️  All migrations already applied (database is up to date)")
+	} else {
+		log.Printf("✅ Successfully applied %d pending migration(s)", pendingCount)
+	}
+
+	return nil
+}
+
+// createMigrationsTable creates the schema_migrations table if it doesn't exist
+func createMigrationsTable(db *sql.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			id SERIAL PRIMARY KEY,
+			version VARCHAR(255) NOT NULL UNIQUE,
+			applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`
+	_, err := db.Exec(query)
+	return err
+}
+
+// getMigrationFiles returns sorted list of .up.sql migration files
+func getMigrationFiles() ([]string, error) {
+	files, err := ioutil.ReadDir("migrations")
+	if err != nil {
+		// If migrations directory doesn't exist, return empty list (not an error)
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("failed to read migrations directory: %w", err)
+	}
+
+	var migrations []string
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		// Only include .up.sql files for forward migrations
+		if strings.HasSuffix(file.Name(), ".up.sql") ||
+			(strings.HasSuffix(file.Name(), ".sql") && !strings.Contains(file.Name(), ".down.sql")) {
+			migrations = append(migrations, file.Name())
+		}
+	}
+
+	sort.Strings(migrations)
+	return migrations, nil
+}
+
+// getAppliedMigrations returns map of already-applied migration versions
+func getAppliedMigrations(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query("SELECT version FROM schema_migrations")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	applied := make(map[string]bool)
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		applied[version] = true
+	}
+
+	return applied, nil
+}
+
+// getMigrationVersion extracts version from migration filename
+func getMigrationVersion(filename string) string {
+	// Use full filename as version for unique tracking
+	return filename
 }

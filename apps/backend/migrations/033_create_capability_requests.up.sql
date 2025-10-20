@@ -2,7 +2,7 @@
 -- This table tracks requests for ADDITIONAL capabilities after initial agent registration
 
 CREATE TABLE IF NOT EXISTS capability_requests (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     capability_type VARCHAR(255) NOT NULL,
     reason TEXT NOT NULL,

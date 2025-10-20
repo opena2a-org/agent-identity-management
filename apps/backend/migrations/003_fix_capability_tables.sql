@@ -4,7 +4,7 @@
 
 -- Create agent_capabilities table if it doesn't exist
 CREATE TABLE IF NOT EXISTS agent_capabilities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     capability_type VARCHAR(100) NOT NULL,
     capability_scope JSONB,
@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_capabilities_revoked ON agent_capabilities(
 
 -- Create capability_violations table if it doesn't exist
 CREATE TABLE IF NOT EXISTS capability_violations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     attempted_capability VARCHAR(100) NOT NULL,
     registered_capabilities JSONB,

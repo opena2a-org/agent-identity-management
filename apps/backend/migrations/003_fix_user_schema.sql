@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS users CASCADE;
 -- Step 2: Recreate users table with correct structure matching domain.User
 CREATE TABLE users (
     -- Core identity fields
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,  -- Single name field (not first_name/last_name)

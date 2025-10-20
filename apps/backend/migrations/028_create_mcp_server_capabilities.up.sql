@@ -2,7 +2,7 @@
 -- exposed by MCP servers for automatic capability detection
 
 CREATE TABLE mcp_server_capabilities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     mcp_server_id UUID NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
 
     -- Capability identification
