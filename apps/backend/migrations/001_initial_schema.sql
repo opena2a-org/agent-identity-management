@@ -145,11 +145,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_alerts_organization_id ON alerts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_alerts_alert_type ON alerts(alert_type);
-CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
-CREATE INDEX IF NOT EXISTS idx_alerts_is_acknowledged ON alerts(is_acknowledged);
-CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
+-- Alert indexes moved to 002_fix_alerts_schema.up.sql to handle existing databases
+-- with incomplete alerts table structure
 
 -- Updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
