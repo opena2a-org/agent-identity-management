@@ -1,5 +1,5 @@
 -- Create default admin user on first startup
--- Default credentials: admin@localhost / admin
+-- Default credentials: admin@opena2a.org / admin
 -- User MUST change password on first login
 
 DO $$
@@ -19,13 +19,15 @@ BEGIN
             INSERT INTO organizations (
                 id,
                 name,
-                status,
+                domain,
+                is_active,
                 created_at,
                 updated_at
             ) VALUES (
                 gen_random_uuid(),
                 'Default Organization',
-                'active',
+                'opena2a.org',
+                TRUE,
                 NOW(),
                 NOW()
             ) RETURNING id INTO default_org_id;
@@ -39,25 +41,27 @@ BEGIN
             email,
             name,
             role,
-            status,
+            provider,
+            provider_id,
             password_hash,
-            force_password_change,
+            email_verified,
             created_at,
             updated_at
         ) VALUES (
             gen_random_uuid(),
             default_org_id,
-            'admin@localhost',
+            'admin@opena2a.org',
             'Default Administrator',
             'admin',
-            'active',
+            'email',
+            'admin@opena2a.org',
             '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- bcrypt hash of "admin"
-            TRUE, -- Force password change on first login
+            TRUE, -- Email verified
             NOW(),
             NOW()
         );
 
-        RAISE NOTICE 'Default admin user created with email: admin@localhost and password: admin (MUST be changed on first login)';
+        RAISE NOTICE 'Default admin user created with email: admin@opena2a.org and password: admin (MUST be changed on first login)';
     ELSE
         RAISE NOTICE 'Users already exist in database, skipping default admin creation';
     END IF;
