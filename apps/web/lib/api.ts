@@ -27,8 +27,6 @@ const getApiUrl = () => {
   return "http://localhost:8080";
 };
 
-const API_URL = getApiUrl();
-
 export interface Agent {
   id: string;
   organization_id: string;
@@ -183,12 +181,16 @@ export interface DetectionStatusResponse {
 }
 
 class APIClient {
-  private baseURL: string;
   private token: string | null = null;
   private refreshToken: string | null = null;
 
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
+  constructor() {
+    // No baseURL parameter - we'll get it dynamically on each request
+  }
+
+  // Dynamic getter that evaluates the API URL at runtime
+  private get baseURL(): string {
+    return getApiUrl();
   }
 
   setToken(token: string, refreshToken?: string) {
@@ -1490,4 +1492,5 @@ class APIClient {
   }
 }
 
-export const api = new APIClient(API_URL);
+// Create API client instance - baseURL will be resolved dynamically on each request
+export const api = new APIClient();
