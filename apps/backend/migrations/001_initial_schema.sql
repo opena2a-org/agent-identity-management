@@ -2,7 +2,7 @@
 -- Note: Both uuid-ossp and pgcrypto are not allow-listed in Azure PostgreSQL
 
 -- Organizations table
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     domain VARCHAR(255) UNIQUE NOT NULL,
@@ -14,11 +14,11 @@ CREATE TABLE organizations (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_organizations_domain ON organizations(domain);
-CREATE INDEX idx_organizations_is_active ON organizations(is_active);
+CREATE INDEX IF NOT EXISTS idx_organizations_domain ON organizations(domain);
+CREATE INDEX IF NOT EXISTS idx_organizations_is_active ON organizations(is_active);
 
 -- Users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
@@ -34,12 +34,12 @@ CREATE TABLE users (
     UNIQUE(provider, provider_id)
 );
 
-CREATE INDEX idx_users_organization_id ON users(organization_id);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_provider ON users(provider, provider_id);
+CREATE INDEX IF NOT EXISTS idx_users_organization_id ON users(organization_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provider_id);
 
 -- Agents table
-CREATE TABLE agents (
+CREATE TABLE IF NOT EXISTS agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -60,14 +60,14 @@ CREATE TABLE agents (
     UNIQUE(organization_id, name)
 );
 
-CREATE INDEX idx_agents_organization_id ON agents(organization_id);
-CREATE INDEX idx_agents_agent_type ON agents(agent_type);
-CREATE INDEX idx_agents_status ON agents(status);
-CREATE INDEX idx_agents_trust_score ON agents(trust_score);
-CREATE INDEX idx_agents_created_by ON agents(created_by);
+CREATE INDEX IF NOT EXISTS idx_agents_organization_id ON agents(organization_id);
+CREATE INDEX IF NOT EXISTS idx_agents_agent_type ON agents(agent_type);
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+CREATE INDEX IF NOT EXISTS idx_agents_trust_score ON agents(trust_score);
+CREATE INDEX IF NOT EXISTS idx_agents_created_by ON agents(created_by);
 
 -- API Keys table
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -81,14 +81,14 @@ CREATE TABLE api_keys (
     created_by UUID NOT NULL REFERENCES users(id)
 );
 
-CREATE INDEX idx_api_keys_organization_id ON api_keys(organization_id);
-CREATE INDEX idx_api_keys_agent_id ON api_keys(agent_id);
-CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
-CREATE INDEX idx_api_keys_prefix ON api_keys(prefix);
-CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
+CREATE INDEX IF NOT EXISTS idx_api_keys_organization_id ON api_keys(organization_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_agent_id ON api_keys(agent_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);
+CREATE INDEX IF NOT EXISTS idx_api_keys_is_active ON api_keys(is_active);
 
 -- Trust Scores table
-CREATE TABLE trust_scores (
+CREATE TABLE IF NOT EXISTS trust_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     score DECIMAL(4,3) NOT NULL,
@@ -105,12 +105,12 @@ CREATE TABLE trust_scores (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_trust_scores_agent_id ON trust_scores(agent_id);
-CREATE INDEX idx_trust_scores_last_calculated ON trust_scores(last_calculated);
-CREATE INDEX idx_trust_scores_created_at ON trust_scores(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trust_scores_agent_id ON trust_scores(agent_id);
+CREATE INDEX IF NOT EXISTS idx_trust_scores_last_calculated ON trust_scores(last_calculated);
+CREATE INDEX IF NOT EXISTS idx_trust_scores_created_at ON trust_scores(created_at DESC);
 
 -- Audit Logs table
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -123,14 +123,14 @@ CREATE TABLE audit_logs (
     timestamp TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_logs_organization_id ON audit_logs(organization_id);
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
-CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_organization_id ON audit_logs(organization_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
 
 -- Alerts table
-CREATE TABLE alerts (
+CREATE TABLE IF NOT EXISTS alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     alert_type VARCHAR(100) NOT NULL,
@@ -145,11 +145,11 @@ CREATE TABLE alerts (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_alerts_organization_id ON alerts(organization_id);
-CREATE INDEX idx_alerts_alert_type ON alerts(alert_type);
-CREATE INDEX idx_alerts_severity ON alerts(severity);
-CREATE INDEX idx_alerts_is_acknowledged ON alerts(is_acknowledged);
-CREATE INDEX idx_alerts_created_at ON alerts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_organization_id ON alerts(organization_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_alert_type ON alerts(alert_type);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_alerts_is_acknowledged ON alerts(is_acknowledged);
+CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
 
 -- Updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
