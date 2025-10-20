@@ -1,36 +1,37 @@
+"use client";
+
 // Runtime API URL configuration
-// For production deployments, NEXT_PUBLIC_API_URL can be set at build time OR
-// runtime via window.__RUNTIME_CONFIG__. This allows the same image to work
-// across different environments without rebuilding.
-const getApiUrl = () => {
-  // CRITICAL: Only run in browser context to avoid SSR mismatch
+// CRITICAL: This function MUST be called ONLY in browser context (client-side)
+// to ensure proper URL detection for environment-agnostic deployments
+const getApiUrl = (): string => {
+  // Defense: If somehow called during SSR, throw clear error
   if (typeof window === 'undefined') {
-    // During SSR, use env var if available, otherwise return placeholder
-    // The actual URL will be resolved on client-side hydration
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+    throw new Error('getApiUrl() MUST be called in browser context only. Check your component for SSR issues.');
   }
 
-  // Now we're in browser context - do full detection
-
-  // 1. Check for runtime config (set by server)
+  // 1. Check for runtime config (set by server via script injection)
   if ((window as any).__RUNTIME_CONFIG__?.apiUrl) {
+    console.log('[API] Using runtime config URL:', (window as any).__RUNTIME_CONFIG__.apiUrl);
     return (window as any).__RUNTIME_CONFIG__.apiUrl;
   }
 
   // 2. Check for build-time environment variable
   if (process.env.NEXT_PUBLIC_API_URL) {
+    console.log('[API] Using build-time env URL:', process.env.NEXT_PUBLIC_API_URL);
     return process.env.NEXT_PUBLIC_API_URL;
   }
 
-  // 3. Auto-detect from window location (browser context guaranteed)
+  // 3. Auto-detect from window location (for environment-agnostic deployment)
   const { protocol, hostname } = window.location;
-  // If frontend is on aim-frontend.*, backend is likely on aim-backend.*
   if (hostname.includes('aim-frontend')) {
     const backendHost = hostname.replace('aim-frontend', 'aim-backend');
-    return `${protocol}//${backendHost}`;
+    const detectedUrl = `${protocol}//${backendHost}`;
+    console.log('[API] Auto-detected URL from hostname:', detectedUrl);
+    return detectedUrl;
   }
 
-  // 4. Fallback to localhost for development
+  // 4. Fallback to localhost for local development
+  console.log('[API] Using localhost fallback');
   return "http://localhost:8080";
 };
 
@@ -190,14 +191,18 @@ export interface DetectionStatusResponse {
 class APIClient {
   private token: string | null = null;
   private refreshToken: string | null = null;
+  private _baseURL: string | null = null;
 
   constructor() {
-    // No baseURL parameter - we'll get it dynamically on each request
+    // Constructor does nothing - baseURL is lazily initialized on first use
   }
 
-  // Dynamic getter that evaluates the API URL at runtime
+  // Lazy getter that initializes baseURL only once, on first access (client-side only)
   private get baseURL(): string {
-    return getApiUrl();
+    if (!this._baseURL) {
+      this._baseURL = getApiUrl(); // Will throw if called during SSR
+    }
+    return this._baseURL;
   }
 
   setToken(token: string, refreshToken?: string) {
