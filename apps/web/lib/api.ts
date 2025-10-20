@@ -1504,5 +1504,33 @@ class APIClient {
   }
 }
 
-// Create API client instance - baseURL will be resolved dynamically on each request
-export const api = new APIClient();
+// Lazy singleton instance - created ONLY on first access in browser
+let _apiInstance: APIClient | null = null;
+
+function getAPIClient(): APIClient {
+  if (!_apiInstance) {
+    console.log('[API] Creating APIClient instance for the first time');
+    _apiInstance = new APIClient();
+  }
+  return _apiInstance;
+}
+
+// Export a Proxy that lazily creates the real APIClient on first property access
+export const api = new Proxy({} as APIClient, {
+  get(target, prop) {
+    const instance = getAPIClient();
+    const value = (instance as any)[prop];
+
+    // Bind methods to the instance to preserve 'this' context
+    if (typeof value === 'function') {
+      return value.bind(instance);
+    }
+
+    return value;
+  },
+  set(target, prop, value) {
+    const instance = getAPIClient();
+    (instance as any)[prop] = value;
+    return true;
+  }
+});
