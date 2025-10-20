@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { AuthGuard } from '@/components/auth-guard';
 
 interface AgentFormData {
   name: string;
@@ -51,7 +52,8 @@ export default function NewAgentPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <AuthGuard>
+      <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Register New Agent</h1>
         <p className="mt-2 text-gray-600">
@@ -232,5 +234,6 @@ export default function NewAgentPage() {
         </Card>
       </form>
     </div>
+    </AuthGuard>
   );
 }

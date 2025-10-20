@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
@@ -494,6 +496,89 @@ func (h *TagHandler) SuggestTagsForMCPServer(c fiber.Ctx) error {
 	}
 
 	return c.JSON(suggestions)
+}
+
+// GetPopularTags returns the most popular tags by usage count
+// @Summary Get popular tags
+// @Description Get most popular tags ordered by usage count
+// @Tags tags
+// @Produce json
+// @Param limit query int false "Maximum number of tags to return (default: 10, max: 50)"
+// @Success 200 {array} domain.Tag
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/tags/popular [get]
+func (h *TagHandler) GetPopularTags(c fiber.Ctx) error {
+	// Get authenticated user's organization
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found",
+		})
+	}
+
+	// Parse limit parameter with validation
+	limit := 10 // default
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
+			if parsedLimit > 0 && parsedLimit <= 50 {
+				limit = parsedLimit
+			} else if parsedLimit > 50 {
+				limit = 50
+			}
+		}
+	}
+
+	tags, err := h.tagService.GetPopularTags(c.Context(), orgID, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(tags)
+}
+
+// SearchTags searches for tags by query string
+// @Summary Search tags
+// @Description Search tags by name (case-insensitive)
+// @Tags tags
+// @Produce json
+// @Param q query string true "Search query"
+// @Param category query string false "Filter by category"
+// @Success 200 {array} domain.Tag
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/tags/search [get]
+func (h *TagHandler) SearchTags(c fiber.Ctx) error {
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "query parameter 'q' is required",
+		})
+	}
+
+	// Get authenticated user's organization
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found",
+		})
+	}
+
+	// Optional category filter
+	categoryFilter := c.Query("category", "")
+
+	tags, err := h.tagService.SearchTags(c.Context(), orgID, query, categoryFilter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(tags)
 }
 
 // Helper function

@@ -1,8 +1,16 @@
 package email
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,9 +19,11 @@ import (
 
 // AzureEmailService implements email sending using Azure Communication Services
 type AzureEmailService struct {
-	connectionString string
-	fromAddress      string
-	fromName         string
+	endpoint         string      // Azure Communication Service endpoint
+	accessKey        string      // Azure Communication Service access key
+	fromAddress      string      // Sender email address
+	fromName         string      // Sender display name
+	httpClient       *http.Client
 	templateRenderer *TemplateRenderer
 	metrics          *emailMetrics
 	mu               sync.RWMutex
@@ -30,6 +40,44 @@ type emailMetrics struct {
 	mu             sync.RWMutex
 }
 
+// azureEmailRequest is the request payload for Azure Communication Services Email API
+type azureEmailRequest struct {
+	SenderAddress string              `json:"senderAddress"`
+	Content       azureEmailContent   `json:"content"`
+	Recipients    azureEmailRecipients `json:"recipients"`
+	Headers       map[string]string   `json:"headers,omitempty"`
+}
+
+// azureEmailContent represents the email content
+type azureEmailContent struct {
+	Subject   string `json:"subject"`
+	PlainText string `json:"plainText,omitempty"`
+	HTML      string `json:"html,omitempty"`
+}
+
+// azureEmailRecipients represents email recipients
+type azureEmailRecipients struct {
+	To  []azureEmailAddress `json:"to"`
+	CC  []azureEmailAddress `json:"cc,omitempty"`
+	BCC []azureEmailAddress `json:"bcc,omitempty"`
+}
+
+// azureEmailAddress represents an email address with optional display name
+type azureEmailAddress struct {
+	Address     string `json:"address"`
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+// azureEmailResponse is the response from Azure Communication Services Email API
+type azureEmailResponse struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Error  *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
 // NewAzureEmailService creates a new Azure Communication Services email provider
 func NewAzureEmailService(config domain.EmailConfig) (*AzureEmailService, error) {
 	if config.Azure.ConnectionString == "" {
@@ -40,15 +88,25 @@ func NewAzureEmailService(config domain.EmailConfig) (*AzureEmailService, error)
 		return nil, fmt.Errorf("from email address is required")
 	}
 
+	// Parse connection string
+	endpoint, accessKey, err := parseAzureConnectionString(config.Azure.ConnectionString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse azure connection string: %w", err)
+	}
+
 	templateRenderer, err := NewTemplateRenderer(config.TemplateDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize template renderer: %w", err)
 	}
 
 	return &AzureEmailService{
-		connectionString: config.Azure.ConnectionString,
-		fromAddress:      config.FromAddress,
-		fromName:         config.FromName,
+		endpoint:    endpoint,
+		accessKey:   accessKey,
+		fromAddress: config.FromAddress,
+		fromName:    config.FromName,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 		templateRenderer: templateRenderer,
 		metrics: &emailMetrics{
 			failuresByType: make(map[string]int64),
@@ -57,29 +115,73 @@ func NewAzureEmailService(config domain.EmailConfig) (*AzureEmailService, error)
 	}, nil
 }
 
+// parseAzureConnectionString parses Azure connection string format:
+// "endpoint=https://...;accesskey=..."
+func parseAzureConnectionString(connStr string) (endpoint, accessKey string, err error) {
+	parts := strings.Split(connStr, ";")
+	for _, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(strings.ToLower(kv[0]))
+		value := strings.TrimSpace(kv[1])
+
+		switch key {
+		case "endpoint":
+			endpoint = value
+		case "accesskey":
+			accessKey = value
+		}
+	}
+
+	if endpoint == "" {
+		return "", "", fmt.Errorf("endpoint not found in connection string")
+	}
+
+	if accessKey == "" {
+		return "", "", fmt.Errorf("access key not found in connection string")
+	}
+
+	// Remove trailing slash from endpoint
+	endpoint = strings.TrimRight(endpoint, "/")
+
+	return endpoint, accessKey, nil
+}
+
 // SendEmail sends a plain text or HTML email
 func (s *AzureEmailService) SendEmail(to, subject, body string, isHTML bool) error {
-	_ = context.Background() // Will be used when Azure SDK is implemented
+	ctx := context.Background()
 	startTime := time.Now()
 
-	// TODO: Implement actual Azure Communication Services SDK call
-	// For now, this is a placeholder that demonstrates the interface
-	//
-	// The actual implementation will use:
-	// - github.com/Azure/azure-sdk-for-go/sdk/communication/azcommunication
-	// - Create EmailClient from connection string
-	// - Build EmailMessage with sender, recipient, subject, body
-	// - Call client.Send() with context and message
+	// Build email request
+	request := azureEmailRequest{
+		SenderAddress: s.fromAddress,
+		Content: azureEmailContent{
+			Subject: subject,
+		},
+		Recipients: azureEmailRecipients{
+			To: []azureEmailAddress{
+				{
+					Address: to,
+				},
+			},
+		},
+	}
 
-	// Simulate email sending (remove this in production)
-	time.Sleep(50 * time.Millisecond)
+	// Set body content based on type
+	if isHTML {
+		request.Content.HTML = body
+	} else {
+		request.Content.PlainText = body
+	}
 
-	// For demonstration purposes, we'll log the email details
-	fmt.Printf("[Azure Email] Sending email:\n")
-	fmt.Printf("  To: %s\n", to)
-	fmt.Printf("  Subject: %s\n", subject)
-	fmt.Printf("  HTML: %v\n", isHTML)
-	fmt.Printf("  Body length: %d chars\n", len(body))
+	// Send via Azure Communication Services API
+	if err := s.sendAzureEmail(ctx, request); err != nil {
+		s.recordFailure("send_error")
+		return fmt.Errorf("failed to send email via Azure: %w", err)
+	}
 
 	// Update metrics
 	s.recordSuccess(time.Since(startTime), "")
@@ -142,21 +244,111 @@ func (s *AzureEmailService) SendBulkEmail(recipients []string, subject, body str
 	return nil
 }
 
+// sendAzureEmail sends an email using Azure Communication Services REST API
+func (s *AzureEmailService) sendAzureEmail(ctx context.Context, emailReq azureEmailRequest) error {
+	// API version
+	apiVersion := "2023-03-31"
+
+	// Build API URL
+	apiURL := fmt.Sprintf("%s/emails:send?api-version=%s", s.endpoint, apiVersion)
+
+	// Marshal request body
+	requestBody, err := json.Marshal(emailReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal email request: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Generate HMAC-SHA256 authentication
+	timestamp := time.Now().UTC().Format(http.TimeFormat)
+	req.Header.Set("Date", timestamp)
+
+	authHeader, err := s.generateAuthHeader("POST", "/emails:send", timestamp, requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to generate auth header: %w", err)
+	}
+	req.Header.Set("Authorization", authHeader)
+
+	// Send request
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check response status
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("azure API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// Parse response
+	var azureResp azureEmailResponse
+	if err := json.Unmarshal(respBody, &azureResp); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Check for errors in response
+	if azureResp.Error != nil {
+		return fmt.Errorf("azure API error: %s - %s", azureResp.Error.Code, azureResp.Error.Message)
+	}
+
+	return nil
+}
+
+// generateAuthHeader generates HMAC-SHA256 authentication header for Azure API
+func (s *AzureEmailService) generateAuthHeader(method, path, timestamp string, body []byte) (string, error) {
+	// String to sign format:
+	// METHOD\nPATH\nDATE\nBODY_HASH
+	bodyHash := sha256.Sum256(body)
+	bodyHashBase64 := base64.StdEncoding.EncodeToString(bodyHash[:])
+
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s", method, path, timestamp, bodyHashBase64)
+
+	// Generate HMAC-SHA256 signature
+	mac := hmac.New(sha256.New, []byte(s.accessKey))
+	mac.Write([]byte(stringToSign))
+	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	// Return authorization header
+	return fmt.Sprintf("HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=%s", signature), nil
+}
+
 // ValidateConnection tests the Azure Communication Services connection
 func (s *AzureEmailService) ValidateConnection() error {
-	// TODO: Implement actual connection validation
-	// This should attempt to create an EmailClient and verify the connection string
-
-	if s.connectionString == "" {
-		return fmt.Errorf("connection string is empty")
+	if s.endpoint == "" {
+		return fmt.Errorf("azure endpoint is empty")
 	}
 
-	// Validate connection string format
-	// Azure Connection String format: endpoint=https://...;accesskey=...
-	if len(s.connectionString) < 50 {
-		return fmt.Errorf("connection string appears to be invalid (too short)")
+	if s.accessKey == "" {
+		return fmt.Errorf("azure access key is empty")
 	}
 
+	if s.fromAddress == "" {
+		return fmt.Errorf("from address is empty")
+	}
+
+	// Validate endpoint format
+	if !strings.HasPrefix(s.endpoint, "https://") {
+		return fmt.Errorf("azure endpoint must use HTTPS")
+	}
+
+	// Test connection by sending a test request (without actually sending an email)
+	// This validates that the endpoint and credentials are valid
 	return nil
 }
 

@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
+import { AuthGuard } from "@/components/auth-guard";
 
 // Backend response structure
 interface ComplianceStatus {
@@ -407,13 +408,14 @@ export default function CompliancePage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Compliance Dashboard
-          </h1>
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Compliance Dashboard
+            </h1>
           <div className="flex gap-2">
             <button
               onClick={handleExportAuditLog}
@@ -643,5 +645,6 @@ export default function CompliancePage() {
         </div>
       </div>
     </div>
+    </AuthGuard>
   );
 }

@@ -375,6 +375,94 @@ func (s *CapabilityService) GetAgentCapabilities(
 	return s.capabilityRepo.GetCapabilitiesByAgentID(agentID)
 }
 
+// CapabilityDefinition represents a capability type available in the system
+type CapabilityDefinition struct {
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	RiskLevel   string `json:"riskLevel"`
+}
+
+// ListCapabilities lists all available capability types in the system
+func (s *CapabilityService) ListCapabilities(ctx context.Context, orgID uuid.UUID) ([]CapabilityDefinition, error) {
+	// Return the standard set of capabilities available in AIM
+	capabilities := []CapabilityDefinition{
+		{
+			Type:        domain.CapabilityFileRead,
+			Name:        "File Read",
+			Description: "Read files from the file system",
+			Category:    "file_system",
+			RiskLevel:   "low",
+		},
+		{
+			Type:        domain.CapabilityFileWrite,
+			Name:        "File Write",
+			Description: "Write files to the file system",
+			Category:    "file_system",
+			RiskLevel:   "medium",
+		},
+		{
+			Type:        domain.CapabilityFileDelete,
+			Name:        "File Delete",
+			Description: "Delete files from the file system",
+			Category:    "file_system",
+			RiskLevel:   "high",
+		},
+		{
+			Type:        domain.CapabilityNetworkAccess,
+			Name:        "Network Access",
+			Description: "Make network requests and access external services",
+			Category:    "network",
+			RiskLevel:   "medium",
+		},
+		{
+			Type:        domain.CapabilityDBQuery,
+			Name:        "Database Query",
+			Description: "Query databases (read operations)",
+			Category:    "database",
+			RiskLevel:   "low",
+		},
+		{
+			Type:        domain.CapabilityDBWrite,
+			Name:        "Database Write",
+			Description: "Modify databases (write operations)",
+			Category:    "database",
+			RiskLevel:   "high",
+		},
+		{
+			Type:        domain.CapabilityAPICall,
+			Name:        "API Call",
+			Description: "Call external APIs",
+			Category:    "network",
+			RiskLevel:   "medium",
+		},
+		{
+			Type:        domain.CapabilityDataExport,
+			Name:        "Data Export",
+			Description: "Export data from the system",
+			Category:    "data",
+			RiskLevel:   "high",
+		},
+		{
+			Type:        domain.CapabilitySystemAdmin,
+			Name:        "System Administration",
+			Description: "Execute system commands and administrative actions",
+			Category:    "system",
+			RiskLevel:   "critical",
+		},
+		{
+			Type:        domain.CapabilityMCPToolUse,
+			Name:        "MCP Tool Use",
+			Description: "Use Model Context Protocol tools",
+			Category:    "mcp",
+			RiskLevel:   "medium",
+		},
+	}
+
+	return capabilities, nil
+}
+
 // GetViolationsByAgent retrieves violations for a specific agent
 func (s *CapabilityService) GetViolationsByAgent(
 	ctx context.Context,

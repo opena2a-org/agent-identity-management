@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface SecurityPolicy {
   id: string;
@@ -315,14 +316,15 @@ export default function SecurityPoliciesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Security Policies</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure security enforcement policies for capability violations and
-          threat detection
-        </p>
-      </div>
+    <AuthGuard>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Security Policies</h1>
+          <p className="text-muted-foreground mt-1">
+            Configure security enforcement policies for capability violations and
+            threat detection
+          </p>
+        </div>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -672,6 +674,7 @@ export default function SecurityPoliciesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -53,6 +54,9 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 
 	request, err := h.service.CreateRequest(c.Context(), &input)
 	if err != nil {
+		// Log the detailed error for debugging
+		fmt.Printf("❌ Error creating capability request: %v\n", err)
+
 		if err.Error() == "agent not found" {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": err.Error(),
@@ -64,7 +68,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create capability request",
+			"error": fmt.Sprintf("failed to create capability request: %v", err),
 		})
 	}
 

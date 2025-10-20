@@ -33,6 +33,7 @@ import {
   DashboardSkeleton,
   ChartSkeleton,
 } from "@/components/ui/content-loaders";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -1038,8 +1039,10 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <DashboardContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

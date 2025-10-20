@@ -11,6 +11,7 @@ import {
 import { api } from "@/lib/api";
 import { formatTime, formatDateTime } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface VerificationEvent {
   id: string;
@@ -227,9 +228,10 @@ export default function MonitoringPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
             Verification Monitoring
@@ -608,5 +610,6 @@ export default function MonitoringPage() {
         </div>
       </div>
     </div>
+    </AuthGuard>
   );
 }

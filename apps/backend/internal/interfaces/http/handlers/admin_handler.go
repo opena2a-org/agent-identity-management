@@ -43,8 +43,34 @@ func NewAdminHandler(
 
 // ListUsers returns all users in the organization including pending registration requests
 func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
 
 	// Get approved users
 	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
@@ -384,8 +410,34 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 
 // GetAuditLogs returns audit logs with filtering
 func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
 
 	// Parse filters
 	var filters struct {
@@ -512,8 +564,34 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 
 // GetAlerts returns all alerts with optional filtering
 func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
 
 	// Parse filters
 	severity := c.Query("severity")
@@ -998,8 +1076,34 @@ func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
 
 // GetOrganizationSettings retrieves organization settings
 func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
 
 	org, err := h.adminService.GetOrganizationSettings(c.Context(), orgID)
 	if err != nil {
@@ -1076,6 +1180,36 @@ func (h *AdminHandler) UpdateOrganizationSettings(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message":          "Organization settings updated successfully",
 		"auto_approve_sso": req.AutoApproveSSO,
+	})
+}
+
+// GetUnacknowledgedAlertCount returns the count of unacknowledged alerts for an organization
+func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
+	// Get organization ID from user context
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	// Call alert service to count unacknowledged alerts
+	count, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"count": count,
 	})
 }
 

@@ -141,21 +141,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
 	}
 
-	// At least one OAuth provider must be configured
-	hasProvider := false
-	if c.OAuth.Google.ClientID != "" && c.OAuth.Google.ClientSecret != "" {
-		hasProvider = true
-	}
-	if c.OAuth.Microsoft.ClientID != "" && c.OAuth.Microsoft.ClientSecret != "" {
-		hasProvider = true
-	}
-	if c.OAuth.Okta.ClientID != "" && c.OAuth.Okta.ClientSecret != "" {
-		hasProvider = true
-	}
-
-	if !hasProvider {
-		return fmt.Errorf("at least one OAuth provider must be configured")
-	}
+	// OAuth providers are now optional since we support email/password authentication
+	// Validation removed - OAuth configuration is checked at runtime when needed
 
 	return nil
 }

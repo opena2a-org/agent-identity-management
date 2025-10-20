@@ -315,3 +315,112 @@ func (r *TagRepository) GetMCPServerTags(ctx context.Context, mcpServerID uuid.U
 
 	return tags, nil
 }
+
+// GetPopularTags retrieves the most popular tags by usage count
+func (r *TagRepository) GetPopularTags(ctx context.Context, organizationID uuid.UUID, limit int) ([]*domain.Tag, error) {
+	query := `
+		SELECT t.id, t.organization_id, t.key, t.value, t.category, t.description, t.color, t.created_at, t.created_by,
+		       COALESCE(agent_count, 0) + COALESCE(mcp_count, 0) as usage_count
+		FROM tags t
+		LEFT JOIN (
+			SELECT tag_id, COUNT(*) as agent_count
+			FROM agent_tags
+			GROUP BY tag_id
+		) at ON t.id = at.tag_id
+		LEFT JOIN (
+			SELECT tag_id, COUNT(*) as mcp_count
+			FROM mcp_server_tags
+			GROUP BY tag_id
+		) mst ON t.id = mst.tag_id
+		WHERE t.organization_id = $1
+		ORDER BY usage_count DESC, t.created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, organizationID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get popular tags: %w", err)
+	}
+	defer rows.Close()
+
+	tags := make([]*domain.Tag, 0)
+	for rows.Next() {
+		tag := &domain.Tag{}
+		var usageCount int
+		err := rows.Scan(
+			&tag.ID,
+			&tag.OrganizationID,
+			&tag.Key,
+			&tag.Value,
+			&tag.Category,
+			&tag.Description,
+			&tag.Color,
+			&tag.CreatedAt,
+			&tag.CreatedBy,
+			&usageCount, // We select it but don't store it in the tag struct
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags, nil
+}
+
+// SearchTags searches for tags by query string (case-insensitive)
+func (r *TagRepository) SearchTags(ctx context.Context, organizationID uuid.UUID, query string, category *domain.TagCategory) ([]*domain.Tag, error) {
+	var sqlQuery string
+	var args []interface{}
+
+	if category != nil {
+		sqlQuery = `
+			SELECT id, organization_id, key, value, category, description, color, created_at, created_by
+			FROM tags
+			WHERE organization_id = $1
+			  AND category = $2
+			  AND (key ILIKE $3 OR value ILIKE $3 OR description ILIKE $3)
+			ORDER BY key, value
+		`
+		searchPattern := "%" + query + "%"
+		args = []interface{}{organizationID, *category, searchPattern}
+	} else {
+		sqlQuery = `
+			SELECT id, organization_id, key, value, category, description, color, created_at, created_by
+			FROM tags
+			WHERE organization_id = $1
+			  AND (key ILIKE $2 OR value ILIKE $2 OR description ILIKE $2)
+			ORDER BY key, value
+		`
+		searchPattern := "%" + query + "%"
+		args = []interface{}{organizationID, searchPattern}
+	}
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search tags: %w", err)
+	}
+	defer rows.Close()
+
+	tags := make([]*domain.Tag, 0)
+	for rows.Next() {
+		tag := &domain.Tag{}
+		err := rows.Scan(
+			&tag.ID,
+			&tag.OrganizationID,
+			&tag.Key,
+			&tag.Value,
+			&tag.Category,
+			&tag.Description,
+			&tag.Color,
+			&tag.CreatedAt,
+			&tag.CreatedBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags, nil
+}

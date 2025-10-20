@@ -32,6 +32,7 @@ import {
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface Alert {
   id: string;
@@ -319,8 +320,9 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Security Alerts</h1>
           <p className="text-muted-foreground mt-1">
@@ -561,5 +563,6 @@ export default function AlertsPage() {
         </CardContent>
       </Card>
     </div>
+    </AuthGuard>
   );
 }

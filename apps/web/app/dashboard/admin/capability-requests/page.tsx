@@ -32,6 +32,7 @@ import {
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface CapabilityRequest {
   id: string;
@@ -231,12 +232,13 @@ export default function CapabilityRequestsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Capability Requests</h1>
-        <p className="text-muted-foreground mt-1">
-          Review and approve agent capability expansion requests
-        </p>
+    <AuthGuard>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Capability Requests</h1>
+          <p className="text-muted-foreground mt-1">
+            Review and approve agent capability expansion requests
+          </p>
         <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
           <p className="text-sm text-blue-900 dark:text-blue-200">
             <strong>Auto-Grant Architecture:</strong> Initial capabilities are
@@ -431,6 +433,7 @@ export default function CapabilityRequestsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }

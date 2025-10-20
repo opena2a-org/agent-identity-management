@@ -39,9 +39,13 @@ import (
 // @host localhost:8080
 // @BasePath /api/v1
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+	// Track start time for uptime calculation
+	startTime := time.Now()
+
+	// Load environment variables from project root
+	// Backend runs from apps/backend, so go up 2 directories to find root .env
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Println("No .env file found in project root, using environment variables")
 	}
 
 	// Load configuration
@@ -171,6 +175,57 @@ func main() {
 		})
 	})
 
+	// System status endpoint (no auth required)
+	app.Get("/api/v1/status", func(c fiber.Ctx) error {
+		// Get environment (default to "development" if not set)
+		environment := os.Getenv("ENVIRONMENT")
+		if environment == "" {
+			environment = "development"
+		}
+
+		// Check database status
+		dbStatus := "healthy"
+		if err := db.Ping(); err != nil {
+			dbStatus = "unavailable"
+		}
+
+		// Check Redis status (optional)
+		redisStatus := "not configured"
+		if redisClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := redisClient.Ping(ctx).Err(); err != nil {
+				redisStatus = "unavailable"
+			} else {
+				redisStatus = "healthy"
+			}
+		}
+
+		// Check email service status
+		emailStatus := "unavailable"
+		if emailService != nil {
+			emailStatus = "healthy"
+		}
+
+		return c.JSON(fiber.Map{
+			"status":      "operational",
+			"version":     "1.0.0",
+			"environment": environment,
+			"uptime":      time.Since(startTime).Seconds(),
+			"services": fiber.Map{
+				"database": dbStatus,
+				"redis":    redisStatus,
+				"email":    emailStatus,
+			},
+			"features": fiber.Map{
+				"oauth":              false, // OAuth disabled
+				"email_registration": true,
+				"mcp_auto_detection": true,
+				"trust_scoring":      true,
+			},
+		})
+	})
+
 	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
 	// These routes use API key authentication for SDK/programmatic access
 	sdkAPI := app.Group("/api/v1/sdk-api")
@@ -285,10 +340,10 @@ type Repositories struct {
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
-	// Wrap database with sqlx for repositories that need it (OAuth repository and capability repositories)
+	// Wrap database with sqlx for repositories that need it (registration and capability repositories)
 	dbx := sqlx.NewDb(db, "postgres")
 
-	// Initialize OAuth repository (TODO: Rename to RegistrationRepository after OAuth removal)
+	// Initialize registration repository for user registration workflow
 	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
 
 	return &Repositories{
@@ -530,6 +585,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.MCP, // ✅ Inject MCPService for auto-detect MCPs feature
 			services.Audit,
+			services.APIKey,
+			handlers.NewTrustScoreHandler(services.Trust, services.Agent, services.Audit),
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
@@ -555,9 +612,10 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		MCP: handlers.NewMCPHandler(
 			services.MCP,
-			services.MCPCapability, // ✅ For capability endpoint
+			services.MCPCapability,     // ✅ For capability endpoint
 			services.Audit,
-			repos.Agent, // ✅ For agent relationships ("Talks To")
+			repos.Agent,                // ✅ For agent relationships ("Talks To")
+			repos.VerificationEvent,    // ✅ For verification events endpoint
 		),
 		Security: handlers.NewSecurityHandler(
 			services.Security,
@@ -657,6 +715,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	public.Post("/register", h.PublicRegistration.RegisterUser) // 🚀 User registration
 	public.Get("/register/:requestId/status", h.PublicRegistration.CheckRegistrationStatus) // Check registration status
 	public.Post("/login", h.PublicRegistration.Login) // 🚀 Public login
+	public.Post("/change-password", h.PublicRegistration.ChangePassword) // 🚀 Forced password change (enterprise security)
+	public.Post("/forgot-password", h.PublicRegistration.ForgotPassword) // 🚀 Password reset request
+	public.Post("/reset-password", h.PublicRegistration.ResetPassword) // 🚀 Password reset with token
+	public.Post("/request-access", h.PublicRegistration.RequestAccess) // 🚀 Request platform access (no password required)
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
@@ -706,6 +768,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Put("/:id", middleware.MemberMiddleware(), h.Agent.UpdateAgent)
 	agents.Delete("/:id", middleware.ManagerMiddleware(), h.Agent.DeleteAgent)
 	agents.Post("/:id/verify", middleware.ManagerMiddleware(), h.Agent.VerifyAgent)
+	// Agent lifecycle management endpoints
+	agents.Post("/:id/suspend", middleware.ManagerMiddleware(), h.Agent.SuspendAgent)
+	agents.Post("/:id/reactivate", middleware.ManagerMiddleware(), h.Agent.ReactivateAgent)
+	agents.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
 	// Runtime verification endpoints - CORE functionality
 	agents.Post("/:id/verify-action", h.Agent.VerifyAction)
 	agents.Post("/:id/log-action/:audit_id", h.Agent.LogActionResult)
@@ -719,6 +785,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Delete("/:id/mcp-servers/bulk", middleware.MemberMiddleware(), h.Agent.BulkRemoveMCPServersFromAgent) // Remove multiple MCPs
 	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent)   // Remove single MCP
 	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)        // Auto-detect MCPs from config
+	// Trust Score management - RESTful endpoints under /agents/:id/trust-score/*
+	agents.Get("/:id/trust-score", h.Agent.GetAgentTrustScore)                                                   // Get current trust score
+	agents.Get("/:id/trust-score/history", h.Agent.GetAgentTrustScoreHistory)                                    // Get trust score history
+	agents.Put("/:id/trust-score", middleware.AdminMiddleware(), h.Agent.UpdateAgentTrustScore)                  // Manually update score (admin)
+	agents.Post("/:id/trust-score/recalculate", middleware.ManagerMiddleware(), h.Agent.RecalculateAgentTrustScore) // Recalculate score
+	// Agent security endpoints - Key vault, audit logs, and API keys per agent
+	agents.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)                                // Get agent's key vault info (public key, expiration, rotation status)
+	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs)                              // Get audit logs for specific agent (with pagination)
+	agents.Get("/:id/api-keys", h.Agent.GetAgentAPIKeys)                                  // List API keys for specific agent
+	agents.Post("/:id/api-keys", middleware.MemberMiddleware(), h.Agent.CreateAgentAPIKey) // Create API key for specific agent
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -768,6 +844,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Alerts
 	admin.Get("/alerts", h.Admin.GetAlerts)
+	admin.Get("/alerts/unacknowledged/count", h.Admin.GetUnacknowledgedAlertCount)
 	admin.Post("/alerts/:id/acknowledge", h.Admin.AcknowledgeAlert)
 	admin.Post("/alerts/:id/resolve", h.Admin.ResolveAlert)
 	admin.Post("/alerts/:id/approve-drift", h.Admin.ApproveDrift)
@@ -803,6 +880,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
 	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
+	compliance.Get("/reports", h.Compliance.ListComplianceReports)
+	compliance.Get("/access-reviews", h.Compliance.ListAccessReviews)
+	compliance.Get("/data-retention", h.Compliance.GetDataRetentionPolicies)
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
@@ -816,8 +896,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	mcpServers.Post("/:id/verify", middleware.ManagerMiddleware(), h.MCP.VerifyMCPServer)
 	mcpServers.Post("/:id/keys", middleware.MemberMiddleware(), h.MCP.AddPublicKey)
 	mcpServers.Get("/:id/verification-status", h.MCP.GetVerificationStatus)
-	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities) // ✅ Get detected capabilities
-	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)             // ✅ Get agents that talk to this MCP server
+	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities)       // ✅ Get detected capabilities
+	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)                   // ✅ Get agents that talk to this MCP server
+	mcpServers.Get("/:id/verification-events", h.MCP.GetMCPVerificationEvents) // ✅ Get verification events for MCP server
+	mcpServers.Get("/:id/audit-logs", h.MCP.GetMCPAuditLogs)                  // ✅ Get audit logs for MCP server
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
 
@@ -869,6 +951,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	verificationEvents.Get("/", h.VerificationEvent.ListVerificationEvents)
 	verificationEvents.Get("/recent", h.VerificationEvent.GetRecentEvents)
 	verificationEvents.Get("/statistics", h.VerificationEvent.GetStatistics)
+	verificationEvents.Get("/stats", h.VerificationEvent.GetVerificationStats)               // ✅ Get aggregated verification stats
+	verificationEvents.Get("/agent/:id", h.VerificationEvent.GetAgentVerificationEvents)    // ✅ Get events for specific agent
+	verificationEvents.Get("/mcp/:id", h.VerificationEvent.GetMCPVerificationEvents)        // ✅ Get events for specific MCP server
 	verificationEvents.Get("/:id", h.VerificationEvent.GetVerificationEvent)
 	verificationEvents.Post("/", middleware.MemberMiddleware(), h.VerificationEvent.CreateVerificationEvent)
 	verificationEvents.Delete("/:id", middleware.ManagerMiddleware(), h.VerificationEvent.DeleteVerificationEvent)
@@ -879,6 +964,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	tags.Use(middleware.RateLimitMiddleware())
 	tags.Get("/", h.Tag.GetTags)
 	tags.Post("/", middleware.MemberMiddleware(), h.Tag.CreateTag)
+	tags.Get("/popular", h.Tag.GetPopularTags)
+	tags.Get("/search", h.Tag.SearchTags)
 	tags.Delete("/:id", middleware.ManagerMiddleware(), h.Tag.DeleteTag)
 
 	// Agent tag routes (under /agents/:id/tags)
@@ -894,6 +981,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Agent violation routes (under /agents/:id/violations)
 	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)
+
+	// Capabilities routes (authentication required) - List all available capability types
+	capabilities := v1.Group("/capabilities")
+	capabilities.Use(middleware.AuthMiddleware(jwtService))
+	capabilities.Get("/", h.Capability.ListCapabilities)
 
 	// Capability Request routes (authentication required)
 	capabilityRequests := v1.Group("/capability-requests")
@@ -916,6 +1008,9 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 		code = e.Code
 		message = e.Message
 	}
+
+	// 🔍 LOG ALL ERRORS for debugging
+	log.Printf("❌ ERROR [%d] %s %s - %v", code, c.Method(), c.Path(), err)
 
 	return c.Status(code).JSON(fiber.Map{
 		"error":     true,

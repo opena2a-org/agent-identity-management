@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -11,10 +12,11 @@ import (
 )
 
 type MCPHandler struct {
-	mcpService           *application.MCPService
-	mcpCapabilityService *application.MCPCapabilityService
-	auditService         *application.AuditService
-	agentRepository      *repository.AgentRepository
+	mcpService                   *application.MCPService
+	mcpCapabilityService         *application.MCPCapabilityService
+	auditService                 *application.AuditService
+	agentRepository              *repository.AgentRepository
+	verificationEventRepository  domain.VerificationEventRepository
 }
 
 func NewMCPHandler(
@@ -22,12 +24,14 @@ func NewMCPHandler(
 	mcpCapabilityService *application.MCPCapabilityService,
 	auditService *application.AuditService,
 	agentRepository *repository.AgentRepository,
+	verificationEventRepository domain.VerificationEventRepository,
 ) *MCPHandler {
 	return &MCPHandler{
-		mcpService:           mcpService,
-		mcpCapabilityService: mcpCapabilityService,
-		auditService:         auditService,
-		agentRepository:      agentRepository,
+		mcpService:                  mcpService,
+		mcpCapabilityService:        mcpCapabilityService,
+		auditService:                auditService,
+		agentRepository:             agentRepository,
+		verificationEventRepository: verificationEventRepository,
 	}
 }
 
@@ -57,6 +61,14 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	if err != nil {
 		// Log the actual error for debugging
 		fmt.Printf("❌ Error creating MCP server: %v\n", err)
+
+		// Return 409 Conflict for duplicate URL errors
+		if err.Error() == "mcp server with this URL already exists" {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -577,6 +589,119 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"agents": agentSummaries,
 		"total":  len(agentSummaries),
+	})
+}
+
+// GetMCPVerificationEvents retrieves verification events for a specific MCP server
+// @Summary Get MCP server verification events
+// @Description Get all verification events for a specific MCP server with pagination
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Param limit query int false "Number of events to return" default(50)
+// @Param offset query int false "Number of events to skip" default(0)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/{id}/verification-events [get]
+func (h *MCPHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	serverID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Verify server belongs to organization first
+	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "MCP server not found",
+		})
+	}
+	if server.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Parse pagination parameters
+	limit := 50
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 100 {
+			limit = parsedLimit
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Get verification events for this MCP server
+	events, total, err := h.verificationEventRepository.GetByMCPServer(serverID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch verification events",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"events": events,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// GetMCPAuditLogs retrieves audit logs for a specific MCP server
+// @Summary Get MCP server audit logs
+// @Description Get all audit logs for a specific MCP server with pagination
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Param limit query int false "Number of logs to return" default(50)
+// @Param offset query int false "Number of logs to skip" default(0)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/{id}/audit-logs [get]
+func (h *MCPHandler) GetMCPAuditLogs(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	serverID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Verify server belongs to organization first
+	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "MCP server not found",
+		})
+	}
+	if server.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Get audit logs for this MCP server
+	logs, err := h.auditService.GetResourceLogs(c.Context(), "mcp_server", serverID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch audit logs",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"audit_logs": logs,
+		"total":      len(logs),
 	})
 }
 

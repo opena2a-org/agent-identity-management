@@ -192,7 +192,12 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	zipWriter := zip.NewWriter(buf)
 
 	// Get SDK root directory based on type
-	sdkRoot := fmt.Sprintf("../../sdks/%s", sdkType)
+	// Use environment variable if set, otherwise use relative path from working directory
+	sdkBaseDir := os.Getenv("SDK_BASE_DIR")
+	if sdkBaseDir == "" {
+		sdkBaseDir = "sdks" // Default: relative to working directory
+	}
+	sdkRoot := filepath.Join(sdkBaseDir, sdkType)
 	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)
 
 	// Add SDK files to zip

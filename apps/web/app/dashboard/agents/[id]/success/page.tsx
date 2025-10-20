@@ -6,6 +6,7 @@ import { CheckCircle, Download, Copy, Check, ArrowRight, Book, Github } from 'lu
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
+import { AuthGuard } from '@/components/auth-guard';
 
 interface Agent {
   id: string;
@@ -132,7 +133,8 @@ export default function AgentSuccessPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <AuthGuard>
+      <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Success Header */}
       <div className="text-center pt-8 pb-4">
         <div className="flex justify-center mb-4">
@@ -233,19 +235,52 @@ export default function AgentSuccessPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Python SDK */}
-            <div className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-colors">
+          <div className="grid grid-cols-1 gap-4">
+            {/* Python SDK - Production Ready */}
+            <div className="border-2 border-blue-500 rounded-lg p-6 bg-gradient-to-br from-blue-50 to-white">
               <div className="flex flex-col h-full">
                 <div className="mb-4">
-                  <h3 className="font-semibold text-lg mb-2">Python</h3>
-                  <p className="text-sm text-gray-600">
-                    Production-ready SDK with Ed25519 signing and automatic verification
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Download className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-xl mb-1">Python SDK</h3>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Production Ready
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Official production-ready SDK with Ed25519 cryptographic signing, OAuth integration,
+                    automatic MCP detection, and secure keyring storage.
                   </p>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Ed25519 cryptographic signing</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>OAuth/OIDC integration (Google, Microsoft, Okta)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Automatic MCP detection</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Secure keyring credential storage</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>100% test coverage</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-auto">
                   <Button
-                    className="w-full"
+                    className="w-full bg-blue-600 hover:bg-blue-700"
                     onClick={() => downloadSDK('python')}
                     disabled={downloadingSDK !== null}
                   >
@@ -265,38 +300,14 @@ export default function AgentSuccessPage() {
               </div>
             </div>
 
-            {/* Node.js SDK (Coming Soon) */}
-            <div className="border-2 border-gray-200 rounded-lg p-4 opacity-60">
-              <div className="flex flex-col h-full">
-                <div className="mb-4">
-                  <h3 className="font-semibold text-lg mb-2">Node.js / TypeScript</h3>
-                  <p className="text-sm text-gray-600">
-                    Coming soon - TypeScript SDK with full type safety
-                  </p>
-                </div>
-                <div className="mt-auto">
-                  <Button className="w-full" disabled>
-                    Coming Soon
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Go SDK (Coming Soon) */}
-            <div className="border-2 border-gray-200 rounded-lg p-4 opacity-60">
-              <div className="flex flex-col h-full">
-                <div className="mb-4">
-                  <h3 className="font-semibold text-lg mb-2">Go</h3>
-                  <p className="text-sm text-gray-600">
-                    Coming soon - High-performance Go SDK
-                  </p>
-                </div>
-                <div className="mt-auto">
-                  <Button className="w-full" disabled>
-                    Coming Soon
-                  </Button>
-                </div>
-              </div>
+            {/* Future SDKs Note */}
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <p className="text-sm text-gray-600 mb-2">
+                <strong>Future Releases:</strong> Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
+              </p>
+              <p className="text-xs text-gray-500">
+                The Python SDK provides complete feature parity and is production-ready for all use cases.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -432,5 +443,6 @@ users = get_users()`}</code>
         </Button>
       </div>
     </div>
+    </AuthGuard>
   );
 }

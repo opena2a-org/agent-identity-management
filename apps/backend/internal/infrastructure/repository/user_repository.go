@@ -159,6 +159,59 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	return user, nil
 }
 
+// GetByPasswordResetToken retrieves a user by password reset token
+func (r *UserRepository) GetByPasswordResetToken(resetToken string) (*domain.User, error) {
+	query := `
+		SELECT id, organization_id, email, name, avatar_url, role,
+		       password_hash, force_password_change, last_login_at,
+		       password_reset_token, password_reset_expires_at,
+		       status, created_at, updated_at, approved_by, approved_at, deleted_at
+		FROM users
+		WHERE password_reset_token = $1
+		  AND password_reset_expires_at > NOW()
+		  AND deleted_at IS NULL
+	`
+
+	user := &domain.User{}
+	var status sql.NullString
+
+	err := r.db.QueryRow(query, resetToken).Scan(
+		&user.ID,
+		&user.OrganizationID,
+		&user.Email,
+		&user.Name,
+		&user.AvatarURL,
+		&user.Role,
+		&user.PasswordHash,
+		&user.ForcePasswordChange,
+		&user.LastLoginAt,
+		&user.PasswordResetToken,
+		&user.PasswordResetExpiresAt,
+		&status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.ApprovedBy,
+		&user.ApprovedAt,
+		&user.DeletedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("invalid or expired reset token")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Set status from database or default to active
+	if status.Valid {
+		user.Status = domain.UserStatus(status.String)
+	} else {
+		user.Status = domain.UserStatusActive
+	}
+
+	return user, nil
+}
+
 // GetByOrganization retrieves all users in an organization
 func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, error) {
 	query := `
@@ -232,8 +285,10 @@ func (r *UserRepository) Update(user *domain.User) error {
 		UPDATE users
 		SET name = $1, avatar_url = $2, role = $3, password_hash = $4,
 		    force_password_change = $5, last_login_at = $6,
-		    status = $7, approved_by = $8, approved_at = $9, updated_at = $10
-		WHERE id = $11
+		    status = $7, approved_by = $8, approved_at = $9,
+		    password_reset_token = $10, password_reset_expires_at = $11,
+		    updated_at = $12
+		WHERE id = $13
 	`
 
 	user.UpdatedAt = time.Now()
@@ -248,6 +303,8 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.Status,
 		user.ApprovedBy,
 		user.ApprovedAt,
+		user.PasswordResetToken,
+		user.PasswordResetExpiresAt,
 		user.UpdatedAt,
 		user.ID,
 	)

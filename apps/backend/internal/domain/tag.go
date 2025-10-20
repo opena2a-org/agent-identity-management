@@ -48,6 +48,10 @@ type TagRepository interface {
 	List(ctx context.Context, organizationID uuid.UUID, category *TagCategory) ([]*Tag, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 
+	// Tag Search & Discovery
+	GetPopularTags(ctx context.Context, organizationID uuid.UUID, limit int) ([]*Tag, error)
+	SearchTags(ctx context.Context, organizationID uuid.UUID, query string, category *TagCategory) ([]*Tag, error)
+
 	// Agent Tag Relationships
 	AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagIDs []uuid.UUID) error
 	RemoveTagFromAgent(ctx context.Context, agentID uuid.UUID, tagID uuid.UUID) error

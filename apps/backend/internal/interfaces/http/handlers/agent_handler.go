@@ -11,20 +11,26 @@ import (
 )
 
 type AgentHandler struct {
-	agentService *application.AgentService
-	mcpService   *application.MCPService
-	auditService *application.AuditService
+	agentService       *application.AgentService
+	mcpService         *application.MCPService
+	auditService       *application.AuditService
+	apiKeyService      *application.APIKeyService
+	trustScoreHandler  *TrustScoreHandler
 }
 
 func NewAgentHandler(
 	agentService *application.AgentService,
 	mcpService   *application.MCPService,
 	auditService *application.AuditService,
+	apiKeyService *application.APIKeyService,
+	trustScoreHandler *TrustScoreHandler,
 ) *AgentHandler {
 	return &AgentHandler{
-		agentService: agentService,
-		mcpService:   mcpService,
-		auditService: auditService,
+		agentService:      agentService,
+		mcpService:        mcpService,
+		auditService:      auditService,
+		apiKeyService:     apiKeyService,
+		trustScoreHandler: trustScoreHandler,
 	}
 }
 
@@ -1057,6 +1063,376 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 			"capability_violation_count": agent.CapabilityViolationCount,
 			"is_compromised":       agent.IsCompromised,
 		},
+	})
+}
+
+// ========================================
+// Trust Score Management (RESTful nesting under /agents/:id/trust-score/*)
+// ========================================
+
+// GetAgentTrustScore returns current trust score for an agent
+// Wrapper that delegates to TrustScoreHandler for RESTful endpoint consistency
+// @Summary Get agent trust score
+// @Description Get current trust score for an agent
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/trust-score [get]
+func (h *AgentHandler) GetAgentTrustScore(c fiber.Ctx) error {
+	// Delegate to existing trust score handler
+	return h.trustScoreHandler.GetTrustScore(c)
+}
+
+// GetAgentTrustScoreHistory returns trust score history for an agent
+// Wrapper that delegates to TrustScoreHandler for RESTful endpoint consistency
+// @Summary Get agent trust score history
+// @Description Get trust score changes over time for an agent
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param limit query int false "Number of history entries to return (default: 30)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/trust-score/history [get]
+func (h *AgentHandler) GetAgentTrustScoreHistory(c fiber.Ctx) error {
+	// Delegate to existing trust score handler
+	return h.trustScoreHandler.GetTrustScoreHistory(c)
+}
+
+// UpdateAgentTrustScore manually updates trust score (admin override)
+// @Summary Update agent trust score (admin only)
+// @Description Manually override the trust score for an agent
+// @Tags agents
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body UpdateTrustScoreRequest true "New trust score"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/trust-score [put]
+func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Score  float64 `json:"score"`
+		Reason string  `json:"reason"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate score range (0.000 to 9.999 based on database schema)
+	if req.Score < 0.0 || req.Score > 9.999 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Trust score must be between 0.0 and 9.999",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Update trust score in database using agent repository
+	if err := h.agentService.UpdateTrustScore(c.Context(), agentID, req.Score); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update trust score",
+		})
+	}
+
+	// Get updated agent
+	updatedAgent, _ := h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit - manual trust score override is a sensitive admin action
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"trust_score",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"agent_name":       agent.Name,
+			"old_trust_score":  agent.TrustScore,
+			"new_trust_score":  req.Score,
+			"reason":           req.Reason,
+			"action":           "manual_override",
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"success":     true,
+		"agent_id":    agentID,
+		"agent_name":  updatedAgent.Name,
+		"trust_score": updatedAgent.TrustScore,
+		"updated_at":  updatedAgent.UpdatedAt,
+		"message":     "Trust score updated successfully",
+	})
+}
+
+// RecalculateAgentTrustScore triggers trust score recalculation
+// Wrapper that delegates to TrustScoreHandler.CalculateTrustScore
+// @Summary Recalculate agent trust score
+// @Description Trigger recalculation of trust score based on current metrics
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/trust-score/recalculate [post]
+func (h *AgentHandler) RecalculateAgentTrustScore(c fiber.Ctx) error {
+	// Delegate to existing trust score handler
+	return h.trustScoreHandler.CalculateTrustScore(c)
+}
+
+// ========================================
+// Agent Lifecycle Management
+// ========================================
+
+// SuspendAgent suspends an agent by setting its status to suspended
+// @Summary Suspend agent
+// @Description Suspend an agent by setting its status to suspended. The agent will be unable to perform actions.
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/suspend [post]
+func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Suspend the agent
+	if err := h.agentService.SuspendAgent(c.Context(), agentID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Get updated agent to return in response
+	agent, _ = h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":      "suspend",
+			"agent_name":  agent.Name,
+			"status":      agent.Status,
+			"trust_score": agent.TrustScore,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"success":     true,
+		"message":     "Agent suspended successfully",
+		"status":      agent.Status,
+		"trust_score": agent.TrustScore,
+		"agent":       agent,
+	})
+}
+
+// ReactivateAgent reactivates a suspended agent by setting its status to verified
+// @Summary Reactivate agent
+// @Description Reactivate a suspended agent by setting its status to verified. The agent will be able to perform actions again.
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/reactivate [post]
+func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Reactivate the agent
+	if err := h.agentService.ReactivateAgent(c.Context(), agentID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Get updated agent to return in response
+	agent, _ = h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":      "reactivate",
+			"agent_name":  agent.Name,
+			"status":      agent.Status,
+			"trust_score": agent.TrustScore,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"success":     true,
+		"message":     "Agent reactivated successfully",
+		"status":      agent.Status,
+		"trust_score": agent.TrustScore,
+		"verified_at": agent.VerifiedAt,
+		"agent":       agent,
+	})
+}
+
+// RotateCredentials rotates an agent's cryptographic credentials by generating new Ed25519 keypair
+// @Summary Rotate agent credentials
+// @Description Generate new Ed25519 keypair for agent. Previous public key is stored for grace period.
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/rotate-credentials [post]
+func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Rotate credentials (generates new keypair)
+	publicKey, privateKey, err := h.agentService.RotateCredentials(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Get updated agent to return in response
+	agent, _ = h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":         "rotate_credentials",
+			"agent_name":     agent.Name,
+			"rotation_count": agent.RotationCount,
+			"key_created_at": agent.KeyCreatedAt,
+			"key_expires_at": agent.KeyExpiresAt,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"success":             true,
+		"message":             "Credentials rotated successfully",
+		"public_key":          publicKey,
+		"private_key":         privateKey, // ⚠️ SENSITIVE: Only returned once during rotation
+		"previous_public_key": agent.PreviousPublicKey,
+		"rotation_count":      agent.RotationCount,
+		"key_created_at":      agent.KeyCreatedAt,
+		"key_expires_at":      agent.KeyExpiresAt,
+		"warning":             "Store the private key securely. It will not be shown again.",
 	})
 }
 

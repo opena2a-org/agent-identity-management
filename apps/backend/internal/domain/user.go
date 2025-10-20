@@ -52,6 +52,7 @@ type UserRepository interface {
 	Create(user *User) error
 	GetByID(id uuid.UUID) (*User, error)
 	GetByEmail(email string) (*User, error)
+	GetByPasswordResetToken(resetToken string) (*User, error)
 	GetByOrganization(orgID uuid.UUID) ([]*User, error)
 	GetByOrganizationAndStatus(orgID uuid.UUID, status UserStatus) ([]*User, error)
 	Update(user *User) error

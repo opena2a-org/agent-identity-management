@@ -726,3 +726,118 @@ func (h *ComplianceHandler) RemediateViolation(c fiber.Ctx) error {
 		"remediated_at": remediationDate,
 	})
 }
+
+// ListComplianceReports returns a list of compliance reports
+// @Summary List compliance reports
+// @Description Get all compliance reports for the organization
+// @Tags compliance
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/compliance/reports [get]
+func (h *ComplianceHandler) ListComplianceReports(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	reports, err := h.complianceService.ListComplianceReports(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve compliance reports",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"compliance_reports",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		nil,
+	)
+
+	return c.JSON(fiber.Map{
+		"reports": reports,
+		"total":   len(reports),
+	})
+}
+
+// ListAccessReviews returns a list of access review reports
+// @Summary List access reviews
+// @Description Get all access review reports with optional status filtering
+// @Tags compliance
+// @Produce json
+// @Param status query string false "Filter by status (pending, approved, rejected)"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/compliance/access-reviews [get]
+func (h *ComplianceHandler) ListAccessReviews(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	statusFilter := c.Query("status", "")
+
+	reviews, err := h.complianceService.ListAccessReviews(c.Context(), orgID, statusFilter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve access reviews",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"access_reviews",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"status_filter": statusFilter,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"reviews": reviews,
+		"total":   len(reviews),
+		"filter": map[string]string{
+			"status": statusFilter,
+		},
+	})
+}
+
+// GetDataRetentionPolicies returns data retention policies
+// @Summary Get data retention policies
+// @Description Get data retention policies for the organization
+// @Tags compliance
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/compliance/data-retention [get]
+func (h *ComplianceHandler) GetDataRetentionPolicies(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	policies, err := h.complianceService.GetDataRetentionPolicies(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve data retention policies",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"data_retention_policies",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		nil,
+	)
+
+	return c.JSON(policies)
+}

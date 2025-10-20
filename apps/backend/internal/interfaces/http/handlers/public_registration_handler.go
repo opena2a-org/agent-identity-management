@@ -374,6 +374,132 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword" validate:"required,min=8"`
 }
 
+// RequestAccessRequest represents the access request request
+type RequestAccessRequest struct {
+	Email            string  `json:"email" validate:"required,email"`
+	FullName         string  `json:"fullName" validate:"required,min=1,max=200"`
+	OrganizationName *string `json:"organizationName,omitempty"`
+	Reason           string  `json:"reason" validate:"required,min=10,max=1000"`
+}
+
+// RequestAccessResponse represents the access request response
+type RequestAccessResponse struct {
+	Success   bool      `json:"success"`
+	Message   string    `json:"message"`
+	RequestID uuid.UUID `json:"requestId"`
+	Status    string    `json:"status"`
+}
+
+// RequestAccess allows users to request access to the platform
+// @Summary Request platform access
+// @Description Submit a request for platform access with email, name, and reason
+// @Tags public
+// @Accept json
+// @Produce json
+// @Param request body RequestAccessRequest true "Access request details"
+// @Success 201 {object} RequestAccessResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/public/request-access [post]
+func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
+	var req RequestAccessRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.FullName) == "" || strings.TrimSpace(req.Reason) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Email, full name, and reason are required",
+		})
+	}
+
+	// Validate reason length (minimum 10 characters)
+	if len(strings.TrimSpace(req.Reason)) < 10 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Reason must be at least 10 characters",
+		})
+	}
+
+	// Normalize inputs
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	fullName := strings.TrimSpace(req.FullName)
+	reason := strings.TrimSpace(req.Reason)
+
+	// Split full name into first and last name (simple approach)
+	nameParts := strings.Fields(fullName)
+	firstName := nameParts[0]
+	lastName := ""
+	if len(nameParts) > 1 {
+		lastName = strings.Join(nameParts[1:], " ")
+	}
+
+	// Check if user already exists
+	existingUser, err := h.authService.GetUserByEmail(c.Context(), email)
+	if err == nil && existingUser != nil {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"success": false,
+			"error":   "A user with this email already exists",
+		})
+	}
+
+	// Check if registration request already exists
+	existingRequest, err := h.registrationService.GetRegistrationRequestByEmail(c.Context(), email)
+	if err == nil && existingRequest != nil && existingRequest.Status == domain.RegistrationStatusPending {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"success": false,
+			"error":   "An access request with this email is already pending approval",
+		})
+	}
+
+	// Create access request (stored as registration request with no password)
+	// This uses the existing registration request infrastructure
+	registrationRequest, err := h.registrationService.CreateAccessRequest(
+		c.Context(),
+		email,
+		firstName,
+		lastName,
+		reason,
+		req.OrganizationName,
+	)
+	if err != nil {
+		// Log the actual error for debugging
+		fmt.Printf("ERROR in RequestAccess: %v\n", err)
+
+		// Handle specific error cases
+		switch err {
+		case application.ErrUserAlreadyExists:
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"success": false,
+				"error":   "A user with this email already exists",
+			})
+		case application.ErrRegistrationRequestExists:
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"success": false,
+				"error":   "An access request with this email is already pending approval",
+			})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"error":   fmt.Sprintf("Failed to create access request: %v", err),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(&RequestAccessResponse{
+		Success:   true,
+		Message:   "Access request submitted successfully. You will receive an email once your request is reviewed.",
+		RequestID: registrationRequest.ID,
+		Status:    "pending",
+	})
+}
+
 // ChangePassword handles password changes (including forced changes for default admin)
 // @Summary Change user password
 // @Description Change password for a user (supports forced password changes)
@@ -451,6 +577,144 @@ func (h *PublicRegistrationHandler) ChangePassword(c fiber.Ctx) error {
 	return h.generateApprovedLoginResponse(c, user)
 }
 
+// ForgotPasswordRequest represents the forgot password request
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// ForgotPasswordResponse represents the forgot password response
+type ForgotPasswordResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// ForgotPassword handles forgot password requests
+// @Summary Request password reset
+// @Description Request a password reset token to be sent via email
+// @Tags public
+// @Accept json
+// @Produce json
+// @Param request body ForgotPasswordRequest true "Email address"
+// @Success 200 {object} ForgotPasswordResponse
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/public/forgot-password [post]
+func (h *PublicRegistrationHandler) ForgotPassword(c fiber.Ctx) error {
+	var req ForgotPasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+	}
+
+	// Validate email format
+	if strings.TrimSpace(req.Email) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Email is required",
+		})
+	}
+
+	// Request password reset (always succeeds for security - don't reveal if email exists)
+	if err := h.registrationService.RequestPasswordReset(c.Context(), req.Email); err != nil {
+		// Log error but don't reveal to user
+		fmt.Printf("ERROR in ForgotPassword: %v\n", err)
+	}
+
+	// Always return success message for security (timing-attack prevention)
+	return c.JSON(&ForgotPasswordResponse{
+		Success: true,
+		Message: "If an account with that email exists, a password reset link has been sent.",
+	})
+}
+
+// ResetPasswordRequest represents the reset password request
+type ResetPasswordRequest struct {
+	ResetToken      string `json:"reset_token" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" validate:"required"`
+}
+
+// ResetPasswordResponse represents the reset password response
+type ResetPasswordResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// ResetPassword handles password reset using a valid token
+// @Summary Reset password
+// @Description Reset user password using a valid reset token
+// @Tags public
+// @Accept json
+// @Produce json
+// @Param request body ResetPasswordRequest true "Reset password details"
+// @Success 200 {object} ResetPasswordResponse
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/public/reset-password [post]
+func (h *PublicRegistrationHandler) ResetPassword(c fiber.Ctx) error {
+	var req ResetPasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if strings.TrimSpace(req.ResetToken) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Reset token is required",
+		})
+	}
+	if strings.TrimSpace(req.NewPassword) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "New password is required",
+		})
+	}
+	if strings.TrimSpace(req.ConfirmPassword) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Password confirmation is required",
+		})
+	}
+
+	// Validate passwords match
+	if req.NewPassword != req.ConfirmPassword {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Passwords do not match",
+		})
+	}
+
+	// Validate password length (minimum 8 characters)
+	if len(req.NewPassword) < 8 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Password must be at least 8 characters long",
+		})
+	}
+
+	// Reset password
+	if err := h.registrationService.ResetPassword(
+		c.Context(),
+		req.ResetToken,
+		req.NewPassword,
+		req.ConfirmPassword,
+	); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   err.Error(),
+		})
+	}
+
+	return c.JSON(&ResetPasswordResponse{
+		Success: true,
+		Message: "Password has been reset successfully. You can now log in with your new password.",
+	})
+}
+
 // RegisterRoutes registers the public registration and login routes
 func (h *PublicRegistrationHandler) RegisterRoutes(app *fiber.App) {
 	public := app.Group("/api/v1/public")
@@ -460,4 +724,5 @@ func (h *PublicRegistrationHandler) RegisterRoutes(app *fiber.App) {
 	public.Get("/register/:requestId/status", h.CheckRegistrationStatus)
 	public.Post("/login", h.Login)
 	public.Post("/change-password", h.ChangePassword)
+	public.Post("/forgot-password", h.ForgotPassword)
 }

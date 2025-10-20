@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -83,7 +84,20 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/trends [get]
 func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
 	
 	// Support both days and weeks parameters for backward compatibility
 	period := c.Query("period", "weeks")
@@ -215,7 +229,7 @@ func (h *AnalyticsHandler) GenerateReport(c fiber.Ctx) error {
 }
 
 // GetVerificationActivity retrieves monthly verification activity trends
-// @Summary Get verification activity trends  
+// @Summary Get verification activity trends
 // @Description Get monthly verification activity showing verified vs pending agents
 // @Tags analytics
 // @Produce json
@@ -223,7 +237,20 @@ func (h *AnalyticsHandler) GenerateReport(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/verification-activity [get]
 func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
 	months, _ := strconv.Atoi(c.Query("months", "6"))
 
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
@@ -353,13 +380,28 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/dashboard [get]
 func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
 
 	// Fetch agents
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
+		// 🔍 LOG DETAILED ERROR for debugging
+		log.Printf("❌ Failed to fetch agents for org %s: %v", orgID.String(), err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agents",
+			"error": fmt.Sprintf("Failed to fetch agents: %v", err),
 		})
 	}
 

@@ -35,6 +35,15 @@ func (s *AlertService) GetUnacknowledgedAlerts(ctx context.Context, orgID uuid.U
 	return s.alertRepo.GetUnacknowledged(orgID)
 }
 
+// CountUnacknowledged counts unacknowledged alerts for an organization
+func (s *AlertService) CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (int, error) {
+	alerts, err := s.alertRepo.GetUnacknowledged(orgID)
+	if err != nil {
+		return 0, err
+	}
+	return len(alerts), nil
+}
+
 // CheckAPIKeyExpiry checks for expiring API keys and creates alerts
 // NOTE: This method is not currently used but kept for future expansion
 // when API key expiry tracking is added to the system

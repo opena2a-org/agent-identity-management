@@ -278,9 +278,13 @@ print(f"MCP Trust Score: {verification.trust_score}")
 - **Icons**: Lucide React
 
 #### SDK
-- **Python SDK**: Full-featured with CrewAI, LangChain, MCP integrations
-- **Go SDK**
-- **JavaScript SDK**
+- **Python SDK**: ✅ Production-ready with 100% test coverage
+  - Ed25519 cryptographic signing
+  - OAuth/OIDC integration (Google, Microsoft, Okta)
+  - Automatic MCP detection
+  - CrewAI & LangChain integrations
+  - Secure keyring storage
+- **Future Releases**: Go and JavaScript/TypeScript SDKs planned for Q1-Q2 2026
 
 #### Infrastructure
 - **Containers**: Docker + Docker Compose
@@ -669,16 +673,18 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [x] 60+ REST API endpoints
 - [x] Enterprise SSO (Google, Microsoft, Okta)
 
-### v1.1.0 (Q1 2025)
+### v1.1.0 (Q1 2026)
 - [ ] **Action Verification**: Capture agent action context with behavioral baselines
 - [ ] **Advanced RBAC**: Custom roles and fine-grained permissions
 - [ ] **GraphQL API**: Complex queries and real-time subscriptions
 - [ ] **CLI Tool**: Command-line interface for automation
-- [ ] **Go SDK**: Full-featured Go client library
-- [ ] **JavaScript SDK**: Browser and Node.js support
+- [ ] **Go SDK**: Full-featured Go client library (Q1 2026)
 - [ ] **Advanced Analytics**: Agent behavior insights and trends
 - [ ] **Webhook Management UI**: Configure webhooks from dashboard
 - [ ] **Multi-region Deployment**: Global distribution support
+
+### v1.2.0 (Q2 2026)
+- [ ] **JavaScript/TypeScript SDK**: Browser and Node.js support (Q2 2026)
 
 ### v1.2.0 (Q2 2025)
 - [ ] **SAML 2.0 SSO**: Enterprise SAML authentication

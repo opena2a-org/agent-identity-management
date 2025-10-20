@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -16,8 +16,10 @@ import {
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl") || "/dashboard";
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -57,11 +59,21 @@ export default function LoginPage() {
         password: formData.password,
       });
 
+      // Check if user must change password (enterprise security requirement)
+      if (response.user?.force_password_change) {
+        toast.info("You must change your password before continuing.");
+        // Store user info temporarily for password change flow
+        localStorage.setItem('temp_user_id', response.user.id);
+        localStorage.setItem('temp_user_email', response.user.email);
+        router.push("/auth/change-password");
+        return;
+      }
+
       if (response.success) {
         if (response.isApproved) {
-          // User is approved, redirect to dashboard
+          // User is approved, redirect to return URL or dashboard
           toast.success("Login successful!");
-          router.push("/dashboard");
+          router.push(decodeURIComponent(returnUrl));
         } else {
           // User exists but not approved yet - redirect to pending page
           toast.info("Your account is pending admin approval.");
@@ -261,5 +273,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

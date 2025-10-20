@@ -30,11 +30,18 @@ func NewSDKTokenHandler(sdkTokenService *application.SDKTokenService) *SDKTokenH
 // @Router /api/v1/users/me/sdk-tokens [get]
 // @Security BearerAuth
 func (h *SDKTokenHandler) ListUserTokens(c fiber.Ctx) error {
-	// Get authenticated user from context
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
+	// 🔍 Safe type assertion with error checking
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "User not authenticated",
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
 		})
 	}
 

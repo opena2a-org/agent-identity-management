@@ -23,6 +23,7 @@ export interface User {
   avatar_url?: string;
   role: "admin" | "manager" | "member" | "viewer" | "pending";
   status: "active" | "pending_approval" | "suspended" | "deactivated";
+  force_password_change?: boolean;
   created_at: string;
   provider?: string;
   last_login_at?: string;
@@ -288,13 +289,40 @@ class APIClient {
   }
 
   async changePassword(data: {
-    current_password: string;
-    new_password: string;
-  }): Promise<{ message: string }> {
-    return this.request("/api/v1/auth/change-password", {
+    email: string;
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<{ success: boolean; user?: User; accessToken?: string; refreshToken?: string; message?: string }> {
+    // Use public endpoint for forced password changes (no auth required)
+    // Backend expects: email, oldPassword, newPassword
+    const payload = {
+      email: data.email,
+      oldPassword: data.currentPassword,
+      newPassword: data.newPassword,
+    };
+
+    const response = await fetch(`${this.baseURL}/api/v1/public/change-password`, {
       method: "POST",
-      body: JSON.stringify(data),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(payload),
     });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to change password");
+    }
+
+    const data_response = await response.json();
+
+    // Store tokens if password change was successful
+    if (data_response.success && data_response.accessToken) {
+      this.setToken(data_response.accessToken, data_response.refreshToken);
+    }
+
+    return data_response;
   }
 
   // Public Registration & Login (Email/Password)

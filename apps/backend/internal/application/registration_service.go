@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,6 +88,60 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 	// Save registration request
 	if err := s.registrationRepo.CreateRegistrationRequest(ctx, req); err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
+	}
+
+	return req, nil
+}
+
+// CreateAccessRequest creates an access request without password (for request-access endpoint)
+// This differs from CreateManualRegistrationRequest by not requiring a password
+func (s *RegistrationService) CreateAccessRequest(
+	ctx context.Context,
+	email, firstName, lastName, reason string,
+	organizationName *string,
+) (*domain.UserRegistrationRequest, error) {
+	// Check if user already exists
+	existingUser, err := s.userRepo.GetByEmail(email)
+	if err == nil && existingUser != nil {
+		return nil, ErrUserAlreadyExists
+	}
+
+	// Check if a registration request already exists for this email
+	existingRequest, err := s.registrationRepo.GetRegistrationRequestByEmail(ctx, email)
+	if err == nil && existingRequest != nil && existingRequest.IsPending() {
+		return nil, ErrRegistrationRequestExists
+	}
+
+	// Create new access request (no password)
+	now := time.Now()
+	localProvider := domain.OAuthProviderLocal
+
+	req := &domain.UserRegistrationRequest{
+		ID:                 uuid.New(),
+		Email:              email,
+		FirstName:          firstName,
+		LastName:           lastName,
+		PasswordHash:       nil, // No password for access requests
+		OAuthProvider:      &localProvider,
+		OAuthUserID:        nil,
+		Status:             domain.RegistrationStatusPending,
+		RequestedAt:        now,
+		OAuthEmailVerified: false,
+		Metadata:           map[string]interface{}{
+			"reason": reason,
+		},
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+
+	// Add organization name to metadata if provided
+	if organizationName != nil && *organizationName != "" {
+		req.Metadata["organization_name"] = *organizationName
+	}
+
+	// Save access request
+	if err := s.registrationRepo.CreateRegistrationRequest(ctx, req); err != nil {
+		return nil, fmt.Errorf("failed to create access request: %w", err)
 	}
 
 	return req, nil
@@ -221,6 +276,113 @@ func (s *RegistrationService) RejectRegistrationRequest(
 	}
 
 	// TODO: Send rejection email to user
+
+	return nil
+}
+
+// RequestPasswordReset generates a password reset token for a user and sends a reset email
+func (s *RegistrationService) RequestPasswordReset(
+	ctx context.Context,
+	email string,
+) error {
+	// Normalize email
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	// Get user by email (fail silently for security)
+	user, err := s.userRepo.GetByEmail(email)
+	if err != nil || user == nil {
+		// Don't reveal if user exists - always return success
+		return nil
+	}
+
+	// Check if user account is deactivated
+	if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+		// Don't reveal if user is deactivated - always return success
+		return nil
+	}
+
+	// Generate password reset token (UUID format)
+	resetToken := uuid.New().String()
+
+	// Set expiration to 24 hours from now
+	expiresAt := time.Now().Add(24 * time.Hour)
+
+	// Update user with reset token and expiration
+	user.PasswordResetToken = &resetToken
+	user.PasswordResetExpiresAt = &expiresAt
+
+	if err := s.userRepo.Update(user); err != nil {
+		return fmt.Errorf("failed to update user with reset token: %w", err)
+	}
+
+	// TODO: Send password reset email if email service available
+	// For now, log the token (REMOVE IN PRODUCTION!)
+	fmt.Printf("🔑 Password reset token for %s: %s (expires at %s)\n", email, resetToken, expiresAt.Format(time.RFC3339))
+
+	return nil
+}
+
+// ResetPassword resets a user's password using a valid reset token
+func (s *RegistrationService) ResetPassword(
+	ctx context.Context,
+	resetToken string,
+	newPassword string,
+	confirmPassword string,
+) error {
+	// Validate inputs
+	if strings.TrimSpace(resetToken) == "" {
+		return fmt.Errorf("reset token is required")
+	}
+	if strings.TrimSpace(newPassword) == "" {
+		return fmt.Errorf("new password is required")
+	}
+	if newPassword != confirmPassword {
+		return fmt.Errorf("passwords do not match")
+	}
+
+	// Find user by reset token (automatically validates expiration)
+	user, err := s.userRepo.GetByPasswordResetToken(resetToken)
+	if err != nil {
+		return fmt.Errorf("invalid or expired reset token")
+	}
+
+	// Validate password strength
+	passwordHasher := auth.NewPasswordHasher()
+	if err := passwordHasher.ValidatePassword(newPassword); err != nil {
+		return err
+	}
+
+	// Hash new password
+	hashedPassword, err := passwordHasher.HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Update user password and clear reset token
+	user.PasswordHash = &hashedPassword
+	user.PasswordResetToken = nil
+	user.PasswordResetExpiresAt = nil
+	user.ForcePasswordChange = false // Clear force password change if set
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(user); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	// Log audit event
+	s.auditService.LogAction(
+		ctx,
+		user.OrganizationID,
+		user.ID,
+		domain.AuditActionUpdate,
+		"user",
+		user.ID,
+		"", // IP address
+		"", // User agent
+		map[string]interface{}{
+			"action": "password_reset_completed",
+		},
+	)
 
 	return nil
 }

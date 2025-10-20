@@ -29,6 +29,7 @@ import { api } from "@/lib/api";
 import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface SecurityThreat {
   id: string;
@@ -364,9 +365,10 @@ export default function SecurityPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Security Dashboard
@@ -632,5 +634,6 @@ export default function SecurityPage() {
         threat={selectedThreat}
       />
     </div>
+    </AuthGuard>
   );
 }

@@ -175,6 +175,15 @@ func (s *VerificationEventService) ListAgentVerificationEvents(
 	return s.eventRepo.GetByAgent(agentID, limit, offset)
 }
 
+// ListMCPVerificationEvents retrieves verification events for a specific MCP server
+func (s *VerificationEventService) ListMCPVerificationEvents(
+	ctx context.Context,
+	mcpServerID uuid.UUID,
+	limit, offset int,
+) ([]*domain.VerificationEvent, int, error) {
+	return s.eventRepo.GetByMCPServer(mcpServerID, limit, offset)
+}
+
 // GetRecentEvents retrieves recent verification events (for real-time monitoring)
 func (s *VerificationEventService) GetRecentEvents(ctx context.Context, orgID uuid.UUID, minutes int) ([]*domain.VerificationEvent, error) {
 	return s.eventRepo.GetRecentEvents(orgID, minutes)

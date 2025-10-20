@@ -54,16 +54,17 @@ type CapabilityRepository interface {
 
 // Standard capability types
 const (
-	CapabilityFileRead       = "file:read"
-	CapabilityFileWrite      = "file:write"
-	CapabilityFileDelete     = "file:delete"
-	CapabilityAPICall        = "api:call"
-	CapabilityDBQuery        = "db:query"
-	CapabilityDBWrite        = "db:write"
+	CapabilityFileRead        = "file:read"
+	CapabilityFileWrite       = "file:write"
+	CapabilityFileDelete      = "file:delete"
+	CapabilityNetworkAccess   = "network:access"
+	CapabilityAPICall         = "api:call"
+	CapabilityDBQuery         = "db:query"
+	CapabilityDBWrite         = "db:write"
 	CapabilityUserImpersonate = "user:impersonate"
-	CapabilityDataExport     = "data:export"
-	CapabilitySystemAdmin    = "system:admin"
-	CapabilityMCPToolUse     = "mcp:tool_use"
+	CapabilityDataExport      = "data:export"
+	CapabilitySystemAdmin     = "system:admin"
+	CapabilityMCPToolUse      = "mcp:tool_use"
 )
 
 // Violation severity levels

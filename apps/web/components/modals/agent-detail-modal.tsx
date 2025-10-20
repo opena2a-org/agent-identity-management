@@ -499,12 +499,11 @@ export function AgentDetailModal({
                     <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                        📦 Download SDK (Recommended)
+                        📦 Download Python SDK (Recommended)
                       </h4>
                       <p className="text-xs text-blue-800 dark:text-blue-200">
-                        Download ready-to-use SDK for{" "}
-                        <strong>Python, Node.js, or Go</strong>. Includes
-                        cryptographic keys and automatic verification.
+                        Download production-ready <strong>Python SDK</strong> with
+                        cryptographic keys and automatic verification. 100% test coverage.
                       </p>
                     </div>
                   </div>
@@ -539,50 +538,41 @@ export function AgentDetailModal({
                   <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
                   <div className="flex-1">
                     <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                      📦 Download SDK
+                      📦 Download Python SDK
                     </h4>
-                    <p className="text-xs text-blue-800 dark:text-blue-200 mb-4">
-                      Choose your preferred language. The SDK includes
-                      cryptographic keys and automatic verification.
+                    <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
+                      Production-ready Python SDK with Ed25519 cryptographic signing, OAuth integration,
+                      MCP auto-detection, and 100% test coverage.
                     </p>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-3">
                       <button
                         onClick={() => handleDownloadSDK("python")}
                         disabled={downloadingSDK}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
                       >
                         {downloadingSDK ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Downloading...
+                          </>
                         ) : (
-                          <Download className="h-4 w-4" />
+                          <>
+                            <Download className="h-4 w-4" />
+                            Download Python SDK
+                          </>
                         )}
-                        Python SDK
                       </button>
-                      <button
-                        onClick={() => handleDownloadSDK("node")}
-                        disabled={downloadingSDK}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {downloadingSDK ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4" />
-                        )}
-                        Node.js SDK
-                      </button>
-                      <button
-                        onClick={() => handleDownloadSDK("go")}
-                        disabled={downloadingSDK}
-                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {downloadingSDK ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4" />
-                        )}
-                        Go SDK
-                      </button>
+
+                      <div className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded p-3">
+                        <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+                          <strong>Future Releases:</strong>
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
+                          The Python SDK provides complete functionality today.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -47,6 +47,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface Agent {
   id: string;
@@ -299,7 +300,8 @@ export default function AgentDetailsPage({
   }
 
   return (
-    <div className="space-y-6">
+    <AuthGuard>
+      <div className="space-y-6">
       {/* Header */}
       <div>
         <Button
@@ -806,5 +808,6 @@ export default function AgentDetailsPage({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </AuthGuard>
   );
 }

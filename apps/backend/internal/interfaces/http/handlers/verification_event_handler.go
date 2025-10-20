@@ -399,6 +399,173 @@ func (h *VerificationEventHandler) GetStatistics(c fiber.Ctx) error {
 	return c.JSON(stats)
 }
 
+// GetAgentVerificationEvents retrieves verification events for a specific agent
+// @Summary Get agent verification events
+// @Description Get all verification events for a specific agent with pagination
+// @Tags verification-events
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param limit query int false "Number of events to return" default(50)
+// @Param offset query int false "Number of events to skip" default(0)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/verification-events/agent/{id} [get]
+func (h *VerificationEventHandler) GetAgentVerificationEvents(c fiber.Ctx) error {
+	// Get organization ID from auth context
+	_, err := getOrganizationID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Parse agent ID
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID format",
+		})
+	}
+
+	// Parse pagination parameters
+	limit, err := strconv.Atoi(c.Query("limit", "50"))
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(c.Query("offset", "0"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	// Get verification events for this agent
+	events, total, err := h.service.ListAgentVerificationEvents(c.Context(), agentID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve verification events",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"events": events,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// GetMCPVerificationEvents retrieves verification events for a specific MCP server
+// @Summary Get MCP server verification events
+// @Description Get all verification events for a specific MCP server with pagination
+// @Tags verification-events
+// @Accept json
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Param limit query int false "Number of events to return" default(50)
+// @Param offset query int false "Number of events to skip" default(0)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/verification-events/mcp/{id} [get]
+func (h *VerificationEventHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
+	// Get organization ID from auth context
+	_, err := getOrganizationID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Parse MCP server ID
+	mcpServerID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID format",
+		})
+	}
+
+	// Parse pagination parameters
+	limit, err := strconv.Atoi(c.Query("limit", "50"))
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(c.Query("offset", "0"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	// Get verification events for this MCP server
+	// We need to add this method to the service layer
+	events, total, err := h.service.ListMCPVerificationEvents(c.Context(), mcpServerID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve verification events",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"events": events,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// GetVerificationStats retrieves aggregated verification statistics
+// @Summary Get verification statistics
+// @Description Get overall verification statistics including success rates and type distribution
+// @Tags verification-events
+// @Accept json
+// @Produce json
+// @Param period query string false "Time period (24h, 7d, 30d)" default(24h)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/verification-events/stats [get]
+func (h *VerificationEventHandler) GetVerificationStats(c fiber.Ctx) error {
+	// Get organization ID from auth context
+	orgID, err := getOrganizationID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Parse time period
+	period := c.Query("period", "24h")
+	var startTime, endTime time.Time
+	endTime = time.Now()
+
+	switch period {
+	case "24h":
+		startTime = endTime.Add(-24 * time.Hour)
+	case "7d":
+		startTime = endTime.Add(-7 * 24 * time.Hour)
+	case "30d":
+		startTime = endTime.Add(-30 * 24 * time.Hour)
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid period (use 24h, 7d, or 30d)",
+		})
+	}
+
+	// Get statistics from service
+	stats, err := h.service.GetStatistics(c.Context(), orgID, startTime, endTime)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve verification statistics",
+		})
+	}
+
+	return c.JSON(stats)
+}
+
 // DeleteVerificationEvent deletes a verification event
 // @Summary Delete verification event
 // @Description Delete a verification event (admin only)

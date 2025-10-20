@@ -19,7 +19,20 @@ func NewSecurityPolicyHandler(policyService *application.SecurityPolicyService) 
 
 // ListPolicies lists all security policies for the organization (admin only)
 func (h *SecurityPolicyHandler) ListPolicies(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
 
 	policies, err := h.policyService.ListPolicies(c.Context(), orgID)
 	if err != nil {

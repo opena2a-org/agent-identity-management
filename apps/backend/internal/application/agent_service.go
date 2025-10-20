@@ -319,6 +319,21 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 	return trustScore, nil
 }
 
+// UpdateTrustScore manually updates an agent's trust score (admin override)
+func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, newScore float64) error {
+	// Validate score range (0.000 to 9.999 based on database schema)
+	if newScore < 0.0 || newScore > 9.999 {
+		return fmt.Errorf("trust score must be between 0.0 and 9.999")
+	}
+
+	// Update trust score in database
+	if err := s.agentRepo.UpdateTrustScore(agentID, newScore); err != nil {
+		return fmt.Errorf("failed to update trust score: %w", err)
+	}
+
+	return nil
+}
+
 // VerifyAction verifies if an agent can perform an action
 // ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
 // This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
@@ -867,4 +882,107 @@ func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMC
 // GetAgentByName retrieves an agent by name within an organization
 func (s *AgentService) GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error) {
 return s.agentRepo.GetByName(orgID, name)
+}
+
+// SuspendAgent suspends an agent by setting its status to suspended
+func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
+	agent, err := s.agentRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	// Update status to suspended
+	agent.Status = domain.AgentStatusSuspended
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to suspend agent: %w", err)
+	}
+
+	// Recalculate trust score (suspension affects trust)
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
+	}
+
+	return nil
+}
+
+// ReactivateAgent reactivates a suspended agent by setting its status to verified
+func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error {
+	agent, err := s.agentRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	// Update status to verified
+	now := time.Now()
+	agent.Status = domain.AgentStatusVerified
+	agent.VerifiedAt = &now
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to reactivate agent: %w", err)
+	}
+
+	// Recalculate trust score (reactivation affects trust)
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
+	}
+
+	return nil
+}
+
+// RotateCredentials rotates an agent's cryptographic credentials by generating new Ed25519 keypair
+func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error) {
+	// 1. Fetch agent
+	agent, err := s.agentRepo.GetByID(id)
+	if err != nil {
+		return "", "", fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. Generate new Ed25519 key pair
+	keyPair, err := crypto.GenerateEd25519KeyPair()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate new cryptographic keys: %w", err)
+	}
+
+	// 3. Encode keys to base64
+	encodedKeys := crypto.EncodeKeyPair(keyPair)
+
+	// 4. Encrypt new private key before storing
+	encryptedPrivateKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to encrypt private key: %w", err)
+	}
+
+	// 5. Store previous public key for grace period (allows existing SDKs to work temporarily)
+	if agent.PublicKey != nil {
+		agent.PreviousPublicKey = agent.PublicKey
+	}
+
+	// 6. Update agent with new keys
+	agent.PublicKey = &encodedKeys.PublicKeyBase64
+	agent.EncryptedPrivateKey = &encryptedPrivateKey
+	agent.KeyAlgorithm = encodedKeys.Algorithm
+	now := time.Now()
+	agent.KeyCreatedAt = &now
+
+	// Set key expiration to 1 year from now (standard practice)
+	keyExpiry := time.Now().AddDate(1, 0, 0)
+	agent.KeyExpiresAt = &keyExpiry
+
+	// Increment rotation count
+	agent.RotationCount++
+
+	// 7. Update agent in database
+	if err := s.agentRepo.Update(agent); err != nil {
+		return "", "", fmt.Errorf("failed to update agent credentials: %w", err)
+	}
+
+	// 8. Return new credentials (for immediate use by caller)
+	return encodedKeys.PublicKeyBase64, encodedKeys.PrivateKeyBase64, nil
 }

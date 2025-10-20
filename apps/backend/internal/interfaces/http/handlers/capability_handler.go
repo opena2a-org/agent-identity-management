@@ -343,6 +343,44 @@ func (h *CapabilityHandler) GetViolationsByOrganization(c fiber.Ctx) error {
 	})
 }
 
+// ListCapabilities godoc
+// @Summary List all available capabilities
+// @Description Get all capability types available in the system
+// @Tags capabilities
+// @Produce json
+// @Success 200 {array} application.CapabilityDefinition
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /capabilities [get]
+func (h *CapabilityHandler) ListCapabilities(c fiber.Ctx) error {
+	// Get organization ID from context
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: "Invalid organization ID type in context",
+		})
+	}
+
+	// Call capability service to list all capabilities
+	capabilities, err := h.capabilityService.ListCapabilities(context.Background(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"capabilities": capabilities,
+	})
+}
+
 // GetRecentViolations godoc
 // @Summary Get recent violations
 // @Description Retrieve violations from the last N minutes for an organization

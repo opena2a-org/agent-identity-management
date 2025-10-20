@@ -196,6 +196,30 @@ func (s *TagService) SuggestTagsForMCPServer(ctx context.Context, mcpServerID uu
 	return []*domain.Tag{}, nil
 }
 
+// GetPopularTags retrieves the most popular tags by usage count
+func (s *TagService) GetPopularTags(ctx context.Context, orgID uuid.UUID, limit int) ([]*domain.Tag, error) {
+	tags, err := s.tagRepo.GetPopularTags(ctx, orgID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get popular tags: %w", err)
+	}
+	return tags, nil
+}
+
+// SearchTags searches for tags by query string (case-insensitive)
+func (s *TagService) SearchTags(ctx context.Context, orgID uuid.UUID, query string, categoryFilter string) ([]*domain.Tag, error) {
+	var category *domain.TagCategory
+	if categoryFilter != "" {
+		cat := domain.TagCategory(categoryFilter)
+		category = &cat
+	}
+
+	tags, err := s.tagRepo.SearchTags(ctx, orgID, query, category)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search tags: %w", err)
+	}
+	return tags, nil
+}
+
 // validateTagInput validates tag creation input
 func (s *TagService) validateTagInput(input CreateTagInput) error {
 	if input.Key == "" {

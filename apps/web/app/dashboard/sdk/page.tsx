@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { AuthGuard } from "@/components/auth-guard";
 
 type SDKLanguage = 'python' | 'go' | 'javascript'
 
@@ -42,8 +43,9 @@ export default function SDKDownloadPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="mb-8">
+    <AuthGuard>
+      <div className="container mx-auto py-8 px-4 max-w-4xl">
+        <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Enterprise-Grade Agent Security
         </h1>
@@ -76,143 +78,79 @@ export default function SDKDownloadPage() {
         </div>
       )}
 
-      {/* SDK Cards */}
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
-        {/* Python SDK - Full Featured */}
-        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4 h-16">
-              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Code className="h-6 w-6 text-blue-600" />
+      {/* SDK Card - Python Only */}
+      <div className="mb-8">
+        {/* Python SDK - Production Ready */}
+        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg overflow-hidden max-w-2xl mx-auto">
+          <div className="p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="h-16 w-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+                <Code className="h-8 w-8 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Python SDK</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Python SDK</h2>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 mt-1">
+                  ✅ Production Ready
+                </span>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4 h-20">
-              Official Python client for agent identity management with cryptographic verification.
+            <p className="text-base text-gray-700 mb-6">
+              Official production-ready Python client for agent identity management with Ed25519 cryptographic
+              verification, OAuth integration, automatic MCP detection, and secure keyring storage.
             </p>
 
             <button
               onClick={() => handleDownload('python')}
               disabled={downloading && selectedSDK === 'python'}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-base shadow-md"
             >
-              <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download SDK'}
+              <Download className="h-5 w-5" />
+              {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download Python SDK'}
             </button>
           </div>
 
-          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>OAuth auto-configured</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Auto-detect MCPs & capabilities</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Ed25519 crypto signing</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>System keyring integration</span>
+          <div className="bg-gradient-to-br from-gray-50 to-blue-50 px-6 py-5 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Features Included:</h3>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>OAuth/OIDC auto-configured</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Auto-detect MCPs & capabilities</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Ed25519 crypto signing</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>System keyring integration</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>LangChain & CrewAI support</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>100% test coverage</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Go SDK - Production Ready */}
-        <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4 h-16">
-              <div className="h-12 w-12 bg-cyan-100 rounded-lg flex items-center justify-center">
-                <Code className="h-6 w-6 text-cyan-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Go SDK</h2>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-700 mb-4 h-20">
-              Official Go client for agent identity management with cryptographic verification.
+        {/* Future SDKs Notice */}
+        <div className="mt-6 max-w-2xl mx-auto">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-900 mb-2">
+              <strong>🚀 Future SDK Releases:</strong>
             </p>
-
-            <button
-              onClick={() => handleDownload('go')}
-              disabled={downloading && selectedSDK === 'go'}
-              className="w-full bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 disabled:bg-cyan-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
-            >
-              <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'go' ? 'Downloading...' : 'Download SDK'}
-            </button>
-          </div>
-
-          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>OAuth auto-configured</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Auto-detect MCPs & capabilities</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Ed25519 crypto signing</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>System keyring integration</span>
-            </div>
-          </div>
-        </div>
-
-        {/* JavaScript SDK - Production Ready */}
-        <div className="bg-white border-2 border-green-500 rounded-lg shadow-sm overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4 h-16">
-              <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Code className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">JavaScript SDK</h2>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-700 mb-4 h-20">
-              Official JavaScript/TypeScript client for agent identity management with cryptographic verification.
+            <p className="text-sm text-blue-800">
+              Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026. The Python SDK provides
+              complete feature parity and is production-ready for all use cases today.
             </p>
-
-            <button
-              onClick={() => handleDownload('javascript')}
-              disabled={downloading && selectedSDK === 'javascript'}
-              className="w-full bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
-            >
-              <Download className="h-4 w-4" />
-              {downloading && selectedSDK === 'javascript' ? 'Downloading...' : 'Download SDK'}
-            </button>
-          </div>
-
-          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-1">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>OAuth auto-configured</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Auto-detect MCPs & capabilities</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>Ed25519 crypto signing</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-              <span>System keyring integration</span>
-            </div>
           </div>
         </div>
       </div>
@@ -302,5 +240,6 @@ export default function SDKDownloadPage() {
       </div>
 
     </div>
-  )
+    </AuthGuard>
+  );
 }

@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AuthGuard } from "@/components/auth-guard";
 
 export default function SDKTokensPage() {
   const [tokens, setTokens] = useState<SDKToken[]>([]);
@@ -123,9 +124,10 @@ export default function SDKTokensPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">SDK Tokens</h1>
           <p className="text-muted-foreground mt-2">
@@ -425,5 +427,6 @@ export default function SDKTokensPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </AuthGuard>
   );
 }

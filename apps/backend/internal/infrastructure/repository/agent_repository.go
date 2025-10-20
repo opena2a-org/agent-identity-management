@@ -25,9 +25,9 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	query := `
 		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		                    trust_score, capability_violation_count, is_compromised, talks_to, capabilities,
+		                    trust_score, talks_to, capabilities,
 		                    created_at, updated_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 	`
 
 	now := time.Now()
@@ -72,8 +72,6 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.RepositoryURL,
 		agent.DocumentationURL,
 		agent.TrustScore,
-		agent.CapabilityViolationCount,
-		agent.IsCompromised,
 		talksToJSON,
 		capabilitiesJSON, // ✅ Store capabilities
 		agent.CreatedAt,
@@ -89,8 +87,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, last_capability_check_at, capability_violation_count,
-		       is_compromised, talks_to, capabilities, created_at, updated_at, created_by
+		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by
 		FROM agents
 		WHERE id = $1
 	`
@@ -102,7 +99,6 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var certificateURL sql.NullString
 	var repositoryURL sql.NullString
 	var documentationURL sql.NullString
-	var lastCapabilityCheck sql.NullTime
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
 
@@ -123,9 +119,6 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&documentationURL,
 		&agent.TrustScore,
 		&agent.VerifiedAt,
-		&lastCapabilityCheck,
-		&agent.CapabilityViolationCount,
-		&agent.IsCompromised,
 		&talksToJSON,
 		&capabilitiesJSON,
 		&agent.CreatedAt,
@@ -158,9 +151,6 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 	if documentationURL.Valid {
 		agent.DocumentationURL = documentationURL.String
-	}
-	if lastCapabilityCheck.Valid {
-		agent.LastCapabilityCheckAt = &lastCapabilityCheck.Time
 	}
 
 	// Unmarshal talks_to from JSONB
@@ -263,9 +253,8 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		SET display_name = $1, description = $2, agent_type = $3, status = $4, version = $5,
 		    public_key = $6, encrypted_private_key = $7, key_algorithm = $8, certificate_url = $9, repository_url = $10,
 		    documentation_url = $11, trust_score = $12, verified_at = $13,
-		    last_capability_check_at = $14, capability_violation_count = $15,
-		    is_compromised = $16, talks_to = $17, updated_at = $18
-		WHERE id = $19
+		    talks_to = $14, updated_at = $15
+		WHERE id = $16
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -290,9 +279,6 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.DocumentationURL,
 		agent.TrustScore,
 		agent.VerifiedAt,
-		agent.LastCapabilityCheckAt,
-		agent.CapabilityViolationCount,
-		agent.IsCompromised,
 		talksToJSON,
 		agent.UpdatedAt,
 		agent.ID,
@@ -384,22 +370,22 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	return agents, nil
 }
 
-// UpdateTrustScore updates an agent's trust score and increments violation count
+// UpdateTrustScore updates an agent's trust score
 func (r *AgentRepository) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	query := `
 		UPDATE agents
-		SET trust_score = $1, capability_violation_count = capability_violation_count + 1, updated_at = $2
+		SET trust_score = $1, updated_at = $2
 		WHERE id = $3
 	`
 	_, err := r.db.Exec(query, newScore, time.Now(), id)
 	return err
 }
 
-// MarkAsCompromised marks an agent as potentially compromised
+// MarkAsCompromised marks an agent as potentially compromised by setting status to suspended
 func (r *AgentRepository) MarkAsCompromised(id uuid.UUID) error {
 	query := `
 		UPDATE agents
-		SET is_compromised = true, status = $1, updated_at = $2
+		SET status = $1, updated_at = $2
 		WHERE id = $3
 	`
 	_, err := r.db.Exec(query, domain.AgentStatusSuspended, time.Now(), id)
@@ -495,7 +481,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
-		       talks_to, capabilities, last_capability_check_at, capability_violation_count, is_compromised
+		       talks_to, capabilities
 		FROM agents
 		WHERE organization_id = $1 AND name = $2
 		LIMIT 1
@@ -517,9 +503,6 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	var rotationCount sql.NullInt32
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
-	var lastCapabilityCheckAt sql.NullTime
-	var capabilityViolationCount sql.NullInt32
-	var isCompromised sql.NullBool
 
 	err := r.db.QueryRow(query, orgID, name).Scan(
 		&agent.ID,
@@ -548,9 +531,6 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&rotationCount,
 		&talksToJSON,
 		&capabilitiesJSON,
-		&lastCapabilityCheckAt,
-		&capabilityViolationCount,
-		&isCompromised,
 	)
 
 	if err == sql.ErrNoRows {
@@ -599,15 +579,6 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	}
 	if rotationCount.Valid {
 		agent.RotationCount = int(rotationCount.Int32)
-	}
-	if capabilityViolationCount.Valid {
-		agent.CapabilityViolationCount = int(capabilityViolationCount.Int32)
-	}
-	if isCompromised.Valid {
-		agent.IsCompromised = isCompromised.Bool
-	}
-	if lastCapabilityCheckAt.Valid {
-		agent.LastCapabilityCheckAt = &lastCapabilityCheckAt.Time
 	}
 
 	// Unmarshal JSONB fields

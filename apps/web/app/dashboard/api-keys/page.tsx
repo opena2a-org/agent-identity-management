@@ -19,6 +19,7 @@ import { CreateAPIKeyModal } from "@/components/modals/create-api-key-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
 import { getErrorMessage } from "@/lib/error-messages";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface APIKeyWithAgent extends APIKey {
   agent_name?: string;
@@ -294,9 +295,10 @@ export default function APIKeysPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             API Keys
@@ -523,5 +525,6 @@ export default function APIKeysPage() {
         }}
       />
     </div>
+    </AuthGuard>
   );
 }

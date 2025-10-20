@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { AgentsPageSkeleton } from "@/components/ui/content-loaders";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
 import { getErrorMessage } from "@/lib/error-messages";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface AgentStats {
   total: number;
@@ -601,8 +602,10 @@ function AgentsPageContent() {
 
 export default function AgentsPage() {
   return (
-    <Suspense fallback={<AgentsPageSkeleton />}>
-      <AgentsPageContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense fallback={<AgentsPageSkeleton />}>
+        <AgentsPageContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

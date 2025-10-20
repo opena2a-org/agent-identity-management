@@ -23,6 +23,7 @@ import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
 import { MCPDetailModal } from "@/components/modals/mcp-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
+import { AuthGuard } from "@/components/auth-guard";
 interface MCPServer {
   id: string;
   name: string;
@@ -414,9 +415,10 @@ export default function MCPServersPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             MCP Servers
@@ -685,5 +687,6 @@ export default function MCPServersPage() {
         onDelete={handleDeleteMCP}
       />
     </div>
+    </AuthGuard>
   );
 }

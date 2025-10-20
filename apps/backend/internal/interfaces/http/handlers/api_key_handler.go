@@ -24,7 +24,20 @@ func NewAPIKeyHandler(
 
 // ListAPIKeys returns all API keys for the organization
 func (h *APIKeyHandler) ListAPIKeys(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// 🔍 Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
 
 	// Optional: filter by agent
 	agentIDStr := c.Query("agent_id")

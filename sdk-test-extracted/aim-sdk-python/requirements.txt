@@ -1,0 +1,7 @@
+# AIM Python SDK Requirements
+
+# HTTP library for API communication
+requests>=2.31.0
+
+# Ed25519 cryptography (NaCl/libsodium)
+PyNaCl>=1.5.0

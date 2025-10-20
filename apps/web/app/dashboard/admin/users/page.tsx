@@ -43,6 +43,7 @@ import { formatDate } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableSkeleton } from "@/components/ui/content-loaders";
 import { toast } from "sonner";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface User {
   id: string;
@@ -320,8 +321,9 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <AuthGuard>
+      <div className="space-y-6">
+        <div>
         <h1 className="text-3xl font-bold">User Management</h1>
         <p className="text-muted-foreground mt-1">
           Manage <strong>human users</strong> who access the AIM dashboard
@@ -749,5 +751,6 @@ export default function UsersPage() {
         </CardContent>
       </Card>
     </div>
+    </AuthGuard>
   );
 }

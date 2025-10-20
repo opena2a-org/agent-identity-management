@@ -21,7 +21,6 @@ import {
   ShieldCheck,
   CheckSquare,
   ClipboardCheck,
-  FileText,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -105,12 +104,6 @@ const navigationBase: NavSection[] = [
         roles: ["admin", "manager"], // Managers can view alerts
       },
       {
-        name: "Audit Logs",
-        href: "/dashboard/admin/audit-logs",
-        icon: FileText,
-        roles: ["admin"],
-      },
-      {
         name: "Capability Requests",
         href: "/dashboard/admin/capability-requests",
         icon: CheckSquare,
@@ -126,12 +119,6 @@ const navigationBase: NavSection[] = [
         name: "Compliance",
         href: "/dashboard/admin/compliance",
         icon: ClipboardCheck,
-        roles: ["admin"], // Admin-only compliance monitoring
-      },
-      {
-        name: "Admin Dashboard",
-        href: "/dashboard/admin",
-        icon: Shield,
         roles: ["admin"], // Admin-only compliance monitoring
       },
     ],

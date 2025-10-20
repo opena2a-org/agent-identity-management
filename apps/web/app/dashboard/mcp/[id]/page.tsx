@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MCPServerDetailSkeleton } from "@/components/ui/content-loaders";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface MCPServer {
   id: string;
@@ -300,9 +301,10 @@ export default function MCPServerDetailsPage({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
+    <AuthGuard>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
         <Button
           variant="ghost"
           size="sm"
@@ -722,5 +724,6 @@ export default function MCPServerDetailsPage({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </AuthGuard>
   );
 }
