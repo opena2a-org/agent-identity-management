@@ -3,8 +3,17 @@
 // runtime via window.__RUNTIME_CONFIG__. This allows the same image to work
 // across different environments without rebuilding.
 const getApiUrl = () => {
+  // CRITICAL: Only run in browser context to avoid SSR mismatch
+  if (typeof window === 'undefined') {
+    // During SSR, use env var if available, otherwise return placeholder
+    // The actual URL will be resolved on client-side hydration
+    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  }
+
+  // Now we're in browser context - do full detection
+
   // 1. Check for runtime config (set by server)
-  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.apiUrl) {
+  if ((window as any).__RUNTIME_CONFIG__?.apiUrl) {
     return (window as any).__RUNTIME_CONFIG__.apiUrl;
   }
 
@@ -13,14 +22,12 @@ const getApiUrl = () => {
     return process.env.NEXT_PUBLIC_API_URL;
   }
 
-  // 3. Try to auto-detect from window location (same origin)
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location;
-    // If frontend is on aim-frontend.*, backend is likely on aim-backend.*
-    if (hostname.includes('aim-frontend')) {
-      const backendHost = hostname.replace('aim-frontend', 'aim-backend');
-      return `${protocol}//${backendHost}`;
-    }
+  // 3. Auto-detect from window location (browser context guaranteed)
+  const { protocol, hostname } = window.location;
+  // If frontend is on aim-frontend.*, backend is likely on aim-backend.*
+  if (hostname.includes('aim-frontend')) {
+    const backendHost = hostname.replace('aim-frontend', 'aim-backend');
+    return `${protocol}//${backendHost}`;
   }
 
   // 4. Fallback to localhost for development
