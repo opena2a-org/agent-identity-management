@@ -63,10 +63,9 @@ echo ""
 echo "📋 Step 5: Building frontend Docker image (no cache)..."
 echo "   Platform: linux/amd64 (Azure compatible)"
 echo "   Tag: latest, $COMMIT_HASH"
-echo "   API URL: https://aim-backend.wittydesert-756d026f.eastus2.azurecontainerapps.io"
+echo "   API URL: Auto-detected from hostname"
 docker buildx build --platform linux/amd64 \
   --no-cache \
-  --build-arg NEXT_PUBLIC_API_URL=https://aim-backend.wittydesert-756d026f.eastus2.azurecontainerapps.io \
   -t $ACR_NAME.azurecr.io/aim-frontend:latest \
   -t $ACR_NAME.azurecr.io/aim-frontend:$COMMIT_HASH \
   -f apps/backend/infrastructure/docker/Dockerfile.frontend \

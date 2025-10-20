@@ -1,4 +1,33 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// Runtime API URL configuration
+// For production deployments, NEXT_PUBLIC_API_URL can be set at build time OR
+// runtime via window.__RUNTIME_CONFIG__. This allows the same image to work
+// across different environments without rebuilding.
+const getApiUrl = () => {
+  // 1. Check for runtime config (set by server)
+  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.apiUrl) {
+    return (window as any).__RUNTIME_CONFIG__.apiUrl;
+  }
+
+  // 2. Check for build-time environment variable
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  // 3. Try to auto-detect from window location (same origin)
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    // If frontend is on aim-frontend.*, backend is likely on aim-backend.*
+    if (hostname.includes('aim-frontend')) {
+      const backendHost = hostname.replace('aim-frontend', 'aim-backend');
+      return `${protocol}//${backendHost}`;
+    }
+  }
+
+  // 4. Fallback to localhost for development
+  return "http://localhost:8080";
+};
+
+const API_URL = getApiUrl();
 
 export interface Agent {
   id: string;
