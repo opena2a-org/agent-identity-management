@@ -15,13 +15,8 @@ const getApiUrl = (): string => {
     return (window as any).__RUNTIME_CONFIG__.apiUrl;
   }
 
-  // 2. Check for build-time environment variable
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    console.log('[API] Using build-time env URL:', process.env.NEXT_PUBLIC_API_URL);
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-
-  // 3. Auto-detect from window location (for environment-agnostic deployment)
+  // 2. Auto-detect from window location (PRIMARY method for environment-agnostic deployment)
+  // IMPORTANT: Do this BEFORE checking process.env because Next.js bakes env vars at build time
   const { protocol, hostname } = window.location;
   if (hostname.includes('aim-frontend')) {
     const backendHost = hostname.replace('aim-frontend', 'aim-backend');
@@ -30,8 +25,9 @@ const getApiUrl = (): string => {
     return detectedUrl;
   }
 
-  // 4. Fallback to localhost for local development
-  console.log('[API] Using localhost fallback');
+  // 3. Fallback to localhost for local development
+  // Note: process.env.NEXT_PUBLIC_API_URL is baked in at build time and cannot be trusted in production
+  console.log('[API] Using localhost fallback (local development)');
   return "http://localhost:8080";
 };
 
