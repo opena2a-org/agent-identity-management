@@ -8,6 +8,7 @@ import { Suspense } from 'react'
 function RegistrationPendingContent() {
   const searchParams = useSearchParams()
   const requestId = searchParams.get('request_id')
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'info@opena2a.org'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -104,7 +105,7 @@ function RegistrationPendingContent() {
             </Link>
 
             <a
-              href="mailto:admin@yourcompany.com?subject=AIM Account Registration - Urgent"
+              href={`mailto:${supportEmail}?subject=AIM Account Registration - Urgent`}
               className="w-full border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors text-center"
             >
               Contact Administrator

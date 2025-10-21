@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
@@ -17,6 +18,7 @@ type AnalyticsHandler struct {
 	auditService             *application.AuditService
 	mcpService               *application.MCPService
 	verificationEventService *application.VerificationEventService
+	db                       *sql.DB // Database connection for real analytics queries
 }
 
 func NewAnalyticsHandler(
@@ -24,12 +26,14 @@ func NewAnalyticsHandler(
 	auditService *application.AuditService,
 	mcpService *application.MCPService,
 	verificationEventService *application.VerificationEventService,
+	db *sql.DB,
 ) *AnalyticsHandler {
 	return &AnalyticsHandler{
 		agentService:             agentService,
 		auditService:             auditService,
 		mcpService:               mcpService,
 		verificationEventService: verificationEventService,
+		db:                       db,
 	}
 }
 
@@ -61,12 +65,45 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 		}
 	}
 
+	// Get REAL API call stats from database
+	var apiCalls int64
+	var dataVolumeMB float64
+
+	// Calculate time range based on period
+	var startTime time.Time
+	switch period {
+	case "day":
+		startTime = time.Now().AddDate(0, 0, -1)
+	case "week":
+		startTime = time.Now().AddDate(0, 0, -7)
+	case "year":
+		startTime = time.Now().AddDate(-1, 0, 0)
+	default: // month
+		startTime = time.Now().AddDate(0, -1, 0)
+	}
+
+	// Query real API calls
+	err = h.db.QueryRow(`
+		SELECT
+			COUNT(*) as api_calls,
+			COALESCE(SUM(request_size_bytes + response_size_bytes) / 1024.0 / 1024.0, 0) as data_volume_mb
+		FROM api_calls
+		WHERE organization_id = $1
+			AND called_at >= $2
+	`, orgID, startTime).Scan(&apiCalls, &dataVolumeMB)
+
+	if err != nil {
+		// If table doesn't exist yet (migration not run), use defaults
+		apiCalls = 0
+		dataVolumeMB = 0
+	}
+
 	stats := map[string]interface{}{
 		"period":        period,
 		"total_agents":  totalAgents,
 		"active_agents": activeAgents,
-		"api_calls":     totalAgents * 150,           // Simulated
-		"data_volume":   float64(totalAgents) * 25.5, // MB, simulated
+		"api_calls":     apiCalls,      // ✅ REAL DATA
+		"data_volume":   dataVolumeMB,  // ✅ REAL DATA in MB
 		"uptime":        99.9,
 		"generated_at":  time.Now().UTC(),
 	}
@@ -114,77 +151,158 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		}
 	}
 
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch trends",
-		})
-	}
-
-	// Calculate average trust score
-	totalScore := 0.0
-	for _, agent := range agents {
-		totalScore += agent.TrustScore
-	}
-	avgScore := 0.0
-	if len(agents) > 0 {
-		avgScore = totalScore / float64(len(agents))
-	}
-
-	// Generate weekly trend data (simulated)
+	// Get REAL trust score trends from database
 	trends := []map[string]interface{}{}
-	
+
 	if period == "weeks" {
-		// Generate weekly data
-		for i := weeks; i >= 1; i-- {
-			// Calculate the start of each week (Monday)
-			now := time.Now()
-			weeksAgo := time.Duration(i-1) * 7 * 24 * time.Hour
-			weekStart := now.Add(-weeksAgo)
-			
-			// Find the Monday of this week
-			for weekStart.Weekday() != time.Monday {
-				weekStart = weekStart.AddDate(0, 0, -1)
+		// Query weekly aggregated trust scores
+		query := `
+			WITH weekly_scores AS (
+				SELECT
+					DATE_TRUNC('week', recorded_at) as week_start,
+					AVG(trust_score) as avg_score,
+					COUNT(DISTINCT agent_id) as agent_count
+				FROM trust_score_history
+				WHERE organization_id = $1
+					AND recorded_at >= NOW() - INTERVAL '1 week' * $2
+				GROUP BY DATE_TRUNC('week', recorded_at)
+				ORDER BY week_start DESC
+			)
+			SELECT week_start, avg_score, agent_count
+			FROM weekly_scores
+			ORDER BY week_start ASC
+		`
+
+		rows, err := h.db.Query(query, orgID, weeks)
+		if err != nil {
+			// Fallback: use current agent trust scores if history not available
+			agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+			totalScore := 0.0
+			for _, agent := range agents {
+				totalScore += agent.TrustScore
 			}
-			
-			// Create simulated trend with some variation
-			scoreVariation := avgScore + float64(i)*0.05 - 0.1 + (float64(weeks-i)*0.02)
-			if scoreVariation < 0 {
-				scoreVariation = avgScore * 0.8
+			avgScore := 0.0
+			if len(agents) > 0 {
+				avgScore = totalScore / float64(len(agents))
 			}
-			if scoreVariation > 1.0 {
-				scoreVariation = 1.0
-			}
-			
-			trends = append(trends, map[string]interface{}{
-				"date":        fmt.Sprintf("Week %d", weeks-i+1),
-				"week_start":  weekStart.Format("2006-01-02"),
-				"avg_score":   scoreVariation,
-				"agent_count": len(agents),
+
+			return c.JSON(fiber.Map{
+				"period":          fmt.Sprintf("Last %d weeks", weeks),
+				"trends":          []map[string]interface{}{},
+				"current_average": avgScore,
+				"data_type":       "weekly",
+				"note":            "Historical data not yet available. Install migration 010 to enable trust score history.",
 			})
 		}
-		
+		defer rows.Close()
+
+		for rows.Next() {
+			var weekStart time.Time
+			var avgScore float64
+			var agentCount int
+
+			if err := rows.Scan(&weekStart, &avgScore, &agentCount); err != nil {
+				continue
+			}
+
+			trends = append(trends, map[string]interface{}{
+				"date":        weekStart.Format("2006-01-02"),
+				"week_start":  weekStart.Format("2006-01-02"),
+				"avg_score":   avgScore,
+				"agent_count": agentCount,
+			})
+		}
+
+		// Get current average for comparison
+		agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+		totalScore := 0.0
+		for _, agent := range agents {
+			totalScore += agent.TrustScore
+		}
+		currentAvg := 0.0
+		if len(agents) > 0 {
+			currentAvg = totalScore / float64(len(agents))
+		}
+
 		return c.JSON(fiber.Map{
 			"period":          fmt.Sprintf("Last %d weeks", weeks),
 			"trends":          trends,
-			"current_average": avgScore,
+			"current_average": currentAvg,
 			"data_type":       "weekly",
 		})
 	} else {
-		// Generate daily data (backward compatibility)
-		for i := days; i >= 0; i-- {
-			date := time.Now().AddDate(0, 0, -i)
-			trends = append(trends, map[string]interface{}{
-				"date":        date.Format("2006-01-02"),
-				"avg_score":   avgScore + float64(i)*0.01,
-				"agent_count": len(agents),
+		// Query daily aggregated trust scores
+		query := `
+			WITH daily_scores AS (
+				SELECT
+					DATE(recorded_at) as date,
+					AVG(trust_score) as avg_score,
+					COUNT(DISTINCT agent_id) as agent_count
+				FROM trust_score_history
+				WHERE organization_id = $1
+					AND recorded_at >= NOW() - INTERVAL '1 day' * $2
+				GROUP BY DATE(recorded_at)
+				ORDER BY date DESC
+			)
+			SELECT date, avg_score, agent_count
+			FROM daily_scores
+			ORDER BY date ASC
+		`
+
+		rows, err := h.db.Query(query, orgID, days)
+		if err != nil {
+			// Fallback: use current agent trust scores
+			agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+			totalScore := 0.0
+			for _, agent := range agents {
+				totalScore += agent.TrustScore
+			}
+			avgScore := 0.0
+			if len(agents) > 0 {
+				avgScore = totalScore / float64(len(agents))
+			}
+
+			return c.JSON(fiber.Map{
+				"period":          fmt.Sprintf("Last %d days", days),
+				"trends":          []map[string]interface{}{},
+				"current_average": avgScore,
+				"data_type":       "daily",
+				"note":            "Historical data not yet available. Install migration 010 to enable trust score history.",
 			})
 		}
-		
+		defer rows.Close()
+
+		for rows.Next() {
+			var date time.Time
+			var avgScore float64
+			var agentCount int
+
+			if err := rows.Scan(&date, &avgScore, &agentCount); err != nil {
+				continue
+			}
+
+			trends = append(trends, map[string]interface{}{
+				"date":        date.Format("2006-01-02"),
+				"avg_score":   avgScore,
+				"agent_count": agentCount,
+			})
+		}
+
+		// Get current average
+		agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+		totalScore := 0.0
+		for _, agent := range agents {
+			totalScore += agent.TrustScore
+		}
+		currentAvg := 0.0
+		if len(agents) > 0 {
+			currentAvg = totalScore / float64(len(agents))
+		}
+
 		return c.JSON(fiber.Map{
 			"period":          fmt.Sprintf("Last %d days", days),
 			"trends":          trends,
-			"current_average": avgScore,
+			"current_average": currentAvg,
 			"data_type":       "daily",
 		})
 	}
