@@ -29,7 +29,7 @@ Just like Stripe revolutionized payments, **AIM transforms AI agent identity man
 ```python
 # Download SDK from dashboard (pre-configured with your credentials)
 # No pip install - SDK comes with embedded authentication
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE → Your agent is now enterprise-secure! ✨
 agent = secure("my-agent")
@@ -78,10 +78,10 @@ open http://localhost:3001
 ```python
 # Extract the downloaded SDK and import it
 # No pip install - SDK is pre-configured for YOU
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - Your agent is registered and secured!
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # That's it! No API keys, no configuration! 🎉
 ```
@@ -427,7 +427,7 @@ result = copilot.run("Find employee 12345")
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **1-Line Setup** | `register_agent("my-agent")` | ✅ Production |
+| **1-Line Setup** | `secure("my-agent")` | ✅ Production |
 | **Zero Configuration** | SDK pre-configured with credentials | ✅ Production |
 | **Auto-MCP Detection** | Claude Desktop config parsing | ✅ Production |
 | **CrewAI Integration** | Multi-agent team security | ✅ Production |
@@ -544,10 +544,10 @@ kubectl apply -f infrastructure/k8s/
 
 ```python
 # After extracting your personalized SDK:
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # That's it! No API keys, no configuration!
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 ```
 
 ### For Integration Partners (LangChain, CrewAI, etc.)

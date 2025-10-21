@@ -26,10 +26,10 @@ def send_critical_notification(message):
 ### Manual Install Mode (Still Easy!)
 
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # Requires API key, but still auto-detects capabilities + MCPs
-agent = register_agent("my-agent", api_key="aim_abc123")
+agent = secure("my-agent", api_key="aim_abc123")
 
 # ✅ Auto-detected: Capabilities, MCP servers
 # ✅ Auto-verified: Challenge-response verification

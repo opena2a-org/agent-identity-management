@@ -151,10 +151,10 @@ sys.modules scanning
 
 ### 3. Zero-Config Registration
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE - Everything automatic!
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # Behind the scenes:
 # ✅ OAuth credentials loaded
@@ -212,10 +212,10 @@ with open(os.path.expanduser("~/.aim/credentials.json"), "w") as f:
 
 ### After AIM (The "Stripe Moment")
 ```python
-from aim_sdk import register_agent
+from aim_sdk import secure
 
 # ONE LINE
-agent = register_agent("my-agent")
+agent = secure("my-agent")
 
 # Everything automatic:
 # ✅ Key generation
