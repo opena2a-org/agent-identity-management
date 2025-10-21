@@ -47,25 +47,26 @@ agent = secure("my-agent")
 
 ## 🚀 Quick Start
 
-### Step 1: Access AIM Dashboard
+### Step 1: Deploy AIM Locally
 
-**Production (Recommended)** 🌐
-```
-https://dashboard.opena2a.org
-```
+**AIM is a self-deployed solution** - you run it in your own infrastructure for complete control and security.
 
-**Self-Hosted** 💻
 ```bash
+# Clone and deploy AIM
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 docker compose up -d
-# Dashboard: http://localhost:3001
+
+# Access your dashboard
+open http://localhost:3001
 ```
+
+> **Coming Soon**: Managed cloud version at opena2a.org for instant access
 
 ### Step 2: Get Your SDK (Zero Configuration!)
 
-1. **Login to Dashboard**
-   - Register or login at dashboard.opena2a.org
+1. **Login to Your Dashboard**
+   - Access your local AIM dashboard at http://localhost:3001
    - Self-service registration available
 
 2. **Download Pre-Configured SDK**
@@ -535,10 +536,11 @@ kubectl apply -f infrastructure/k8s/
 
 ### How to Get the SDK
 
-1. **Login to Dashboard** → dashboard.opena2a.org
-2. **Go to Settings** → SDK Download
-3. **Click Download** → Get your personalized SDK
-4. **Extract & Use** → Start coding immediately
+1. **Deploy AIM** → Run `docker compose up -d`
+2. **Login to Dashboard** → http://localhost:3001
+3. **Go to Settings** → SDK Download
+4. **Click Download** → Get your personalized SDK
+5. **Extract & Use** → Start coding immediately
 
 ```python
 # After extracting your personalized SDK:
