@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -80,12 +82,12 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		})
 	}
 
-	// Get pending registration requests
+	// Get pending registration requests (optional - table may not exist in all deployments)
 	pendingRequests, _, err := h.registrationService.ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch pending registration requests",
-		})
+		// ℹ️ If table doesn't exist or query fails, just show approved users
+		log.Printf("⚠️ Warning: Failed to fetch pending registration requests (table may not exist): %v", err)
+		pendingRequests = []*domain.UserRegistrationRequest{} // Empty slice, no pending requests
 	}
 
 	// Convert pending requests to a user-like format for the frontend
@@ -263,6 +265,19 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 		})
 	}
 
+	// Check if target user is the super admin (first admin user in the organization)
+	// Super admin is identified as the oldest admin user by created_at timestamp
+	isSuperAdmin, err := h.isSuperAdmin(c.Context(), targetUserID, orgID)
+	if err != nil {
+		log.Printf("⚠️ Error checking super admin status: %v", err)
+	}
+
+	if isSuperAdmin {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Cannot deactivate the super administrator account. This account is protected to ensure system access.",
+		})
+	}
+
 	if err := h.authService.DeactivateUser(c.Context(), targetUserID, orgID, adminID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -371,6 +386,19 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	if targetUserID == adminID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Cannot delete your own account",
+		})
+	}
+
+	// Check if target user is the super admin (first admin user in the organization)
+	// Super admin is identified as the oldest admin user by created_at timestamp
+	isSuperAdmin, err := h.isSuperAdmin(c.Context(), targetUserID, orgID)
+	if err != nil {
+		log.Printf("⚠️ Error checking super admin status: %v", err)
+	}
+
+	if isSuperAdmin {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Cannot delete the super administrator account. This account is protected to ensure system access.",
 		})
 	}
 
@@ -1266,4 +1294,54 @@ func (h *AdminHandler) ApproveDrift(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Configuration drift approved successfully",
 	})
+}
+
+// isSuperAdmin checks if the given user is the super admin (first admin user created in the organization)
+// Super admin is protected from deactivation and deletion to ensure system access
+func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID) (bool, error) {
+	// Get the user to check their role
+	user, err := h.authService.GetUserByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+
+	// Only admin users can be super admins
+	if user.Role != "admin" {
+		return false, nil
+	}
+
+	// Verify user belongs to the organization
+	if user.OrganizationID != orgID {
+		return false, nil
+	}
+
+	// Get all users in the organization
+	users, err := h.authService.GetUsersByOrganization(ctx, orgID)
+	if err != nil {
+		return false, err
+	}
+
+	// Find all admin users and sort by created_at (oldest first)
+	var admins []*domain.User
+	for _, u := range users {
+		if u.Role == "admin" && u.Status == "active" {
+			admins = append(admins, u)
+		}
+	}
+
+	// If no admins found or only one admin (must be super admin), return true for that admin
+	if len(admins) == 0 {
+		return false, nil
+	}
+
+	// Find the oldest admin (super admin)
+	oldestAdmin := admins[0]
+	for _, admin := range admins {
+		if admin.CreatedAt.Before(oldestAdmin.CreatedAt) {
+			oldestAdmin = admin
+		}
+	}
+
+	// User is super admin if they are the oldest admin created
+	return oldestAdmin.ID == userID, nil
 }

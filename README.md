@@ -52,29 +52,79 @@ As AI agents become more autonomous and powerful, they need robust identity and 
 
 ## 🚀 Quick Start
 
-### One-Command Deployment
+### Deployment Options
+
+#### Option 1: Azure Production Deployment (Recommended)
+
+**Fully automated deployment to Azure with one command:**
 
 ```bash
 # Clone the repository
 git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
-# Deploy everything (infrastructure + services)
-./deploy.sh
-
-# Or just infrastructure for development
-./deploy.sh development
+# Deploy to Azure (creates all infrastructure + services)
+./scripts/deploy-azure-production.sh
 ```
 
+**What gets deployed automatically:**
+- ✅ PostgreSQL database (with auto-initialization)
+- ✅ Redis cache
+- ✅ Backend API (auto-creates admin user and security policies)
+- ✅ Frontend dashboard
+- ✅ SSL/TLS certificates
+- ✅ Monitoring and health checks
+
+**First-time setup:**
+- Admin credentials created automatically
+- Default security policies seeded
+- Database schema applied
+- Ready to use in ~10 minutes
+
 **Access your AIM instance:**
+- 🌐 Dashboard: `https://aim-prod-frontend.*.azurecontainerapps.io`
+- 🔌 Backend API: `https://aim-prod-backend.*.azurecontainerapps.io`
+- 👤 Admin login: Check deployment output for credentials
+
+#### Option 2: Local Development
+
+**For local development and testing:**
+
+```bash
+# Prerequisites: Docker, Docker Compose, Go 1.23+, Node 22+
+
+# 1. Clone the repository
+git clone https://github.com/opena2a/agent-identity-management.git
+cd agent-identity-management
+
+# 2. Set environment variables
+cp .env.example .env
+# Edit .env with your settings
+
+# 3. Start backend
+cd apps/backend
+go run cmd/server/main.go
+
+# 4. Start frontend (in another terminal)
+cd apps/web
+npm install
+npm run dev
+```
+
+**Access your local instance:**
 - 🌐 Dashboard: http://localhost:3000
 - 🔌 Backend API: http://localhost:8080
-- 📊 Grafana: http://localhost:3003
+
+**First-time setup:**
+Backend automatically initializes on first run:
+- Creates database schema
+- Seeds default security policies
+- Creates admin user (credentials from environment variables)
 
 ### Create Your First Agent (via Dashboard)
 
-1. **Register**: Navigate to http://localhost:3000 and create an account
-2. **Create Agent**: Click "Register New Agent" in the dashboard
+1. **Login**: Navigate to the dashboard and login with admin credentials
+2. **Create Agent**: Click "Agents" → "Register New Agent"
 3. **Download SDK**: Go to agent details → "SDK Setup" tab
 4. **Copy & Run**: Copy the 1-line setup code and paste into your agent
 
