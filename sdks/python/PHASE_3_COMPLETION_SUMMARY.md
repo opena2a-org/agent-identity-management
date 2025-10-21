@@ -157,7 +157,7 @@ from aim_sdk import secure
 agent = secure("my-agent")
 
 # Behind the scenes:
-# ✅ OAuth credentials loaded
+# ✅ SDK authentication tokens loaded
 # ✅ Capabilities auto-detected
 # ✅ MCP servers auto-detected
 # ✅ Ed25519 keys generated

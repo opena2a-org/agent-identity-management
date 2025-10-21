@@ -1,45 +1,40 @@
 # AIM Python SDK
 
-**Enterprise-grade identity and capability management for AI agents.**
+**The Stripe for AI Agent Identity - One line of code. Complete security.**
 
-One-line agent registration with automatic cryptographic verification.
+Enterprise-grade cryptographic verification with zero configuration.
 
 ## Quick Start - Zero Configuration 🚀
 
-### SDK Download Mode (ZERO CONFIG!)
+### The "Stripe Moment" for AI Security
 
 ```python
 from aim_sdk import secure
 
-# ONE LINE - That's it! Everything auto-detected.
+# ONE LINE - Complete enterprise security
 agent = secure("my-agent")
 
-# ✅ Auto-detected: OAuth credentials, capabilities, MCP servers
-# ✅ Auto-verified: Challenge-response verification
-# ✅ Ready to use!
-
-@agent.perform_action("send_email", resource="admin@example.com")
-def send_critical_notification(message):
-    send_email("admin@example.com", message)
+# That's it. Your agent now has:
+# ✅ Ed25519 cryptographic signatures
+# ✅ Real-time trust scoring
+# ✅ Complete audit trail
+# ✅ Zero configuration
 ```
 
-### Manual Install Mode (Still Easy!)
+### Manual Mode (With API Key)
 
 ```python
 from aim_sdk import secure
 
-# Requires API key, but still auto-detects capabilities + MCPs
+# Still one line - just add your API key
 agent = secure("my-agent", api_key="aim_abc123")
-
-# ✅ Auto-detected: Capabilities, MCP servers
-# ✅ Auto-verified: Challenge-response verification
 ```
 
 ## Installation
 
 **Option 1: Download SDK from Dashboard (Recommended)**
 - Visit your AIM dashboard
-- Click "Download SDK" → Includes embedded OAuth credentials
+- Click "Download SDK" → Includes embedded authentication tokens
 - Extract and you're ready to go!
 
 **Option 2: Manual Install via pip**
@@ -49,81 +44,45 @@ pip install aim-sdk
 pip install -r requirements.txt
 ```
 
-## Features
+## Why AIM?
 
-- ✅ **Zero-config registration**: One line, everything auto-detected (SDK mode)
-- ✅ **Automatic capability detection**: Scans imports, decorators, config files
-- ✅ **Automatic MCP detection**: Finds MCP servers from Claude config & imports
-- ✅ **Automatic key management**: Ed25519 keys generated and stored securely
-- ✅ **Automatic verification**: Challenge-response auth, auto-approval
-- ✅ **Decorator-based verification**: Simple `@agent.perform_action()` decorator
-- ✅ **Trust scoring**: ML-powered risk assessment
-- ✅ **Audit logging**: Complete action history
-- ✅ **Secure storage**: Credentials saved to `~/.aim/credentials.json` (0600 permissions)
+**Before AIM:** 50+ lines of boilerplate for basic agent security
+**After AIM:** 1 line
 
-## Usage Modes
+### What You Get
 
-### Mode 1: SDK Download (ZERO CONFIG) ⭐ Recommended
+| Feature | Description | Zero Config? |
+|---------|-------------|--------------|
+| **Cryptographic Identity** | Ed25519 signatures on every action | ✅ Automatic |
+| **Trust Scoring** | Real-time ML risk assessment | ✅ Automatic |
+| **Capability Detection** | Scans your code, finds what your agent does | ✅ Automatic |
+| **MCP Server Detection** | Finds Claude Desktop configs automatically | ✅ Automatic |
+| **Audit Trail** | SOC 2 compliant logging | ✅ Automatic |
+| **Action Verification** | Every API call cryptographically signed | ✅ Automatic |
 
+## Usage Examples
+
+### 1. Zero Config (Downloaded SDK)
 ```python
 from aim_sdk import secure
-
-# ONE LINE - Everything auto-detected!
-agent = secure("my-agent")
-
-# What happens behind the scenes:
-# ✅ OAuth credentials loaded from .aim/credentials.json
-# ✅ Capabilities auto-detected (imports, decorators, config)
-# ✅ MCP servers auto-detected (Claude config, imports)
-# ✅ Agent registered with AIM
-# ✅ Challenge-response verification completed
-# ✅ Auto-approved (if trust score ≥70)
+agent = secure("my-agent")  # Done. Complete security.
 ```
 
-### Mode 2: Manual Install (API Key)
-
+### 2. With API Key
 ```python
 from aim_sdk import secure
-
-# Requires API key, but still auto-detects capabilities + MCPs
 agent = secure("my-agent", api_key="aim_abc123")
-
-# What happens:
-# ✅ Capabilities auto-detected
-# ✅ MCP servers auto-detected
-# ✅ Agent registered
-# ✅ Auto-verified
 ```
 
-### Mode 3: Power User (Full Control)
-
+### 3. Custom Configuration
 ```python
 from aim_sdk import secure
-
-# Disable auto-detection, specify everything manually
 agent = secure(
     name="my-agent",
     api_key="aim_abc123",
-    auto_detect=False,  # Disable auto-detection
-    capabilities=["custom_capability"],
-    talks_to=["custom-mcp-server"],
-    display_name="My Custom Agent",
-    version="1.0.0",
-    repository_url="https://github.com/myorg/my-agent"
-)
-```
-
-### Mode 4: Existing Credentials
-
-```python
-from aim_sdk import AIMClient
-
-# If you already have credentials from previous registration
-client = AIMClient(
-    agent_id="your-agent-id",
-    public_key="base64-public-key",
-    private_key="base64-private-key",
-    aim_url="https://aim.example.com"
+    auto_detect=False,
+    capabilities=["read_database", "send_email"],
+    version="1.0.0"
 )
 ```
 
@@ -157,92 +116,21 @@ def delete_user_account(user_id):
     return database.execute("DELETE FROM users WHERE id = ?", user_id)
 ```
 
-## Capability Management - How Auto-Grant Works 🔒
+## Capability Management
 
-### Initial Registration: Auto-Grant (No Approval Needed!)
+### How It Works
 
-When you register an agent, **capabilities are automatically granted** - no admin approval required!
-
-```python
-from aim_sdk import secure
-
-# Capabilities detected and AUTO-GRANTED immediately
-agent = secure("my-agent")
-
-# ✅ Capabilities: Auto-detected from imports/decorators
-# ✅ Granted: Automatically during registration
-# ✅ Ready to use: Perform actions immediately!
-```
-
-**This is a game-changer**: Users can start using agents immediately without waiting for admin approval.
-
-### Capability Updates: Admin Approval Required
-
-If you need to add NEW capabilities after registration, admins must approve:
+1. **Registration = Auto-Grant**: All capabilities detected during registration are automatically granted
+2. **Updates = Admin Approval**: New capabilities after registration require admin review
+3. **Security**: Prevents privilege escalation attacks (CVE-2025-32711)
 
 ```python
-from aim_sdk import AIMClient
+# Initial registration - capabilities auto-granted
+agent = secure("my-agent")  # ✅ Can use all detected capabilities immediately
 
-client = AIMClient.from_credentials("my-agent")
-
-# Request new capability (requires admin approval)
-request = client.capabilities.request(
-    capability_type="delete_email",
-    reason="Need to clean up spam automatically"
-)
-
-print(f"Request created: {request['id']}")
-print(f"Status: {request['status']}")  # "pending"
-
-# Admin reviews and approves via dashboard
-# Once approved, capability is automatically granted
+# Later, need new capability? Admin must approve
+client.capabilities.request("delete_data", reason="Cleanup feature")
 ```
-
-**Why this workflow?**
-- **Fast onboarding**: Users start immediately
-- **Security**: Admins review capability expansions
-- **Scalability**: No bottleneck for thousands of agents
-
-### How Enforcement Works
-
-AIM enforces capabilities using a **single source of truth**:
-
-```python
-# ✅ ENFORCEMENT: Only GRANTED capabilities are enforced
-# - agent.capabilities (array) = DECLARED (reference only)
-# - agent_capabilities (table) = GRANTED (enforcement)
-
-@agent.perform_action("read_email")
-def read_inbox():
-    # ✅ Allowed if "read_email" was GRANTED
-    # ❌ Denied if "read_email" not granted (even if declared)
-    pass
-```
-
-**Security Benefits**:
-- Prevents CVE-2025-32711 (EchoLeak) attacks
-- Admin control over capability expansion
-- Full audit trail (who granted what, when)
-
-### Alternative: Delete and Re-register
-
-Don't want to wait for admin approval? Delete your agent and re-register with updated capabilities:
-
-```python
-from aim_sdk import secure, AIMClient
-
-# Delete existing agent
-client = AIMClient.from_credentials("my-agent")
-client.agents.delete(agent_id=client.agent_id)
-
-# Re-register with updated capabilities
-agent = secure(
-    "my-agent",
-    capabilities=["read_email", "send_email", "delete_email"]  # ✅ All auto-granted
-)
-```
-
-**Trade-off**: Loses historical trust score and audit logs.
 
 ## Credential Storage
 
@@ -264,101 +152,30 @@ Credentials are automatically saved to `~/.aim/credentials.json` with secure per
 }
 ```
 
-## Auto-Detection: Fully Automated Setup 🎉
+## Auto-Detection Magic 🎯
 
-### Full Auto-Detection (NOW AVAILABLE!)
+AIM automatically detects everything about your agent:
 
-AIM now automatically detects **EVERYTHING**:
+### What Gets Detected
+
+| Source | What It Finds | Confidence |
+|--------|--------------|------------|
+| **Python Imports** | `requests` → API calls, `psycopg2` → Database access | 95% |
+| **Claude Desktop Config** | MCP servers from `~/.claude/claude_desktop_config.json` | 100% |
+| **Decorators** | `@agent.perform_action()` calls in your code | 100% |
+| **Config Files** | Explicit capabilities in `~/.aim/capabilities.json` | 100% |
+
+### Override When Needed
 
 ```python
-from aim_sdk import secure
-
-# ONE LINE - Zero configuration!
+# Full auto-detection (default)
 agent = secure("my-agent")
 
-# AIM automatically detects:
-# ✅ Agent capabilities (from imports, decorators, config files)
-# ✅ MCP servers (from Claude config & Python imports)
-# ✅ Authentication (OAuth from SDK download or API key)
-# ✅ Trust scoring factors
-```
+# Partial override
+agent = secure("my-agent", capabilities=["custom_capability"])
 
-### Capability Auto-Detection
-
-**AIM detects capabilities from:**
-
-1. **Import Analysis** - Infers capabilities from Python packages:
-   ```python
-   import requests      # → "make_api_calls"
-   import smtplib       # → "send_email"
-   import psycopg2      # → "access_database"
-   import subprocess    # → "execute_code"
-   ```
-
-2. **Decorator Analysis** - Scans `@agent.perform_action()` calls:
-   ```python
-   @agent.perform_action("read_database")
-   def get_users():       # → "access_database"
-       pass
-   ```
-
-3. **Config File** - Explicit declarations in `~/.aim/capabilities.json`:
-   ```json
-   {
-     "capabilities": ["custom_capability"],
-     "version": "1.0.0"
-   }
-   ```
-
-### MCP Server Auto-Detection
-
-**AIM detects MCP servers from:**
-
-1. **Claude Desktop Config** (`~/.claude/claude_desktop_config.json`):
-   - 100% confidence for configured servers
-   - Extracts command, args, and environment variables
-
-2. **Python Imports** (module scanning):
-   - Detects MCP packages in sys.modules
-   - 90% confidence for imported packages
-
-### Manual Override (Power Users)
-
-You can always override auto-detection:
-
-```python
-from aim_sdk import secure
-
-# Disable auto-detection entirely
-agent = secure(
-    "my-agent",
-    api_key="aim_abc123",
-    auto_detect=False,
-    capabilities=["custom_capability"],
-    talks_to=["custom-mcp-server"]
-)
-
-# Or mix auto-detection with manual specification
-agent = secure(
-    "my-agent",
-    api_key="aim_abc123",
-    capabilities=["read_files", "write_files"],  # Manual
-    # talks_to will be auto-detected
-)
-```
-
-### Convenience Functions
-
-```python
-from aim_sdk import auto_detect_capabilities, auto_detect_mcps
-
-# Detect capabilities separately
-capabilities = auto_detect_capabilities()
-print(f"Your agent has: {capabilities}")
-
-# Detect MCP servers separately
-mcps = auto_detect_mcps()
-print(f"Your agent talks to: {[m['mcpServer'] for m in mcps]}")
+# Complete manual control
+agent = secure("my-agent", auto_detect=False, capabilities=["read", "write"])
 ```
 
 ## Examples

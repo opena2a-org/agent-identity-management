@@ -1,5 +1,9 @@
 """
-OAuth token management for AIM SDK.
+SDK token management for AIM SDK.
+
+This module handles SDK authentication tokens (refresh/access tokens) for the SDK download mode.
+Note: This is NOT OAuth provider authentication (Google/Microsoft/Okta) - that was removed.
+This manages the JWT tokens embedded in downloaded SDKs for zero-config authentication.
 
 Handles automatic token refresh with token rotation and secure storage.
 """
