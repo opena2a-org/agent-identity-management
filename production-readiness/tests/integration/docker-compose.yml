@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: aim_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  test-db-data:
