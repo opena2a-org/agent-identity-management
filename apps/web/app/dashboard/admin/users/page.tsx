@@ -209,15 +209,16 @@ export default function UsersPage() {
     try {
       if (user.is_registration_request) {
         await api.approveRegistrationRequest(user.id);
-        alert("Registration request approved successfully");
+        toast.success("Registration request approved successfully");
       } else {
         await api.approveUser(user.id);
-        alert("User approved successfully");
+        toast.success("User approved successfully");
       }
-      fetchUsers(); // Refresh the list
-    } catch (error) {
+      await fetchUsers(); // Refresh the list
+    } catch (error: any) {
       console.error("Failed to approve user:", error);
-      alert("Failed to approve user");
+      const errorMessage = error?.message || "Failed to approve user";
+      toast.error(errorMessage);
     }
   };
 

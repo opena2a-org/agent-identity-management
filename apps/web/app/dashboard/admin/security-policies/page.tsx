@@ -135,8 +135,13 @@ export default function SecurityPoliciesPage() {
   const fetchPolicies = async () => {
     try {
       const data = await api.getSecurityPolicies();
+      // ✅ MVP: Only show capability_violation policy (the only enforced policy)
+      // Filter out non-enforced policies to avoid confusion
+      const enforcedPolicies = data.filter(
+        (p: SecurityPolicy) => p.policy_type === "capability_violation"
+      );
       // Sort by priority (highest first)
-      const sorted = data.sort(
+      const sorted = enforcedPolicies.sort(
         (a: SecurityPolicy, b: SecurityPolicy) => b.priority - a.priority
       );
       setPolicies(sorted);
@@ -321,8 +326,7 @@ export default function SecurityPoliciesPage() {
         <div>
           <h1 className="text-3xl font-bold">Security Policies</h1>
           <p className="text-muted-foreground mt-1">
-            Configure security enforcement policies for capability violations and
-            threat detection
+            Configure security enforcement for capability violations. Actively enforced policies block unauthorized agent actions in real-time.
           </p>
         </div>
 
@@ -389,30 +393,26 @@ export default function SecurityPoliciesPage() {
             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm">
               <p className="font-medium text-blue-900 dark:text-blue-100">
-                Security Policy Enforcement Modes
+                Capability Violation Enforcement (MVP)
               </p>
-              <ul className="space-y-1 text-blue-800 dark:text-blue-200">
+              <p className="text-blue-800 dark:text-blue-200">
+                This policy prevents agents from performing actions outside their defined capability list.
+                It protects against scope violations like EchoLeak (CVE-2025-32711) where agents attempt
+                unauthorized operations.
+              </p>
+              <ul className="space-y-1 text-blue-800 dark:text-blue-200 mt-2">
                 <li className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  <strong>Alert Only:</strong> Generate security alerts but
-                  allow actions (monitoring mode)
+                  <strong>Alert Only:</strong> Log violations but allow actions (monitoring mode)
                 </li>
                 <li className="flex items-center gap-2">
                   <Lock className="h-4 w-4" />
-                  <strong>Block & Alert:</strong> Prevent actions and generate
-                  alerts (enforcement mode)
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4" />
-                  <strong>Allow:</strong> Permit actions without alerts
-                  (exception mode)
+                  <strong>Block & Alert:</strong> Prevent violations and create alerts (enforcement mode - recommended)
                 </li>
               </ul>
               <p className="text-blue-700 dark:text-blue-300 mt-3">
-                ⚠️ <strong>Warning:</strong> Enabling "Block & Alert" mode will
-                prevent agent actions in real-time. This may impact production
-                workflows. Start with "Alert Only" mode to monitor behavior
-                first.
+                💡 <strong>Tip:</strong> Additional policy types (trust score monitoring, unusual activity detection,
+                data exfiltration prevention) are planned for post-MVP release. See the roadmap for details.
               </p>
             </div>
           </div>

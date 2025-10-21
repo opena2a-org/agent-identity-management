@@ -506,6 +506,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		oauthRepo, // Still uses oauth_repository for now (will be renamed in later step)
 		repos.User,
 		auditService,
+		emailService, // ✅ NEW: Email service for password reset and admin notifications
 	)
 
 	tagService := application.NewTagService(

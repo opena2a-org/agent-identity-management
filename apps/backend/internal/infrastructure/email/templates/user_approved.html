@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to AIM</title>
+    <title>Your AIM Account is Approved</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -22,7 +22,7 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             padding: 40px 20px;
             text-align: center;
@@ -52,7 +52,7 @@
         }
         .cta-button {
             display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             text-decoration: none;
             padding: 14px 32px;
@@ -63,6 +63,22 @@
         }
         .cta-button:hover {
             transform: translateY(-2px);
+        }
+        .info-box {
+            background: #ecfdf5;
+            border-left: 4px solid #10b981;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+        .info-box h3 {
+            color: #065f46;
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .info-box p {
+            color: #047857;
+            margin: 5px 0;
         }
         .features {
             background: #f9fafb;
@@ -102,7 +118,7 @@
             margin: 5px 0;
         }
         .footer a {
-            color: #667eea;
+            color: #10b981;
             text-decoration: none;
         }
     </style>
@@ -110,34 +126,44 @@
 <body>
     <div class="email-container">
         <div class="header">
-            <h1>🎉 Welcome to AIM</h1>
-            <p>Agent Identity Management Platform</p>
+            <h1>✅ Account Approved!</h1>
+            <p>You can now access AIM</p>
         </div>
 
         <div class="content">
             <h2>Hi {{.UserName}},</h2>
 
-            <p>Thank you for registering with AIM! We've received your registration request and it's currently pending admin approval.</p>
+            <p>Great news! Your AIM account has been approved and is now active. You can start managing your AI agents and MCP servers with enterprise-grade security.</p>
 
-            <p><strong>What happens next:</strong></p>
-            <ol>
-                <li>An administrator will review your registration request</li>
-                <li>You'll receive an email notification once your account is approved</li>
-                <li>After approval, you can login and start managing AI agents</li>
-            </ol>
+            <div class="info-box">
+                <h3>🔑 Your Account Details</h3>
+                <p><strong>Email:</strong> {{.UserEmail}}</p>
+                {{if .CustomData.Role}}
+                <p><strong>Role:</strong> {{index .CustomData "Role"}}</p>
+                {{end}}
+            </div>
+
+            <div style="text-align: center;">
+                {{if .CustomData.LoginURL}}
+                <a href="{{index .CustomData "LoginURL"}}" class="cta-button">Login to Dashboard</a>
+                {{else}}
+                <a href="{{.DashboardURL}}/auth/login" class="cta-button">Login to Dashboard</a>
+                {{end}}
+            </div>
 
             <div class="features">
-                <h3>Once approved, you'll be able to:</h3>
+                <h3>What you can do now:</h3>
                 <ul>
                     <li>Register and manage AI agents with cryptographic verification</li>
                     <li>Monitor agent trust scores and security metrics</li>
                     <li>Configure MCP servers with public key authentication</li>
-                    <li>Track API key usage and expiration</li>
+                    <li>Generate and manage API keys for programmatic access</li>
+                    <li>Track SDK token usage and expiration</li>
                     <li>Get real-time security alerts and compliance reports</li>
                 </ul>
             </div>
 
-            <p>If you have any questions or didn't request this registration, please contact our support team.</p>
+            <p>If you have any questions or need assistance getting started, our support team is here to help.</p>
 
             <p>Best regards,<br>
             <strong>The AIM Team</strong></p>
@@ -149,7 +175,7 @@
             <p><a href="mailto:{{.SupportEmail}}">Contact Support</a></p>
             {{end}}
             <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">
-                You're receiving this email because your account was created on the AIM platform.
+                You're receiving this email because your AIM account was approved.
             </p>
         </div>
     </div>

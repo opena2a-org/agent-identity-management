@@ -1,5 +1,115 @@
 # 🧠 Claude Code Workflow for Agent Identity Management
 
+## ⚠️ CRITICAL: Azure Subscription Rules
+
+### ALWAYS USE OPENA2A SUBSCRIPTION FOR AIM
+**MANDATORY**: Agent Identity Management (AIM) project MUST use the **opena2a** Azure subscription.
+
+**Correct Subscription**:
+- **Name**: Azure subscription 1 (opena2a)
+- **Subscription ID**: `1b1e58e7-97db-4b08-b3d9-ee8e7867bcb9`
+- **Purpose**: All AIM production and development resources
+
+**Set as default before ANY Azure operations**:
+```bash
+az account set --subscription 1b1e58e7-97db-4b08-b3d9-ee8e7867bcb9
+```
+
+**NEVER USE**:
+- ❌ Microsoft Azure Sponsorship (devsecflow) - `096d30cf-2a43-4e8d-ac33-2a0757c2b714`
+- ❌ CSNP-Portal - `1761ee16-b4a7-4985-aa08-b1be60e42fbc`
+
+**Verification**:
+```bash
+# Always verify correct subscription before deploying
+az account show --query "{name:name, id:id}"
+# Should show: "Azure subscription 1" with ID ending in "ee8e7867bcb9"
+```
+
+## 🗄️ CRITICAL: Azure Production Resources
+
+### PostgreSQL Database (ALWAYS REQUIRED)
+**Server Name**: `aim-prod-db-1760993976`
+**Admin User**: `aimadmin`
+**Admin Password**: `AIM-NewProdDB-2025!@#`
+**Host**: `aim-prod-db-1760993976.postgres.database.azure.com`
+**Database Name**: `identity`
+**Port**: `5432`
+**SSL Mode**: `require` (MUST be enabled for Azure PostgreSQL)
+
+**Backend Environment Variables** (CRITICAL):
+```bash
+POSTGRES_HOST="aim-prod-db-1760993976.postgres.database.azure.com"
+POSTGRES_PORT="5432"
+POSTGRES_USER="aimadmin"
+POSTGRES_PASSWORD="AIM-NewProdDB-2025!@#"
+POSTGRES_DB="identity"
+POSTGRES_SSL_MODE="require"  # ⚠️ REQUIRED for Azure PostgreSQL!
+```
+
+### Default Admin Account (Fresh Deployments)
+Every fresh AIM deployment automatically creates a default system administrator account.
+
+**Default Admin Credentials** (Created by migration 013_create_default_admin_user.sql):
+- **Email**: `admin@opena2a.org`
+- **Password**: `AIM2025!Secure` (MUST be changed on first login)
+- **Role**: `admin`
+- **Organization**: OpenA2A Admin (ID: a0000000-0000-0000-0000-000000000001)
+- **User ID**: a0000000-0000-0000-0000-000000000002
+
+**Important Security Notes**:
+- ✅ Default admin is automatically created during database migrations
+- ⚠️ Admin **MUST** change password on first login (force_password_change=TRUE)
+- 🔒 Password is bcrypt-hashed with cost factor 10
+- 📝 Migration uses `ON CONFLICT DO NOTHING` for idempotency
+- 🚨 Default credentials should be changed immediately after deployment
+
+**First Login Behavior**:
+When admin logs in with default credentials, the API returns:
+```json
+{
+  "success": false,
+  "message": "You must change your password before continuing",
+  "user": { ... },
+  "isApproved": true
+}
+```
+
+Frontend should redirect to password change flow when `force_password_change: true`.
+
+### Redis Cache (OPTIONAL - Backend gracefully handles failures)
+**Name**: `aim-prod-redis-1760993976`
+**Host**: `aim-prod-redis-1760993976.redis.cache.windows.net`
+**Port**: `6380` (SSL port)
+**Password**: `DH9aiuCrg59LkUZO79Ay6TNZz9Od8Vq88AzCaAVrPHY=`
+
+**Backend Environment Variables**:
+```bash
+REDIS_HOST="aim-prod-redis-1760993976.redis.cache.windows.net"
+REDIS_PORT="6380"
+REDIS_PASSWORD="DH9aiuCrg59LkUZO79Ay6TNZz9Od8Vq88AzCaAVrPHY="
+```
+
+**NOTE**: Redis currently times out due to network access restrictions. The backend gracefully falls back to running without caching when Redis is unavailable. This is intentional and does not impact core functionality.
+
+### Container Registry
+**Name**: `aimprodacr1760993976`
+**Login Server**: `aimprodacr1760993976.azurecr.io`
+
+### Container Apps
+**Backend**: `https://aim-prod-backend.graypebble-c7e67ab8.canadacentral.azurecontainerapps.io`
+**Frontend**: `https://aim-prod-frontend.graypebble-c7e67ab8.canadacentral.azurecontainerapps.io`
+
+### Resource Group
+**Name**: `aim-production-rg`
+**Location**: `canadacentral`
+
+### SMTP (Email)
+**Host**: `smtp.gmail.com`
+**Port**: `587`
+**Username**: `info@opena2a.org`
+**Password**: `sqvwlganlqptfjgp`
+
 ## 🔧 CLI Tools
 
 ### Google Cloud SDK

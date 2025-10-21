@@ -85,25 +85,25 @@ func (s *SMTPEmailService) SendEmail(to, subject, body string, isHTML bool) erro
 	// Send email
 	var err error
 	if s.tlsEnabled {
-		// Use TLS connection
-		tlsConfig := &tls.Config{
-			ServerName: s.host,
-		}
-
-		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		// Use STARTTLS for modern SMTP servers (port 587)
+		// This connects in plaintext first, then upgrades to TLS
+		client, err := smtp.Dial(addr)
 		if err != nil {
-			s.recordFailure("tls_dial_error")
-			return fmt.Errorf("failed to dial TLS: %w", err)
-		}
-		defer conn.Close()
-
-		client, err := smtp.NewClient(conn, s.host)
-		if err != nil {
-			s.recordFailure("smtp_client_error")
-			return fmt.Errorf("failed to create SMTP client: %w", err)
+			s.recordFailure("smtp_dial_error")
+			return fmt.Errorf("failed to dial SMTP server: %w", err)
 		}
 		defer client.Quit()
 
+		// Upgrade to TLS using STARTTLS
+		tlsConfig := &tls.Config{
+			ServerName: s.host,
+		}
+		if err = client.StartTLS(tlsConfig); err != nil {
+			s.recordFailure("starttls_error")
+			return fmt.Errorf("failed to connect via TLS: %w", err)
+		}
+
+		// Authenticate
 		if auth != nil {
 			if err := client.Auth(auth); err != nil {
 				s.recordFailure("auth_error")
@@ -111,6 +111,7 @@ func (s *SMTPEmailService) SendEmail(to, subject, body string, isHTML bool) erro
 			}
 		}
 
+		// Send the message
 		if err := client.Mail(s.fromAddress); err != nil {
 			s.recordFailure("mail_from_error")
 			return fmt.Errorf("MAIL FROM failed: %w", err)
@@ -216,22 +217,20 @@ func (s *SMTPEmailService) ValidateConnection() error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 
 	if s.tlsEnabled {
-		// Test TLS connection
+		// Test STARTTLS connection (for port 587)
+		client, err := smtp.Dial(addr)
+		if err != nil {
+			return fmt.Errorf("failed to connect to SMTP server: %w", err)
+		}
+		defer client.Quit()
+
+		// Upgrade to TLS using STARTTLS
 		tlsConfig := &tls.Config{
 			ServerName: s.host,
 		}
-
-		conn, err := tls.Dial("tcp", addr, tlsConfig)
-		if err != nil {
-			return fmt.Errorf("failed to connect via TLS: %w", err)
+		if err = client.StartTLS(tlsConfig); err != nil {
+			return fmt.Errorf("failed to start TLS: %w", err)
 		}
-		defer conn.Close()
-
-		client, err := smtp.NewClient(conn, s.host)
-		if err != nil {
-			return fmt.Errorf("failed to create SMTP client: %w", err)
-		}
-		defer client.Quit()
 
 		// Test authentication if configured
 		if s.username != "" && s.password != "" {

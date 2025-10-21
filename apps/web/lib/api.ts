@@ -312,7 +312,20 @@ class APIClient {
       return undefined as T;
     }
 
-    return response.json();
+    // Check if response has content before parsing JSON
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      try {
+        return await response.json();
+      } catch (err) {
+        // JSON parsing failed, but response was successful
+        console.warn("Failed to parse JSON response:", err);
+        return undefined as T;
+      }
+    }
+
+    // No JSON content, return undefined
+    return undefined as T;
   }
 
   // Auth
@@ -422,6 +435,30 @@ class APIClient {
     message: string;
   }> {
     return this.request(`/api/v1/public/register/${requestId}/status`);
+  }
+
+  async forgotPassword(data: { email: string }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request("/api/v1/public/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetPassword(data: {
+    resetToken: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request("/api/v1/public/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   // Agents

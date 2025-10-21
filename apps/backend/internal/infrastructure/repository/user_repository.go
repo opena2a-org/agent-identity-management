@@ -22,8 +22,8 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // Create creates a new user
 func (r *UserRepository) Create(user *domain.User) error {
 	query := `
-		INSERT INTO users (id, organization_id, email, name, avatar_url, role, password_hash, status, force_password_change, approved_by, approved_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO users (id, organization_id, email, name, avatar_url, role, provider, provider_id, password_hash, status, force_password_change, approved_by, approved_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	now := time.Now()
@@ -53,6 +53,8 @@ func (r *UserRepository) Create(user *domain.User) error {
 		user.Name,
 		user.AvatarURL,
 		user.Role,
+		user.Provider,    // Added provider
+		user.ProviderID,  // Added provider_id
 		user.PasswordHash,
 		user.Status,
 		user.ForcePasswordChange,

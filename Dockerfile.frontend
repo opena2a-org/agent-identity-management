@@ -1,0 +1,43 @@
+# Multi-stage build for Next.js frontend
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY apps/web/package*.json ./apps/web/
+COPY package*.json ./
+
+# Install dependencies
+RUN cd apps/web && npm ci
+
+# Copy source code
+COPY apps/web ./apps/web
+
+# Build the application
+RUN cd apps/web && npm run build
+
+# Production image
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy built assets from builder
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "apps/web/server.js"]

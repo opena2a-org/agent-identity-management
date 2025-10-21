@@ -1,8 +1,136 @@
 # 🗺️ AIM Development Roadmap
 
-**Last Updated**: October 20, 2025
+**Last Updated**: October 21, 2025
 
 This document tracks future enhancements and features that are deferred from the current development cycle.
+
+---
+
+## 🛡️ Security Policy Enforcement (Post-MVP)
+
+### Current Status (MVP)
+✅ **Capability Violation Detection** - FULLY IMPLEMENTED
+- Actively enforced on all agent API calls
+- Creates security alerts for violations
+- Blocks unauthorized actions in real-time
+- Prevents EchoLeak-style attacks (CVE-2025-32711)
+
+### Planned Security Policy Enforcers
+
+---
+
+### Trust Score Policy Enforcement
+**Priority**: High
+**Status**: Planned (Phase 1)
+**Estimated Effort**: 2 hours
+
+**Current**: Trust scores are calculated and displayed, but not enforced
+**Needed**: Automatic enforcement when trust scores fall below thresholds
+
+**Policies to Enforce**:
+- Low Trust Score Alert (threshold: 70, action: alert_only)
+- Critical Trust Score Block (threshold: 50, action: block_and_alert)
+
+**Implementation**:
+- Add `EvaluateTrustScore()` method to `SecurityPolicyService`
+- Call after every trust score update in `AgentService`
+- Create alerts for low scores
+- Automatically disable agents with critical scores
+- Send notifications to administrators
+
+**Use Case**: Proactive threat detection based on agent behavior changes
+
+---
+
+### Failed Authentication Monitoring
+**Priority**: High
+**Status**: Planned (Phase 2)
+**Estimated Effort**: 4 hours
+
+**Current**: Auth failures are logged but not tracked or enforced
+**Needed**: Account lockout and alerts for repeated failures
+
+**Policy to Enforce**:
+- Failed Authentication Monitoring (max_attempts: 5, time_window: 15m, lockout: 30m)
+
+**Implementation**:
+- Add failed attempt counter per agent/user
+- Add `EvaluateAuthFailures()` method
+- Implement temporary account lockout
+- Create alerts for suspicious patterns
+- Send email notifications for lockouts
+- Admin dashboard to unlock accounts
+
+**Use Case**: Prevent brute force attacks and credential stuffing
+
+---
+
+### Unusual Activity Detection
+**Priority**: Medium
+**Status**: Planned (Phase 3)
+**Estimated Effort**: 6 hours
+
+**Current**: Agent API calls are logged but no anomaly detection
+**Needed**: Real-time detection of unusual behavior patterns
+
+**Policy to Enforce**:
+- Unusual Activity Monitoring (api_rate_threshold: 1000, time_window: 1h, check_off_hours: true)
+
+**Implementation**:
+- Add middleware to track API call rates
+- Implement baseline behavior profiling per agent
+- Add `EvaluateUnusualActivity()` method
+- Detect API rate spikes
+- Detect off-hours access patterns
+- Create alerts for anomalies
+- Optional blocking of suspicious activity
+
+**Use Case**: Detect compromised agents or malicious behavior
+
+---
+
+### Data Exfiltration Detection
+**Priority**: Medium
+**Status**: Planned (Phase 3)
+**Estimated Effort**: 8 hours
+
+**Current**: No tracking of data transfers or response sizes
+**Needed**: Detection and prevention of large-scale data exfiltration
+
+**Policy to Enforce**:
+- Data Exfiltration Detection (data_threshold_mb: 100, time_window: 1h)
+
+**Implementation**:
+- Add response size tracking middleware
+- Track cumulative data transfer per agent
+- Add `EvaluateDataExfiltration()` method
+- Detect large data transfers
+- Detect unusual download patterns
+- Create alerts for suspicious transfers
+- Optional blocking of exfiltration attempts
+- Log destination IPs/domains
+
+**Use Case**: Prevent data breaches and insider threats
+
+---
+
+### Phase Timeline
+
+**Phase 1** (Post-MVP, Week 1):
+- Trust Score Policy Enforcement
+- Documentation and testing
+
+**Phase 2** (Post-MVP, Week 2):
+- Failed Authentication Monitoring
+- Integration testing
+
+**Phase 3** (Post-MVP, Weeks 3-4):
+- Unusual Activity Detection
+- Data Exfiltration Detection
+- End-to-end security testing
+- Performance optimization
+
+**Total Estimated Effort**: 20 hours across 4 weeks
 
 ---
 

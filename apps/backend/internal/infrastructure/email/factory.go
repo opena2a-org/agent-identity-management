@@ -22,12 +22,14 @@ func NewEmailService() (domain.EmailService, error) {
 // NewEmailServiceWithConfig creates an email service with the provided configuration
 func NewEmailServiceWithConfig(config domain.EmailConfig) (domain.EmailService, error) {
 	switch config.Provider {
+	case "console":
+		return NewConsoleEmailService(config)
 	case "azure":
 		return NewAzureEmailService(config)
 	case "smtp":
 		return NewSMTPEmailService(config)
 	default:
-		return nil, fmt.Errorf("unsupported email provider: %s (use 'azure' or 'smtp')", config.Provider)
+		return nil, fmt.Errorf("unsupported email provider: %s (use 'console', 'azure' or 'smtp')", config.Provider)
 	}
 }
 
@@ -50,6 +52,10 @@ func LoadEmailConfigFromEnv() (domain.EmailConfig, error) {
 
 	// Load provider-specific configuration
 	switch provider {
+	case "console":
+		// No additional configuration needed for console provider
+		// This is for development/testing only
+
 	case "azure":
 		config.Azure = domain.AzureEmailConfig{
 			ConnectionString: getEnv("AZURE_EMAIL_CONNECTION_STRING", ""),
@@ -79,7 +85,7 @@ func LoadEmailConfigFromEnv() (domain.EmailConfig, error) {
 		}
 
 	default:
-		return config, fmt.Errorf("unsupported EMAIL_PROVIDER: %s (use 'azure' or 'smtp')", provider)
+		return config, fmt.Errorf("unsupported EMAIL_PROVIDER: %s (use 'console', 'azure' or 'smtp')", provider)
 	}
 
 	return config, nil

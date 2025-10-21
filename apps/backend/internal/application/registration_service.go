@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -35,17 +36,20 @@ type RegistrationService struct {
 	registrationRepo RegistrationRepository
 	userRepo         domain.UserRepository
 	auditService     *AuditService
+	emailService     domain.EmailService
 }
 
 func NewRegistrationService(
 	registrationRepo RegistrationRepository,
 	userRepo domain.UserRepository,
 	auditService *AuditService,
+	emailService domain.EmailService,
 ) *RegistrationService {
 	return &RegistrationService{
 		registrationRepo: registrationRepo,
 		userRepo:         userRepo,
 		auditService:     auditService,
+		emailService:     emailService,
 	}
 }
 
@@ -88,6 +92,50 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 	// Save registration request
 	if err := s.registrationRepo.CreateRegistrationRequest(ctx, req); err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
+	}
+
+	// Send registration confirmation email
+	if s.emailService != nil {
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "http://localhost:3000"
+		}
+
+		supportEmail := os.Getenv("SUPPORT_EMAIL")
+		if supportEmail == "" {
+			supportEmail = "support@opena2a.org"
+		}
+
+		// Combine first and last name
+		fullName := firstName
+		if lastName != "" {
+			if fullName != "" {
+				fullName += " "
+			}
+			fullName += lastName
+		}
+		if fullName == "" {
+			fullName = email // Fallback to email if no name
+		}
+
+		templateData := domain.EmailTemplateData{
+			UserName:     fullName,
+			UserEmail:    email,
+			DashboardURL: frontendURL,
+			SupportEmail: supportEmail,
+			Timestamp:    time.Now(),
+			CustomData: map[string]interface{}{
+				"FirstName": firstName,
+				"LastName":  lastName,
+			},
+		}
+
+		if err := s.emailService.SendTemplatedEmail(domain.TemplateWelcome, email, templateData); err != nil {
+			// Log error but don't fail the request (email is non-critical)
+			fmt.Printf("⚠️  Failed to send registration confirmation email to %s: %v\n", email, err)
+		} else {
+			fmt.Printf("✅ Sent registration confirmation email to %s\n", email)
+		}
 	}
 
 	return req, nil
@@ -203,15 +251,30 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		fullName = req.Email // Fallback to email if no name provided
 	}
 
+	// Determine provider based on registration request type
+	provider := "local" // Default to local for email/password
+	providerID := req.Email // Use email as provider ID for local auth
+
+	// If OAuth registration, use OAuth provider info
+	if req.OAuthProvider != nil && *req.OAuthProvider != "" {
+		provider = string(*req.OAuthProvider) // Convert OAuthProvider enum to string
+		if req.OAuthUserID != nil {
+			providerID = *req.OAuthUserID
+		}
+	}
+
 	user := &domain.User{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
 		Email:          req.Email,
 		Name:           fullName,
 		Role:           domain.RoleViewer, // Default to viewer role for new users
+		Provider:       provider,
+		ProviderID:     providerID,
 		PasswordHash:   req.PasswordHash,  // Will be set for email/password registrations
 		ApprovedBy:     &reviewerID,
 		ApprovedAt:     &time.Time{},
+		Status:         domain.UserStatusActive, // Set user as active upon approval
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -228,8 +291,22 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 
 	// Create user via repository
 	if err := s.userRepo.Create(user); err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		// Log detailed error for debugging
+		fmt.Printf("❌ CRITICAL ERROR: Failed to create user account after approval\n")
+		fmt.Printf("   Email: %s\n", user.Email)
+		fmt.Printf("   Organization ID: %s\n", user.OrganizationID)
+		fmt.Printf("   Provider: %s\n", user.Provider)
+		fmt.Printf("   ProviderID: %s\n", user.ProviderID)
+		fmt.Printf("   Role: %s\n", user.Role)
+		fmt.Printf("   Status: %s\n", user.Status)
+		fmt.Printf("   Password Hash Present: %v\n", user.PasswordHash != nil && *user.PasswordHash != "")
+		fmt.Printf("   Error: %v\n", err)
+
+		return nil, fmt.Errorf("failed to create user '%s' in database: %w", user.Email, err)
 	}
+
+	// Success logging
+	fmt.Printf("✅ Successfully created user account: %s (ID: %s)\n", user.Email, user.ID)
 
 	// Log audit
 	s.auditService.LogAction(
@@ -247,7 +324,39 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		},
 	)
 
-	// TODO: Send approval email to user
+	// Send approval email to user
+	if s.emailService != nil {
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "http://localhost:3000"
+		}
+
+		supportEmail := os.Getenv("SUPPORT_EMAIL")
+		if supportEmail == "" {
+			supportEmail = "support@opena2a.org"
+		}
+
+		loginURL := fmt.Sprintf("%s/auth/login", frontendURL)
+
+		templateData := domain.EmailTemplateData{
+			UserName:     fullName,
+			UserEmail:    user.Email,
+			DashboardURL: frontendURL,
+			SupportEmail: supportEmail,
+			Timestamp:    now,
+			CustomData: map[string]interface{}{
+				"LoginURL": loginURL,
+				"Role":     string(user.Role),
+			},
+		}
+
+		if err := s.emailService.SendTemplatedEmail(domain.TemplateUserApproved, user.Email, templateData); err != nil {
+			// Log error but don't fail the request (email is non-critical)
+			fmt.Printf("⚠️  Failed to send approval email to %s: %v\n", user.Email, err)
+		} else {
+			fmt.Printf("✅ Sent approval email to %s\n", user.Email)
+		}
+	}
 
 	return user, nil
 }
@@ -315,9 +424,38 @@ func (s *RegistrationService) RequestPasswordReset(
 		return fmt.Errorf("failed to update user with reset token: %w", err)
 	}
 
-	// TODO: Send password reset email if email service available
-	// For now, log the token (REMOVE IN PRODUCTION!)
-	fmt.Printf("🔑 Password reset token for %s: %s (expires at %s)\n", email, resetToken, expiresAt.Format(time.RFC3339))
+	// Send password reset email using template
+	if s.emailService != nil {
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "http://localhost:3000"
+		}
+
+		supportEmail := os.Getenv("SUPPORT_EMAIL")
+		if supportEmail == "" {
+			supportEmail = "support@opena2a.org"
+		}
+
+		resetLink := fmt.Sprintf("%s/auth/reset-password?token=%s", frontendURL, resetToken)
+
+		templateData := domain.EmailTemplateData{
+			UserName:     user.Name,
+			UserEmail:    user.Email,
+			DashboardURL: frontendURL,
+			SupportEmail: supportEmail,
+			Timestamp:    time.Now(),
+			ExpiresAt:    expiresAt,
+			CustomData: map[string]interface{}{
+				"ResetLink": resetLink,
+				"ExpiresIn": "24 hours",
+			},
+		}
+
+		if err := s.emailService.SendTemplatedEmail(domain.TemplatePasswordReset, user.Email, templateData); err != nil {
+			// Log error but don't fail the request (email is non-critical)
+			fmt.Printf("⚠️ Failed to send password reset email to %s: %v\n", email, err)
+		}
+	}
 
 	return nil
 }
