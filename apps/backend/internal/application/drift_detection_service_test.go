@@ -27,8 +27,8 @@ func (m *MockAgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	return args.Get(0).(*domain.Agent), args.Error(1)
 }
 
-func (m *MockAgentRepository) GetByName(name string) (*domain.Agent, error) {
-	args := m.Called(name)
+func (m *MockAgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
+	args := m.Called(orgID, name)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

@@ -59,7 +59,7 @@ func main() {
 	flag.Parse()
 
 	// Print banner
-	fmt.Println(banner)
+	fmt.Print(banner)
 
 	// Validate configuration
 	if err := validateConfig(config); err != nil {

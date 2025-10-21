@@ -74,6 +74,11 @@ func (m *MockVerificationEventRepository) GetByMCPServer(mcpServerID uuid.UUID, 
 	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), args.Error(2)
 }
 
+func (m *MockVerificationEventRepository) UpdateResult(id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+	args := m.Called(id, result, reason, metadata)
+	return args.Error(0)
+}
+
 // TestVerificationEventWithDriftDetection tests the complete flow of verification event creation with drift detection
 func TestVerificationEventWithDriftDetection(t *testing.T) {
 	// Setup
@@ -110,6 +115,9 @@ func TestVerificationEventWithDriftDetection(t *testing.T) {
 	t.Run("creates verification event with drift detection", func(t *testing.T) {
 		// Mock agent retrieval
 		mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+		// Mock trust score update (called when drift is detected)
+		mockAgentRepo.On("UpdateTrustScore", mock.Anything, mock.Anything).Return(nil)
 
 		// Mock alert creation (drift will be detected)
 		mockAlertRepo.On("Create", mock.MatchedBy(func(alert *domain.Alert) bool {

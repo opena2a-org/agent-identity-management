@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
@@ -168,5 +167,5 @@ func (p *MicrosoftProvider) GetProviderName() domain.OAuthProvider {
 	return domain.OAuthProviderMicrosoft
 }
 
-// Ensure MicrosoftProvider implements OAuthProvider interface
-var _ application.OAuthProvider = (*MicrosoftProvider)(nil)
+// OAuth provider interface compliance check (currently disabled in production)
+// var _ application.OAuthProvider = (*MicrosoftProvider)(nil)

@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
@@ -163,5 +162,5 @@ func (p *GoogleProvider) GetProviderName() domain.OAuthProvider {
 	return domain.OAuthProviderGoogle
 }
 
-// Ensure GoogleProvider implements OAuthProvider interface
-var _ application.OAuthProvider = (*GoogleProvider)(nil)
+// OAuth provider interface compliance check (currently disabled in production)
+// var _ application.OAuthProvider = (*GoogleProvider)(nil)

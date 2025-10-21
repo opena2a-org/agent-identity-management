@@ -18,8 +18,10 @@ const getApiUrl = (): string => {
   // 2. Auto-detect from window location (PRIMARY method for environment-agnostic deployment)
   // IMPORTANT: Do this BEFORE checking process.env because Next.js bakes env vars at build time
   const { protocol, hostname } = window.location;
-  if (hostname.includes('aim-frontend')) {
-    const backendHost = hostname.replace('aim-frontend', 'aim-backend');
+
+  // Match both 'aim-frontend' and 'aim-dev-frontend' or any variant with '-frontend'
+  if (hostname.includes('-frontend')) {
+    const backendHost = hostname.replace('-frontend', '-backend');
     const detectedUrl = `${protocol}//${backendHost}`;
     console.log('[API] Auto-detected URL from hostname:', detectedUrl);
     return detectedUrl;
