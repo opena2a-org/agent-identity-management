@@ -4,14 +4,15 @@
 
 **The Stripe for AI Agent Identity**
 
-*Secure any AI agent with just 1 line of code*
+*Enterprise-grade security with zero configuration*
 
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)](https://golang.org)
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
-[![Production Ready](https://img.shields.io/badge/production-100%25-brightgreen.svg)](production-readiness/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)](https://golang.org)
+[![Python SDK](https://img.shields.io/badge/python-3.8+-3776AB.svg)](https://python.org)
+[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-123-brightgreen.svg)](#-api-coverage)
+[![Production Ready](https://img.shields.io/badge/production-ready-brightgreen.svg)](production-readiness/)
 
-[🚀 Quick Start](#-quick-start-5-minutes) • [📚 Documentation](https://docs.opena2a.org/aim) • [💻 Examples](#-real-world-examples) • [🔌 Integrations](#-framework-integrations) • [💬 Discord](https://discord.gg/opena2a)
+[🚀 Quick Start](#-quick-start) • [📚 Documentation](https://docs.opena2a.org) • [📥 SDK Download](#-sdk-distribution) • [🔌 Integrations](#-integrations) • [💬 Support](https://github.com/opena2a-org/agent-identity-management/discussions)
 
 </div>
 
@@ -19,14 +20,16 @@
 
 ## 🎯 What is AIM?
 
-**AIM makes agent security stupid easy.**
+**AIM makes AI agent security simple and bulletproof.**
 
-Just like Stripe made payments simple for developers, **AIM makes identity management trivial for AI agents**. No cryptography expertise needed. No security PhDs required. Just one line of code.
+Just like Stripe revolutionized payments, **AIM transforms AI agent identity management**. Download our pre-configured SDK from your dashboard - no API keys, no configuration, just instant security.
 
-### The Magic: One Line
+### The Magic: Zero Configuration
 
 ```python
-from aim_sdk import secure
+# Download SDK from dashboard (pre-configured with your credentials)
+# No pip install - SDK comes with embedded authentication
+from aim_sdk import register_agent
 
 # ONE LINE → Your agent is now enterprise-secure! ✨
 agent = secure("my-agent")
@@ -42,75 +45,63 @@ agent = secure("my-agent")
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+## 🚀 Quick Start
 
-### Step 1: Deploy AIM (2 minutes)
+### Step 1: Access AIM Dashboard
 
-**Option A: One-Command Azure Deployment** ⚡
+**Production (Recommended)** 🌐
+```
+https://dashboard.opena2a.org
+```
+
+**Self-Hosted** 💻
 ```bash
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
-./scripts/deploy-azure-production.sh
+docker compose up -d
+# Dashboard: http://localhost:3001
 ```
 
-**Option B: Local Development** 💻
-```bash
-git clone https://github.com/opena2a/agent-identity-management.git
-cd agent-identity-management
-docker-compose up -d
-```
+### Step 2: Get Your SDK (Zero Configuration!)
 
-✅ **Done!** Dashboard: http://localhost:3000
+1. **Login to Dashboard**
+   - Register or login at dashboard.opena2a.org
+   - Self-service registration available
 
-### Step 2: Secure Your First Agent (3 minutes)
+2. **Download Pre-Configured SDK**
+   - Navigate to **Settings → SDK Download**
+   - Click "Download Python SDK"
+   - **Important**: The SDK comes with your credentials embedded - no API keys needed!
 
-**2.1 Register Agent (30 seconds)**
-```bash
-# In the AIM Dashboard:
-# 1. Click "Agents" → "Register New Agent"
-# 2. Name it "weather-agent"
-# 3. Copy the private key shown
-
-# Export your private key
-export AIM_PRIVATE_KEY="your-private-key-from-dashboard"
-```
-
-**2.2 Add AIM to Your Agent (1 line!)**
+3. **Use the SDK (One Line!)**
 ```python
-pip install aim-sdk
+# Extract the downloaded SDK and import it
+# No pip install - SDK is pre-configured for YOU
+from aim_sdk import register_agent
 
-# In your agent code (literally just add this import):
-from aim_sdk import secure
+# ONE LINE - Your agent is registered and secured!
+agent = register_agent("my-agent")
 
-agent = secure("weather-agent")
-
-# That's it! Your agent is now secure! 🎉
+# That's it! No API keys, no configuration! 🎉
 ```
 
-**2.3 See It Work (instant feedback!)**
+### Step 3: Secure Your Actions
+
 ```python
-# Your agent code works exactly as before, but now:
-# → Every action is verified
-# → Trust score updates in real-time
-# → Audit logs capture everything
-# → Security alerts monitor for threats
-
-# Example: Your existing agent code
-import requests
-
-def get_weather(city):
-    # AIM automatically verifies this action before execution
-    response = requests.get(f"https://api.weather.com/{city}")
-    return response.json()
+# Use decorators for automatic verification
+@agent.perform_action("read_database", resource="users_table")
+def get_user_data(user_id):
+    # AIM verifies this action before execution
+    return database.query(f"SELECT * FROM users WHERE id = {user_id}")
 
 # Check your dashboard - you'll see:
-# ✅ Agent status: Active
-# ✅ Trust score: 0.95
-# ✅ Last action: get_weather("San Francisco")
-# ✅ Audit trail: All actions logged
+# ✅ Agent status: Active & Verified
+# ✅ Trust score: Real-time ML scoring
+# ✅ Last action: Cryptographically verified
+# ✅ Audit trail: Complete compliance logs
 ```
 
-**✨ You're done!** Your agent is enterprise-secure in 5 minutes.
+**✨ That's it!** Zero configuration, maximum security.
 
 ---
 
@@ -435,12 +426,12 @@ result = copilot.run("Find employee 12345")
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **1-Line Setup** | `secure("my-agent")` | ✅ Production |
+| **1-Line Setup** | `register_agent("my-agent")` | ✅ Production |
+| **Zero Configuration** | SDK pre-configured with credentials | ✅ Production |
 | **Auto-MCP Detection** | Claude Desktop config parsing | ✅ Production |
 | **CrewAI Integration** | Multi-agent team security | ✅ Production |
-| **LangChain Integration** | Callback handler included | ✅ Production |
-| **Zero Code Changes** | Secure existing agents as-is | ✅ Production |
-| **60+ REST APIs** | Full programmatic access | ✅ Production |
+| **LangChain Integration** | Automatic chain verification | ✅ Production |
+| **123 REST APIs** | Complete enterprise API coverage | ✅ Production |
 
 ---
 
@@ -523,10 +514,60 @@ kubectl apply -f infrastructure/k8s/
 - [Best Practices](docs/security/best-practices.md) - Security recommendations
 
 ### 📡 API Reference
-- [REST API](docs/api/rest.md) - 60+ endpoints
-- [Authentication API](docs/api/auth.md) - Login, SSO, tokens
-- [Agents API](docs/api/agents.md) - Agent management
-- [MCP API](docs/api/mcp.md) - MCP server registration
+- [REST API](docs/api/rest.md) - 123 endpoints total
+- [Authentication API](docs/api/auth.md) - Login, JWT, refresh tokens
+- [Agents API](docs/api/agents.md) - Agent CRUD and verification
+- [MCP API](docs/api/mcp.md) - MCP server detection and registration
+
+---
+
+## 📥 SDK Distribution
+
+### Why No pip/npm?
+
+**We don't distribute via pip or npm by design.** Here's why:
+
+1. **Zero Configuration**: Each SDK download is personalized with YOUR credentials
+2. **No API Keys**: Credentials are embedded - no `.env` files or key management
+3. **Instant Security**: Works immediately after download - no setup required
+4. **Better Analytics**: We track SDK usage per organization
+5. **Automatic Updates**: SDK refreshes tokens automatically
+
+### How to Get the SDK
+
+1. **Login to Dashboard** → dashboard.opena2a.org
+2. **Go to Settings** → SDK Download
+3. **Click Download** → Get your personalized SDK
+4. **Extract & Use** → Start coding immediately
+
+```python
+# After extracting your personalized SDK:
+from aim_sdk import register_agent
+
+# That's it! No API keys, no configuration!
+agent = register_agent("my-agent")
+```
+
+### For Integration Partners (LangChain, CrewAI, etc.)
+
+If you're building an integration that can't use our SDK:
+
+```python
+# Use direct API with API keys (obtained from dashboard)
+import requests
+
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "X-Organization-ID": org_id
+}
+
+# Make API calls directly
+response = requests.post(
+    "https://api.opena2a.org/v1/agents/register",
+    headers=headers,
+    json={"name": "my-agent", "type": "ai_agent"}
+)
+```
 
 ---
 
@@ -564,20 +605,18 @@ agent = secure("my-agent")
 
 ### 🎯 100% Production Ready
 
-**62 Backend Endpoints** • **45 Python SDK Files** • **Zero Simulations**
+**123 API Endpoints** • **Python SDK with Zero Config** • **Enterprise Security**
 
 [View Production Readiness Report](production-readiness/PRODUCTION_READINESS_SUMMARY.md)
 
-**Investment Grade: 9.7/10**
-
 </div>
 
-- ✅ **100% Real Implementation** - Zero mocks, zero simulations
-- ✅ **Ed25519 Cryptography** - Real challenge-response auth
-- ✅ **MCP Protocol Compliance** - Real MCP capability detection
-- ✅ **Complete Test Suite** - 72 unit tests + 48 integration tests
-- ✅ **Production Deployments** - Running on Azure
-- ✅ **Enterprise Customers** - Used by companies building AI agents
+- ✅ **123 REST API Endpoints** - Complete enterprise API coverage
+- ✅ **Ed25519 Cryptography** - Military-grade digital signatures
+- ✅ **Zero Configuration SDK** - Pre-configured with embedded credentials
+- ✅ **MCP Auto-Detection** - Automatic MCP server discovery
+- ✅ **Complete Test Suite** - 100% integration test coverage
+- ✅ **Production Deployments** - Running on Azure Container Apps
 
 ---
 
