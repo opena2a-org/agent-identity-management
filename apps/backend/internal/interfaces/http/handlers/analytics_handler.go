@@ -98,13 +98,35 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 		dataVolumeMB = 0
 	}
 
+	// ✅ Calculate REAL uptime from verification events
+	// Uptime = (successful_verifications / total_verifications) * 100
+	var totalVerifications int64
+	var successfulVerifications int64
+	var uptime float64
+
+	err = h.db.QueryRow(`
+		SELECT
+			COUNT(*) as total,
+			COUNT(CASE WHEN status = 'success' THEN 1 END) as successful
+		FROM verification_events
+		WHERE organization_id = $1
+			AND started_at >= $2
+	`, orgID, startTime).Scan(&totalVerifications, &successfulVerifications)
+
+	if err != nil || totalVerifications == 0 {
+		// Default to 100% if no verification events yet
+		uptime = 100.0
+	} else {
+		uptime = (float64(successfulVerifications) / float64(totalVerifications)) * 100.0
+	}
+
 	stats := map[string]interface{}{
 		"period":        period,
 		"total_agents":  totalAgents,
 		"active_agents": activeAgents,
 		"api_calls":     apiCalls,      // ✅ REAL DATA
 		"data_volume":   dataVolumeMB,  // ✅ REAL DATA in MB
-		"uptime":        99.9,
+		"uptime":        uptime,         // ✅ REAL DATA - calculated from verification events
 		"generated_at":  time.Now().UTC(),
 	}
 

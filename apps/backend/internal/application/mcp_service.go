@@ -1,8 +1,12 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +23,7 @@ type MCPService struct {
 	cryptoService         *infracrypto.ED25519Service
 	keyVault              *crypto.KeyVault       // ✅ For secure private key storage
 	capabilityService     *MCPCapabilityService  // ✅ For automatic capability detection
+	httpClient            *http.Client           // ✅ For real MCP server communication
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
 }
@@ -39,7 +44,10 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 		cryptoService:         infracrypto.NewED25519Service(),
 		keyVault:              keyVault,
 		capabilityService:     capabilityService,
-		challenges:            make(map[string]ChallengeData),
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second, // 30 second timeout for MCP server communication
+		},
+		challenges: make(map[string]ChallengeData),
 	}
 }
 
@@ -217,30 +225,74 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	}
 
 	// 2. Generate challenge
-	_, err = s.GenerateVerificationChallenge(ctx, id)
+	challenge, err := s.GenerateVerificationChallenge(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to generate challenge: %w", err)
 	}
 
-	// 3. In a real implementation, we would:
-	//    - Send challenge to server's verification URL
-	//    - Server signs challenge with its private key
-	//    - Server returns signed challenge
-	//    - We verify signature with stored public key
-	//
-	// For MVP, we'll simulate automatic success if public key exists
-	// The infrastructure is in place for full implementation
+	// ✅ 3. REAL CRYPTOGRAPHIC VERIFICATION
+	// Send challenge to server's verification URL and verify signed response
+	var verificationSuccess bool
 
-	// Simulate challenge-response (for MVP)
-	// In production, replace this with actual HTTP call to verification URL
-	simulatedSuccess := server.PublicKey != ""
+	if server.VerificationURL == "" {
+		// If no verification URL provided, use the server's base URL + standard endpoint
+		server.VerificationURL = server.URL + "/.well-known/mcp/verify"
+	}
+
+	// Step 3a: Send challenge to MCP server
+	challengeReq := map[string]string{
+		"challenge": challenge,
+		"server_id": id.String(),
+	}
+	reqBody, err := json.Marshal(challengeReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal challenge request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", server.VerificationURL, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to create verification request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to contact MCP server verification endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("MCP server verification endpoint returned non-200 status: %d", resp.StatusCode)
+	}
+
+	// Step 3b: Parse signed challenge response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read verification response: %w", err)
+	}
+
+	var verifyResp struct {
+		SignedChallenge string `json:"signed_challenge"`
+	}
+	if err := json.Unmarshal(respBody, &verifyResp); err != nil {
+		return fmt.Errorf("failed to parse verification response: %w", err)
+	}
+
+	// Step 3c: Verify the signed challenge using Ed25519
+	if err := s.VerifyChallengeResponse(ctx, id, verifyResp.SignedChallenge); err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	// ✅ Verification successful - cryptographic proof established
+	verificationSuccess := true
 
 	var verificationStatus domain.VerificationEventStatus
 	var verificationResult domain.VerificationResult
 	var confidence float64
 	var trustScore float64
 
-	if simulatedSuccess {
+	if verificationSuccess {
 		// Mark server as verified
 		if err := s.mcpRepo.VerifyServer(ctx, id); err != nil {
 			return err
@@ -314,8 +366,8 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		}
 	}
 
-	if !simulatedSuccess {
-		return fmt.Errorf("verification failed")
+	if !verificationSuccess {
+		return fmt.Errorf("cryptographic verification failed")
 	}
 
 	return nil

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +17,33 @@ import (
 type MCPCapabilityService struct {
 	capabilityRepo *repository.MCPServerCapabilityRepository
 	mcpRepo        *repository.MCPServerRepository
+	httpClient     *http.Client
+}
+
+// MCPCapabilitiesResponse represents the standard MCP protocol capabilities response
+type MCPCapabilitiesResponse struct {
+	Tools     []MCPTool     `json:"tools,omitempty"`
+	Resources []MCPResource `json:"resources,omitempty"`
+	Prompts   []MCPPrompt   `json:"prompts,omitempty"`
+}
+
+type MCPTool struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	InputSchema map[string]interface{} `json:"inputSchema"`
+}
+
+type MCPResource struct {
+	Name        string   `json:"name"`
+	URI         string   `json:"uri"`
+	Description string   `json:"description"`
+	MimeTypes   []string `json:"mimeTypes,omitempty"`
+}
+
+type MCPPrompt struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Arguments   []string `json:"arguments,omitempty"`
 }
 
 func NewMCPCapabilityService(
@@ -23,12 +53,15 @@ func NewMCPCapabilityService(
 	return &MCPCapabilityService{
 		capabilityRepo: capabilityRepo,
 		mcpRepo:        mcpRepo,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second, // 30 second timeout for capability discovery
+		},
 	}
 }
 
 // DetectCapabilities detects and stores capabilities for an MCP server
-// For MVP, this simulates capability detection
-// In production, this would make an HTTP request to the MCP server's capabilities endpoint
+// ✅ REAL IMPLEMENTATION - Follows MCP Protocol Standard
+// Makes HTTP GET request to /.well-known/mcp/capabilities endpoint
 func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID uuid.UUID) error {
 	// Get server details
 	server, err := s.mcpRepo.GetByID(serverID)
@@ -36,23 +69,97 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		return fmt.Errorf("failed to get MCP server: %w", err)
 	}
 
-	// ✅ SIMULATED CAPABILITY DETECTION FOR MVP
-	// In production, this would:
-	// 1. Make HTTP request to server.URL + "/.well-known/mcp/capabilities"
-	// 2. Parse the MCP protocol response
-	// 3. Extract tools, resources, and prompts
-	//
-	// For now, we'll simulate by generating sample capabilities based on server URL
+	// ✅ REAL MCP PROTOCOL CAPABILITY DETECTION
+	// Step 1: Construct MCP capabilities endpoint URL
+	capabilitiesURL := strings.TrimSuffix(server.URL, "/") + "/.well-known/mcp/capabilities"
 
-	capabilities := s.generateSampleCapabilities(server)
+	// Step 2: Make HTTP GET request to MCP server
+	req, err := http.NewRequestWithContext(ctx, "GET", capabilitiesURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %w", err)
+	}
 
-	// Store detected capabilities
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "AIM/1.0 (Agent Identity Management)")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to fetch capabilities from %s: %w", capabilitiesURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("MCP server returned non-200 status: %d", resp.StatusCode)
+	}
+
+	// Step 3: Parse MCP protocol response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var mcpResp MCPCapabilitiesResponse
+	if err := json.Unmarshal(body, &mcpResp); err != nil {
+		return fmt.Errorf("failed to parse MCP capabilities response: %w", err)
+	}
+
+	// Step 4: Convert MCP protocol capabilities to domain objects
+	capabilities := []*domain.MCPServerCapability{}
+
+	// Convert tools
+	for _, tool := range mcpResp.Tools {
+		schemaJSON, _ := json.Marshal(tool.InputSchema)
+		capabilities = append(capabilities, &domain.MCPServerCapability{
+			ID:               uuid.New(),
+			MCPServerID:      serverID,
+			Name:             tool.Name,
+			CapabilityType:   domain.MCPCapabilityTypeTool,
+			Description:      tool.Description,
+			CapabilitySchema: schemaJSON,
+			DetectedAt:       time.Now().UTC(),
+			IsActive:         true,
+		})
+	}
+
+	// Convert resources
+	for _, resource := range mcpResp.Resources {
+		schema := map[string]interface{}{
+			"uri":       resource.URI,
+			"mimeTypes": resource.MimeTypes,
+		}
+		schemaJSON, _ := json.Marshal(schema)
+		capabilities = append(capabilities, &domain.MCPServerCapability{
+			ID:               uuid.New(),
+			MCPServerID:      serverID,
+			Name:             resource.Name,
+			CapabilityType:   domain.MCPCapabilityTypeResource,
+			Description:      resource.Description,
+			CapabilitySchema: schemaJSON,
+			DetectedAt:       time.Now().UTC(),
+			IsActive:         true,
+		})
+	}
+
+	// Convert prompts
+	for _, prompt := range mcpResp.Prompts {
+		schema := map[string]interface{}{
+			"arguments": prompt.Arguments,
+		}
+		schemaJSON, _ := json.Marshal(schema)
+		capabilities = append(capabilities, &domain.MCPServerCapability{
+			ID:               uuid.New(),
+			MCPServerID:      serverID,
+			Name:             prompt.Name,
+			CapabilityType:   domain.MCPCapabilityTypePrompt,
+			Description:      prompt.Description,
+			CapabilitySchema: schemaJSON,
+			DetectedAt:       time.Now().UTC(),
+			IsActive:         true,
+		})
+	}
+
+	// Step 5: Store detected capabilities in database
 	for _, cap := range capabilities {
-		cap.MCPServerID = serverID
-		cap.ID = uuid.New()
-		cap.DetectedAt = time.Now().UTC()
-		cap.IsActive = true
-
 		if err := s.capabilityRepo.Create(cap); err != nil {
 			// Log error but continue with other capabilities
 			fmt.Printf("⚠️  Failed to store capability %s: %v\n", cap.Name, err)
@@ -62,12 +169,25 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		fmt.Printf("✅ Detected %s capability: %s\n", cap.CapabilityType, cap.Name)
 	}
 
-	fmt.Printf("✅ Successfully detected %d capabilities for MCP server %s\n", len(capabilities), server.Name)
+	fmt.Printf("✅ Successfully detected %d real capabilities from MCP server %s\n", len(capabilities), server.Name)
 	return nil
 }
 
-// generateSampleCapabilities generates sample capabilities for testing
-// In production, this would be replaced with actual MCP protocol communication
+// GetCapabilities retrieves all capabilities for an MCP server
+func (s *MCPCapabilityService) GetCapabilities(ctx context.Context, serverID uuid.UUID) ([]*domain.MCPServerCapability, error) {
+	return s.capabilityRepo.GetByServerID(serverID)
+}
+
+// GetCapabilitiesByType retrieves capabilities by type
+func (s *MCPCapabilityService) GetCapabilitiesByType(ctx context.Context, serverID uuid.UUID, capType domain.MCPCapabilityType) ([]*domain.MCPServerCapability, error) {
+	return s.capabilityRepo.GetByServerIDAndType(serverID, capType)
+}
+
+// ===== LEGACY SIMULATED METHODS (NO LONGER USED) =====
+// The methods below were used for MVP simulation and are kept for reference only.
+// Real capability detection now uses the MCP protocol standard.
+
+// generateSampleCapabilities (DEPRECATED - DO NOT USE)
 func (s *MCPCapabilityService) generateSampleCapabilities(server *domain.MCPServer) []*domain.MCPServerCapability {
 	capabilities := []*domain.MCPServerCapability{}
 
