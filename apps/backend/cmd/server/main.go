@@ -121,7 +121,7 @@ func main() {
 	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, emailService)
 
 	// Initialize handlers
-	h := initHandlers(services, repos, jwtService, keyVault, cfg)
+	h := initHandlers(services, repos, jwtService, keyVault, cfg, db)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -138,6 +138,7 @@ func main() {
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(middleware.LoggerMiddleware())
+	app.Use(middleware.AnalyticsTracking(db)) // Real-time API call tracking
 
 	// CORS with allowed origins from environment
 	// IMPORTANT: Frontend ALWAYS runs on port 3000, backend on port 8080
@@ -586,7 +587,7 @@ type Handlers struct {
 	CapabilityRequest *handlers.CapabilityRequestHandlers // ✅ For capability request approval
 }
 
-func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config) *Handlers {
+func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
 	return &Handlers{
 		Auth: handlers.NewAuthHandler(
 			services.Auth,
@@ -640,6 +641,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.MCP,
 			services.VerificationEvent,
+			db, // Database connection for real-time analytics
 		),
 		Webhook: handlers.NewWebhookHandler(
 			services.Webhook,

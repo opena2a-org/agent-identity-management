@@ -389,44 +389,63 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 		}
 	}
 
-	// Generate monthly verification activity data
+	// Get REAL verification activity from verification_events table
 	activity := []map[string]interface{}{}
-	now := time.Now()
-	
-	for i := months - 1; i >= 0; i-- {
-		monthDate := now.AddDate(0, -i, 0)
-		monthName := monthDate.Format("Jan")
-		
-		// Simulate historical data with some variation
-		// Current month uses real data, previous months are simulated
-		if i == 0 {
-			// Current month - use real data
-			activity = append(activity, map[string]interface{}{
-				"month":     monthName,
-				"verified":  verifiedCount,
-				"pending":   pendingCount,
-				"month_year": monthDate.Format("2006-01"),
-			})
-		} else {
-			// Historical months - simulate data based on current state
-			historicalVerified := verifiedCount - (i * 2) + ((i % 3) * 3)
-			historicalPending := pendingCount + (i % 2) + 1
-			
-			// Ensure non-negative values
-			if historicalVerified < 0 {
-				historicalVerified = verifiedCount / 2
-			}
-			if historicalPending < 0 {
-				historicalPending = 1
-			}
-			
-			activity = append(activity, map[string]interface{}{
-				"month":     monthName,
-				"verified":  historicalVerified,
-				"pending":   historicalPending,
-				"month_year": monthDate.Format("2006-01"),
-			})
+
+	query := `
+		WITH monthly_activity AS (
+			SELECT
+				DATE_TRUNC('month', created_at) as month_start,
+				COUNT(*) FILTER (WHERE status = 'verified') as verified,
+				COUNT(*) FILTER (WHERE status = 'pending' OR status = 'failed') as pending
+			FROM verification_events
+			WHERE organization_id = $1
+				AND created_at >= NOW() - INTERVAL '1 month' * $2
+			GROUP BY DATE_TRUNC('month', created_at)
+			ORDER BY month_start ASC
+		)
+		SELECT month_start, verified, pending
+		FROM monthly_activity
+	`
+
+	rows, err := h.db.Query(query, orgID, months)
+	if err != nil {
+		// Fallback: if verification_events table doesn't exist yet, use current stats only
+		now := time.Now()
+		activity = append(activity, map[string]interface{}{
+			"month":      now.Format("Jan"),
+			"verified":   verifiedCount,
+			"pending":    pendingCount,
+			"month_year": now.Format("2006-01"),
+		})
+
+		return c.JSON(fiber.Map{
+			"period":   fmt.Sprintf("Last %d months", months),
+			"activity": activity,
+			"current_stats": map[string]interface{}{
+				"total_verified": verifiedCount,
+				"total_pending":  pendingCount,
+				"total_agents":   len(agents),
+			},
+			"note": "Historical data not yet available. Showing current month only.",
+		})
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var monthStart time.Time
+		var verified, pending int
+
+		if err := rows.Scan(&monthStart, &verified, &pending); err != nil {
+			continue
 		}
+
+		activity = append(activity, map[string]interface{}{
+			"month":      monthStart.Format("Jan"),
+			"verified":   verified,
+			"pending":    pending,
+			"month_year": monthStart.Format("2006-01"),
+		})
 	}
 
 	return c.JSON(fiber.Map{
@@ -454,37 +473,97 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	// Get REAL agent activity from agent_activity_metrics table
+	query := `
+		SELECT
+			a.id,
+			a.name,
+			a.status,
+			a.trust_score,
+			COALESCE(MAX(aam.hour_timestamp), a.created_at) as last_active,
+			COALESCE(SUM(aam.api_calls_count), 0) as api_calls,
+			COALESCE(SUM(aam.data_processed_bytes) / 1024.0 / 1024.0, 0) as data_processed_mb
+		FROM agents a
+		LEFT JOIN agent_activity_metrics aam ON a.id = aam.agent_id
+		WHERE a.organization_id = $1
+		GROUP BY a.id, a.name, a.status, a.trust_score, a.created_at
+		ORDER BY last_active DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := h.db.Query(query, orgID, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agent activity",
+		// Fallback: if agent_activity_metrics table doesn't exist, use basic agent data
+		agents, err := h.agentService.ListAgents(c.Context(), orgID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to fetch agent activity",
+			})
+		}
+
+		activities := []map[string]interface{}{}
+		for i, agent := range agents {
+			if i < offset {
+				continue
+			}
+			if len(activities) >= limit {
+				break
+			}
+
+			activities = append(activities, map[string]interface{}{
+				"agent_id":       agent.ID.String(),
+				"agent_name":     agent.Name,
+				"status":         agent.Status,
+				"trust_score":    agent.TrustScore,
+				"last_active":    agent.CreatedAt,
+				"api_calls":      0,
+				"data_processed": 0.0,
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"activities": activities,
+			"total":      len(agents),
+			"limit":      limit,
+			"offset":     offset,
+			"note":       "Activity metrics not yet available. Install migration 010 to enable tracking.",
 		})
 	}
+	defer rows.Close()
 
-	// Build activity data
+	// Build activity data from REAL database records
 	activities := []map[string]interface{}{}
-	for i, agent := range agents {
-		if i < offset {
+	for rows.Next() {
+		var agentID uuid.UUID
+		var name, status string
+		var trustScore float64
+		var lastActive time.Time
+		var apiCalls int64
+		var dataProcessedMB float64
+
+		if err := rows.Scan(&agentID, &name, &status, &trustScore, &lastActive, &apiCalls, &dataProcessedMB); err != nil {
 			continue
-		}
-		if len(activities) >= limit {
-			break
 		}
 
 		activities = append(activities, map[string]interface{}{
-			"agent_id":       agent.ID.String(),
-			"agent_name":     agent.Name,
-			"status":         agent.Status,
-			"trust_score":    agent.TrustScore,
-			"last_active":    time.Now().Add(-time.Duration(i) * time.Hour),
-			"api_calls":      150 + i*10,
-			"data_processed": 25.5 + float64(i)*1.2,
+			"agent_id":       agentID.String(),
+			"agent_name":     name,
+			"status":         status,
+			"trust_score":    trustScore,
+			"last_active":    lastActive,
+			"api_calls":      apiCalls,
+			"data_processed": dataProcessedMB, // in MB
 		})
 	}
 
+	// Get total count for pagination
+	var total int
+	countQuery := `SELECT COUNT(*) FROM agents WHERE organization_id = $1`
+	h.db.QueryRow(countQuery, orgID).Scan(&total)
+
 	return c.JSON(fiber.Map{
 		"activities": activities,
-		"total":      len(agents),
+		"total":      total,
 		"limit":      limit,
 		"offset":     offset,
 	})
