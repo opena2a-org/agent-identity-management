@@ -888,14 +888,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance.Use(middleware.StrictRateLimitMiddleware())
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
-	compliance.Get("/audit-log/export", h.Compliance.ExportAuditLog)
 	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
 	compliance.Get("/audit-log/data-retention", h.Compliance.GetDataRetention)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
-	compliance.Post("/reports/generate", h.Compliance.GenerateComplianceReport)
-	compliance.Get("/reports", h.Compliance.ListComplianceReports)
-	compliance.Get("/access-reviews", h.Compliance.ListAccessReviews)
 	compliance.Get("/data-retention", h.Compliance.GetDataRetentionPolicies)
 
 	// MCP Server routes (authentication required)
@@ -925,9 +921,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	security.Get("/threats", h.Security.GetThreats)
 	security.Get("/anomalies", h.Security.GetAnomalies)
 	security.Get("/metrics", h.Security.GetSecurityMetrics)
-	security.Get("/scan/:id", h.Security.RunSecurityScan)
-	security.Get("/incidents", h.Security.GetIncidents)
-	security.Post("/incidents/:id/resolve", h.Security.ResolveIncident)
 
 	// Analytics routes (authentication required)
 	analytics := v1.Group("/analytics")
@@ -937,7 +930,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	analytics.Get("/usage", h.Analytics.GetUsageStatistics)
 	analytics.Get("/trends", h.Analytics.GetTrustScoreTrends)
 	analytics.Get("/verification-activity", h.Analytics.GetVerificationActivity) // New endpoint for chart
-	analytics.Get("/reports/generate", h.Analytics.GenerateReport)
 	analytics.Get("/agents/activity", h.Analytics.GetAgentActivity)
 
 	// Webhook routes (authentication required)
