@@ -22,6 +22,7 @@ import {
   CheckSquare,
   ClipboardCheck,
   Tag,
+  BarChart3,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -84,6 +85,12 @@ const navigationBase: NavSection[] = [
         name: "Activity Monitoring",
         href: "/dashboard/monitoring",
         icon: Activity,
+        roles: ["admin", "manager"],
+      },
+      {
+        name: "Usage Statistics",
+        href: "/dashboard/analytics/usage",
+        icon: BarChart3,
         roles: ["admin", "manager"],
       },
       {

@@ -34,6 +34,8 @@ import {
   ChartSkeleton,
 } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
+import { TrustTrends } from "@/components/analytics/trust-trends";
+import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 
 interface DashboardStats {
   // Backend returns these exact fields (snake_case from Go JSON tags)
@@ -890,6 +892,12 @@ function DashboardContent() {
           </div>
         </div>
       )}
+
+      {/* Analytics Sections */}
+      <div className="grid grid-cols-1 gap-6">
+        <TrustTrends defaultDays={30} />
+        <ActivityTimeline defaultLimit={20} />
+      </div>
     </div>
   );
 }

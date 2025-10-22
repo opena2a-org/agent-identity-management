@@ -762,6 +762,79 @@ class APIClient {
     );
   }
 
+  async getUsageStatistics(days = 30): Promise<{
+    period: string;
+    api_calls: {
+      total: number;
+      by_endpoint: Array<{
+        endpoint: string;
+        count: number;
+        percentage: number;
+      }>;
+      by_day: Array<{
+        date: string;
+        count: number;
+      }>;
+    };
+    active_users: {
+      total: number;
+      by_role: Array<{
+        role: string;
+        count: number;
+      }>;
+    };
+    agent_metrics: {
+      total_requests: number;
+      successful_requests: number;
+      failed_requests: number;
+      success_rate: number;
+    };
+  }> {
+    return this.request(`/api/v1/analytics/usage?days=${days}`);
+  }
+
+  async getTrustScoreTrends(days = 30): Promise<{
+    period: string;
+    trends: Array<{
+      date: string;
+      avg_trust_score: number;
+      agent_count: number;
+      scores_by_range: {
+        excellent: number; // 90-100
+        good: number; // 75-89
+        fair: number; // 50-74
+        poor: number; // 0-49
+      };
+    }>;
+    summary: {
+      overall_avg: number;
+      trend_direction: "up" | "down" | "stable";
+      change_percentage: number;
+    };
+  }> {
+    return this.request(`/api/v1/analytics/trends?days=${days}`);
+  }
+
+  async getAgentActivity(limit = 50): Promise<{
+    activities: Array<{
+      id: string;
+      agent_id: string;
+      agent_name: string;
+      action: string;
+      status: "success" | "failure" | "pending";
+      timestamp: string;
+      details?: string;
+    }>;
+    summary: {
+      total_activities: number;
+      success_count: number;
+      failure_count: number;
+      success_rate: number;
+    };
+  }> {
+    return this.request(`/api/v1/analytics/agents/activity?limit=${limit}`);
+  }
+
   // Verifications
   async listVerifications(
     limit = 100,
