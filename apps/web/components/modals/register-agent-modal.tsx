@@ -483,7 +483,7 @@ export function RegisterAgentModal({
                         </h5>
                         <p className="text-xs text-blue-800 dark:text-blue-200">
                           Download ready-to-use SDK for{" "}
-                          <strong>Python, Node.js, or Go</strong>. Includes
+                          <strong>Python</strong>. Includes
                           cryptographic keys and automatic verification.
                         </p>
                       </div>

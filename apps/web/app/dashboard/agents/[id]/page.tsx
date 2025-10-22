@@ -8,7 +8,6 @@ import {
   Shield,
   AlertTriangle,
   ExternalLink,
-  Network,
   Edit,
   Trash2,
   CheckCircle,
@@ -30,7 +29,6 @@ import { Separator } from "@/components/ui/separator";
 import { AutoDetectButton } from "@/components/agents/auto-detect-button";
 import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
-import { AgentMCPGraph } from "@/components/agents/agent-mcp-graph";
 import { DetectionStatus } from "@/components/agents/detection-status";
 import { SDKSetupGuide } from "@/components/agents/sdk-setup-guide";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
@@ -505,10 +503,6 @@ export default function AgentDetailsPage({
           </TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
           <TabsTrigger value="trust">Trust History</TabsTrigger>
-          <TabsTrigger value="graph">
-            <Network className="h-4 w-4 mr-2" />
-            Graph View
-          </TabsTrigger>
           <TabsTrigger value="detection">
             <Bot className="h-4 w-4 mr-2" />
             Detection
@@ -641,26 +635,6 @@ export default function AgentDetailsPage({
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="graph">
-          <AgentMCPGraph
-            agents={allAgents.map((a) => ({
-              id: a.id,
-              name: a.name,
-              type: a.agent_type,
-              isVerified: a.status === "verified",
-              trustScore: (a.trust_score ?? 0) * 100,
-              talksTo: a.talks_to ?? [],
-            }))}
-            mcpServers={allMCPServers.map((m) => ({
-              id: m.id,
-              name: m.name,
-              isActive: m.isActive ?? m.status === "active",
-              trustScore: m.trustScore ?? 0,
-            }))}
-            highlightAgentId={agent.id}
-          />
         </TabsContent>
 
         <TabsContent value="detection">
