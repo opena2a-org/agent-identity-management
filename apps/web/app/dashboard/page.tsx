@@ -168,9 +168,6 @@ function DashboardContent() {
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(
     null
   );
-  const [trustScoreTrends, setTrustScoreTrends] =
-    useState<TrustScoreTrendsData | null>(null);
-  const [trendsLoading, setTrendsLoading] = useState(true);
   const [verificationActivity, setVerificationActivity] =
     useState<VerificationActivityData | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -219,27 +216,6 @@ function DashboardContent() {
     }
   };
 
-  const fetchTrustScoreTrends = async () => {
-    try {
-      setTrendsLoading(true);
-      console.log("fetchTrustScoreTrends: Fetching 4-week trust score trends");
-      const data = await api.getTrustScoreTrends(4, "weeks"); // Request 4 weeks of data
-      console.log("fetchTrustScoreTrends data:", data);
-
-      // Check if we actually have valid data
-      if (data && data.trends && data.trends.length > 0) {
-        setTrustScoreTrends(data);
-      } else {
-        console.warn("No trend data returned from API");
-        setTrustScoreTrends(null); // Set to null to show "no data" state
-      }
-    } catch (err) {
-      console.error("Failed to fetch trust score trends:", err);
-      setTrustScoreTrends(null); // Set to null to show error state
-    } finally {
-      setTrendsLoading(false);
-    }
-  };
 
   const fetchVerificationActivity = async () => {
     try {
@@ -318,7 +294,6 @@ function DashboardContent() {
     }
     console.log("runing useEffect");
     fetchDashboardData();
-    fetchTrustScoreTrends();
     fetchVerificationActivity();
     fetchAuditLogs();
   }, [searchParams]);
@@ -524,127 +499,7 @@ function DashboardContent() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Trust Score Trend - All roles can see */}
-        {permissions.canViewTrustTrend && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Trust Score Trend (30 Days)
-              </h3>
-              <TrendingUp className="h-5 w-5 text-gray-400" />
-            </div>
-            <div className="h-64">
-              {trendsLoading ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                  </div>
-                  <div className="h-56 flex items-end justify-between gap-2">
-                    {[60, 90, 120, 80, 110, 70].map((height, i) => (
-                      <div
-                        key={i}
-                        className="flex flex-col items-center gap-2 flex-1"
-                      >
-                        <div
-                          className="w-full animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
-                          style={{ height: `${height}px` }}
-                        />
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-8 rounded"></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : trustScoreTrends &&
-                trustScoreTrends.trends &&
-                trustScoreTrends.trends.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={trustScoreTrends.trends.map((trend) => ({
-                      period: trend.date, // Backend provides "Week 1", "Week 2", etc.
-                      score: Math.round(trend.avg_score * 100), // Convert to percentage (0-100)
-                      agent_count: trend.agent_count,
-                      week_start: trend.week_start, // For tooltip info
-                    }))}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="period"
-                      className="text-xs text-gray-500 dark:text-gray-400"
-                      stroke="#9CA3AF"
-                    />
-                    <YAxis
-                      className="text-xs text-gray-500 dark:text-gray-400"
-                      stroke="#9CA3AF"
-                      domain={[0, 100]}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                      }}
-                      formatter={(value: number, name: string) => [
-                        `${value}%`,
-                        name === "score"
-                          ? "Trust Score"
-                          : name === "agent_count"
-                            ? "Agent Count"
-                            : name,
-                      ]}
-                      labelFormatter={(label, payload) => {
-                        if (
-                          payload &&
-                          payload[0] &&
-                          payload[0].payload.week_start
-                        ) {
-                          return `${label} (Starting ${payload[0].payload.week_start})`;
-                        }
-                        return label;
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="#3b82f6"
-                      strokeWidth={3}
-                      name="Trust Score"
-                      dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
-                  <div className="text-center">
-                    <p className="text-base font-medium mb-1">
-                      No Data Available
-                    </p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500">
-                      Trust score trends will appear here once agents start
-                      generating activity
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Show period info only when we have valid data */}
-            {trustScoreTrends &&
-              trustScoreTrends.trends &&
-              trustScoreTrends.trends.length > 0 && (
-                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                  {trustScoreTrends.period} • Current Average:{" "}
-                  {Math.round(trustScoreTrends.current_average * 100)}%
-                </div>
-              )}
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-6">{/* Trust Score Trend card removed (premium feature) */}
 
         {/* Agent Activity - All roles can see */}
         {permissions.canViewActivityChart && (

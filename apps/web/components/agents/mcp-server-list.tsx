@@ -84,7 +84,10 @@ export function MCPServerList({
     setError(null)
 
     try {
-      await api.bulkRemoveMCPServersFromAgent(agentId, Array.from(selectedServers))
+      // Remove servers one by one since bulk endpoint was removed
+      for (const serverId of Array.from(selectedServers)) {
+        await api.removeMCPServerFromAgent(agentId, serverId)
+      }
 
       setSelectedServers(new Set())
       setShowBulkRemoveDialog(false)

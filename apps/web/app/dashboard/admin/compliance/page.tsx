@@ -329,28 +329,6 @@ export default function CompliancePage() {
     fetchComplianceData();
   }, []);
 
-  const handleExportAuditLog = async () => {
-    try {
-      setExporting(true);
-      const blob = await api.exportAuditLog();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `audit-log-${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("Failed to export audit log:", err);
-      alert(
-        "Failed to export audit log: " +
-          (err instanceof Error ? err.message : "Unknown error")
-      );
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const handleRunComplianceCheck = async () => {
     try {
@@ -417,23 +395,6 @@ export default function CompliancePage() {
               Compliance Dashboard
             </h1>
           <div className="flex gap-2">
-            <button
-              onClick={handleExportAuditLog}
-              disabled={exporting}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors text-sm"
-            >
-              {exporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" />
-                  Export Audit Log
-                </>
-              )}
-            </button>
             <button
               onClick={handleRunComplianceCheck}
               disabled={runningCheck}

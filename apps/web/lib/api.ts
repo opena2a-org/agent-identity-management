@@ -614,15 +614,6 @@ class APIClient {
     });
   }
 
-  async approveDrift(
-    alertId: string,
-    approvedMcpServers: string[]
-  ): Promise<{ message: string }> {
-    return this.request(`/api/v1/admin/alerts/${alertId}/approve-drift`, {
-      method: "POST",
-      body: JSON.stringify({ approvedMcpServers }),
-    });
-  }
 
   async getUnacknowledgedAlertCount(): Promise<number> {
     const alerts = await this.getAlerts(100, 0);
@@ -691,31 +682,6 @@ class APIClient {
     return this.request("/api/v1/admin/dashboard/stats");
   }
 
-  // Trust Score Trends - Get weekly or daily trust score trend data
-  async getTrustScoreTrends(
-    weeks = 4,
-    period: "weeks" | "days" = "weeks"
-  ): Promise<{
-    period: string;
-    current_average: number;
-    data_type: "weekly" | "daily";
-    trends: Array<{
-      date: string;
-      week_start?: string; // Only for weekly data
-      avg_score: number;
-      agent_count: number;
-    }>;
-  }> {
-    if (period === "weeks") {
-      return this.request(
-        `/api/v1/analytics/trends?period=weeks&weeks=${weeks}`
-      );
-    } else {
-      // Backward compatibility for days
-      const days = weeks * 7; // Convert weeks to days
-      return this.request(`/api/v1/analytics/trends?period=days&days=${days}`);
-    }
-  }
 
   // Verification Activity - Get monthly verification activity data
   async getVerificationActivity(months = 6): Promise<{
@@ -820,23 +786,6 @@ class APIClient {
     );
   }
 
-  async getSecurityIncidents(
-    limit = 100,
-    offset = 0
-  ): Promise<{
-    incidents: Array<{
-      id: string;
-      title: string;
-      severity: "low" | "medium" | "high" | "critical";
-      status: "open" | "investigating" | "resolved";
-      created_at: string;
-    }>;
-    total: number;
-  }> {
-    return this.request(
-      `/api/v1/security/incidents?limit=${limit}&offset=${offset}`
-    );
-  }
 
   async getSecurityMetrics(): Promise<{
     total_threats: number;
@@ -994,21 +943,6 @@ class APIClient {
     );
   }
 
-  // Remove multiple MCP servers from agent's talks_to list (bulk)
-  async bulkRemoveMCPServersFromAgent(
-    agentId: string,
-    mcpServerIds: string[]
-  ): Promise<{
-    message: string;
-    talks_to: string[];
-    removed_servers: string[];
-    total_count: number;
-  }> {
-    return this.request(`/api/v1/agents/${agentId}/mcp-servers/bulk`, {
-      method: "DELETE",
-      body: JSON.stringify({ mcp_server_ids: mcpServerIds }),
-    });
-  }
 
   // Auto-detect MCP servers from Claude Desktop config
   async detectAndMapMCPServers(
@@ -1344,17 +1278,6 @@ class APIClient {
     });
   }
 
-  // Create a capability request (any authenticated user)
-  async createCapabilityRequest(data: {
-    agent_id: string;
-    capability_type: string;
-    reason: string;
-  }): Promise<any> {
-    return this.request("/api/v1/capability-requests", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
 
   // ========================================
   // Security Policies (Admin Only)
@@ -1467,42 +1390,6 @@ class APIClient {
     return this.request("/api/v1/compliance/metrics");
   }
 
-  // Export audit log (returns CSV file as blob)
-  async exportAuditLog(params?: {
-    start_date?: string;
-    end_date?: string;
-    entity_type?: string;
-    action?: string;
-  }): Promise<Blob> {
-    const queryParams = new URLSearchParams();
-    if (params?.start_date) queryParams.append("start_date", params.start_date);
-    if (params?.end_date) queryParams.append("end_date", params.end_date);
-    if (params?.entity_type)
-      queryParams.append("entity_type", params.entity_type);
-    if (params?.action) queryParams.append("action", params.action);
-
-    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
-    const token = this.getToken();
-
-    const response = await fetch(
-      `${this.baseURL}/api/v1/compliance/audit-log/export${query}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response
-        .json()
-        .catch(() => ({ error: "Failed to export audit log" }));
-      throw new Error(error.error || "Failed to export audit log");
-    }
-
-    return response.blob();
-  }
 
   // Get access review (users and their permissions)
   async getAccessReview(): Promise<{
