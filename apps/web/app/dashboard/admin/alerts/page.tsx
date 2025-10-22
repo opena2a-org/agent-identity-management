@@ -156,7 +156,24 @@ export default function AlertsPage() {
     }
   };
 
+  const resolveAlert = async (alertId: string) => {
+    try {
+      const resolution_notes = prompt("Enter resolution notes (required):");
+      if (!resolution_notes || resolution_notes.trim() === "") {
+        return; // User cancelled or entered empty notes
+      }
 
+      await api.resolveAlert(alertId, resolution_notes.trim());
+
+      // Remove resolved alert from local state
+      setAlerts(alerts.filter((a) => a.id !== alertId));
+
+      window.alert("Alert resolved successfully");
+    } catch (error) {
+      console.error("Failed to resolve alert:", error);
+      window.alert("Failed to resolve alert");
+    }
+  };
 
   const acknowledgeAll = async () => {
     try {
@@ -448,8 +465,8 @@ export default function AlertsPage() {
                         )}
                       </div>
 
-                      {!alert.is_acknowledged && (
-                        <div className="flex gap-2">
+                      <div className="flex gap-2">
+                        {!alert.is_acknowledged && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -458,8 +475,19 @@ export default function AlertsPage() {
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Acknowledge
                           </Button>
-                        </div>
-                      )}
+                        )}
+                        {alert.is_acknowledged && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => resolveAlert(alert.id)}
+                            className="border-green-500 text-green-600 hover:bg-green-50"
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Resolve
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

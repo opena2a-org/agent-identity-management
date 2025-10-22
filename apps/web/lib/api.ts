@@ -1665,6 +1665,60 @@ class APIClient {
       body: JSON.stringify({ check_type: checkType }),
     });
   }
+
+  // Get data retention information
+  async getDataRetention(): Promise<{
+    policies: Array<{
+      id: string;
+      data_type: string;
+      retention_period_days: number;
+      description: string;
+      auto_delete: boolean;
+      created_at: string;
+    }>;
+    storage_metrics: {
+      total_records: number;
+      oldest_record_date: string;
+      deletion_candidates: number;
+    };
+  }> {
+    return this.request("/api/v1/compliance/data-retention");
+  }
+
+  // Resolve alert
+  async resolveAlert(
+    id: string,
+    resolution_notes: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request(`/api/v1/admin/alerts/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution_notes }),
+    });
+  }
+
+  // Get agent audit logs
+  async getAgentAuditLogs(
+    agentId: string,
+    limit: number = 50
+  ): Promise<{
+    logs: Array<{
+      id: string;
+      action: string;
+      performed_by: string;
+      performed_by_email: string;
+      timestamp: string;
+      details: string;
+      ip_address?: string;
+    }>;
+    total: number;
+  }> {
+    return this.request(
+      `/api/v1/agents/${agentId}/audit-logs?limit=${limit}`
+    );
+  }
 }
 
 // Lazy singleton instance - created ONLY on first access in browser
