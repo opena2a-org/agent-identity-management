@@ -823,6 +823,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	trust.Use(middleware.AuthMiddleware(jwtService))
 	trust.Post("/calculate/:id", middleware.ManagerMiddleware(), h.TrustScore.CalculateTrustScore)
 	trust.Get("/agents/:id", h.TrustScore.GetTrustScore)
+	trust.Get("/agents/:id/breakdown", h.TrustScore.GetTrustScoreBreakdown) // Detailed breakdown with weights and contributions
 	trust.Get("/agents/:id/history", h.TrustScore.GetTrustScoreHistory)
 
 	// Admin routes (admin only)
