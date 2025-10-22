@@ -559,7 +559,7 @@ export default function MCPServerDetailsPage({
         </TabsContent>
 
         <TabsContent value="tags">
-          <MCPTagsTab mcpServerId={mcpServer.id} />
+          <MCPTagsTab mcpServerId={server.id} />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">

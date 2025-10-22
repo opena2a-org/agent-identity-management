@@ -785,7 +785,7 @@ class APIClient {
     period: string;
     trends: Array<{
       date: string;
-      avg_trust_score: number;
+      avg_score: number; // ✅ FIXED: Backend returns avg_score, not avg_trust_score
       agent_count: number;
       scores_by_range: {
         excellent: number; // 90-100
@@ -837,8 +837,8 @@ class APIClient {
     success_count: number;
     failure_count: number;
   }>> {
-    const response = await this.request("/api/v1/webhooks");
-    return response.webhooks || response;
+    const response = await this.request<{ webhooks: any[] }>("/api/v1/webhooks");
+    return response.webhooks || [];
   }
 
   async createWebhook(data: {

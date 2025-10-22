@@ -60,8 +60,7 @@ interface WebhookDetail {
     event: string;
     status: 'success' | 'failure';
     response_code: number;
-    triggered_at: string;
-    retry_count: number;
+    timestamp: string;
     error_message?: string;
   }>;
 }
@@ -359,7 +358,6 @@ export function WebhookDetailModal({
                         <TableHead>Event</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Response Code</TableHead>
-                        <TableHead>Retries</TableHead>
                         <TableHead>Timestamp</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -395,17 +393,8 @@ export function WebhookDetailModal({
                               {delivery.response_code}
                             </span>
                           </TableCell>
-                          <TableCell>
-                            {delivery.retry_count > 0 ? (
-                              <span className="text-sm text-yellow-600">
-                                {delivery.retry_count} retries
-                              </span>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">0</span>
-                            )}
-                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {formatDistanceToNow(new Date(delivery.triggered_at), {
+                            {formatDistanceToNow(new Date(delivery.timestamp), {
                               addSuffix: true,
                             })}
                           </TableCell>

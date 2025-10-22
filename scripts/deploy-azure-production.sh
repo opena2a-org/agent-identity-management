@@ -38,6 +38,15 @@ echo "Location: $LOCATION"
 echo "Timestamp: $TIMESTAMP"
 echo ""
 
+# Step 0: Verify migration system
+echo -e "${BLUE}0️⃣  Verifying migration system...${NC}"
+if [ ! -f "apps/backend/migrations/V1__consolidated_schema.sql" ]; then
+    echo -e "${RED}❌ Consolidated schema V1 not found. Cannot proceed with deployment.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Migration system verified${NC}"
+echo ""
+
 # Check if resource group exists
 if az group show --name $RESOURCE_GROUP &>/dev/null; then
     echo -e "${YELLOW}⚠️  Resource group $RESOURCE_GROUP already exists!${NC}"
@@ -283,31 +292,27 @@ if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
     exit 1
 fi
 
-# Step 11: Run database migrations
+# Step 11: Run database migrations (Smart System)
 echo ""
 echo -e "${BLUE}1️⃣1️⃣  Running database migrations...${NC}"
+echo "   Using smart migration system:"
+echo "   - Fresh database → Fast consolidated V1 schema"
+echo "   - Existing database → Incremental migrations"
+echo ""
 
-# Export database password for bootstrap script to use
-export POSTGRES_PASSWORD="$DB_PASSWORD"
-
-# Build bootstrap binary
-echo "   Building bootstrap binary..."
+# Build migration tool
+echo "   Building migration tool..."
 cd apps/backend
-go build -o /tmp/aim-bootstrap ./cmd/bootstrap
+go build -o /tmp/aim-migrate ./cmd/migrate
 cd ../..
 
-# Run bootstrap with CLI flags (bootstrap expects flags, not env vars)
-echo "   Running bootstrap..."
-/tmp/aim-bootstrap \
-  --admin-email="$ADMIN_EMAIL" \
-  --admin-password="$ADMIN_PASSWORD" \
-  --admin-name="$ADMIN_NAME" \
-  --org-name="OpenA2A" \
-  --org-domain="opena2a.org" \
-  --database-url="postgresql://aimadmin:${DB_PASSWORD}@${DB_HOST}:5432/identity?sslmode=require" \
-  --yes
+# Run smart migrations
+echo "   Running smart migrations..."
+DATABASE_URL="postgresql://aimadmin:${DB_PASSWORD}@${DB_HOST}:5432/identity?sslmode=require" \
+  /tmp/aim-migrate
 
-echo -e "${GREEN}✓ Database migrations and bootstrap complete${NC}"
+echo ""
+echo -e "${GREEN}✓ Database migrations complete${NC}"
 
 # Step 12: Create default security policies
 echo ""

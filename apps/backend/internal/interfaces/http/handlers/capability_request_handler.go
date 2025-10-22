@@ -78,6 +78,11 @@ func (h *CapabilityRequestHandlers) ListCapabilityRequests(c fiber.Ctx) error {
 		})
 	}
 
+	// Return empty array instead of null for better API consistency
+	if requests == nil {
+		requests = []*domain.CapabilityRequestWithDetails{}
+	}
+
 	return c.Status(fiber.StatusOK).JSON(requests)
 }
 
