@@ -36,6 +36,8 @@ import { SDKSetupGuide } from "@/components/agents/sdk-setup-guide";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
 import { api } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
+import { ViolationsTab } from "@/components/agent/violations-tab";
+import { KeyVaultTab } from "@/components/agent/key-vault-tab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -493,6 +495,14 @@ export default function AgentDetailsPage({
             <Shield className="h-4 w-4 mr-2" />
             Capabilities
           </TabsTrigger>
+          <TabsTrigger value="violations">
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Violations
+          </TabsTrigger>
+          <TabsTrigger value="key-vault">
+            <KeyRound className="h-4 w-4 mr-2" />
+            Key Vault
+          </TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
           <TabsTrigger value="trust">Trust History</TabsTrigger>
           <TabsTrigger value="graph">
@@ -537,6 +547,14 @@ export default function AgentDetailsPage({
             agentId={agent.id}
             agentCapabilities={agent.capabilities}
           />
+        </TabsContent>
+
+        <TabsContent value="violations">
+          <ViolationsTab agentId={agent.id} />
+        </TabsContent>
+
+        <TabsContent value="key-vault">
+          <KeyVaultTab agentId={agent.id} />
         </TabsContent>
 
         <TabsContent value="activity">
