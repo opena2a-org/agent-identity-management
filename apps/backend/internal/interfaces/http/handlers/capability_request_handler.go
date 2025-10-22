@@ -27,54 +27,6 @@ func NewCapabilityRequestHandlers(service *application.CapabilityRequestService)
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param request body domain.CreateCapabilityRequestInput true "Capability request details"
-// @Success 201 {object} domain.CapabilityRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 409 {object} ErrorResponse
-// @Router /api/v1/capability-requests [post]
-func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
-	// Get user ID from context (set by auth middleware)
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
-	}
-
-	var input domain.CreateCapabilityRequestInput
-	if err := c.Bind().Body(&input); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
-	}
-
-	// Set requested_by from authenticated user
-	input.RequestedBy = userID
-
-	request, err := h.service.CreateRequest(c.Context(), &input)
-	if err != nil {
-		// Log the detailed error for debugging
-		fmt.Printf("❌ Error creating capability request: %v\n", err)
-
-		if err.Error() == "agent not found" {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-		if err.Error() == "capability already granted" || err.Error() == "pending request already exists" {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("failed to create capability request: %v", err),
-		})
-	}
-
-	return c.Status(fiber.StatusCreated).JSON(request)
-}
-
 // ListCapabilityRequests godoc
 // @Summary List capability requests (Admin only)
 // @Description Get all capability requests with optional filtering

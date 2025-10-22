@@ -667,44 +667,6 @@ func (h *MCPHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
 // @Param offset query int false "Number of logs to skip" default(0)
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Router /api/v1/mcp-servers/{id}/audit-logs [get]
-func (h *MCPHandler) GetMCPAuditLogs(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	serverID, err := uuid.Parse(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid MCP server ID",
-		})
-	}
-
-	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
-	}
-
-	// Get audit logs for this MCP server
-	logs, err := h.auditService.GetResourceLogs(c.Context(), "mcp_server", serverID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch audit logs",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"audit_logs": logs,
-		"total":      len(logs),
-	})
-}
-
 // VerifyMCPAction verifies if an MCP server can perform the requested action
 // @Summary Verify MCP action authorization
 // @Description Verify if an MCP server is authorized to perform a specific action

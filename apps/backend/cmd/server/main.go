@@ -857,7 +857,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Get("/alerts/unacknowledged/count", h.Admin.GetUnacknowledgedAlertCount)
 	admin.Post("/alerts/:id/acknowledge", h.Admin.AcknowledgeAlert)
 	admin.Post("/alerts/:id/resolve", h.Admin.ResolveAlert)
-	admin.Post("/alerts/:id/approve-drift", h.Admin.ApproveDrift)
 
 	// Dashboard stats
 	admin.Get("/dashboard/stats", h.Admin.GetDashboardStats)
@@ -905,7 +904,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities)        // ✅ Get detected capabilities
 	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)                    // ✅ Get agents that talk to this MCP server
 	mcpServers.Get("/:id/verification-events", h.MCP.GetMCPVerificationEvents) // ✅ Get verification events for MCP server
-	mcpServers.Get("/:id/audit-logs", h.MCP.GetMCPAuditLogs)                   // ✅ Get audit logs for MCP server
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
 
@@ -936,7 +934,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	webhooks.Get("/", h.Webhook.ListWebhooks)
 	webhooks.Get("/:id", h.Webhook.GetWebhook)
 	webhooks.Delete("/:id", middleware.MemberMiddleware(), h.Webhook.DeleteWebhook)
-	webhooks.Post("/:id/test", middleware.MemberMiddleware(), h.Webhook.TestWebhook)
 
 	// Verification routes (authentication required) - Agent action verification
 	verifications := v1.Group("/verifications")
@@ -993,7 +990,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	capabilityRequests := v1.Group("/capability-requests")
 	capabilityRequests.Use(middleware.AuthMiddleware(jwtService))
 	capabilityRequests.Use(middleware.RateLimitMiddleware())
-	capabilityRequests.Post("/", h.CapabilityRequest.CreateCapabilityRequest) // Any authenticated user can request capabilities
 
 	// MCP server tag routes (under /mcp-servers/:id/tags)
 	mcpServers.Get("/:id/tags", h.Tag.GetMCPServerTags)
