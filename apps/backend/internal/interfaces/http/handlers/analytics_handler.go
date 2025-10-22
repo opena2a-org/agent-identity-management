@@ -330,44 +330,6 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 	}
 }
 
-// GenerateReport generates a custom analytics report
-// @Summary Generate custom report
-// @Description Generate a custom analytics report
-// @Tags analytics
-// @Accept json
-// @Produce json
-// @Param request body map[string]interface{} true "Report configuration"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/analytics/reports/generate [get]
-func (h *AnalyticsHandler) GenerateReport(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-
-	reportType := c.Query("type", "summary")
-	format := c.Query("format", "json")
-
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate report",
-		})
-	}
-
-	report := map[string]interface{}{
-		"report_type":  reportType,
-		"format":       format,
-		"generated_at": time.Now().UTC(),
-		"organization": orgID.String(),
-		"total_agents": len(agents),
-		"metrics": map[string]interface{}{
-			"verified_agents":     countByStatus(agents, "verified"),
-			"pending_agents":      countByStatus(agents, "pending"),
-			"average_trust_score": calculateAverageTrustScore(agents),
-		},
-	}
-
-	return c.JSON(report)
-}
-
 // GetVerificationActivity retrieves monthly verification activity trends
 // @Summary Get verification activity trends
 // @Description Get monthly verification activity showing verified vs pending agents

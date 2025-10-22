@@ -144,36 +144,6 @@ func TestGetAgentActivity_PaginationParameters(t *testing.T) {
 }
 
 // ========================================
-// GET /api/v1/analytics/reports/generate Tests
-// ========================================
-
-func TestGenerateReport_TypeAndFormatParameters(t *testing.T) {
-	baseURL := getBaseURL()
-
-	testCases := []struct {
-		reportType string
-		format     string
-		desc       string
-	}{
-		{"summary", "json", "summary report in JSON"},
-		{"detailed", "json", "detailed report in JSON"},
-		{"summary", "pdf", "summary report in PDF"},
-		{"detailed", "pdf", "detailed report in PDF"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			url := fmt.Sprintf("%s/api/v1/analytics/reports/generate?type=%s&format=%s", baseURL, tc.reportType, tc.format)
-			resp, err := http.Get(url)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-		})
-	}
-}
-
-// ========================================
 // Edge Case Tests
 // ========================================
 
@@ -263,7 +233,6 @@ func TestAnalyticsEndpoints_ResponseContentType(t *testing.T) {
 // - TestGetTrustScoreTrends_Authenticated
 // - TestGetVerificationActivity_Authenticated
 // - TestGetAgentActivity_Authenticated
-// - TestGenerateReport_Authenticated
 //
 // Each should verify:
 // - HTTP 200 response
