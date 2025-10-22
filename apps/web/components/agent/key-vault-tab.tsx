@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Copy, Check, Key, Calendar, RotateCw } from 'lucide-react';
-import { PremiumUpsellBanner } from './premium-upsell-banner';
 import { api } from '@/lib/api';
 import { formatDistanceToNow, differenceInDays } from 'date-fns';
 
@@ -59,8 +58,10 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
     return <div className="text-center py-8 text-muted-foreground">Key vault not found</div>;
   }
 
-  const daysUntilExpiration = differenceInDays(new Date(keyVault.key_expires_at), new Date());
-  const isExpiringSoon = daysUntilExpiration <= 30;
+  const expirationDate = keyVault.key_expires_at ? new Date(keyVault.key_expires_at) : null;
+  const isValidDate = expirationDate && expirationDate.getTime() > 0;
+  const daysUntilExpiration = isValidDate ? differenceInDays(expirationDate, new Date()) : null;
+  const isExpiringSoon = daysUntilExpiration !== null && daysUntilExpiration <= 30 && daysUntilExpiration > 0;
 
   return (
     <div className="space-y-6">
@@ -109,21 +110,31 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
               <Calendar className="inline h-4 w-4 mr-1" />
               Expiration
             </label>
-            <div className="flex items-center gap-2">
-              <div className="text-sm">
-                {new Date(keyVault.key_expires_at).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </div>
-              <div className={`text-sm ${isExpiringSoon ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
-                ({daysUntilExpiration} days remaining)
-              </div>
-            </div>
-            {isExpiringSoon && (
-              <div className="mt-2 text-sm text-red-600">
-                ⚠️ Key expires soon! Consider rotating credentials.
+            {isValidDate ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm">
+                    {expirationDate!.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </div>
+                  {daysUntilExpiration !== null && (
+                    <div className={`text-sm ${isExpiringSoon ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                      ({daysUntilExpiration} days remaining)
+                    </div>
+                  )}
+                </div>
+                {isExpiringSoon && (
+                  <div className="mt-2 text-sm text-red-600">
+                    ⚠️ Key expires soon! Consider rotating credentials.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Never expires
               </div>
             )}
           </div>
@@ -134,7 +145,13 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
               Created
             </label>
             <div className="text-sm">
-              {formatDistanceToNow(new Date(keyVault.key_created_at), { addSuffix: true })}
+              {(() => {
+                const createdDate = keyVault.key_created_at ? new Date(keyVault.key_created_at) : null;
+                const isValidCreatedDate = createdDate && createdDate.getTime() > 0;
+                return isValidCreatedDate
+                  ? formatDistanceToNow(createdDate, { addSuffix: true })
+                  : 'Unknown';
+              })()}
             </div>
           </div>
 
@@ -155,9 +172,6 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
           </div>
         </div>
       </Card>
-
-      {/* Premium Upsell */}
-      <PremiumUpsellBanner />
     </div>
   );
 }

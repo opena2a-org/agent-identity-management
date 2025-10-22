@@ -7,16 +7,31 @@ import (
 )
 
 // TrustScoreFactors contains the individual factors contributing to trust score
+// Based on 8-factor trust scoring algorithm (see documentation)
 type TrustScoreFactors struct {
-	VerificationStatus  float64 `json:"verification_status"`  // 0-1
-	CertificateValidity float64 `json:"certificate_validity"` // 0-1
-	RepositoryQuality   float64 `json:"repository_quality"`   // 0-1
-	DocumentationScore  float64 `json:"documentation_score"`  // 0-1
-	CommunityTrust      float64 `json:"community_trust"`      // 0-1
-	SecurityAudit       float64 `json:"security_audit"`       // 0-1
-	UpdateFrequency     float64 `json:"update_frequency"`     // 0-1
-	AgeScore            float64 `json:"age_score"`            // 0-1
-	CapabilityRisk      float64 `json:"capability_risk"`      // 0-1 (1 = low risk, 0 = high risk)
+	// Factor 1: Verification Status (25% weight) - Ed25519 signature verification
+	VerificationStatus float64 `json:"verification_status"` // 0-1
+
+	// Factor 2: Uptime & Availability (15% weight) - Health check responsiveness
+	Uptime float64 `json:"uptime"` // 0-1
+
+	// Factor 3: Action Success Rate (15% weight) - Successful vs failed actions
+	SuccessRate float64 `json:"success_rate"` // 0-1
+
+	// Factor 4: Security Alerts (15% weight) - Active security alerts by severity
+	SecurityAlerts float64 `json:"security_alerts"` // 0-1
+
+	// Factor 5: Compliance Score (10% weight) - SOC 2, HIPAA, GDPR adherence
+	Compliance float64 `json:"compliance"` // 0-1
+
+	// Factor 6: Age & History (10% weight) - How long agent has been operating
+	Age float64 `json:"age"` // 0-1
+
+	// Factor 7: Drift Detection (5% weight) - Behavioral pattern changes
+	DriftDetection float64 `json:"drift_detection"` // 0-1
+
+	// Factor 8: User Feedback (5% weight) - Explicit user ratings
+	UserFeedback float64 `json:"user_feedback"` // 0-1
 }
 
 // TrustScore represents a calculated trust score for an agent

@@ -16,8 +16,14 @@ func NewTrustScoreRepository(db *sql.DB) *TrustScoreRepository {
 }
 
 func (r *TrustScoreRepository) Create(score *domain.TrustScore) error {
+	// 8-factor trust scoring system
 	query := `
-		INSERT INTO trust_scores (id, agent_id, score, verification_status, certificate_validity, repository_quality, documentation_score, community_trust, security_audit, update_frequency, age_score, confidence, last_calculated, created_at)
+		INSERT INTO trust_scores (
+			id, agent_id, score,
+			verification_status, uptime, success_rate, security_alerts,
+			compliance, age, drift_detection, user_feedback,
+			confidence, last_calculated, created_at
+		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 
@@ -36,13 +42,13 @@ func (r *TrustScoreRepository) Create(score *domain.TrustScore) error {
 		score.AgentID,
 		score.Score,
 		score.Factors.VerificationStatus,
-		score.Factors.CertificateValidity,
-		score.Factors.RepositoryQuality,
-		score.Factors.DocumentationScore,
-		score.Factors.CommunityTrust,
-		score.Factors.SecurityAudit,
-		score.Factors.UpdateFrequency,
-		score.Factors.AgeScore,
+		score.Factors.Uptime,
+		score.Factors.SuccessRate,
+		score.Factors.SecurityAlerts,
+		score.Factors.Compliance,
+		score.Factors.Age,
+		score.Factors.DriftDetection,
+		score.Factors.UserFeedback,
 		score.Confidence,
 		score.LastCalculated,
 		score.CreatedAt,
@@ -55,8 +61,13 @@ func (r *TrustScoreRepository) GetByAgent(agentID uuid.UUID) (*domain.TrustScore
 }
 
 func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore, error) {
+	// 8-factor trust scoring system
 	query := `
-		SELECT id, agent_id, score, verification_status, certificate_validity, repository_quality, documentation_score, community_trust, security_audit, update_frequency, age_score, confidence, last_calculated, created_at
+		SELECT
+			id, agent_id, score,
+			verification_status, uptime, success_rate, security_alerts,
+			compliance, age, drift_detection, user_feedback,
+			confidence, last_calculated, created_at
 		FROM trust_scores
 		WHERE agent_id = $1
 		ORDER BY created_at DESC
@@ -69,13 +80,13 @@ func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore,
 		&score.AgentID,
 		&score.Score,
 		&score.Factors.VerificationStatus,
-		&score.Factors.CertificateValidity,
-		&score.Factors.RepositoryQuality,
-		&score.Factors.DocumentationScore,
-		&score.Factors.CommunityTrust,
-		&score.Factors.SecurityAudit,
-		&score.Factors.UpdateFrequency,
-		&score.Factors.AgeScore,
+		&score.Factors.Uptime,
+		&score.Factors.SuccessRate,
+		&score.Factors.SecurityAlerts,
+		&score.Factors.Compliance,
+		&score.Factors.Age,
+		&score.Factors.DriftDetection,
+		&score.Factors.UserFeedback,
 		&score.Confidence,
 		&score.LastCalculated,
 		&score.CreatedAt,
@@ -88,8 +99,13 @@ func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore,
 }
 
 func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*domain.TrustScore, error) {
+	// 8-factor trust scoring system
 	query := `
-		SELECT id, agent_id, score, verification_status, certificate_validity, repository_quality, documentation_score, community_trust, security_audit, update_frequency, age_score, confidence, last_calculated, created_at
+		SELECT
+			id, agent_id, score,
+			verification_status, uptime, success_rate, security_alerts,
+			compliance, age, drift_detection, user_feedback,
+			confidence, last_calculated, created_at
 		FROM trust_scores
 		WHERE agent_id = $1
 		ORDER BY created_at DESC
@@ -110,13 +126,13 @@ func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*doma
 			&score.AgentID,
 			&score.Score,
 			&score.Factors.VerificationStatus,
-			&score.Factors.CertificateValidity,
-			&score.Factors.RepositoryQuality,
-			&score.Factors.DocumentationScore,
-			&score.Factors.CommunityTrust,
-			&score.Factors.SecurityAudit,
-			&score.Factors.UpdateFrequency,
-			&score.Factors.AgeScore,
+			&score.Factors.Uptime,
+			&score.Factors.SuccessRate,
+			&score.Factors.SecurityAlerts,
+			&score.Factors.Compliance,
+			&score.Factors.Age,
+			&score.Factors.DriftDetection,
+			&score.Factors.UserFeedback,
 			&score.Confidence,
 			&score.LastCalculated,
 			&score.CreatedAt,

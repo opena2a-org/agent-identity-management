@@ -436,7 +436,9 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.TrustScore,
 		repos.APIKey,
 		repos.AuditLog,
-		repos.Capability, // ✅ NEW: Add capability repository for risk scoring
+		repos.Capability,
+		repos.Agent,  // For fetching agent data
+		repos.Alert,  // For security alerts scoring
 	)
 
 	agentService := application.NewAgentService(

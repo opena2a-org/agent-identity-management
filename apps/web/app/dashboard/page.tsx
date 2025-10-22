@@ -458,7 +458,9 @@ function DashboardContent() {
     },
     {
       name: "Trust Score Average",
-      value: data?.avg_trust_score?.toFixed(2) || 0,
+      value: data?.avg_trust_score
+        ? `${(data.avg_trust_score * 100).toFixed(0)}%`
+        : "0%",
       icon: TrendingUp,
       permission: "canViewTrustScore" as const,
     },
