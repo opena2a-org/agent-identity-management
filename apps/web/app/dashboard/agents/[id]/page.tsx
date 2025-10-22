@@ -14,6 +14,7 @@ import {
   Loader2,
   Download,
   KeyRound,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
 import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
+import { AgentTagsTab } from "@/components/agent/tags-tab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -502,6 +504,10 @@ export default function AgentDetailsPage({
             <KeyRound className="h-4 w-4 mr-2" />
             Key Vault
           </TabsTrigger>
+          <TabsTrigger value="tags">
+            <Tag className="h-4 w-4 mr-2" />
+            Tags
+          </TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
           <TabsTrigger value="trust">
             <Shield className="h-4 w-4 mr-2" />
@@ -553,6 +559,10 @@ export default function AgentDetailsPage({
 
         <TabsContent value="key-vault">
           <KeyVaultTab agentId={agent.id} />
+        </TabsContent>
+
+        <TabsContent value="tags">
+          <AgentTagsTab agentId={agent.id} />
         </TabsContent>
 
         <TabsContent value="activity">

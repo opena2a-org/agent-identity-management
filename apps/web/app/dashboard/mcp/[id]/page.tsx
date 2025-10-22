@@ -13,6 +13,7 @@ import {
   Trash2,
   CheckCircle,
   Loader2,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MCPServerDetailSkeleton } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
+import { MCPTagsTab } from "@/components/mcp/tags-tab";
 
 interface MCPServer {
   id: string;
@@ -456,6 +458,10 @@ export default function MCPServerDetailsPage({
             Capabilities
           </TabsTrigger>
           <TabsTrigger value="agents">Connected Agents</TabsTrigger>
+          <TabsTrigger value="tags">
+            <Tag className="h-4 w-4 mr-2" />
+            Tags
+          </TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
@@ -550,6 +556,10 @@ export default function MCPServerDetailsPage({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="tags">
+          <MCPTagsTab mcpServerId={mcpServer.id} />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">

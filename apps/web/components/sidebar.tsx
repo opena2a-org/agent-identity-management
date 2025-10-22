@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   CheckSquare,
   ClipboardCheck,
+  Tag,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -52,6 +53,12 @@ const navigationBase: NavSection[] = [
         name: "MCP Servers",
         href: "/dashboard/mcp",
         icon: Server,
+        roles: ["admin", "manager", "member"],
+      },
+      {
+        name: "Tags",
+        href: "/dashboard/tags",
+        icon: Tag,
         roles: ["admin", "manager", "member"],
       },
       {
