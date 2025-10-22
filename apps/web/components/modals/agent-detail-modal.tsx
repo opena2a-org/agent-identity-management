@@ -134,9 +134,13 @@ export function AgentDetailModal({
 
     setDownloadingSDK(true);
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = api.getToken();
+
+      // Get runtime-detected API URL from api client's baseURL
+      const apiBaseURL = (api as any).baseURL;
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agents/${agent.id}/sdk?language=${language}`,
+        `${apiBaseURL}/api/v1/agents/${agent.id}/sdk?language=${language}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -172,9 +176,13 @@ export function AgentDetailModal({
 
     setLoadingKeys(true);
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = api.getToken();
+
+      // Get runtime-detected API URL from api client's baseURL
+      const apiBaseURL = (api as any).baseURL;
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agents/${agent.id}/credentials`,
+        `${apiBaseURL}/api/v1/agents/${agent.id}/credentials`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
