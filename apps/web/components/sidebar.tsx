@@ -23,6 +23,7 @@ import {
   ClipboardCheck,
   Tag,
   BarChart3,
+  Webhook,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -92,6 +93,12 @@ const navigationBase: NavSection[] = [
         href: "/dashboard/analytics/usage",
         icon: BarChart3,
         roles: ["admin", "manager"],
+      },
+      {
+        name: "Webhooks",
+        href: "/dashboard/webhooks",
+        icon: Webhook,
+        roles: ["admin"], // Admin-only webhook management
       },
       {
         name: "Security",

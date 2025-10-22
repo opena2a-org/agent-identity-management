@@ -835,6 +835,101 @@ class APIClient {
     return this.request(`/api/v1/analytics/agents/activity?limit=${limit}`);
   }
 
+  // Webhooks
+  async listWebhooks(): Promise<Array<{
+    id: string;
+    organization_id: string;
+    name: string;
+    url: string;
+    events: string[];
+    is_active: boolean;
+    secret: string;
+    created_at: string;
+    last_triggered_at?: string;
+    success_count: number;
+    failure_count: number;
+  }>> {
+    const response = await this.request("/api/v1/webhooks");
+    return response.webhooks || response;
+  }
+
+  async createWebhook(data: {
+    name: string;
+    url: string;
+    events: string[];
+    secret?: string;
+  }): Promise<{
+    id: string;
+    organization_id: string;
+    name: string;
+    url: string;
+    events: string[];
+    is_active: boolean;
+    secret: string;
+    created_at: string;
+  }> {
+    return this.request("/api/v1/webhooks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getWebhook(id: string): Promise<{
+    id: string;
+    organization_id: string;
+    name: string;
+    url: string;
+    events: string[];
+    is_active: boolean;
+    secret: string;
+    created_at: string;
+    last_triggered_at?: string;
+    success_count: number;
+    failure_count: number;
+    deliveries: Array<{
+      id: string;
+      event: string;
+      status: "success" | "failure";
+      response_code: number;
+      timestamp: string;
+      error_message?: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/webhooks/${id}`);
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    return this.request(`/api/v1/webhooks/${id}`, { method: "DELETE" });
+  }
+
+  async updateWebhook(id: string, data: {
+    name?: string;
+    url?: string;
+    events?: string[];
+    is_active?: boolean;
+  }): Promise<{
+    id: string;
+    organization_id: string;
+    name: string;
+    url: string;
+    events: string[];
+    is_active: boolean;
+    created_at: string;
+  }> {
+    return this.request(`/api/v1/webhooks/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async testWebhook(id: string): Promise<{
+    success: boolean;
+    response_code: number;
+    message: string;
+  }> {
+    return this.request(`/api/v1/webhooks/${id}/test`, { method: "POST" });
+  }
+
   // Verifications
   async listVerifications(
     limit = 100,
