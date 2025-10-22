@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)](https://golang.org)
 [![Python SDK](https://img.shields.io/badge/python-3.8+-3776AB.svg)](https://python.org)
-[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-123-brightgreen.svg)](#-api-coverage)
+[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-70-brightgreen.svg)](#-features)
 [![Production Ready](https://img.shields.io/badge/production-ready-brightgreen.svg)](production-readiness/)
 
 [🚀 Quick Start](#-quick-start) • [📚 Documentation](https://docs.opena2a.org) • [📥 SDK Download](#-sdk-distribution) • [🔌 Integrations](#-integrations) • [💬 Support](https://github.com/opena2a-org/agent-identity-management/discussions)
@@ -401,38 +401,54 @@ result = copilot.run("Find employee 12345")
 
 ---
 
-## 📊 Features
+## ✨ Features
 
-### 🔐 Security (Enterprise-Grade)
+### Core Identity Management
+- **70 Production Endpoints** (down from 95 - focused MVP)
+- **Agent Registration & Verification** with Ed25519 cryptographic keys
+- **MCP Server Registration** with public key verification
+- **Trust Scoring** with ML-powered 8-factor algorithm
+- **Real-time Monitoring** with security threat detection
+- **Capability Violations Tracking** with severity-based alerts (NEW)
+- **Key Vault Management** with rotation history (NEW)
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Ed25519 Crypto** | Military-grade digital signatures | ✅ Production |
-| **Challenge-Response** | Prevents replay attacks | ✅ Production |
-| **Trust Scoring** | 8-factor ML algorithm | ✅ Production |
-| **Anomaly Detection** | Behavioral drift detection | ✅ Production |
-| **MCP Verification** | Cryptographic MCP server auth | ✅ Production |
+### Security & Compliance
+- **Role-Based Access Control (RBAC)** with organization isolation
+- **API Key Management** with SHA-256 hashing
+- **Comprehensive Audit Logging** for SOC 2/HIPAA/GDPR
+- **OAuth/OIDC Integration** (Google, Microsoft, Okta)
+- **Real-time Security Alerts** with acknowledgment workflow
 
-### 🏢 Compliance (Audit-Ready)
+### Developer Experience
+- **100% UI Coverage** - Every endpoint has a frontend interface
+- **REST API** with OpenAPI/Swagger documentation
+- **SDK Auto-generation** for Python, TypeScript, Go
+- **Webhook Integration** for third-party systems
+- **CLI Tool** for automation (coming soon)
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Complete Audit Trail** | Every action logged immutably | ✅ Production |
-| **SOC 2 Reports** | Automated compliance exports | ✅ Production |
-| **HIPAA Compliance** | Healthcare data protection | ✅ Production |
-| **GDPR Ready** | EU data privacy compliance | ✅ Production |
-| **Access Reviews** | Quarterly access audits | ✅ Production |
+---
 
-### 🛠️ Developer Experience (Incredibly Simple)
+## 💎 Community vs Premium Tiers
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **1-Line Setup** | `secure("my-agent")` | ✅ Production |
-| **Zero Configuration** | SDK pre-configured with credentials | ✅ Production |
-| **Auto-MCP Detection** | Claude Desktop config parsing | ✅ Production |
-| **CrewAI Integration** | Multi-agent team security | ✅ Production |
-| **LangChain Integration** | Automatic chain verification | ✅ Production |
-| **123 REST APIs** | Complete enterprise API coverage | ✅ Production |
+### Community Edition (Free)
+**70 endpoints** covering complete core functionality:
+- ✅ Agent & MCP server management
+- ✅ Trust scoring with history
+- ✅ Basic security monitoring
+- ✅ Compliance basics (status, metrics)
+- ✅ Key vault (AIM-generated keypairs)
+- ✅ Organization-wide API keys
+
+### Premium Edition ($199-499/mo)
+Advanced features for enterprises:
+- 💎 Advanced analytics & reporting
+- 💎 Compliance automation (audit exports, access reviews)
+- 💎 Security incident management
+- 💎 Secrets management vault (third-party API keys)
+- 💎 Agent-scoped API keys
+- 💎 Advanced threat detection
+
+**Clear separation** ensures no feature cannibalization and strong premium value proposition.
 
 ---
 
@@ -515,7 +531,7 @@ kubectl apply -f infrastructure/k8s/
 - [Best Practices](docs/security/best-practices.md) - Security recommendations
 
 ### 📡 API Reference
-- [REST API](docs/api/rest.md) - 123 endpoints total
+- [REST API](docs/api/rest.md) - 70 endpoints total (Community Edition MVP)
 - [Authentication API](docs/api/auth.md) - Login, JWT, refresh tokens
 - [Agents API](docs/api/agents.md) - Agent CRUD and verification
 - [MCP API](docs/api/mcp.md) - MCP server detection and registration
@@ -607,13 +623,13 @@ agent = secure("my-agent")
 
 ### 🎯 100% Production Ready
 
-**123 API Endpoints** • **Python SDK with Zero Config** • **Enterprise Security**
+**70 API Endpoints** • **Python SDK with Zero Config** • **Enterprise Security**
 
 [View Production Readiness Report](production-readiness/PRODUCTION_READINESS_SUMMARY.md)
 
 </div>
 
-- ✅ **123 REST API Endpoints** - Complete enterprise API coverage
+- ✅ **70 REST API Endpoints** - Complete enterprise API coverage (MVP focused)
 - ✅ **Ed25519 Cryptography** - Military-grade digital signatures
 - ✅ **Zero Configuration SDK** - Pre-configured with embedded credentials
 - ✅ **MCP Auto-Detection** - Automatic MCP server discovery
