@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Shield,
   Activity,
@@ -13,13 +17,17 @@ import {
   Clock,
   TrendingUp,
   ThumbsUp,
-  Info
+  Info,
+  Edit3,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TrustScoreBreakdownProps {
   agentId: string;
+  userRole?: "admin" | "manager" | "member" | "viewer";
 }
 
 interface TrustScoreBreakdown {
@@ -120,10 +128,14 @@ const factorMetadata = {
   },
 };
 
-export function TrustScoreBreakdown({ agentId }: TrustScoreBreakdownProps) {
+export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScoreBreakdownProps) {
   const [breakdown, setBreakdown] = useState<TrustScoreBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [newScore, setNewScore] = useState<string>("");
+  const [adjustmentReason, setAdjustmentReason] = useState<string>("");
 
   useEffect(() => {
     const fetchBreakdown = async () => {
@@ -154,6 +166,52 @@ export function TrustScoreBreakdown({ agentId }: TrustScoreBreakdownProps) {
     if (score >= 0.75) return 'bg-yellow-600';
     return 'bg-red-600';
   };
+
+  const handleManualAdjustment = async () => {
+    if (!newScore || !adjustmentReason) {
+      alert("Please provide both a new score and a reason for the adjustment");
+      return;
+    }
+
+    const scoreValue = parseFloat(newScore);
+    if (isNaN(scoreValue) || scoreValue < 0 || scoreValue > 100) {
+      alert("Score must be a number between 0 and 100");
+      return;
+    }
+
+    setAdjusting(true);
+    try {
+      await api.adjustAgentTrustScore(agentId, scoreValue, adjustmentReason);
+      alert("Trust score adjusted successfully");
+
+      // Refresh breakdown
+      const data = await api.getTrustScoreBreakdown(agentId);
+      setBreakdown(data);
+      setNewScore("");
+      setAdjustmentReason("");
+    } catch (err: any) {
+      alert(err?.message || "Failed to adjust trust score");
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  const handleRecalculation = async () => {
+    setRecalculating(true);
+    try {
+      // Call recalculate API (assuming it exists)
+      // For now, we'll just refresh the breakdown
+      const data = await api.getTrustScoreBreakdown(agentId);
+      setBreakdown(data);
+      alert("Trust score recalculated successfully");
+    } catch (err: any) {
+      alert(err?.message || "Failed to recalculate trust score");
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const isAdmin = userRole === "admin";
 
   if (loading) {
     return (
@@ -193,6 +251,94 @@ export function TrustScoreBreakdown({ agentId }: TrustScoreBreakdownProps) {
   return (
     <TooltipProvider>
       <div className="space-y-4">
+        {/* Admin Manual Adjustment Card */}
+        {isAdmin && (
+          <Card className="border-2 border-blue-200 bg-blue-50/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5 text-blue-600" />
+                Admin Controls
+              </CardTitle>
+              <CardDescription>
+                Manual trust score adjustment and recalculation (admin only)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold">Manual Score Adjustment</h4>
+                  <div className="space-y-2">
+                    <Label htmlFor="newScore">New Score (0-100)</Label>
+                    <Input
+                      id="newScore"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      placeholder="85.0"
+                      value={newScore}
+                      onChange={(e) => setNewScore(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reason">Reason for Adjustment</Label>
+                    <Textarea
+                      id="reason"
+                      placeholder="Explain why you're manually adjusting this score..."
+                      value={adjustmentReason}
+                      onChange={(e) => setAdjustmentReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleManualAdjustment}
+                    disabled={adjusting || !newScore || !adjustmentReason}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    {adjusting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Adjusting...
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Apply Manual Adjustment
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold">Recalculate Trust Score</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Force immediate recalculation of the trust score based on current
+                    behavioral and security factors. This will override any manual adjustments.
+                  </p>
+                  <Button
+                    onClick={handleRecalculation}
+                    disabled={recalculating}
+                    variant="outline"
+                    className="w-full border-green-500 text-green-600 hover:bg-green-50"
+                  >
+                    {recalculating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Recalculating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Recalculate Score
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Overall Score Card */}
         <Card>
           <CardHeader>

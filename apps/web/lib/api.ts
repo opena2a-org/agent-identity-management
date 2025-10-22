@@ -492,6 +492,25 @@ class APIClient {
     return this.request(`/api/v1/agents/${id}/verify`, { method: "POST" });
   }
 
+  async suspendAgent(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/v1/agents/${id}/suspend`, { method: "POST" });
+  }
+
+  async reactivateAgent(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/v1/agents/${id}/reactivate`, { method: "POST" });
+  }
+
+  async rotateAgentCredentials(id: string): Promise<{ api_key: string; message: string }> {
+    return this.request(`/api/v1/agents/${id}/rotate-credentials`, { method: "POST" });
+  }
+
+  async adjustAgentTrustScore(id: string, score: number, reason: string): Promise<{ success: boolean; new_score: number }> {
+    return this.request(`/api/v1/agents/${id}/trust-score`, {
+      method: "PUT",
+      body: JSON.stringify({ score, reason }),
+    });
+  }
+
   // API Keys
   async listAPIKeys(): Promise<{ api_keys: APIKey[] }> {
     return this.request("/api/v1/api-keys");

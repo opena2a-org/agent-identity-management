@@ -3,7 +3,17 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Copy, Check, Key, Calendar, RotateCw } from 'lucide-react';
+import { Copy, Check, Key, Calendar, RotateCw, Loader2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { api } from '@/lib/api';
 import { formatDistanceToNow, differenceInDays } from 'date-fns';
 
@@ -25,6 +35,10 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
   const [keyVault, setKeyVault] = useState<KeyVault | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [showRotateConfirm, setShowRotateConfirm] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [showNewKeyDialog, setShowNewKeyDialog] = useState(false);
 
   useEffect(() => {
     const fetchKeyVault = async () => {
@@ -50,6 +64,31 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
     }
   };
 
+  const handleRotateCredentials = async () => {
+    setRotating(true);
+    try {
+      const response = await api.rotateAgentCredentials(agentId);
+      setNewApiKey(response.api_key);
+      setShowNewKeyDialog(true);
+      setShowRotateConfirm(false);
+
+      // Refresh key vault data
+      const data = await api.getAgentKeyVault(agentId);
+      setKeyVault(data);
+    } catch (error: any) {
+      alert(error?.message || 'Failed to rotate credentials');
+    } finally {
+      setRotating(false);
+    }
+  };
+
+  const copyNewApiKey = () => {
+    if (newApiKey) {
+      navigator.clipboard.writeText(newApiKey);
+      alert('New API key copied to clipboard!');
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading key vault...</div>;
   }
@@ -66,9 +105,29 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Key className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Cryptographic Key Vault</h3>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Key className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">Cryptographic Key Vault</h3>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowRotateConfirm(true)}
+            disabled={rotating}
+            className="border-blue-500 text-blue-600 hover:bg-blue-50"
+          >
+            {rotating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Rotating...
+              </>
+            ) : (
+              <>
+                <RotateCw className="h-4 w-4 mr-1" />
+                Rotate Credentials
+              </>
+            )}
+          </Button>
         </div>
 
         <div className="space-y-6">
@@ -172,6 +231,63 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
           </div>
         </div>
       </Card>
+
+      {/* Rotate Confirmation Dialog */}
+      <AlertDialog open={showRotateConfirm} onOpenChange={setShowRotateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rotate Credentials</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will generate a new API key and cryptographic key pair for this agent.
+              The previous key will remain valid for a grace period to prevent service disruption.
+              Make sure to update your agent's configuration with the new credentials.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRotateCredentials}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {rotating ? "Rotating..." : "Rotate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* New API Key Dialog */}
+      <AlertDialog open={showNewKeyDialog} onOpenChange={setShowNewKeyDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>New API Key Generated</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your new API key has been generated successfully. <strong>This is the only time you'll see the full key.</strong> Copy it now and store it securely.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="my-4">
+            <code className="block p-3 bg-muted rounded-md text-xs font-mono break-all">
+              {newApiKey}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyNewApiKey}
+              className="mt-2 w-full"
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy API Key
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => {
+              setShowNewKeyDialog(false);
+              setNewApiKey(null);
+            }}>
+              Done
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

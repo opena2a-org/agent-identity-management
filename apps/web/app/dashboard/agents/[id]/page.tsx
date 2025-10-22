@@ -15,6 +15,8 @@ import {
   Download,
   KeyRound,
   Tag,
+  Ban,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -101,8 +103,11 @@ export default function AgentDetailsPage({
   >("viewer");
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [suspending, setSuspending] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
@@ -191,6 +196,35 @@ export default function AgentDetailsPage({
     } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleSuspend = async () => {
+    if (!agentId) return;
+    setSuspending(true);
+    try {
+      await api.suspendAgent(agentId);
+      alert("Agent suspended successfully");
+      handleRefresh();
+    } catch (e: any) {
+      alert(e?.message || "Suspend failed");
+    } finally {
+      setSuspending(false);
+      setShowSuspendConfirm(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!agentId) return;
+    setReactivating(true);
+    try {
+      await api.reactivateAgent(agentId);
+      alert("Agent reactivated successfully");
+      handleRefresh();
+    } catch (e: any) {
+      alert(e?.message || "Reactivate failed");
+    } finally {
+      setReactivating(false);
     }
   };
 
@@ -395,6 +429,44 @@ export default function AgentDetailsPage({
                   <>
                     <CheckCircle className="h-4 w-4 mr-1" />{" "}
                     {isVerified ? "Verified" : "Verify Agent"}
+                  </>
+                )}
+              </Button>
+            )}
+            {canManage && agent.status !== "suspended" && (
+              <Button
+                variant="outline"
+                onClick={() => setShowSuspendConfirm(true)}
+                disabled={suspending}
+                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              >
+                {suspending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Suspending...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="h-4 w-4 mr-1" /> Suspend
+                  </>
+                )}
+              </Button>
+            )}
+            {canManage && agent.status === "suspended" && (
+              <Button
+                variant="outline"
+                onClick={handleReactivate}
+                disabled={reactivating}
+                className="border-green-500 text-green-600 hover:bg-green-50"
+              >
+                {reactivating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Reactivating...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-1" /> Reactivate
                   </>
                 )}
               </Button>
@@ -625,7 +697,7 @@ export default function AgentDetailsPage({
         </TabsContent>
 
         <TabsContent value="trust">
-          <TrustScoreBreakdown agentId={agent.id} />
+          <TrustScoreBreakdown agentId={agent.id} userRole={userRole} />
         </TabsContent>
 
         <TabsContent value="detection">
@@ -786,6 +858,29 @@ export default function AgentDetailsPage({
               className="bg-red-600 hover:bg-red-700"
             >
               {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Suspend Confirmation Dialog */}
+      <AlertDialog open={showSuspendConfirm} onOpenChange={setShowSuspendConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suspend Agent</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will temporarily suspend the agent "{agent.name}". The agent
+              will be unable to authenticate or perform actions until
+              reactivated. You can reactivate this agent at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSuspend}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {suspending ? "Suspending..." : "Suspend"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
