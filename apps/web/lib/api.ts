@@ -1124,6 +1124,20 @@ class APIClient {
     );
   }
 
+  async getAgentViolations(
+    agentId: string,
+    limit: number = 10,
+    offset: number = 0
+  ): Promise<{ violations: any[]; total: number }> {
+    return this.request(
+      `/api/v1/agents/${agentId}/violations?limit=${limit}&offset=${offset}`
+    );
+  }
+
+  async getAgentKeyVault(agentId: string): Promise<any> {
+    return this.request(`/api/v1/agents/${agentId}/key-vault`);
+  }
+
   // MCP Server Tags
   async getMCPServerTags(mcpServerId: string): Promise<Tag[]> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`);
