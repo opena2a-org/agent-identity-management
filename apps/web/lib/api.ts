@@ -522,6 +522,46 @@ class APIClient {
     return this.request(`/api/v1/trust-score/agents/${agentId}`);
   }
 
+  async getTrustScoreBreakdown(agentId: string): Promise<{
+    agentId: string;
+    agentName: string;
+    overall: number;
+    factors: {
+      verificationStatus: number;
+      uptime: number;
+      successRate: number;
+      securityAlerts: number;
+      compliance: number;
+      age: number;
+      driftDetection: number;
+      userFeedback: number;
+    };
+    weights: {
+      verificationStatus: number;
+      uptime: number;
+      successRate: number;
+      securityAlerts: number;
+      compliance: number;
+      age: number;
+      driftDetection: number;
+      userFeedback: number;
+    };
+    contributions: {
+      verificationStatus: number;
+      uptime: number;
+      successRate: number;
+      securityAlerts: number;
+      compliance: number;
+      age: number;
+      driftDetection: number;
+      userFeedback: number;
+    };
+    confidence: number;
+    calculatedAt: string;
+  }> {
+    return this.request(`/api/v1/trust-score/agents/${agentId}/breakdown`);
+  }
+
   // User management
   async getUsers(limit = 100, offset = 0): Promise<any[]> {
     const response = await this.request<{ users: any[] }>(

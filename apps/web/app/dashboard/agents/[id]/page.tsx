@@ -36,6 +36,7 @@ import { api } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
+import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -502,7 +503,10 @@ export default function AgentDetailsPage({
             Key Vault
           </TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-          <TabsTrigger value="trust">Trust History</TabsTrigger>
+          <TabsTrigger value="trust">
+            <Shield className="h-4 w-4 mr-2" />
+            Trust Score
+          </TabsTrigger>
           <TabsTrigger value="detection">
             <Bot className="h-4 w-4 mr-2" />
             Detection
@@ -611,30 +615,7 @@ export default function AgentDetailsPage({
         </TabsContent>
 
         <TabsContent value="trust">
-          <Card>
-            <CardHeader>
-              <CardTitle>Trust Score History</CardTitle>
-              <CardDescription>
-                Recent verification confidence levels
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="w-full h-28 flex items-end gap-2">
-                {events.slice(0, 20).map((ev, idx) => (
-                  <div
-                    key={ev.id || idx}
-                    className="flex-1 bg-blue-500/20"
-                    style={{
-                      height: `${Math.max(4, Math.min(100, Math.round(ev.confidence * 100)))}%`,
-                    }}
-                  />
-                ))}
-                {events.length === 0 && (
-                  <div className="text-sm text-muted-foreground">No data</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <TrustScoreBreakdown agentId={agent.id} />
         </TabsContent>
 
         <TabsContent value="detection">
