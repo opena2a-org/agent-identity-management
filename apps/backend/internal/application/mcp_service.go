@@ -285,7 +285,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	}
 
 	// ✅ Verification successful - cryptographic proof established
-	verificationSuccess := true
+	verificationSuccess = true
 
 	var verificationStatus domain.VerificationEventStatus
 	var verificationResult domain.VerificationResult

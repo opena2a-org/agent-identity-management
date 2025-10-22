@@ -315,16 +315,6 @@ func (s *MCPCapabilityService) createPromptCapability(name, description string, 
 	}
 }
 
-// GetCapabilities retrieves all capabilities for an MCP server
-func (s *MCPCapabilityService) GetCapabilities(ctx context.Context, serverID uuid.UUID) ([]*domain.MCPServerCapability, error) {
-	return s.capabilityRepo.GetByServerID(serverID)
-}
-
-// GetCapabilitiesByType retrieves capabilities by type
-func (s *MCPCapabilityService) GetCapabilitiesByType(ctx context.Context, serverID uuid.UUID, capType domain.MCPCapabilityType) ([]*domain.MCPServerCapability, error) {
-	return s.capabilityRepo.GetByServerIDAndType(serverID, capType)
-}
-
 // Helper function to check if a string contains any of the given substrings
 func containsAny(s string, substrings []string) bool {
 	for _, substr := range substrings {
