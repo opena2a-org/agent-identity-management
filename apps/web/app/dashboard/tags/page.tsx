@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAPIClient, Tag, TagCategory } from "@/lib/api";
+import { api, Tag, TagCategory } from "@/lib/api";
 import { toast } from "sonner";
 import { TagList } from "@/components/tags/tag-list";
 import { TagCreateModal } from "@/components/tags/tag-create-modal";
@@ -26,8 +26,6 @@ export default function TagsPage() {
   const [categoryFilter, setCategoryFilter] = useState<TagCategory | "all">("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
-
-  const api = getAPIClient();
 
   // Load tags
   const loadTags = async () => {

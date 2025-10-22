@@ -848,9 +848,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)
 	admin.Post("/registration-requests/:id/reject", h.Admin.RejectRegistrationRequest)
 
-	// Organization settings
+	// Organization settings (read-only - no SSO auto-approve in Community)
 	admin.Get("/organization/settings", h.Admin.GetOrganizationSettings)
-	admin.Put("/organization/settings", h.Admin.UpdateOrganizationSettings)
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)

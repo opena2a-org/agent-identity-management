@@ -46,29 +46,30 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState<number>(defaultLimit);
   const [refreshing, setRefreshing] = useState(false);
-
-  const fetchActivity = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const activityData = await api.getAgentActivity(limit);
-      setData(activityData);
-    } catch (err: any) {
-      console.error('Failed to fetch agent activity:', err);
-      setError(err.message || 'Failed to load agent activity');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
+    const fetchActivity = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const activityData = await api.getAgentActivity(limit);
+        setData(activityData);
+      } catch (err: any) {
+        console.error('Failed to fetch agent activity:', err);
+        setError(err.message || 'Failed to load agent activity');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+
     fetchActivity();
-  }, [limit]);
+  }, [limit, refreshTrigger]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchActivity();
+    setRefreshTrigger(prev => prev + 1);
   };
 
   const getStatusIcon = (status: string) => {
@@ -228,7 +229,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
             <div className="space-y-1">
               {data.activities.map((activity, index) => (
                 <div
-                  key={activity.id}
+                  key={`${activity.agent_id}-${activity.timestamp}-${index}`}
                   className="flex gap-4 p-4 rounded-lg border bg-white hover:bg-gray-50 transition-colors"
                 >
                   {/* Status Icon */}

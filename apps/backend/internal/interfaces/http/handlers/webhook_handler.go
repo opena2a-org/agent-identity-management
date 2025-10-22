@@ -86,6 +86,11 @@ func (h *WebhookHandler) ListWebhooks(c fiber.Ctx) error {
 		})
 	}
 
+	// Ensure webhooks is never null (return empty array instead)
+	if webhooks == nil {
+		webhooks = []*domain.Webhook{}
+	}
+
 	return c.JSON(fiber.Map{
 		"webhooks": webhooks,
 		"total":    len(webhooks),

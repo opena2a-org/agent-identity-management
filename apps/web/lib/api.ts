@@ -639,18 +639,6 @@ class APIClient {
     });
   }
 
-  // Organization settings
-  async getOrganizationSettings(): Promise<{ auto_approve_sso: boolean }> {
-    return this.request("/api/v1/admin/organization/settings");
-  }
-
-  async updateOrganizationSettings(autoApproveSSO: boolean): Promise<void> {
-    return this.request("/api/v1/admin/organization/settings", {
-      method: "PUT",
-      body: JSON.stringify({ auto_approve_sso: autoApproveSSO }),
-    });
-  }
-
   // Audit logs
   async getAuditLogs(limit = 100, offset = 0): Promise<any[]> {
     const response: any = await this.request(

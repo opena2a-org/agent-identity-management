@@ -1,5 +1,12 @@
 # 🧠 Claude Code Workflow for Agent Identity Management
 
+## 🔑 CRITICAL: Application Routes
+
+### Authentication Routes
+**Login Page**: `/auth/login` (ALWAYS use this route for sign-in)
+**Sign Up Page**: `/auth/signup`
+**Dashboard**: `/dashboard` (after login)
+
 ## ⚠️ CRITICAL: Azure Subscription Rules
 
 ### ALWAYS USE OPENA2A SUBSCRIPTION FOR AIM

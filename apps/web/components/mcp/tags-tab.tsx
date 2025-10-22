@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Tag, getAPIClient } from "@/lib/api";
+import { Tag, api } from "@/lib/api";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TagSelector } from "@/components/tags/tag-selector";
@@ -16,8 +16,6 @@ export function MCPTagsTab({ mcpServerId }: MCPTagsTabProps) {
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-
-  const api = getAPIClient();
 
   const loadData = async () => {
     try {

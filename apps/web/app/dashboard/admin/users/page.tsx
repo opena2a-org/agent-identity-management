@@ -29,15 +29,12 @@ import {
   Clock,
   Ban,
   UserX,
-  Settings,
   Key,
   Bot,
   Server,
   ArrowRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,8 +109,6 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterOrg, setFilterOrg] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [autoApproveSSO, setAutoApproveSSO] = useState(true);
-  const [savingSettings, setSavingSettings] = useState(false);
   const [apiKeysCount, setApiKeysCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -144,7 +139,6 @@ export default function UsersPage() {
   useEffect(() => {
     if (!authChecked || role !== "admin") return;
     fetchUsers();
-    fetchSettings();
     fetchAPIKeysCount();
   }, [authChecked, role]);
 
@@ -159,34 +153,12 @@ export default function UsersPage() {
     }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const settings = await api.getOrganizationSettings();
-      setAutoApproveSSO(settings.auto_approve_sso);
-    } catch (error) {
-      console.error("Failed to fetch settings:", error);
-    }
-  };
-
   const fetchAPIKeysCount = async () => {
     try {
       const { api_keys } = await api.listAPIKeys();
       setApiKeysCount(api_keys?.length || 0);
     } catch (error) {
       console.error("Failed to fetch API keys count:", error);
-    }
-  };
-
-  const toggleAutoApprove = async (enabled: boolean) => {
-    setSavingSettings(true);
-    try {
-      await api.updateOrganizationSettings(enabled);
-      setAutoApproveSSO(enabled);
-    } catch (error) {
-      console.error("Failed to update settings:", error);
-      alert("Failed to update settings");
-    } finally {
-      setSavingSettings(false);
     }
   };
 
@@ -413,42 +385,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Organization Settings */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>User Approval Settings</CardTitle>
-          </div>
-          <CardDescription>
-            Configure how new SSO users are handled when they sign in
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-approve" className="text-base">
-                Auto-Approve SSO Users
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                When enabled, new SSO users are automatically granted access.
-                When disabled, admins must manually approve new users.
-              </p>
-            </div>
-            <Switch
-              id="auto-approve"
-              checked={autoApproveSSO}
-              onCheckedChange={toggleAutoApprove}
-              disabled={savingSettings}
-            />
-          </div>
-          <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-            <strong>Note:</strong> The first user in any organization is always
-            automatically approved as admin, regardless of this setting.
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Filters */}
       <Card>

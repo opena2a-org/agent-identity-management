@@ -152,7 +152,7 @@ export default function UsageStatisticsPage() {
                 <div>
                   <div className="text-sm text-muted-foreground">Total API Calls</div>
                   <div className="text-3xl font-bold text-blue-600">
-                    {data.api_calls.total.toLocaleString()}
+                    {data?.api_calls?.total?.toLocaleString() || '0'}
                   </div>
                 </div>
               </div>
@@ -166,7 +166,7 @@ export default function UsageStatisticsPage() {
                 <div>
                   <div className="text-sm text-muted-foreground">Active Users</div>
                   <div className="text-3xl font-bold text-purple-600">
-                    {data.active_users.total}
+                    {data?.active_users?.total || 0}
                   </div>
                 </div>
               </div>
@@ -180,7 +180,7 @@ export default function UsageStatisticsPage() {
                 <div>
                   <div className="text-sm text-muted-foreground">Success Rate</div>
                   <div className="text-3xl font-bold text-green-600">
-                    {(data.agent_metrics.success_rate * 100).toFixed(1)}%
+                    {((data?.agent_metrics?.success_rate || 0) * 100).toFixed(1)}%
                   </div>
                 </div>
               </div>
@@ -194,7 +194,7 @@ export default function UsageStatisticsPage() {
                 <div>
                   <div className="text-sm text-muted-foreground">Failed Requests</div>
                   <div className="text-3xl font-bold text-orange-600">
-                    {data.agent_metrics.failed_requests.toLocaleString()}
+                    {data?.agent_metrics?.failed_requests?.toLocaleString() || '0'}
                   </div>
                 </div>
               </div>
@@ -209,44 +209,53 @@ export default function UsageStatisticsPage() {
             <CardDescription>Daily API request volume</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="relative h-64 border rounded-lg p-4 bg-gradient-to-b from-white to-gray-50">
-              {/* Y-axis labels */}
-              <div className="absolute left-2 top-4 bottom-4 flex flex-col justify-between text-xs text-muted-foreground">
-                {[...Array(5)].map((_, i) => {
-                  const max = Math.max(...data.api_calls.by_day.map(d => d.count));
-                  const value = Math.ceil(max * (4 - i) / 4);
-                  return <span key={i}>{value}</span>;
-                })}
-              </div>
+            {data?.api_calls?.by_day && data.api_calls.by_day.length > 0 ? (
+              <div className="relative h-64 border rounded-lg p-4 bg-gradient-to-b from-white to-gray-50">
+                {/* Y-axis labels */}
+                <div className="absolute left-2 top-4 bottom-4 flex flex-col justify-between text-xs text-muted-foreground">
+                  {[...Array(5)].map((_, i) => {
+                    const max = Math.max(...data.api_calls.by_day.map(d => d.count));
+                    const value = Math.ceil(max * (4 - i) / 4);
+                    return <span key={i}>{value}</span>;
+                  })}
+                </div>
 
-              {/* Chart area */}
-              <div className="ml-12 mr-4 h-full flex items-end gap-1">
-                {data.api_calls.by_day.map((day, index) => {
-                  const maxCount = Math.max(...data.api_calls.by_day.map(d => d.count));
-                  const height = (day.count / maxCount) * 100;
+                {/* Chart area */}
+                <div className="ml-12 mr-4 h-full flex items-end gap-1">
+                  {data.api_calls.by_day.map((day, index) => {
+                    const maxCount = Math.max(...data.api_calls.by_day.map(d => d.count));
+                    const height = (day.count / maxCount) * 100;
 
-                  return (
-                    <div key={index} className="flex-1 flex flex-col items-center gap-1 group">
-                      <div className="relative w-full">
-                        <div
-                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                          style={{ height: `${height * 2}px` }}
-                          title={`${formatDate(day.date)}: ${day.count} calls`}
-                        />
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded shadow">
-                          {day.count}
+                    return (
+                      <div key={index} className="flex-1 flex flex-col items-center gap-1 group">
+                        <div className="relative w-full">
+                          <div
+                            className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                            style={{ height: `${height * 2}px` }}
+                            title={`${formatDate(day.date)}: ${day.count} calls`}
+                          />
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded shadow">
+                            {day.count}
+                          </div>
                         </div>
+                        {index % Math.ceil(data.api_calls.by_day.length / 7) === 0 && (
+                          <span className="text-xs text-muted-foreground rotate-45 origin-top-left mt-2">
+                            {formatDate(day.date)}
+                          </span>
+                        )}
                       </div>
-                      {index % Math.ceil(data.api_calls.by_day.length / 7) === 0 && (
-                        <span className="text-xs text-muted-foreground rotate-45 origin-top-left mt-2">
-                          {formatDate(day.date)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-center text-muted-foreground">
+                <div>
+                  <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                  <p>No API call data available for the selected period</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -258,31 +267,40 @@ export default function UsageStatisticsPage() {
               <CardDescription>Most frequently accessed endpoints</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {data.api_calls.by_endpoint.slice(0, 10).map((endpoint, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-mono text-xs truncate flex-1">
-                        {endpoint.endpoint}
-                      </span>
-                      <span className="font-semibold ml-2">
-                        {endpoint.count.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{ width: `${endpoint.percentage}%` }}
-                        />
+              {data?.api_calls?.by_endpoint && data.api_calls.by_endpoint.length > 0 ? (
+                <div className="space-y-4">
+                  {data.api_calls.by_endpoint.slice(0, 10).map((endpoint, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-mono text-xs truncate flex-1">
+                          {endpoint.endpoint}
+                        </span>
+                        <span className="font-semibold ml-2">
+                          {endpoint.count.toLocaleString()}
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground w-12 text-right">
-                        {endpoint.percentage.toFixed(1)}%
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ width: `${endpoint.percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-12 text-right">
+                          {endpoint.percentage.toFixed(1)}%
+                        </span>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-center text-muted-foreground">
+                  <div>
+                    <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                    <p>No endpoint data available</p>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -293,32 +311,41 @@ export default function UsageStatisticsPage() {
               <CardDescription>User distribution across roles</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {data.active_users.by_role.map((role, index) => {
-                  const percentage = (role.count / data.active_users.total) * 100;
-                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500'];
+              {data?.active_users?.by_role && data.active_users.by_role.length > 0 ? (
+                <div className="space-y-4">
+                  {data.active_users.by_role.map((role, index) => {
+                    const percentage = (role.count / data.active_users.total) * 100;
+                    const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500'];
 
-                  return (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium capitalize">{role.role}</span>
-                        <span className="font-semibold">{role.count} users</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${colors[index % colors.length]} rounded-full`}
-                            style={{ width: `${percentage}%` }}
-                          />
+                    return (
+                      <div key={index} className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium capitalize">{role.role}</span>
+                          <span className="font-semibold">{role.count} users</span>
                         </div>
-                        <span className="text-xs text-muted-foreground w-12 text-right">
-                          {percentage.toFixed(1)}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${colors[index % colors.length]} rounded-full`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-12 text-right">
+                            {percentage.toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-center text-muted-foreground">
+                  <div>
+                    <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                    <p>No user role data available</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -334,7 +361,7 @@ export default function UsageStatisticsPage() {
               <div className="flex flex-col items-center p-6 bg-gray-50 border rounded-lg">
                 <Activity className="h-12 w-12 text-gray-600 mb-3" />
                 <div className="text-3xl font-bold text-gray-600">
-                  {data.agent_metrics.total_requests.toLocaleString()}
+                  {data?.agent_metrics?.total_requests?.toLocaleString() || '0'}
                 </div>
                 <div className="text-sm text-muted-foreground">Total Requests</div>
               </div>
@@ -342,7 +369,7 @@ export default function UsageStatisticsPage() {
               <div className="flex flex-col items-center p-6 bg-green-50 border border-green-200 rounded-lg">
                 <CheckCircle className="h-12 w-12 text-green-600 mb-3" />
                 <div className="text-3xl font-bold text-green-600">
-                  {data.agent_metrics.successful_requests.toLocaleString()}
+                  {data?.agent_metrics?.successful_requests?.toLocaleString() || '0'}
                 </div>
                 <div className="text-sm text-muted-foreground">Successful</div>
               </div>
@@ -350,7 +377,7 @@ export default function UsageStatisticsPage() {
               <div className="flex flex-col items-center p-6 bg-red-50 border border-red-200 rounded-lg">
                 <XCircle className="h-12 w-12 text-red-600 mb-3" />
                 <div className="text-3xl font-bold text-red-600">
-                  {data.agent_metrics.failed_requests.toLocaleString()}
+                  {data?.agent_metrics?.failed_requests?.toLocaleString() || '0'}
                 </div>
                 <div className="text-sm text-muted-foreground">Failed</div>
               </div>

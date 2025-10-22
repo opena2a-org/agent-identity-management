@@ -177,20 +177,24 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 	trends := []map[string]interface{}{}
 
 	if period == "weeks" {
-		// Query weekly aggregated trust scores
+		// Query weekly aggregated trust scores WITH score ranges
 		query := `
 			WITH weekly_scores AS (
 				SELECT
 					DATE_TRUNC('week', recorded_at) as week_start,
 					AVG(trust_score) as avg_score,
-					COUNT(DISTINCT agent_id) as agent_count
+					COUNT(DISTINCT agent_id) as agent_count,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.90 THEN agent_id END) as excellent,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.70 AND trust_score < 0.90 THEN agent_id END) as good,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.50 AND trust_score < 0.70 THEN agent_id END) as fair,
+					COUNT(DISTINCT CASE WHEN trust_score < 0.50 THEN agent_id END) as poor
 				FROM trust_score_history
 				WHERE organization_id = $1
 					AND recorded_at >= NOW() - INTERVAL '1 week' * $2
 				GROUP BY DATE_TRUNC('week', recorded_at)
 				ORDER BY week_start DESC
 			)
-			SELECT week_start, avg_score, agent_count
+			SELECT week_start, avg_score, agent_count, excellent, good, fair, poor
 			FROM weekly_scores
 			ORDER BY week_start ASC
 		`
@@ -221,9 +225,9 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		for rows.Next() {
 			var weekStart time.Time
 			var avgScore float64
-			var agentCount int
+			var agentCount, excellent, good, fair, poor int
 
-			if err := rows.Scan(&weekStart, &avgScore, &agentCount); err != nil {
+			if err := rows.Scan(&weekStart, &avgScore, &agentCount, &excellent, &good, &fair, &poor); err != nil {
 				continue
 			}
 
@@ -232,6 +236,12 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				"week_start":  weekStart.Format("2006-01-02"),
 				"avg_score":   avgScore,
 				"agent_count": agentCount,
+				"scores_by_range": map[string]interface{}{
+					"excellent": excellent,
+					"good":      good,
+					"fair":      fair,
+					"poor":      poor,
+				},
 			})
 		}
 
@@ -246,27 +256,57 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			currentAvg = totalScore / float64(len(agents))
 		}
 
+		// Calculate trend direction and change percentage
+		trendDirection := "stable"
+		changePercentage := 0.0
+
+		if len(trends) >= 2 {
+			// Compare first and last data points
+			firstScore := trends[0]["avg_score"].(float64)
+			lastScore := trends[len(trends)-1]["avg_score"].(float64)
+
+			if lastScore > firstScore {
+				changePercentage = ((lastScore - firstScore) / firstScore) * 100
+				if changePercentage > 1.0 { // More than 1% increase
+					trendDirection = "up"
+				}
+			} else if lastScore < firstScore {
+				changePercentage = ((firstScore - lastScore) / firstScore) * 100
+				if changePercentage > 1.0 { // More than 1% decrease
+					trendDirection = "down"
+				}
+			}
+		}
+
 		return c.JSON(fiber.Map{
-			"period":          fmt.Sprintf("Last %d weeks", weeks),
-			"trends":          trends,
-			"current_average": currentAvg,
-			"data_type":       "weekly",
+			"period":     fmt.Sprintf("Last %d weeks", weeks),
+			"trends":     trends,
+			"data_type":  "weekly",
+			"summary": fiber.Map{
+				"overall_avg":       currentAvg,
+				"trend_direction":   trendDirection,
+				"change_percentage": changePercentage,
+			},
 		})
 	} else {
-		// Query daily aggregated trust scores
+		// Query daily aggregated trust scores WITH score ranges
 		query := `
 			WITH daily_scores AS (
 				SELECT
 					DATE(recorded_at) as date,
 					AVG(trust_score) as avg_score,
-					COUNT(DISTINCT agent_id) as agent_count
+					COUNT(DISTINCT agent_id) as agent_count,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.90 THEN agent_id END) as excellent,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.70 AND trust_score < 0.90 THEN agent_id END) as good,
+					COUNT(DISTINCT CASE WHEN trust_score >= 0.50 AND trust_score < 0.70 THEN agent_id END) as fair,
+					COUNT(DISTINCT CASE WHEN trust_score < 0.50 THEN agent_id END) as poor
 				FROM trust_score_history
 				WHERE organization_id = $1
 					AND recorded_at >= NOW() - INTERVAL '1 day' * $2
 				GROUP BY DATE(recorded_at)
 				ORDER BY date DESC
 			)
-			SELECT date, avg_score, agent_count
+			SELECT date, avg_score, agent_count, excellent, good, fair, poor
 			FROM daily_scores
 			ORDER BY date ASC
 		`
@@ -297,9 +337,9 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		for rows.Next() {
 			var date time.Time
 			var avgScore float64
-			var agentCount int
+			var agentCount, excellent, good, fair, poor int
 
-			if err := rows.Scan(&date, &avgScore, &agentCount); err != nil {
+			if err := rows.Scan(&date, &avgScore, &agentCount, &excellent, &good, &fair, &poor); err != nil {
 				continue
 			}
 
@@ -307,6 +347,12 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				"date":        date.Format("2006-01-02"),
 				"avg_score":   avgScore,
 				"agent_count": agentCount,
+				"scores_by_range": map[string]interface{}{
+					"excellent": excellent,
+					"good":      good,
+					"fair":      fair,
+					"poor":      poor,
+				},
 			})
 		}
 
@@ -321,11 +367,37 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			currentAvg = totalScore / float64(len(agents))
 		}
 
+		// Calculate trend direction and change percentage
+		trendDirection := "stable"
+		changePercentage := 0.0
+
+		if len(trends) >= 2 {
+			// Compare first and last data points
+			firstScore := trends[0]["avg_score"].(float64)
+			lastScore := trends[len(trends)-1]["avg_score"].(float64)
+
+			if lastScore > firstScore {
+				changePercentage = ((lastScore - firstScore) / firstScore) * 100
+				if changePercentage > 1.0 { // More than 1% increase
+					trendDirection = "up"
+				}
+			} else if lastScore < firstScore {
+				changePercentage = ((firstScore - lastScore) / firstScore) * 100
+				if changePercentage > 1.0 { // More than 1% decrease
+					trendDirection = "down"
+				}
+			}
+		}
+
 		return c.JSON(fiber.Map{
-			"period":          fmt.Sprintf("Last %d days", days),
-			"trends":          trends,
-			"current_average": currentAvg,
-			"data_type":       "daily",
+			"period":    fmt.Sprintf("Last %d days", days),
+			"trends":    trends,
+			"data_type": "daily",
+			"summary": fiber.Map{
+				"overall_avg":       currentAvg,
+				"trend_direction":   trendDirection,
+				"change_percentage": changePercentage,
+			},
 		})
 	}
 }
@@ -500,17 +572,46 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 				"status":         agent.Status,
 				"trust_score":    agent.TrustScore,
 				"last_active":    agent.CreatedAt,
+				"timestamp":      agent.CreatedAt, // Frontend expects 'timestamp' field
 				"api_calls":      0,
 				"data_processed": 0.0,
 			})
 		}
 
+		// Calculate summary statistics for fallback case
+		totalActivities := len(activities)
+		successCount := 0
+		failureCount := 0
+
+		for _, activity := range activities {
+			status, ok := activity["status"].(string)
+			if !ok {
+				continue
+			}
+			if status == "verified" || status == "success" {
+				successCount++
+			} else if status == "pending" || status == "failed" {
+				failureCount++
+			}
+		}
+
+		successRate := 0.0
+		if totalActivities > 0 {
+			successRate = (float64(successCount) / float64(totalActivities)) * 100
+		}
+
 		return c.JSON(fiber.Map{
 			"activities": activities,
-			"total":      len(agents),
-			"limit":      limit,
-			"offset":     offset,
-			"note":       "Activity metrics not yet available. Install migration 010 to enable tracking.",
+			"summary": fiber.Map{
+				"total_activities": totalActivities,
+				"success_count":    successCount,
+				"failure_count":    failureCount,
+				"success_rate":     successRate,
+			},
+			"total":  len(agents),
+			"limit":  limit,
+			"offset": offset,
+			"note":   "Activity metrics not yet available. Install migration 010 to enable tracking.",
 		})
 	}
 	defer rows.Close()
@@ -535,6 +636,7 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			"status":         status,
 			"trust_score":    trustScore,
 			"last_active":    lastActive,
+			"timestamp":      lastActive, // Frontend expects 'timestamp' field
 			"api_calls":      apiCalls,
 			"data_processed": dataProcessedMB, // in MB
 		})
@@ -545,11 +647,39 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	countQuery := `SELECT COUNT(*) FROM agents WHERE organization_id = $1`
 	h.db.QueryRow(countQuery, orgID).Scan(&total)
 
+	// Calculate summary statistics for the activity timeline
+	totalActivities := len(activities)
+	successCount := 0
+	failureCount := 0
+
+	for _, activity := range activities {
+		status, ok := activity["status"].(string)
+		if !ok {
+			continue
+		}
+		if status == "verified" || status == "success" {
+			successCount++
+		} else if status == "pending" || status == "failed" {
+			failureCount++
+		}
+	}
+
+	successRate := 0.0
+	if totalActivities > 0 {
+		successRate = (float64(successCount) / float64(totalActivities)) * 100
+	}
+
 	return c.JSON(fiber.Map{
 		"activities": activities,
-		"total":      total,
-		"limit":      limit,
-		"offset":     offset,
+		"summary": fiber.Map{
+			"total_activities": totalActivities,
+			"success_count":    successCount,
+			"failure_count":    failureCount,
+			"success_rate":     successRate,
+		},
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
 	})
 }
 

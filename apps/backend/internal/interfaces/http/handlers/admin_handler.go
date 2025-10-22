@@ -1158,56 +1158,13 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"id":               org.ID,
-		"name":             org.Name,
-		"domain":           org.Domain,
-		"plan_type":        org.PlanType,
-		"max_agents":       org.MaxAgents,
-		"max_users":        org.MaxUsers,
-		"auto_approve_sso": org.AutoApproveSSO,
-		"is_active":        org.IsActive,
-	})
-}
-
-// UpdateOrganizationSettings updates organization settings
-func (h *AdminHandler) UpdateOrganizationSettings(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	adminID := c.Locals("user_id").(uuid.UUID)
-
-	var req struct {
-		AutoApproveSSO bool `json:"auto_approve_sso"`
-	}
-
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	if err := h.adminService.UpdateOrganizationSettings(c.Context(), orgID, req.AutoApproveSSO); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	// Log audit
-	h.auditService.LogAction(
-		c.Context(),
-		orgID,
-		adminID,
-		domain.AuditActionUpdate,
-		"organization_settings",
-		orgID,
-		c.IP(),
-		c.Get("User-Agent"),
-		map[string]interface{}{
-			"auto_approve_sso": req.AutoApproveSSO,
-		},
-	)
-
-	return c.JSON(fiber.Map{
-		"message":          "Organization settings updated successfully",
-		"auto_approve_sso": req.AutoApproveSSO,
+		"id":         org.ID,
+		"name":       org.Name,
+		"domain":     org.Domain,
+		"plan_type":  org.PlanType,
+		"max_agents": org.MaxAgents,
+		"max_users":  org.MaxUsers,
+		"is_active":  org.IsActive,
 	})
 }
 

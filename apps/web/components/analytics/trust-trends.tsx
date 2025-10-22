@@ -20,7 +20,7 @@ interface TrustTrendsProps {
 
 interface TrustTrend {
   date: string;
-  avg_trust_score: number;
+  avg_score: number;  // ✅ FIXED: Backend returns avg_score, not avg_trust_score
   agent_count: number;
   scores_by_range: {
     excellent: number;
@@ -218,7 +218,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
             {/* Chart area */}
             <div className="ml-12 mr-4 h-full flex items-end gap-1">
               {data.trends.map((trend, index) => {
-                const height = (trend.avg_trust_score * 100);
+                const height = (trend.avg_score * 100);
                 const color = height >= 90 ? 'bg-green-500' :
                              height >= 75 ? 'bg-blue-500' :
                              height >= 50 ? 'bg-yellow-500' :
@@ -230,10 +230,10 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
                       <div
                         className={`w-full ${color} rounded-t transition-all hover:opacity-80`}
                         style={{ height: `${height * 2}px` }}
-                        title={`${formatDate(trend.date)}: ${(trend.avg_trust_score * 100).toFixed(1)}%`}
+                        title={`${formatDate(trend.date)}: ${(trend.avg_score * 100).toFixed(1)}%`}
                       />
                       <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded shadow">
-                        {(trend.avg_trust_score * 100).toFixed(0)}%
+                        {(trend.avg_score * 100).toFixed(0)}%
                       </div>
                     </div>
                     {index % Math.ceil(data.trends.length / 7) === 0 && (

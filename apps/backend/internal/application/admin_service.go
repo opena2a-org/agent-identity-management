@@ -197,18 +197,3 @@ func (s *AdminService) PermanentlyDeleteUser(ctx context.Context, userID, adminI
 func (s *AdminService) GetOrganizationSettings(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error) {
 	return s.orgRepo.GetByID(orgID)
 }
-
-// UpdateOrganizationSettings updates organization settings
-func (s *AdminService) UpdateOrganizationSettings(ctx context.Context, orgID uuid.UUID, autoApproveSSO bool) error {
-	org, err := s.orgRepo.GetByID(orgID)
-	if err != nil {
-		return fmt.Errorf("failed to get organization: %w", err)
-	}
-
-	org.AutoApproveSSO = autoApproveSSO
-	if err := s.orgRepo.Update(org); err != nil {
-		return fmt.Errorf("failed to update organization settings: %w", err)
-	}
-
-	return nil
-}
