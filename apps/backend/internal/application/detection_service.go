@@ -298,7 +298,22 @@ func (s *DetectionService) GetDetectionStatus(
 		response.LastReportedAt = &sdk.LastHeartbeatAt
 	}
 
-	// 3. Get ALL connected MCPs from talks_to with their detection metadata
+	// 3. Get the most recent protocol from verification events
+	// SDK auto-detects protocol and sends it with each verification request
+	var protocol sql.NullString
+	err = s.db.QueryRowContext(ctx, `
+		SELECT protocol
+		FROM verification_events
+		WHERE agent_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, agentID).Scan(&protocol)
+
+	if err == nil && protocol.Valid {
+		response.Protocol = protocol.String
+	}
+
+	// 4. Get ALL connected MCPs from talks_to with their detection metadata
 	// This query shows all servers in Connections tab, enriched with detection data
 	rows, err := s.db.QueryContext(ctx, `
 		WITH connected_mcps AS (
