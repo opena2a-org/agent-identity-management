@@ -1075,25 +1075,13 @@ def _register_via_oauth(
     registration_data["public_key"] = public_key_b64
     print(f"✅ Keypair generated")
 
-    # Initialize OAuth token manager with SDK credentials path
-    # OAuthTokenManager expects a file path, not the credentials dict
-    # Check for .aim directory (not plaintext file - it might be encrypted!)
-    from pathlib import Path
-    sdk_dir = Path.cwd() / ".aim"
-    print(f"[DEBUG] Checking SDK dir: {sdk_dir}")
-    print(f"[DEBUG] Dir exists: {sdk_dir.exists()}")
-
-    if not sdk_dir.exists():
-        # Fall back to home directory
-        sdk_dir = Path.home() / ".aim"
-        print(f"[DEBUG] Fallback to home dir: {sdk_dir}")
-        print(f"[DEBUG] Home dir exists: {sdk_dir.exists()}")
-
-    # OAuthTokenManager will handle finding encrypted or plaintext credentials
-    sdk_creds_path = sdk_dir / "credentials.json"
-
-    print(f"[DEBUG] Creating OAuthTokenManager with path: {sdk_creds_path}")
-    token_manager = OAuthTokenManager(str(sdk_creds_path))
+    # Initialize OAuth token manager with intelligent credential discovery
+    # NO path argument - let OAuthTokenManager use its _discover_credentials_path() method
+    # This will check: home dir → SDK package dir → current dir (in that order)
+    print(f"[DEBUG] Creating OAuthTokenManager with intelligent credential discovery...")
+    token_manager = OAuthTokenManager()  # ✅ NO path argument!
+    print(f"[DEBUG] OAuthTokenManager created, credentials path: {token_manager.credentials_path}")
+    print(f"[DEBUG] Calling get_access_token()...")
     print(f"[DEBUG] OAuthTokenManager created, calling get_access_token()...")
     access_token = token_manager.get_access_token()
     print(f"[DEBUG] get_access_token() returned: {access_token[:80] if access_token else 'None'}...")

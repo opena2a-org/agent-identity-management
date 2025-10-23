@@ -3,9 +3,12 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
+	"github.com/opena2a/identity/backend/internal/domain"
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 )
 
@@ -81,6 +84,9 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		hasher.Write([]byte(req.RefreshToken))
 		oldTokenHash := hex.EncodeToString(hasher.Sum(nil))
 
+		// CRITICAL: Get old token info BEFORE revoking (for creating new token entry)
+		oldToken, err := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
+
 		// Record usage
 		ipAddress := c.IP()
 		_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
@@ -90,6 +96,46 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		if err != nil {
 			// Log error but don't fail the request (new tokens already issued)
 			_ = err
+		}
+
+		// CRITICAL: Save the new rotated SDK token to database
+		// Use old token info (retrieved before revocation) to create new tracking entry
+		if err == nil && oldToken != nil {
+			// Get new token ID from rotated refresh token
+			newTokenID, err := h.jwtService.GetTokenID(newRefreshToken)
+			if err == nil && newTokenID != "" {
+				// Hash the new token
+				newHasher := sha256.New()
+				newHasher.Write([]byte(newRefreshToken))
+				newTokenHash := hex.EncodeToString(newHasher.Sum(nil))
+
+				// Get client info
+				newIPAddress := c.IP()
+				userAgent := c.Get("User-Agent")
+
+				// Create new SDK token entry
+				newSDKToken := &domain.SDKToken{
+					ID:                uuid.New(),
+					UserID:            oldToken.UserID,
+					OrganizationID:    oldToken.OrganizationID,
+					TokenHash:         newTokenHash,
+					TokenID:           newTokenID,
+					DeviceName:        oldToken.DeviceName,
+					DeviceFingerprint: oldToken.DeviceFingerprint,
+					IPAddress:         &newIPAddress,
+					UserAgent:         &userAgent,
+					CreatedAt:         time.Now(),
+					ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
+					Metadata: map[string]interface{}{
+						"source":         "token_rotation",
+						"rotated_from":   tokenID,
+						"rotation_count": 1,
+					},
+				}
+
+				// Save to database (critical for next rotation)
+				_ = h.sdkTokenService.CreateToken(c.Context(), newSDKToken)
+			}
 		}
 	}
 

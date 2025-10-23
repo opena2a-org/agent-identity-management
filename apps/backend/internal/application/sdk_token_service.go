@@ -81,6 +81,16 @@ func (s *SDKTokenService) ValidateToken(ctx context.Context, tokenHash string) (
 	return token, nil
 }
 
+// CreateToken creates a new SDK token (for token rotation)
+func (s *SDKTokenService) CreateToken(ctx context.Context, token *domain.SDKToken) error {
+	return s.sdkTokenRepo.Create(token)
+}
+
+// GetByTokenHash retrieves a token by its hash (even if revoked - for recovery)
+func (s *SDKTokenService) GetByTokenHash(ctx context.Context, tokenHash string) (*domain.SDKToken, error) {
+	return s.sdkTokenRepo.GetByTokenHash(tokenHash)
+}
+
 // CleanupExpiredTokens removes expired tokens (for scheduled jobs)
 func (s *SDKTokenService) CleanupExpiredTokens(ctx context.Context) error {
 	return s.sdkTokenRepo.DeleteExpired()

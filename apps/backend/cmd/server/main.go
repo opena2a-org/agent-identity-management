@@ -587,6 +587,7 @@ type Handlers struct {
 	SDK                *handlers.SDKHandler
 	SDKToken           *handlers.SDKTokenHandler
 	AuthRefresh        *handlers.AuthRefreshHandler
+	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
 	Capability         *handlers.CapabilityHandler
 	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
 	CapabilityRequest  *handlers.CapabilityRequestHandlers // ✅ For capability request approval
@@ -685,6 +686,10 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			jwtService,
 			services.SDKToken,
 		),
+		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
+			services.SDKToken,
+			jwtService,
+		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
 		),
@@ -740,9 +745,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 
 	// Auth routes (no authentication required)
 	auth := v1.Group("/auth")
-	auth.Post("/login/local", h.Auth.LocalLogin) // Local email/password login
+	auth.Post("/login/local", h.Auth.LocalLogin)       // Local email/password login
 	auth.Post("/logout", h.Auth.Logout)
-	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
+	auth.Post("/refresh", h.AuthRefresh.RefreshToken)  // Refresh access token (with token rotation)
+	auth.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // Recover revoked SDK tokens (zero downtime!)
 
 	// Authenticated auth routes (authentication required)
 	authProtected := v1.Group("/auth")
