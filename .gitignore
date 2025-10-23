@@ -58,3 +58,4 @@ logs/
 # Sensitive Documentation (Strategy, Roadmaps, Premium Products)
 docs/
 
+apps/backend/aim-backend
