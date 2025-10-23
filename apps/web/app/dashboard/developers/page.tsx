@@ -23,7 +23,12 @@ import {
   BookOpen,
   Braces,
   FileJson,
-  Zap
+  Zap,
+  Bot,
+  FileText,
+  Shield,
+  BarChart,
+  Plug
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,6 +74,12 @@ export default function DevelopersPage() {
   const [responseData, setResponseData] = useState<any>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [responseMetadata, setResponseMetadata] = useState<{
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    duration: number;
+  } | null>(null);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -93,7 +104,7 @@ export default function DevelopersPage() {
     {
       category: 'Authentication & Authorization',
       description: 'OAuth 2.0, JWT tokens, and user authentication',
-      icon: '🔐',
+      icon: 'Lock',
       endpoints: [
         {
           method: 'GET',
@@ -148,7 +159,7 @@ export default function DevelopersPage() {
     {
       category: 'Agent Lifecycle Management',
       description: 'Create, manage, and control AI agent identities',
-      icon: '🤖',
+      icon: 'Bot',
       endpoints: [
         {
           method: 'POST',
@@ -269,7 +280,7 @@ export default function DevelopersPage() {
     {
       category: 'Compliance & Audit',
       description: 'Compliance monitoring, audit trails, and regulatory reporting',
-      icon: '📋',
+      icon: 'FileText',
       endpoints: [
         {
           method: 'GET',
@@ -314,7 +325,7 @@ export default function DevelopersPage() {
     {
       category: 'Security & Alerts',
       description: 'Security monitoring, threat detection, and alert management',
-      icon: '🛡️',
+      icon: 'Shield',
       endpoints: [
         {
           method: 'GET',
@@ -350,7 +361,7 @@ export default function DevelopersPage() {
     {
       category: 'Analytics & Reporting',
       description: 'Usage statistics, trust trends, and activity monitoring',
-      icon: '📊',
+      icon: 'BarChart',
       endpoints: [
         {
           method: 'GET',
@@ -397,7 +408,7 @@ export default function DevelopersPage() {
     {
       category: 'SDK & Integration',
       description: 'Client SDKs, webhooks, and third-party integrations',
-      icon: '🔌',
+      icon: 'Plug',
       endpoints: [
         {
           method: 'GET',
@@ -472,10 +483,44 @@ export default function DevelopersPage() {
     }
   };
 
+  const generateCurlCommand = (endpoint: APIEndpoint) => {
+    const token = isAuthenticated ? userToken : manualToken;
+    const baseUrl = 'http://localhost:8080';
+
+    let curl = `curl -X ${endpoint.method} ${baseUrl}${endpoint.path}`;
+
+    if (token) {
+      curl += ` \\\n  -H "Authorization: Bearer ${token.substring(0, 20)}..."`;
+    }
+
+    curl += ` \\\n  -H "Content-Type: application/json"`;
+
+    if ((endpoint.method === 'POST' || endpoint.method === 'PUT') && requestBody && requestBody !== '{}') {
+      curl += ` \\\n  -d '${requestBody}'`;
+    }
+
+    return curl;
+  };
+
+  const getIconComponent = (iconName: string) => {
+    const icons: Record<string, any> = {
+      Lock,
+      Bot,
+      FileText,
+      Shield,
+      BarChart,
+      Plug,
+    };
+    return icons[iconName] || BookOpen;
+  };
+
   const executeAPIRequest = async (endpoint: APIEndpoint) => {
     setIsExecuting(true);
     setExecutionError(null);
     setResponseData(null);
+    setResponseMetadata(null);
+
+    const startTime = performance.now();
 
     try {
       const token = isAuthenticated ? userToken : manualToken;
@@ -511,6 +556,20 @@ export default function DevelopersPage() {
       }
 
       const response = await fetch(`http://localhost:8080${endpoint.path}`, fetchOptions);
+      const duration = performance.now() - startTime;
+
+      // Capture response headers
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      setResponseMetadata({
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+        duration: Math.round(duration),
+      });
 
       const contentType = response.headers.get('content-type');
       let data;
@@ -586,9 +645,12 @@ export default function DevelopersPage() {
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{category.icon}</span>
-                  <span className="text-sm font-medium">{category.category}</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
+                  {(() => {
+                    const IconComponent = getIconComponent(category.icon);
+                    return <IconComponent className="h-5 w-5 text-gray-600" />;
+                  })()}
+                  <span className="font-medium">{category.category}</span>
+                  <Badge variant="outline" className="ml-auto">
                     {category.endpoints.length}
                   </Badge>
                 </div>
@@ -599,7 +661,7 @@ export default function DevelopersPage() {
                 <div className="ml-4 mt-2 space-y-1">
                   {category.endpoints.map((endpoint) => (
                     <button
-                      key={endpoint.path}
+                      key={`${endpoint.method}-${endpoint.path}`}
                       onClick={() => {
                         setSelectedEndpoint(endpoint);
                         setResponseData(null);
@@ -792,46 +854,96 @@ export default function DevelopersPage() {
                 </TabsContent>
               )}
 
-              {/* Try it out Tab */}
+              {/* Try it out Tab - Swagger Style */}
               <TabsContent value="try-it" className="space-y-4">
+                {/* Request URL Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-semibold text-gray-700">Request URL</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-gray-900 text-gray-100 p-3 rounded-lg font-mono text-sm flex items-center justify-between">
+                      <code>http://localhost:8080{selectedEndpoint.path}</code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(`http://localhost:8080${selectedEndpoint.path}`, 'request-url')}
+                        className="text-gray-300 hover:text-white hover:bg-gray-800"
+                      >
+                        {copiedCode === 'request-url' ? (
+                          <CheckCircle className="h-4 w-4 text-green-400" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* cURL Command Section */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-gray-700">cURL Command</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(generateCurlCommand(selectedEndpoint), 'curl-command')}
+                    >
+                      {copiedCode === 'curl-command' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
+                      <code>{generateCurlCommand(selectedEndpoint)}</code>
+                    </pre>
+                  </CardContent>
+                </Card>
+
+                {/* Parameters Section */}
                 <Card className="border-2 border-blue-200 bg-blue-50">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Play className="h-5 w-5 text-blue-600" />
-                        Interactive API Console
-                      </CardTitle>
-                      {!isAuthenticated && selectedEndpoint.requiresAuth && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowTokenInput(!showTokenInput)}
-                        >
-                          <Key className="mr-2 h-3.5 w-3.5" />
-                          {showTokenInput ? 'Hide Token' : 'Add Token'}
-                        </Button>
-                      )}
-                    </div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Braces className="h-5 w-5 text-blue-600" />
+                      Parameters
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Token Input for Unauthenticated Users */}
-                    {!isAuthenticated && selectedEndpoint.requiresAuth && showTokenInput && (
+                    {/* Authorization */}
+                    {selectedEndpoint.requiresAuth && (
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-700">Authorization Token:</label>
-                        <Input
-                          placeholder="Paste your JWT token here..."
-                          value={manualToken}
-                          onChange={(e) => setManualToken(e.target.value)}
-                          type="password"
-                          className="bg-white"
-                        />
+                        <div className="flex items-center gap-2">
+                          <Key className="h-4 w-4 text-gray-600" />
+                          <label className="text-sm font-semibold text-gray-700">Authorization</label>
+                          <Badge variant="outline" className="text-xs">Header</Badge>
+                          {isAuthenticated && <Badge className="bg-green-500">Authorized</Badge>}
+                        </div>
+                        {!isAuthenticated && (
+                          <>
+                            <p className="text-xs text-gray-600">Bearer token required for authentication</p>
+                            <Input
+                              placeholder="Paste your JWT token here..."
+                              value={manualToken}
+                              onChange={(e) => setManualToken(e.target.value)}
+                              type="password"
+                              className="bg-white"
+                            />
+                          </>
+                        )}
                       </div>
                     )}
 
-                    {/* Request Body Editor (for POST/PUT) */}
+                    {/* Request Body (for POST/PUT) */}
                     {(selectedEndpoint.method === 'POST' || selectedEndpoint.method === 'PUT') && (
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-700">Request Body:</label>
+                        <div className="flex items-center gap-2">
+                          <FileJson className="h-4 w-4 text-gray-600" />
+                          <label className="text-sm font-semibold text-gray-700">Request Body</label>
+                          <Badge variant="outline" className="text-xs">application/json</Badge>
+                        </div>
                         <Textarea
                           placeholder='{"key": "value"}'
                           value={requestBody}
@@ -852,27 +964,72 @@ export default function DevelopersPage() {
                         <>Executing...</>
                       ) : (
                         <>
-                          <Play className="mr-2 h-4 w-4" />
+                          <Zap className="mr-2 h-4 w-4" />
                           Execute Request
                         </>
                       )}
                     </Button>
+                  </CardContent>
+                </Card>
 
-                    {/* Response Display */}
-                    {(responseData || executionError) && (
-                      <div className="space-y-2 mt-4">
+                {/* Server Response Section */}
+                {(responseData || executionError || responseMetadata) && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Server Response</CardTitle>
+                        {responseMetadata && (
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={`${
+                                responseMetadata.status >= 200 && responseMetadata.status < 300
+                                  ? 'bg-green-500'
+                                  : responseMetadata.status >= 400
+                                  ? 'bg-red-500'
+                                  : 'bg-orange-500'
+                              }`}
+                            >
+                              {responseMetadata.status} {responseMetadata.statusText}
+                            </Badge>
+                            <Badge variant="outline">
+                              {responseMetadata.duration}ms
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Response Headers */}
+                      {responseMetadata && Object.keys(responseMetadata.headers).length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-semibold text-gray-700">Response Headers</label>
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                            <div className="space-y-1 font-mono text-xs">
+                              {Object.entries(responseMetadata.headers).map(([key, value]) => (
+                                <div key={key} className="flex gap-2">
+                                  <span className="text-gray-600">{key}:</span>
+                                  <span className="text-gray-900">{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Response Body */}
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm font-semibold text-gray-700">Response:</label>
+                          <label className="text-sm font-semibold text-gray-700">Response Body</label>
                           {responseData && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => copyToClipboard(
                                 JSON.stringify(responseData, null, 2),
-                                `response-${selectedEndpoint.path}`
+                                'response-body'
                               )}
                             >
-                              {copiedCode === `response-${selectedEndpoint.path}` ? (
+                              {copiedCode === 'response-body' ? (
                                 <CheckCircle className="h-4 w-4 text-green-500" />
                               ) : (
                                 <Copy className="h-4 w-4" />
@@ -891,17 +1048,15 @@ export default function DevelopersPage() {
                               </div>
                             </div>
                           </div>
-                        ) : (
-                          <pre className="bg-green-50 border-2 border-green-200 rounded-lg p-4 overflow-x-auto text-sm font-mono">
-                            <code className="text-green-900">
-                              {JSON.stringify(responseData, null, 2)}
-                            </code>
+                        ) : responseData && (
+                          <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono max-h-96 overflow-y-auto">
+                            <code>{JSON.stringify(responseData, null, 2)}</code>
                           </pre>
                         )}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
             </Tabs>
           </div>
