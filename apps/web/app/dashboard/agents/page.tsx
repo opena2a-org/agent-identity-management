@@ -246,14 +246,12 @@ function AgentsPageContent() {
     {
       name: "Total Agents",
       value: stats.total.toLocaleString(),
-      change: "+12.5%",
       changeType: "positive",
       icon: Users,
     },
     {
       name: "Verified Agents",
       value: stats.verified.toLocaleString(),
-      change: "+8.2%",
       changeType: "positive",
       icon: CheckCircle2,
     },
@@ -265,7 +263,6 @@ function AgentsPageContent() {
     {
       name: "Avg Trust Score",
       value: `${stats.avgTrustScore}%`,
-      change: "+2.1%",
       changeType: "positive",
       icon: Shield,
     },
