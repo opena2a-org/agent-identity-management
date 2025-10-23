@@ -142,10 +142,10 @@ export function RegisterMCPModal({
         serverData.version = formData.version;
       }
       if (formData.public_key) {
-        serverData.publicKey = formData.public_key;
+        serverData.public_key = formData.public_key;  // Backend expects snake_case
       }
       if (formData.verification_url) {
-        serverData.verificationUrl = formData.verification_url;
+        serverData.verification_url = formData.verification_url;  // Backend expects snake_case
       }
       if (formData.capabilities.length > 0) {
         serverData.capabilities = formData.capabilities;

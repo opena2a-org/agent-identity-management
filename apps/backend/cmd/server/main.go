@@ -493,6 +493,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.User,
 		keyVault,             // ✅ For automatic key generation
 		mcpCapabilityService, // ✅ For automatic capability detection
+		repos.Agent,          // ✅ For connected agents tracking
 	)
 
 	securityService := application.NewSecurityService(

@@ -41,13 +41,13 @@ type SDKCredentials struct {
 }
 
 // DownloadSDK generates a pre-configured SDK with embedded credentials
-// @Summary Download pre-configured SDK
-// @Description Downloads SDK (Python, Go, or JavaScript) with embedded OAuth credentials for zero-config usage
+// @Summary Download pre-configured Python SDK
+// @Description Downloads production-ready Python SDK with embedded OAuth credentials for zero-config usage. Go and JavaScript SDKs planned for Q1-Q2 2026.
 // @Tags sdk
 // @Produce application/zip
-// @Param sdk query string false "SDK type (python, go, javascript)" default(python)
+// @Param sdk query string false "SDK type (only 'python' supported)" default(python)
 // @Success 200 {file} binary "SDK zip file"
-// @Failure 400 {object} ErrorResponse "Invalid SDK type"
+// @Failure 400 {object} ErrorResponse "Invalid SDK type - only Python supported"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/sdk/download [get]
@@ -56,16 +56,15 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// Get SDK type from query parameter (default to python for backward compatibility)
 	sdkType := c.Query("sdk", "python")
 
-	// Validate SDK type
+	// Validate SDK type - ONLY Python SDK is production-ready
+	// Go and JavaScript SDKs archived for Q1-Q2 2026 release
 	validSDKs := map[string]bool{
-		"python":     true,
-		"go":         true,
-		"javascript": true,
+		"python": true,
 	}
 
 	if !validSDKs[sdkType] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid SDK type '%s'. Supported: python, go, javascript", sdkType),
+			"error": fmt.Sprintf("Invalid SDK type '%s'. Only 'python' SDK is currently available. Go and JavaScript SDKs planned for Q1-Q2 2026.", sdkType),
 		})
 	}
 
@@ -192,10 +191,11 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	zipWriter := zip.NewWriter(buf)
 
 	// Get SDK root directory based on type
-	// Use environment variable if set, otherwise use relative path from working directory
+	// Use environment variable if set, otherwise use relative path from project root
 	sdkBaseDir := os.Getenv("SDK_BASE_DIR")
 	if sdkBaseDir == "" {
-		sdkBaseDir = "sdks" // Default: relative to working directory
+		// Default: relative to project root (../../sdks from apps/backend)
+		sdkBaseDir = filepath.Join("..", "..", "sdks")
 	}
 	sdkRoot := filepath.Join(sdkBaseDir, sdkType)
 	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)

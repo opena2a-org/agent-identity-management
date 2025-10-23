@@ -1051,6 +1051,20 @@ class APIClient {
     return this.request(`/api/v1/mcp-servers/${id}`);
   }
 
+  async getMCPServerConnectedAgents(id: string): Promise<{
+    connected_agents: Array<{
+      id: string;
+      name: string;
+      display_name: string;
+      status: string;
+      trust_score: number;
+      updated_at: string;
+    }>;
+    count: number;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${id}/agents`);
+  }
+
   async updateMCPServer(id: string, data: any): Promise<any> {
     return this.request(`/api/v1/mcp-servers/${id}`, {
       method: "PUT",

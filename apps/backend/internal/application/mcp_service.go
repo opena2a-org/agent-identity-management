@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ type MCPService struct {
 	keyVault              *crypto.KeyVault       // ✅ For secure private key storage
 	capabilityService     *MCPCapabilityService  // ✅ For automatic capability detection
 	httpClient            *http.Client           // ✅ For real MCP server communication
+	agentRepo             *repository.AgentRepository // ✅ For querying connected agents
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
 }
@@ -36,7 +38,7 @@ type ChallengeData struct {
 	ExpiresAt time.Time
 }
 
-func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService) *MCPService {
+func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, agentRepo *repository.AgentRepository) *MCPService {
 	return &MCPService{
 		mcpRepo:               mcpRepo,
 		verificationEventRepo: verificationEventRepo,
@@ -48,6 +50,7 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 			Timeout: 30 * time.Second, // 30 second timeout for MCP server communication
 		},
 		challenges: make(map[string]ChallengeData),
+		agentRepo:  agentRepo,
 	}
 }
 
@@ -110,14 +113,14 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	server := &domain.MCPServer{
 		ID:              uuid.New(),
 		OrganizationID:  orgID,
-		Name:            req.Name,
+		Name:            strings.TrimSpace(req.Name),
 		Description:     req.Description,
-		URL:             req.URL,
+		URL:             strings.TrimSpace(req.URL), // ✅ Trim spaces from URL
 		Version:         req.Version,
 		PublicKey:       publicKey, // ✅ Auto-generated if not provided
 		Status:          domain.MCPServerStatusPending,
 		IsVerified:      false,
-		VerificationURL: req.VerificationURL,
+		VerificationURL: strings.TrimSpace(req.VerificationURL), // ✅ Trim spaces
 		Capabilities:    req.Capabilities,
 		TrustScore:      0.0,
 		CreatedBy:       userID,
@@ -167,13 +170,13 @@ func (s *MCPService) UpdateMCPServer(ctx context.Context, id uuid.UUID, req *Upd
 
 	// Update fields
 	if req.Name != "" {
-		server.Name = req.Name
+		server.Name = strings.TrimSpace(req.Name)
 	}
 	if req.Description != "" {
 		server.Description = req.Description
 	}
 	if req.URL != "" {
-		server.URL = req.URL
+		server.URL = strings.TrimSpace(req.URL) // ✅ Trim spaces
 	}
 	if req.Version != "" {
 		server.Version = req.Version
@@ -182,7 +185,7 @@ func (s *MCPService) UpdateMCPServer(ctx context.Context, id uuid.UUID, req *Upd
 		server.PublicKey = req.PublicKey
 	}
 	if req.VerificationURL != "" {
-		server.VerificationURL = req.VerificationURL
+		server.VerificationURL = strings.TrimSpace(req.VerificationURL) // ✅ Trim spaces
 	}
 	if len(req.Capabilities) > 0 {
 		server.Capabilities = req.Capabilities
@@ -239,6 +242,9 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		server.VerificationURL = server.URL + "/.well-known/mcp/verify"
 	}
 
+	// Clean up URL (trim spaces that might have been entered in the form)
+	verificationURL := strings.TrimSpace(server.VerificationURL)
+
 	// Step 3a: Send challenge to MCP server
 	challengeReq := map[string]string{
 		"challenge": challenge,
@@ -249,7 +255,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		return fmt.Errorf("failed to marshal challenge request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", server.VerificationURL, bytes.NewBuffer(reqBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", verificationURL, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return fmt.Errorf("failed to create verification request: %w", err)
 	}
@@ -498,4 +504,75 @@ func (s *MCPService) VerifyMCPAction(
 	// - Timestamp and metadata
 
 	return allowed, reason, auditID, nil
+}
+
+// ========================================
+// Agent Connection Tracking
+// ========================================
+
+// ConnectedAgent represents an agent that uses an MCP server
+type ConnectedAgent struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Status      string    `json:"status"`
+	TrustScore  float64   `json:"trust_score"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// GetConnectedAgents returns all agents that use a specific MCP server
+// This enables the global MCP registry to show which agents are connected
+func (s *MCPService) GetConnectedAgents(ctx context.Context, mcpServerID uuid.UUID) ([]ConnectedAgent, error) {
+	// 1. Get the MCP server to find its name
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("MCP server not found: %w", err)
+	}
+
+	// 2. Get all agents in the same organization
+	allAgents, err := s.agentRepo.GetByOrganization(mcpServer.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agents: %w", err)
+	}
+
+	// 3. Filter agents that have this MCP server in their talks_to list
+	connectedAgents := []ConnectedAgent{}
+	for _, agent := range allAgents {
+		// Skip if agent has no talks_to list
+		if agent.TalksTo == nil {
+			continue
+		}
+
+		// Check if this MCP server is in the talks_to list
+		// Match by both ID and name for flexibility
+		isConnected := false
+		for _, mcpIdentifier := range agent.TalksTo {
+			if mcpIdentifier == mcpServer.ID.String() || mcpIdentifier == mcpServer.Name {
+				isConnected = true
+				break
+			}
+		}
+
+		if isConnected {
+			connectedAgents = append(connectedAgents, ConnectedAgent{
+				ID:          agent.ID,
+				Name:        agent.Name,
+				DisplayName: agent.DisplayName,
+				Status:      string(agent.Status),
+				TrustScore:  agent.TrustScore,
+				UpdatedAt:   agent.UpdatedAt,
+			})
+		}
+	}
+
+	return connectedAgents, nil
+}
+
+// GetConnectedAgentsCount returns the count of agents using an MCP server
+func (s *MCPService) GetConnectedAgentsCount(ctx context.Context, mcpServerID uuid.UUID) (int, error) {
+	agents, err := s.GetConnectedAgents(ctx, mcpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return len(agents), nil
 }
