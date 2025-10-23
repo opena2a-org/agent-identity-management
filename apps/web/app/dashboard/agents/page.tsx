@@ -238,7 +238,7 @@ function AgentsPageContent() {
     avgTrustScore:
       agents && agents.length > 0
         ? Math.round(
-            agents.reduce((sum, a) => sum + a.trust_score, 0) / agents.length
+            (agents.reduce((sum, a) => sum + a.trust_score, 0) / agents.length) * 100
           )
         : 0,
   };
