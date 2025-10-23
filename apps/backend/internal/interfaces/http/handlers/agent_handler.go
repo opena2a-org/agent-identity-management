@@ -1489,3 +1489,94 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 	})
 }
 
+// UpdateAgentKeys allows SDK to register its own public key
+// @Summary Update agent public key
+// @Description Register or update an agent's public key. Used by SDK during initialization.
+// @Tags agents
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param body body object true "Public key to register"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/keys [put]
+func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		PublicKey string `json:"public_key"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.PublicKey == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "public_key is required",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Update public key
+	if err := h.agentService.UpdateAgentPublicKey(c.Context(), agentID, req.PublicKey); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Get updated agent
+	agent, _ = h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":         "update_public_key",
+			"agent_name":     agent.Name,
+			"rotation_count": agent.RotationCount,
+			"key_created_at": agent.KeyCreatedAt,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"success":             true,
+		"message":             "Public key updated successfully",
+		"public_key":          agent.PublicKey,
+		"previous_public_key": agent.PreviousPublicKey,
+		"rotation_count":      agent.RotationCount,
+		"key_created_at":      agent.KeyCreatedAt,
+		"key_expires_at":      agent.KeyExpiresAt,
+	})
+}
+

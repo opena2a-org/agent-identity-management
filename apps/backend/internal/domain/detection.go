@@ -75,6 +75,7 @@ type DetectionStatusResponse struct {
 	SDKVersion        string               `json:"sdkVersion,omitempty"`
 	SDKInstalled      bool                 `json:"sdkInstalled"`
 	AutoDetectEnabled bool                 `json:"autoDetectEnabled"`
+	Protocol          string               `json:"protocol,omitempty"` // SDK-detected protocol: "mcp", "a2a", "oauth", etc.
 	DetectedMCPs      []DetectedMCPSummary `json:"detectedMCPs"`
 	LastReportedAt    *time.Time           `json:"lastReportedAt,omitempty"`
 }

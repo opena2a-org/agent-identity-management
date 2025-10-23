@@ -1040,6 +1040,46 @@ func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (pub
 	return encodedKeys.PublicKeyBase64, encodedKeys.PrivateKeyBase64, nil
 }
 
+// UpdateAgentPublicKey allows SDK to register/update its own public key
+// This is used during SDK initialization when the SDK generates its own keypair
+func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string) error {
+	// 1. Fetch agent
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. Validate public key format (should be base64-encoded 32-byte Ed25519 public key)
+	if publicKey == "" {
+		return fmt.Errorf("public_key is required")
+	}
+
+	// 3. Store previous public key for grace period
+	if agent.PublicKey != nil {
+		agent.PreviousPublicKey = agent.PublicKey
+	}
+
+	// 4. Update agent with new public key
+	agent.PublicKey = &publicKey
+	agent.KeyAlgorithm = "Ed25519"
+	now := time.Now()
+	agent.KeyCreatedAt = &now
+
+	// Set key expiration to 1 year from now
+	keyExpiry := time.Now().AddDate(1, 0, 0)
+	agent.KeyExpiresAt = &keyExpiry
+
+	// Increment rotation count
+	agent.RotationCount++
+
+	// 5. Update agent in database
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to update agent public key: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateLastActive updates the last_active timestamp for an agent
 func (s *AgentService) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
 	return s.agentRepo.UpdateLastActive(ctx, agentID)
