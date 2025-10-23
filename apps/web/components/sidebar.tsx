@@ -24,6 +24,7 @@ import {
   Tag,
   BarChart3,
   Webhook,
+  Code,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -105,6 +106,12 @@ const navigationBase: NavSection[] = [
         href: "/dashboard/security",
         icon: AlertTriangle,
         roles: ["admin", "manager"],
+      },
+      {
+        name: "Developers",
+        href: "/dashboard/developers",
+        icon: Code,
+        roles: ["admin", "manager", "member"], // API docs for developers
       },
     ],
   },
