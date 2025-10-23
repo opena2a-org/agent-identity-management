@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,8 @@ import {
   ChevronRight,
   ChevronDown,
   Play,
-  Key,
-  LogIn,
+  Filter,
+  X,
   AlertCircle,
   Lock,
   Unlock,
@@ -25,45 +25,59 @@ import {
   FileJson,
   Zap,
   Bot,
-  FileText,
+  Server,
+  Key,
+  Activity,
+  Webhook,
+  Tag,
+  Download,
+  AlertTriangle,
+  ShieldCheck,
+  Users,
+  CheckSquare,
+  ClipboardCheck,
+  BarChart3,
   Shield,
-  BarChart,
-  Plug
+  Plug,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiDocumentation, type APIEndpoint, type EndpointCategory } from '@/lib/api-documentation';
 
-interface APIEndpoint {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  path: string;
-  description: string;
-  summary: string;
-  auth: string;
-  requestSchema?: {
-    type: string;
-    properties: Record<string, { type: string; description: string; required?: boolean }>;
-  };
-  responseSchema?: {
-    type: string;
-    properties: Record<string, { type: string; description: string }>;
-  };
-  example: string;
-  requiresAuth: boolean;
-  tags: string[];
-}
-
-interface EndpointCategory {
-  category: string;
-  description: string;
-  icon: string;
-  endpoints: APIEndpoint[];
-}
+// Icon map for categories
+const categoryIcons: Record<string, any> = {
+  Lock,
+  User: Users,
+  Bot,
+  Plug,
+  Shield,
+  Server,
+  Key,
+  Activity,
+  Webhook,
+  Tag,
+  Search,
+  Download,
+  AlertTriangle,
+  ShieldCheck,
+  Users,
+  CheckSquare,
+  ClipboardCheck,
+  BarChart3,
+};
 
 export default function DevelopersPage() {
+  // State
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Authentication & Authorization');
+  const [selectedCategory, setSelectedCategory] = useState<string>(apiDocumentation[0].category);
   const [selectedEndpoint, setSelectedEndpoint] = useState<APIEndpoint | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  // Filters
+  const [filterMethod, setFilterMethod] = useState<string>('all');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [showFilters, setShowFilters] = useState(false);
 
   // API Playground state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -92,7 +106,7 @@ export default function DevelopersPage() {
 
   // Auto-select first endpoint when category changes
   useEffect(() => {
-    const category = apiEndpoints.find(c => c.category === selectedCategory);
+    const category = apiDocumentation.find(c => c.category === selectedCategory);
     if (category && category.endpoints.length > 0) {
       setSelectedEndpoint(category.endpoints[0]);
       setResponseData(null);
@@ -100,421 +114,71 @@ export default function DevelopersPage() {
     }
   }, [selectedCategory]);
 
-  const apiEndpoints: EndpointCategory[] = [
-    {
-      category: 'Authentication & Authorization',
-      description: 'OAuth 2.0, JWT tokens, and user authentication',
-      icon: 'Lock',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/oauth/google/login',
-          summary: 'Initiate Google OAuth login flow',
-          description: 'Redirects user to Google OAuth consent page for authentication',
-          auth: 'None (public)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              redirect_url: { type: 'string', description: 'Google OAuth consent page URL' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/oauth/google/login`,
-          requiresAuth: false,
-          tags: ['oauth', 'authentication']
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/auth/me',
-          summary: 'Get current authenticated user',
-          description: 'Returns the profile of the currently authenticated user including role and organization',
-          auth: 'JWT (all roles)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'User UUID' },
-              email: { type: 'string', description: 'User email address' },
-              role: { type: 'string', description: 'User role (admin|manager|member|viewer)' },
-              organization_id: { type: 'string', description: 'Organization UUID' },
-              created_at: { type: 'string', description: 'ISO 8601 timestamp' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/auth/me \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['authentication', 'user']
-        },
-        {
-          method: 'POST',
-          path: '/api/v1/auth/logout',
-          summary: 'Logout user',
-          description: 'Invalidates the current JWT token and logs out the user',
-          auth: 'JWT (all roles)',
-          example: `curl -X POST https://api.aim.com/api/v1/auth/logout \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['authentication', 'logout']
-        }
-      ]
-    },
-    {
-      category: 'Agent Lifecycle Management',
-      description: 'Create, manage, and control AI agent identities',
-      icon: 'Bot',
-      endpoints: [
-        {
-          method: 'POST',
-          path: '/api/v1/agents',
-          summary: 'Register new agent',
-          description: 'Creates a new agent with automatically generated Ed25519 cryptographic keypair. Returns API key (shown only once!).',
-          auth: 'JWT (member+)',
-          requestSchema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string', description: 'Agent display name', required: true },
-              type: { type: 'string', description: 'Agent type (ai_agent|mcp_server|autonomous_agent)', required: true },
-              description: { type: 'string', description: 'Optional agent description' }
-            }
-          },
-          responseSchema: {
-            type: 'object',
-            properties: {
-              agent: { type: 'object', description: 'Created agent with credentials' },
-              api_key: { type: 'string', description: 'API key (shown only once!)' }
-            }
-          },
-          example: `curl -X POST https://api.aim.com/api/v1/agents \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"MyAgent","type":"ai_agent","description":"My AI assistant"}'`,
-          requiresAuth: true,
-          tags: ['agents', 'create']
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/agents',
-          summary: 'List all agents',
-          description: 'Returns a paginated list of all agents in your organization with their trust scores and verification status',
-          auth: 'JWT (member+)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              agents: { type: 'array', description: 'Array of agent objects' },
-              total: { type: 'number', description: 'Total agent count' },
-              page: { type: 'number', description: 'Current page number' },
-              limit: { type: 'number', description: 'Results per page' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/agents \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['agents', 'list']
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/agents/:id',
-          summary: 'Get agent details',
-          description: 'Retrieves detailed information about a specific agent including public key, trust score, and verification history',
-          auth: 'JWT (member+)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'Agent UUID' },
-              name: { type: 'string', description: 'Agent name' },
-              type: { type: 'string', description: 'Agent type' },
-              public_key: { type: 'string', description: 'Ed25519 public key' },
-              trust_score: { type: 'number', description: 'Trust score (0-100)' },
-              is_verified: { type: 'boolean', description: 'Verification status' },
-              created_at: { type: 'string', description: 'ISO 8601 timestamp' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/agents/AGENT_ID \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['agents', 'details']
-        },
-        {
-          method: 'PUT',
-          path: '/api/v1/agents/:id',
-          summary: 'Update agent metadata',
-          description: 'Updates agent name, description, or custom metadata. Cryptographic keys cannot be changed.',
-          auth: 'JWT (member+)',
-          requestSchema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string', description: 'New agent name' },
-              description: { type: 'string', description: 'New description' },
-              metadata: { type: 'object', description: 'Custom metadata (JSON)' }
-            }
-          },
-          example: `curl -X PUT https://api.aim.com/api/v1/agents/AGENT_ID \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"Updated Agent Name","description":"New description"}'`,
-          requiresAuth: true,
-          tags: ['agents', 'update']
-        },
-        {
-          method: 'POST',
-          path: '/api/v1/agents/:id/suspend',
-          summary: 'Suspend agent',
-          description: 'Immediately suspends an agent and revokes all active sessions. Can be reactivated later.',
-          auth: 'JWT (manager+)',
-          example: `curl -X POST https://api.aim.com/api/v1/agents/AGENT_ID/suspend \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['agents', 'suspend']
-        },
-        {
-          method: 'POST',
-          path: '/api/v1/agents/:id/reactivate',
-          summary: 'Reactivate suspended agent',
-          description: 'Reactivates a previously suspended agent and restores access',
-          auth: 'JWT (manager+)',
-          example: `curl -X POST https://api.aim.com/api/v1/agents/AGENT_ID/reactivate \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['agents', 'reactivate']
-        }
-      ]
-    },
-    {
-      category: 'Compliance & Audit',
-      description: 'Compliance monitoring, audit trails, and regulatory reporting',
-      icon: 'FileText',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/compliance/status',
-          summary: 'Get compliance status',
-          description: 'Returns overall compliance health including SOC 2, HIPAA, and GDPR status',
-          auth: 'JWT (admin)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              overall_status: { type: 'string', description: 'compliant|warning|critical' },
-              last_check: { type: 'string', description: 'ISO 8601 timestamp' },
-              violations: { type: 'array', description: 'Active compliance violations' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/compliance/status \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['compliance', 'status']
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/compliance/metrics',
-          summary: 'Get compliance metrics',
-          description: 'Detailed compliance metrics across SOC 2, HIPAA, and GDPR frameworks',
-          auth: 'JWT (admin)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              soc2: { type: 'object', description: 'SOC 2 compliance metrics' },
-              hipaa: { type: 'object', description: 'HIPAA compliance metrics' },
-              gdpr: { type: 'object', description: 'GDPR compliance metrics' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/compliance/metrics \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['compliance', 'metrics']
-        }
-      ]
-    },
-    {
-      category: 'Security & Alerts',
-      description: 'Security monitoring, threat detection, and alert management',
-      icon: 'Shield',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/admin/alerts',
-          summary: 'List security alerts',
-          description: 'Returns all security alerts with severity levels and acknowledgment status',
-          auth: 'JWT (admin)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              alerts: { type: 'array', description: 'Array of security alert objects' },
-              total: { type: 'number', description: 'Total alert count' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/admin/alerts \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['security', 'alerts']
-        },
-        {
-          method: 'POST',
-          path: '/api/v1/admin/alerts/:id/acknowledge',
-          summary: 'Acknowledge alert',
-          description: 'Marks a security alert as acknowledged by the current admin user',
-          auth: 'JWT (admin)',
-          example: `curl -X POST https://api.aim.com/api/v1/admin/alerts/ALERT_ID/acknowledge \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['security', 'alerts']
-        }
-      ]
-    },
-    {
-      category: 'Analytics & Reporting',
-      description: 'Usage statistics, trust trends, and activity monitoring',
-      icon: 'BarChart',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/analytics/dashboard',
-          summary: 'Get dashboard statistics',
-          description: 'Returns comprehensive dashboard metrics including agent counts, trust scores, and verification statistics',
-          auth: 'JWT (member+)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              total_agents: { type: 'number', description: 'Total agent count' },
-              verified_agents: { type: 'number', description: 'Verified agents count' },
-              avg_trust_score: { type: 'number', description: 'Average trust score (0-100)' },
-              total_verifications: { type: 'number', description: 'Total verification count' },
-              total_users: { type: 'number', description: 'Total user count' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/analytics/dashboard \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['analytics', 'dashboard']
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/analytics/usage',
-          summary: 'Get usage statistics',
-          description: 'API usage metrics including request counts, active agents, and bandwidth consumption',
-          auth: 'JWT (manager+)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              api_calls: { type: 'number', description: 'Total API calls (last 30 days)' },
-              active_agents: { type: 'number', description: 'Currently active agents' },
-              bandwidth: { type: 'number', description: 'Bandwidth used (bytes)' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/analytics/usage \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
-          requiresAuth: true,
-          tags: ['analytics', 'usage']
-        }
-      ]
-    },
-    {
-      category: 'SDK & Integration',
-      description: 'Client SDKs, webhooks, and third-party integrations',
-      icon: 'Plug',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/sdk/python',
-          summary: 'Download Python SDK',
-          description: 'Returns download URL for the latest Python SDK package',
-          auth: 'None (public)',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              download_url: { type: 'string', description: 'Python SDK download URL' },
-              version: { type: 'string', description: 'SDK version (semver)' },
-              docs_url: { type: 'string', description: 'Documentation URL' }
-            }
-          },
-          example: `curl -X GET https://api.aim.com/api/v1/sdk/python`,
-          requiresAuth: false,
-          tags: ['sdk', 'python']
-        },
-        {
-          method: 'POST',
-          path: '/api/v1/webhooks',
-          summary: 'Register webhook',
-          description: 'Creates a new webhook subscription for event notifications (agent.created, agent.suspended, etc.)',
-          auth: 'JWT (manager+)',
-          requestSchema: {
-            type: 'object',
-            properties: {
-              url: { type: 'string', description: 'Webhook endpoint URL', required: true },
-              events: { type: 'array', description: 'Event types to subscribe to', required: true },
-              secret: { type: 'string', description: 'Webhook signing secret (optional)' }
-            }
-          },
-          example: `curl -X POST https://api.aim.com/api/v1/webhooks \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"url":"https://example.com/webhook","events":["agent.created","agent.suspended"]}'`,
-          requiresAuth: true,
-          tags: ['webhooks', 'integration']
-        }
-      ]
-    }
-  ];
+  // Filtered categories and endpoints
+  const filteredData = useMemo(() => {
+    return apiDocumentation
+      .map(category => {
+        const filteredEndpoints = category.endpoints.filter(endpoint => {
+          // Search filter
+          const matchesSearch = searchTerm === '' ||
+            endpoint.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            endpoint.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            endpoint.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            endpoint.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const filteredEndpoints = apiEndpoints
-    .map(category => ({
-      ...category,
-      endpoints: category.endpoints.filter(endpoint => {
-        const matchesSearch = searchTerm === '' ||
-          endpoint.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          endpoint.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          endpoint.summary.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesSearch;
+          // Method filter
+          const matchesMethod = filterMethod === 'all' || endpoint.method === filterMethod;
+
+          // Role filter
+          const matchesRole = filterRole === 'all' || endpoint.roleRequired === filterRole;
+
+          return matchesSearch && matchesMethod && matchesRole;
+        });
+
+        return {
+          ...category,
+          endpoints: filteredEndpoints,
+          matchCount: filteredEndpoints.length,
+        };
       })
-    }))
-    .filter(category => category.endpoints.length > 0);
+      .filter(category => category.matchCount > 0);
+  }, [searchTerm, filterMethod, filterRole]);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(label);
+  // Total endpoint count
+  const totalEndpoints = useMemo(() => {
+    return filteredData.reduce((sum, cat) => sum + cat.matchCount, 0);
+  }, [filteredData]);
+
+  // Copy to clipboard
+  const copyToClipboard = async (text: string, type: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedCode(type);
     toast.success('Copied to clipboard!');
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const getMethodColor = (method: string) => {
-    switch (method) {
-      case 'GET': return 'bg-blue-500 hover:bg-blue-600';
-      case 'POST': return 'bg-green-500 hover:bg-green-600';
-      case 'PUT': return 'bg-orange-500 hover:bg-orange-600';
-      case 'DELETE': return 'bg-red-500 hover:bg-red-600';
-      default: return 'bg-gray-500 hover:bg-gray-600';
+  // Toggle category collapse
+  const toggleCategory = (category: string) => {
+    const newCollapsed = new Set(collapsedCategories);
+    if (newCollapsed.has(category)) {
+      newCollapsed.delete(category);
+    } else {
+      newCollapsed.add(category);
     }
+    setCollapsedCategories(newCollapsed);
   };
 
-  const generateCurlCommand = (endpoint: APIEndpoint) => {
-    const token = isAuthenticated ? userToken : manualToken;
-    const baseUrl = 'http://localhost:8080';
-
-    let curl = `curl -X ${endpoint.method} ${baseUrl}${endpoint.path}`;
-
-    if (token) {
-      curl += ` \\\n  -H "Authorization: Bearer ${token.substring(0, 20)}..."`;
-    }
-
-    curl += ` \\\n  -H "Content-Type: application/json"`;
-
-    if ((endpoint.method === 'POST' || endpoint.method === 'PUT') && requestBody && requestBody !== '{}') {
-      curl += ` \\\n  -d '${requestBody}'`;
-    }
-
-    return curl;
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterMethod('all');
+    setFilterRole('all');
   };
 
-  const getIconComponent = (iconName: string) => {
-    const icons: Record<string, any> = {
-      Lock,
-      Bot,
-      FileText,
-      Shield,
-      BarChart,
-      Plug,
-    };
-    return icons[iconName] || BookOpen;
-  };
+  // Execute API request
+  const executeRequest = async () => {
+    if (!selectedEndpoint) return;
 
-  const executeAPIRequest = async (endpoint: APIEndpoint) => {
     setIsExecuting(true);
     setExecutionError(null);
     setResponseData(null);
@@ -524,551 +188,650 @@ export default function DevelopersPage() {
 
     try {
       const token = isAuthenticated ? userToken : manualToken;
-
-      if (endpoint.requiresAuth && !token) {
-        setExecutionError('Authentication required. Please login or provide a JWT token.');
-        setIsExecuting(false);
-        return;
-      }
-
-      const headers: HeadersInit = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
-      if (token) {
+      if (selectedEndpoint.requiresAuth && token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const fetchOptions: RequestInit = {
-        method: endpoint.method,
-        headers,
-      };
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      let url = `${apiUrl}${selectedEndpoint.path}`;
 
-      if ((endpoint.method === 'POST' || endpoint.method === 'PUT') && requestBody) {
+      // Replace path parameters with actual values
+      const pathParams = selectedEndpoint.path.match(/:(\w+)/g);
+      if (pathParams) {
         try {
-          JSON.parse(requestBody);
-          fetchOptions.body = requestBody;
-        } catch (err) {
-          setExecutionError('Invalid JSON in request body');
-          setIsExecuting(false);
-          return;
+          const bodyData = JSON.parse(requestBody);
+          pathParams.forEach(param => {
+            const paramName = param.substring(1);
+            if (bodyData[paramName]) {
+              url = url.replace(param, bodyData[paramName]);
+              delete bodyData[paramName];
+            }
+          });
+        } catch (e) {
+          // Ignore JSON parse errors for now
         }
       }
 
-      const response = await fetch(`http://localhost:8080${endpoint.path}`, fetchOptions);
-      const duration = performance.now() - startTime;
+      const options: RequestInit = {
+        method: selectedEndpoint.method,
+        headers,
+      };
 
-      // Capture response headers
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
+      if (selectedEndpoint.method !== 'GET' && requestBody !== '{}') {
+        options.body = requestBody;
+      }
+
+      const response = await fetch(url, options);
+      const endTime = performance.now();
+      const duration = Math.round(endTime - startTime);
+
+      const data = await response.json();
 
       setResponseMetadata({
         status: response.status,
         statusText: response.statusText,
-        headers: responseHeaders,
-        duration: Math.round(duration),
+        headers: Object.fromEntries(response.headers.entries()),
+        duration,
       });
 
-      const contentType = response.headers.get('content-type');
-      let data;
-
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = { message: await response.text() };
-      }
-
-      if (!response.ok) {
-        setExecutionError(`HTTP ${response.status}: ${data.error || data.message || 'Request failed'}`);
-      } else {
+      if (response.ok) {
         setResponseData(data);
-        toast.success('Request executed successfully!');
+        toast.success(`Request successful (${duration}ms)`);
+      } else {
+        setExecutionError(JSON.stringify(data, null, 2));
+        toast.error(`Request failed: ${response.statusText}`);
       }
-    } catch (error) {
-      setExecutionError(error instanceof Error ? error.message : 'Network error');
+    } catch (error: any) {
+      const endTime = performance.now();
+      const duration = Math.round(endTime - startTime);
+      setExecutionError(error.message || 'Network error occurred');
+      setResponseMetadata({
+        status: 0,
+        statusText: 'Network Error',
+        headers: {},
+        duration,
+      });
+      toast.error('Request failed: ' + error.message);
     } finally {
       setIsExecuting(false);
     }
   };
 
+  // Generate cURL command
+  const generateCurl = () => {
+    if (!selectedEndpoint) return '';
+
+    const token = isAuthenticated ? userToken : manualToken;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    let curl = `curl -X ${selectedEndpoint.method} '${apiUrl}${selectedEndpoint.path}'`;
+
+    if (selectedEndpoint.requiresAuth && token) {
+      curl += ` \\\n  -H 'Authorization: Bearer ${token}'`;
+    }
+
+    curl += ` \\\n  -H 'Content-Type: application/json'`;
+
+    if (selectedEndpoint.method !== 'GET' && requestBody !== '{}') {
+      curl += ` \\\n  -d '${requestBody}'`;
+    }
+
+    return curl;
+  };
+
+  // Method badge color
+  const getMethodColor = (method: string) => {
+    switch (method) {
+      case 'GET': return 'bg-blue-500';
+      case 'POST': return 'bg-green-500';
+      case 'PUT': return 'bg-yellow-500';
+      case 'DELETE': return 'bg-red-500';
+      case 'PATCH': return 'bg-purple-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  // Active filters count
+  const activeFiltersCount = (searchTerm !== '' ? 1 : 0) + (filterMethod !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0);
+
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Left Sidebar - Swagger style navigation */}
-      <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">AIM API v1.0</h1>
-              <p className="text-sm text-gray-500 mt-1">OpenAPI 3.0 Specification</p>
-            </div>
-            {isAuthenticated ? (
-              <Badge variant="default" className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600">
-                <Unlock className="h-3 w-3" />
-                Auth
-              </Badge>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = '/auth/login'}
-              >
-                <LogIn className="mr-1.5 h-3.5 w-3.5" />
-                Login
-              </Button>
-            )}
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search endpoints..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-50 border-gray-200"
-            />
-          </div>
-        </div>
-
-        {/* Endpoint Categories */}
-        <div className="p-4 space-y-2">
-          {filteredEndpoints.map((category) => (
-            <div key={category.category}>
-              <button
-                onClick={() => setSelectedCategory(category.category)}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                  selectedCategory === category.category
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const IconComponent = getIconComponent(category.icon);
-                    return <IconComponent className="h-5 w-5 text-gray-600" />;
-                  })()}
-                  <span className="font-medium">{category.category}</span>
-                  <Badge variant="outline" className="ml-auto">
-                    {category.endpoints.length}
-                  </Badge>
-                </div>
-              </button>
-
-              {/* Endpoints in this category */}
-              {selectedCategory === category.category && (
-                <div className="ml-4 mt-2 space-y-1">
-                  {category.endpoints.map((endpoint) => (
-                    <button
-                      key={`${endpoint.method}-${endpoint.path}`}
-                      onClick={() => {
-                        setSelectedEndpoint(endpoint);
-                        setResponseData(null);
-                        setExecutionError(null);
-                        setActiveTab('overview');
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-md transition-colors group ${
-                        selectedEndpoint?.path === endpoint.path
-                          ? 'bg-blue-100 border border-blue-300'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <Badge
-                          className={`${getMethodColor(endpoint.method)} text-white text-xs px-1.5 py-0 mt-0.5`}
-                        >
-                          {endpoint.method}
-                        </Badge>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-mono text-gray-700 truncate">
-                            {endpoint.path}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {endpoint.summary}
-                          </p>
-                        </div>
-                        {endpoint.requiresAuth && (
-                          <Lock className="h-3 w-3 text-amber-500 flex-shrink-0 mt-1" />
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">API Documentation</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">
+          Complete AIM API reference with {apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)} endpoints
+        </p>
       </div>
 
-      {/* Main Content Area - Swagger style details */}
-      <div className="flex-1 overflow-y-auto">
-        {selectedEndpoint ? (
-          <div className="max-w-5xl mx-auto p-8">
-            {/* Endpoint Header */}
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Badge className={`${getMethodColor(selectedEndpoint.method)} text-white px-3 py-1`}>
-                  {selectedEndpoint.method}
-                </Badge>
-                <code className="text-lg font-mono font-semibold text-gray-900">
-                  {selectedEndpoint.path}
-                </code>
-                {selectedEndpoint.requiresAuth && (
-                  <div className="flex items-center gap-1.5 text-amber-600 text-sm">
-                    <Lock className="h-4 w-4" />
-                    <span className="font-medium">{selectedEndpoint.auth}</span>
+      {/* Search and Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-4">
+            {/* Search Bar */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search endpoints, tags, descriptions..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                variant={showFilters ? "default" : "outline"}
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {activeFiltersCount}
+                  </Badge>
+                )}
+              </Button>
+            </div>
+
+            {/* Advanced Filters */}
+            {showFilters && (
+              <div className="flex flex-wrap gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-sm font-medium mb-2 block">HTTP Method</label>
+                  <select
+                    value={filterMethod}
+                    onChange={(e) => setFilterMethod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+                  >
+                    <option value="all">All Methods</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-sm font-medium mb-2 block">Required Role</label>
+                  <select
+                    value={filterRole}
+                    onChange={(e) => setFilterRole(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="admin">Admin Only</option>
+                    <option value="manager">Manager+</option>
+                    <option value="member">Member+</option>
+                    <option value="viewer">Viewer+</option>
+                  </select>
+                </div>
+
+                {activeFiltersCount > 0 && (
+                  <div className="flex items-end">
+                    <Button variant="ghost" onClick={clearFilters}>
+                      <X className="h-4 w-4 mr-2" />
+                      Clear Filters
+                    </Button>
                   </div>
                 )}
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                {selectedEndpoint.summary}
-              </h2>
-              <p className="text-gray-600 leading-relaxed">
-                {selectedEndpoint.description}
-              </p>
-              <div className="flex gap-2 mt-3">
-                {selectedEndpoint.tags.map(tag => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+            )}
+
+            {/* Results Count */}
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Showing <span className="font-semibold">{totalEndpoints}</span> of{' '}
+              <span className="font-semibold">{apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)}</span> endpoints
             </div>
+          </div>
+        </CardContent>
+      </Card>
 
-            {/* Tabbed Interface */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="bg-white border border-gray-200">
-                <TabsTrigger value="overview" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Overview
-                </TabsTrigger>
-                {selectedEndpoint.requestSchema && (
-                  <TabsTrigger value="request" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
-                    <Braces className="h-4 w-4 mr-2" />
-                    Request
-                  </TabsTrigger>
-                )}
-                {selectedEndpoint.responseSchema && (
-                  <TabsTrigger value="response" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
-                    <FileJson className="h-4 w-4 mr-2" />
-                    Response
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="try-it" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Try it out
-                </TabsTrigger>
-              </TabsList>
+      {/* Main Content: Sidebar + Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Sidebar: Categories & Endpoints */}
+        <div className="lg:col-span-4 xl:col-span-3">
+          <Card className="sticky top-20 max-h-[calc(100vh-8rem)] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="text-lg">Categories</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {filteredData.map((category) => {
+                const Icon = categoryIcons[category.icon] || BookOpen;
+                const isCollapsed = collapsedCategories.has(category.category);
 
-              {/* Overview Tab */}
-              <TabsContent value="overview" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">cURL Example</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="relative">
-                      <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-                        <code>{selectedEndpoint.example}</code>
-                      </pre>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(selectedEndpoint.example, `example-${selectedEndpoint.path}`)}
-                        className="absolute top-2 right-2 bg-gray-800 hover:bg-gray-700"
-                      >
-                        {copiedCode === `example-${selectedEndpoint.path}` ? (
-                          <CheckCircle className="h-4 w-4 text-green-400" />
-                        ) : (
-                          <Copy className="h-4 w-4 text-gray-300" />
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Request Schema Tab */}
-              {selectedEndpoint.requestSchema && (
-                <TabsContent value="request" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Request Body Schema</CardTitle>
-                      <CardDescription>
-                        Content-Type: application/json
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="space-y-3">
-                          {Object.entries(selectedEndpoint.requestSchema.properties).map(([key, prop]) => (
-                            <div key={key} className="flex items-start gap-3 pb-3 border-b border-gray-200 last:border-0">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <code className="text-sm font-semibold text-blue-600">{key}</code>
-                                  <Badge variant="outline" className="text-xs">{prop.type}</Badge>
-                                  {prop.required && (
-                                    <Badge variant="destructive" className="text-xs">required</Badge>
-                                  )}
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1">{prop.description}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              )}
-
-              {/* Response Schema Tab */}
-              {selectedEndpoint.responseSchema && (
-                <TabsContent value="response" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Response Schema (200 OK)</CardTitle>
-                      <CardDescription>
-                        Content-Type: application/json
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="space-y-3">
-                          {Object.entries(selectedEndpoint.responseSchema.properties).map(([key, prop]) => (
-                            <div key={key} className="flex items-start gap-3 pb-3 border-b border-gray-200 last:border-0">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <code className="text-sm font-semibold text-green-600">{key}</code>
-                                  <Badge variant="outline" className="text-xs">{prop.type}</Badge>
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1">{prop.description}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              )}
-
-              {/* Try it out Tab - Swagger Style */}
-              <TabsContent value="try-it" className="space-y-4">
-                {/* Request URL Section */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-semibold text-gray-700">Request URL</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="bg-gray-900 text-gray-100 p-3 rounded-lg font-mono text-sm flex items-center justify-between">
-                      <code>http://localhost:8080{selectedEndpoint.path}</code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(`http://localhost:8080${selectedEndpoint.path}`, 'request-url')}
-                        className="text-gray-300 hover:text-white hover:bg-gray-800"
-                      >
-                        {copiedCode === 'request-url' ? (
-                          <CheckCircle className="h-4 w-4 text-green-400" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* cURL Command Section */}
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm font-semibold text-gray-700">cURL Command</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(generateCurlCommand(selectedEndpoint), 'curl-command')}
+                return (
+                  <div key={category.category} className="space-y-1">
+                    {/* Category Header */}
+                    <button
+                      onClick={() => toggleCategory(category.category)}
+                      className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     >
-                      {copiedCode === 'curl-command' ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-                      <code>{generateCurlCommand(selectedEndpoint)}</code>
-                    </pre>
-                  </CardContent>
-                </Card>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span className="font-medium text-sm">{category.category}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {category.matchCount}
+                        </Badge>
+                        {isCollapsed ? (
+                          <ChevronRight className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </button>
 
-                {/* Parameters Section */}
-                <Card className="border-2 border-blue-200 bg-blue-50">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Braces className="h-5 w-5 text-blue-600" />
-                      Parameters
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Authorization */}
+                    {/* Endpoints List */}
+                    {!isCollapsed && (
+                      <div className="ml-6 space-y-1">
+                        {category.endpoints.map((endpoint, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setSelectedEndpoint(endpoint);
+                              setSelectedCategory(category.category);
+                              setActiveTab('overview');
+                              setResponseData(null);
+                              setExecutionError(null);
+                            }}
+                            className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                              selectedEndpoint === endpoint
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge className={`${getMethodColor(endpoint.method)} text-white text-xs px-2 py-0`}>
+                                {endpoint.method}
+                              </Badge>
+                              <span className="truncate">{endpoint.summary}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {filteredData.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Search className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">No endpoints match your filters</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Panel: Endpoint Details */}
+        <div className="lg:col-span-8 xl:col-span-9">
+          {selectedEndpoint ? (
+            <Card>
+              <CardHeader>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className={`${getMethodColor(selectedEndpoint.method)} text-white`}>
+                      {selectedEndpoint.method}
+                    </Badge>
+                    <code className="text-lg font-mono">{selectedEndpoint.path}</code>
+                  </div>
+                  <CardDescription className="text-base">
+                    {selectedEndpoint.description}
+                  </CardDescription>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedEndpoint.tags.map((tag, idx) => (
+                      <Badge key={idx} variant="outline" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
                     {selectedEndpoint.requiresAuth && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Key className="h-4 w-4 text-gray-600" />
-                          <label className="text-sm font-semibold text-gray-700">Authorization</label>
-                          <Badge variant="outline" className="text-xs">Header</Badge>
-                          {isAuthenticated && <Badge className="bg-green-500">Authorized</Badge>}
-                        </div>
-                        {!isAuthenticated && (
+                      <Badge variant="destructive" className="text-xs">
+                        <Lock className="h-3 w-3 mr-1" />
+                        Auth Required
+                      </Badge>
+                    )}
+                    {selectedEndpoint.roleRequired && (
+                      <Badge variant="default" className="text-xs">
+                        Role: {selectedEndpoint.roleRequired}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="overview">
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      Overview
+                    </TabsTrigger>
+                    <TabsTrigger value="try-it">
+                      <Play className="h-4 w-4 mr-2" />
+                      Try it out
+                    </TabsTrigger>
+                    <TabsTrigger value="code">
+                      <Code className="h-4 w-4 mr-2" />
+                      Code
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Overview Tab */}
+                  <TabsContent value="overview" className="space-y-6 mt-6">
+                    {/* Authentication Info */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-2">Authentication</h3>
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        {selectedEndpoint.requiresAuth ? (
                           <>
-                            <p className="text-xs text-gray-600">Bearer token required for authentication</p>
-                            <Input
-                              placeholder="Paste your JWT token here..."
-                              value={manualToken}
-                              onChange={(e) => setManualToken(e.target.value)}
-                              type="password"
-                              className="bg-white"
-                            />
+                            <Lock className="h-4 w-4 text-red-600" />
+                            <span className="text-sm">{selectedEndpoint.auth}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">No authentication required</span>
                           </>
                         )}
                       </div>
+                    </div>
+
+                    {/* Request Schema */}
+                    {selectedEndpoint.requestSchema && (
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Request Body</h3>
+                        <div className="space-y-2">
+                          {Object.entries(selectedEndpoint.requestSchema.properties).map(([key, prop]) => (
+                            <div key={key} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                              <div className="flex items-center justify-between mb-1">
+                                <code className="text-sm font-mono">{key}</code>
+                                <div className="flex gap-2">
+                                  <Badge variant="outline" className="text-xs">{prop.type}</Badge>
+                                  {prop.required && (
+                                    <Badge variant="destructive" className="text-xs">Required</Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{prop.description}</p>
+                              {(prop as any).example && (
+                                <code className="text-xs text-gray-500 mt-1 block">
+                                  Example: {JSON.stringify((prop as any).example)}
+                                </code>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
-                    {/* Request Body (for POST/PUT) */}
-                    {(selectedEndpoint.method === 'POST' || selectedEndpoint.method === 'PUT') && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <FileJson className="h-4 w-4 text-gray-600" />
-                          <label className="text-sm font-semibold text-gray-700">Request Body</label>
-                          <Badge variant="outline" className="text-xs">application/json</Badge>
+                    {/* Response Schema */}
+                    {selectedEndpoint.responseSchema && (
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Response Body</h3>
+                        <div className="space-y-2">
+                          {Object.entries(selectedEndpoint.responseSchema.properties).map(([key, prop]) => (
+                            <div key={key} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                              <div className="flex items-center justify-between mb-1">
+                                <code className="text-sm font-mono">{key}</code>
+                                <Badge variant="outline" className="text-xs">{prop.type}</Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{prop.description}</p>
+                              {(prop as any).example && (
+                                <code className="text-xs text-gray-500 mt-1 block">
+                                  Example: {JSON.stringify((prop as any).example)}
+                                </code>
+                              )}
+                            </div>
+                          ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Example Request */}
+                    {selectedEndpoint.example && selectedEndpoint.example !== 'No request body required' && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold">Example Request</h3>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(selectedEndpoint.example, 'example')}
+                          >
+                            {copiedCode === 'example' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                          <code>{selectedEndpoint.example}</code>
+                        </pre>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Try it out Tab */}
+                  <TabsContent value="try-it" className="space-y-4 mt-6">
+                    {/* Authentication Status */}
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      {isAuthenticated ? (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <span className="font-medium">Authenticated</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setIsAuthenticated(false);
+                              setUserToken('');
+                              localStorage.removeItem('auth_token');
+                            }}
+                          >
+                            Logout
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-yellow-600" />
+                            <span className="font-medium">Not Authenticated</span>
+                          </div>
+                          {!showTokenInput ? (
+                            <Button size="sm" onClick={() => setShowTokenInput(true)}>
+                              Add Token
+                            </Button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Input
+                                type="password"
+                                placeholder="Enter Bearer token"
+                                value={manualToken}
+                                onChange={(e) => setManualToken(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  if (manualToken) {
+                                    setUserToken(manualToken);
+                                    setIsAuthenticated(true);
+                                    setShowTokenInput(false);
+                                    toast.success('Token added');
+                                  }
+                                }}
+                              >
+                                Save
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Request Body Editor */}
+                    {selectedEndpoint.method !== 'GET' && (
+                      <div>
+                        <label className="text-sm font-semibold mb-2 block">Request Body</label>
                         <Textarea
-                          placeholder='{"key": "value"}'
                           value={requestBody}
                           onChange={(e) => setRequestBody(e.target.value)}
-                          className="font-mono text-sm bg-white min-h-[150px]"
+                          rows={10}
+                          className="font-mono text-sm"
+                          placeholder={selectedEndpoint.example}
                         />
                       </div>
                     )}
 
                     {/* Execute Button */}
                     <Button
-                      onClick={() => executeAPIRequest(selectedEndpoint)}
+                      onClick={executeRequest}
                       disabled={isExecuting}
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      className="w-full"
                       size="lg"
                     >
                       {isExecuting ? (
-                        <>Executing...</>
+                        <>Loading...</>
                       ) : (
                         <>
-                          <Zap className="mr-2 h-4 w-4" />
+                          <Play className="h-4 w-4 mr-2" />
                           Execute Request
                         </>
                       )}
                     </Button>
-                  </CardContent>
-                </Card>
 
-                {/* Server Response Section */}
-                {(responseData || executionError || responseMetadata) && (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Server Response</CardTitle>
-                        {responseMetadata && (
-                          <div className="flex items-center gap-2">
+                    {/* Response Metadata */}
+                    {responseMetadata && (
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Response</span>
+                          <div className="flex gap-2">
                             <Badge
-                              className={`${
-                                responseMetadata.status >= 200 && responseMetadata.status < 300
-                                  ? 'bg-green-500'
-                                  : responseMetadata.status >= 400
-                                  ? 'bg-red-500'
-                                  : 'bg-orange-500'
-                              }`}
+                              variant={responseMetadata.status < 400 ? "default" : "destructive"}
                             >
                               {responseMetadata.status} {responseMetadata.statusText}
                             </Badge>
-                            <Badge variant="outline">
-                              {responseMetadata.duration}ms
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Response Headers */}
-                      {responseMetadata && Object.keys(responseMetadata.headers).length > 0 && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-700">Response Headers</label>
-                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
-                            <div className="space-y-1 font-mono text-xs">
-                              {Object.entries(responseMetadata.headers).map(([key, value]) => (
-                                <div key={key} className="flex gap-2">
-                                  <span className="text-gray-600">{key}:</span>
-                                  <span className="text-gray-900">{value}</span>
-                                </div>
-                              ))}
-                            </div>
+                            <Badge variant="outline">{responseMetadata.duration}ms</Badge>
                           </div>
                         </div>
-                      )}
-
-                      {/* Response Body */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-semibold text-gray-700">Response Body</label>
-                          {responseData && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(
-                                JSON.stringify(responseData, null, 2),
-                                'response-body'
-                              )}
-                            >
-                              {copiedCode === 'response-body' ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                            </Button>
-                          )}
-                        </div>
-
-                        {executionError ? (
-                          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
-                            <div className="flex items-start gap-3">
-                              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-sm font-semibold text-red-900">Error</p>
-                                <p className="text-sm text-red-700 mt-1">{executionError}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ) : responseData && (
-                          <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono max-h-96 overflow-y-auto">
-                            <code>{JSON.stringify(responseData, null, 2)}</code>
-                          </pre>
-                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-gray-500">
-              <Code className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg font-medium">Select an endpoint to view details</p>
-              <p className="text-sm mt-2">Choose from the sidebar to explore our API</p>
-            </div>
-          </div>
-        )}
+                    )}
+
+                    {/* Response Data */}
+                    {responseData && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold">Response Body</h3>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(JSON.stringify(responseData, null, 2), 'response')}
+                          >
+                            {copiedCode === 'response' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm max-h-96">
+                          <code>{JSON.stringify(responseData, null, 2)}</code>
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Error Response */}
+                    {executionError && (
+                      <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <span className="font-semibold text-red-600">Error</span>
+                        </div>
+                        <pre className="text-sm text-red-800 dark:text-red-200 overflow-x-auto">
+                          {executionError}
+                        </pre>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Code Tab */}
+                  <TabsContent value="code" className="space-y-4 mt-6">
+                    {/* cURL */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold">cURL</h3>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(generateCurl(), 'curl')}
+                        >
+                          {copiedCode === 'curl' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                        <code>{generateCurl()}</code>
+                      </pre>
+                    </div>
+
+                    {/* JavaScript Example */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold">JavaScript (Fetch)</h3>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(`fetch('${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}', {\n  method: '${selectedEndpoint.method}',\n  headers: {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ''}\n  },\n  ${selectedEndpoint.method !== 'GET' ? `body: JSON.stringify(${requestBody})\n` : ''}})\n.then(res => res.json())\n.then(data => console.log(data));`, 'js')}
+                        >
+                          {copiedCode === 'js' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                        <code>{`fetch('${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}', {
+  method: '${selectedEndpoint.method}',
+  headers: {
+    'Content-Type': 'application/json',
+    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ''}\n  },
+  ${selectedEndpoint.method !== 'GET' ? `body: JSON.stringify(${requestBody})\n` : ''}})\n.then(res => res.json())\n.then(data => console.log(data));`}</code>
+                      </pre>
+                    </div>
+
+                    {/* Python Example */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold">Python (requests)</h3>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(`import requests\n\nurl = '${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}'\nheaders = {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ''}\n}\n${selectedEndpoint.method !== 'GET' ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}\nprint(response.json())`, 'python')}
+                        >
+                          {copiedCode === 'python' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                        <code>{`import requests
+
+url = '${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}'
+headers = {
+    'Content-Type': 'application/json',
+    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ''}\n}
+${selectedEndpoint.method !== 'GET' ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}
+print(response.json())`}</code>
+                      </pre>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="h-full flex items-center justify-center min-h-[600px]">
+              <div className="text-center text-gray-500">
+                <BookOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                <p>Select an endpoint to view documentation</p>
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

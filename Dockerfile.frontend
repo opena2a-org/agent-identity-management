@@ -4,17 +4,20 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY apps/web/package*.json ./apps/web/
 COPY package*.json ./
+COPY apps/web/package*.json ./apps/web/
 
-# Install dependencies
-RUN cd apps/web && npm ci
-
-# Copy source code
+# Copy source code (includes config files)
 COPY apps/web ./apps/web
 
-# Build the application
-RUN cd apps/web && npm run build
+# Install root dependencies first (includes tailwindcss)
+RUN npm ci
+
+# Install app-specific dependencies
+RUN cd apps/web && npm ci
+
+# Build the application with module resolution to parent node_modules
+RUN cd apps/web && NODE_PATH=/app/node_modules:./node_modules npm run build
 
 # Production image
 FROM node:20-alpine AS runner
