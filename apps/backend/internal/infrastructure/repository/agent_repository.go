@@ -473,6 +473,88 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	return agents, nil
 }
 
+// GetByMCPServerName gets agents by MCP server NAME (in addition to ID)
+// This is crucial because agent.talks_to often contains MCP server names, not IDs
+func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error) {
+	// Query agents where talks_to JSONB array contains the MCP server name (as string)
+	query := `
+		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
+		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       talks_to, created_at, updated_at, created_by
+		FROM agents
+		WHERE organization_id = $1
+		  AND talks_to @> $2::jsonb
+		ORDER BY created_at DESC
+	`
+
+	// Convert MCP server name to JSON string format for JSONB comparison
+	mcpServerJSON := fmt.Sprintf(`["%s"]`, mcpServerName)
+
+	rows, err := r.db.Query(query, orgID, mcpServerJSON)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*domain.Agent
+	for rows.Next() {
+		agent := &domain.Agent{}
+		var publicKey sql.NullString
+		var certificateURL sql.NullString
+		var repositoryURL sql.NullString
+		var documentationURL sql.NullString
+		var talksToJSON []byte
+		err := rows.Scan(
+			&agent.ID,
+			&agent.OrganizationID,
+			&agent.Name,
+			&agent.DisplayName,
+			&agent.Description,
+			&agent.AgentType,
+			&agent.Status,
+			&agent.Version,
+			&publicKey,
+			&certificateURL,
+			&repositoryURL,
+			&documentationURL,
+			&agent.TrustScore,
+			&agent.VerifiedAt,
+			&talksToJSON,
+			&agent.CreatedAt,
+			&agent.UpdatedAt,
+			&agent.CreatedBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert nullable fields
+		if publicKey.Valid {
+			agent.PublicKey = &publicKey.String
+		}
+		if certificateURL.Valid {
+			agent.CertificateURL = certificateURL.String
+		}
+		if repositoryURL.Valid {
+			agent.RepositoryURL = repositoryURL.String
+		}
+		if documentationURL.Valid {
+			agent.DocumentationURL = documentationURL.String
+		}
+
+		// Unmarshal talks_to from JSONB
+		if len(talksToJSON) > 0 {
+			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+			}
+		}
+
+		agents = append(agents, agent)
+	}
+
+	return agents, nil
+}
+
 
 // GetByName gets an agent by name within an organization
 func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {

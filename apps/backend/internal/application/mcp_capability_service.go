@@ -40,10 +40,16 @@ type MCPResource struct {
 	MimeTypes   []string `json:"mimeTypes,omitempty"`
 }
 
+type MCPPromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+}
+
 type MCPPrompt struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Arguments   []string `json:"arguments,omitempty"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Arguments   []MCPPromptArgument `json:"arguments,omitempty"`
 }
 
 func NewMCPCapabilityService(
@@ -71,7 +77,22 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 
 	// ✅ REAL MCP PROTOCOL CAPABILITY DETECTION
 	// Step 1: Construct MCP capabilities endpoint URL
-	capabilitiesURL := strings.TrimSuffix(server.URL, "/") + "/.well-known/mcp/capabilities"
+	// Parse the server URL to get base URL without path
+	baseURL := server.URL
+	// If URL has a path component (e.g., http://localhost:5555/mcp), extract base
+	if idx := strings.Index(baseURL, "://"); idx != -1 {
+		afterProto := baseURL[idx+3:]
+		if slashIdx := strings.Index(afterProto, "/"); slashIdx != -1 {
+			// Extract scheme://host:port only
+			baseURL = baseURL[:idx+3+slashIdx]
+		}
+	}
+	capabilitiesURL := strings.TrimSuffix(baseURL, "/") + "/.well-known/mcp/capabilities"
+
+	fmt.Printf("🔍 Capability Detection for %s:\n", server.Name)
+	fmt.Printf("   Original URL: %s\n", server.URL)
+	fmt.Printf("   Base URL: %s\n", baseURL)
+	fmt.Printf("   Capabilities URL: %s\n", capabilitiesURL)
 
 	// Step 2: Make HTTP GET request to MCP server
 	req, err := http.NewRequestWithContext(ctx, "GET", capabilitiesURL, nil)
@@ -84,11 +105,15 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		fmt.Printf("❌ Failed to fetch capabilities: %v\n", err)
 		return fmt.Errorf("failed to fetch capabilities from %s: %w", capabilitiesURL, err)
 	}
 	defer resp.Body.Close()
 
+	fmt.Printf("   Response Status: %d\n", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("❌ Non-200 status: %d\n", resp.StatusCode)
 		return fmt.Errorf("MCP server returned non-200 status: %d", resp.StatusCode)
 	}
 

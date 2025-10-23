@@ -496,11 +496,18 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 		})
 	}
 
-	// Return capabilities from the server's capabilities JSONB column
-	// The capabilities are stored as a JSONB array in the mcp_servers table
+	// Fetch detailed capabilities from mcp_server_capabilities table
+	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch capabilities",
+		})
+	}
+
+	// Return detailed capabilities with full metadata
 	return c.JSON(fiber.Map{
-		"capabilities": server.Capabilities,
-		"total":        len(server.Capabilities),
+		"capabilities": capabilities,
+		"total":        len(capabilities),
 	})
 }
 
@@ -537,11 +544,33 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	}
 
 	// Fetch agents that have this MCP server in their talks_to array
-	agents, err := h.agentRepository.GetByMCPServer(serverID, orgID)
+	// Try both by ID and by NAME (agents often use names, not IDs)
+	agentsByID, err := h.agentRepository.GetByMCPServer(serverID, orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agents",
+			"error": "Failed to fetch agents by ID",
 		})
+	}
+
+	agentsByName, err := h.agentRepository.GetByMCPServerName(server.Name, orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch agents by name",
+		})
+	}
+
+	// Combine and deduplicate
+	agentMap := make(map[uuid.UUID]*domain.Agent)
+	for _, agent := range agentsByID {
+		agentMap[agent.ID] = agent
+	}
+	for _, agent := range agentsByName {
+		agentMap[agent.ID] = agent
+	}
+
+	agents := make([]*domain.Agent, 0, len(agentMap))
+	for _, agent := range agentMap {
+		agents = append(agents, agent)
 	}
 
 	// Map to simple response with just the info needed for the modal
@@ -697,5 +726,37 @@ func (h *MCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		"allowed":  true,
 		"reason":   reason,
 		"audit_id": auditID,
+	})
+}
+
+// GetConnectedAgents returns all agents using an MCP server
+// @Summary Get connected agents
+// @Description Get list of agents that use this MCP server
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/{id}/connected-agents [get]
+func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
+	mcpServerID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Get connected agents
+	agents, err := h.mcpService.GetConnectedAgents(c.Context(), mcpServerID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"connected_agents": agents,
+		"count":            len(agents),
 	})
 }

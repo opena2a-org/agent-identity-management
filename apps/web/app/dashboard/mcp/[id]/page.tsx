@@ -59,9 +59,20 @@ interface MCPServer {
   capabilities?: string[]; // Array of capability type strings like ["tools", "prompts", "resources"]
 }
 
-// Capabilities are stored as simple strings in the MCP server
-// e.g., ["tools", "prompts", "resources", "sampling", "logging"]
-type Capability = string;
+// Detailed capability information from mcp_server_capabilities table
+interface Capability {
+  id: string;
+  mcp_server_id: string;
+  name: string;
+  type: "tool" | "resource" | "prompt";
+  description: string;
+  schema: any;
+  detected_at: string;
+  last_verified_at?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface Agent {
   id: string;
@@ -119,9 +130,14 @@ export default function MCPServerDetailsPage({
         const serverData = await api.getMCPServer(serverId!);
         setServer(serverData);
 
-        // Capabilities are already included in the server data
-        // They're stored as a simple array of strings in the capabilities JSONB column
-        setCapabilities(serverData.capabilities || []);
+        // Fetch detailed capabilities from the dedicated endpoint
+        try {
+          const capabilitiesData = await api.getMCPServerCapabilities(serverId!);
+          setCapabilities(capabilitiesData.capabilities || []);
+        } catch (err) {
+          console.error("Failed to fetch capabilities:", err);
+          setCapabilities([]);
+        }
 
         // Fetch connected agents
         try {
@@ -467,26 +483,55 @@ export default function MCPServerDetailsPage({
                 {capabilities.length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-muted-foreground">
-                      No capabilities configured yet
+                      No capabilities detected yet
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Edit the server to add capabilities like tools, prompts,
-                      or resources
+                      Click "Verify" to automatically detect capabilities from the MCP server
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {capabilities.map((capability, index) => (
-                      <div
-                        key={`${capability}-${index}`}
-                        className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
-                      >
-                        <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100 capitalize">
-                          {capability}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {/* Group by type */}
+                    {["tool", "resource", "prompt"].map((type) => {
+                      const typeCaps = capabilities.filter((c) => c.type === type);
+                      if (typeCaps.length === 0) return null;
+
+                      return (
+                        <div key={type} className="space-y-2">
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4" />
+                            {type}s ({typeCaps.length})
+                          </h4>
+                          <div className="grid gap-2">
+                            {typeCaps.map((capability) => (
+                              <div
+                                key={capability.id}
+                                className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                      {capability.name}
+                                    </p>
+                                    {capability.description && (
+                                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                        {capability.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Badge
+                                    variant="outline"
+                                    className="flex-shrink-0 text-xs capitalize"
+                                  >
+                                    {capability.type}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

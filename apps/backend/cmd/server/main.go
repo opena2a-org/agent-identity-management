@@ -247,6 +247,11 @@ func main() {
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)    // SDK capability reporting
 	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)     // SDK MCP registration
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection) // SDK MCP detection and integration reporting
+	
+	// ✅ Action verification for SDK (API key auth)
+	sdkAPI.Post("/verifications", h.Verification.CreateVerification)                 // Request verification for agent action (SDK)
+	sdkAPI.Get("/verifications/:id", h.Verification.GetVerification)                 // Get verification status by ID (SDK)
+	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult) // Submit verification result (SDK)
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
@@ -493,6 +498,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.User,
 		keyVault,             // ✅ For automatic key generation
 		mcpCapabilityService, // ✅ For automatic capability detection
+		repos.Agent,          // ✅ For connected agents tracking
 	)
 
 	securityService := application.NewSecurityService(
@@ -647,6 +653,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.MCP,
 			services.VerificationEvent,
+			services.Auth,     // ✅ For fetching user counts
+			services.Alert,    // ✅ For fetching alert counts
+			services.Security, // ✅ For fetching incident counts
 			db, // Database connection for real-time analytics
 		),
 		Webhook: handlers.NewWebhookHandler(

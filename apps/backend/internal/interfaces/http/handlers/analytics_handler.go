@@ -18,6 +18,9 @@ type AnalyticsHandler struct {
 	auditService             *application.AuditService
 	mcpService               *application.MCPService
 	verificationEventService *application.VerificationEventService
+	authService              *application.AuthService    // ✅ For fetching user counts
+	alertService             *application.AlertService   // ✅ For fetching alert counts
+	securityService          *application.SecurityService // ✅ For fetching incident counts
 	db                       *sql.DB // Database connection for real analytics queries
 }
 
@@ -26,6 +29,9 @@ func NewAnalyticsHandler(
 	auditService *application.AuditService,
 	mcpService *application.MCPService,
 	verificationEventService *application.VerificationEventService,
+	authService *application.AuthService,
+	alertService *application.AlertService,
+	securityService *application.SecurityService,
 	db *sql.DB,
 ) *AnalyticsHandler {
 	return &AnalyticsHandler{
@@ -33,6 +39,9 @@ func NewAnalyticsHandler(
 		auditService:             auditService,
 		mcpService:               mcpService,
 		verificationEventService: verificationEventService,
+		authService:              authService,
+		alertService:             alertService,
+		securityService:          securityService,
 		db:                       db,
 	}
 }
@@ -42,13 +51,17 @@ func NewAnalyticsHandler(
 // @Description Get usage statistics for the organization
 // @Tags analytics
 // @Produce json
+// @Param days query int false "Number of days" default(30)
 // @Param period query string false "Period (day, week, month, year)" default(month)
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/usage [get]
 func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
+	
+	// Support both 'days' and 'period' parameters
+	daysStr := c.Query("days", "")
 	period := c.Query("period", "month")
-
+	
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -69,17 +82,34 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	var apiCalls int64
 	var dataVolumeMB float64
 
-	// Calculate time range based on period
+	// Calculate time range based on 'days' parameter or 'period'
 	var startTime time.Time
-	switch period {
-	case "day":
-		startTime = time.Now().AddDate(0, 0, -1)
-	case "week":
-		startTime = time.Now().AddDate(0, 0, -7)
-	case "year":
-		startTime = time.Now().AddDate(-1, 0, 0)
-	default: // month
-		startTime = time.Now().AddDate(0, -1, 0)
+	var periodLabel string
+	
+	if daysStr != "" {
+		// Use days parameter
+		days, err := strconv.Atoi(daysStr)
+		if err != nil {
+			days = 30
+		}
+		startTime = time.Now().AddDate(0, 0, -days)
+		periodLabel = fmt.Sprintf("Last %d days", days)
+	} else {
+		// Use period parameter
+		switch period {
+		case "day":
+			startTime = time.Now().AddDate(0, 0, -1)
+			periodLabel = "Last 24 hours"
+		case "week":
+			startTime = time.Now().AddDate(0, 0, -7)
+			periodLabel = "Last 7 days"
+		case "year":
+			startTime = time.Now().AddDate(-1, 0, 0)
+			periodLabel = "Last year"
+		default: // month
+			startTime = time.Now().AddDate(0, -1, 0)
+			periodLabel = "Last 30 days"
+		}
 	}
 
 	// Query real API calls
@@ -121,12 +151,12 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	}
 
 	stats := map[string]interface{}{
-		"period":        period,
+		"period":        periodLabel,    // Human-readable period label
 		"total_agents":  totalAgents,
 		"active_agents": activeAgents,
-		"api_calls":     apiCalls,      // ✅ REAL DATA
-		"data_volume":   dataVolumeMB,  // ✅ REAL DATA in MB
-		"uptime":        uptime,         // ✅ REAL DATA - calculated from verification events
+		"api_calls":     apiCalls,       // ✅ REAL DATA from database
+		"data_volume":   dataVolumeMB,   // ✅ REAL DATA in MB
+		"uptime":        uptime,          // ✅ REAL DATA - calculated from verification events
 		"generated_at":  time.Now().UTC(),
 	}
 
@@ -772,6 +802,40 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		}
 	}
 
+	// ✅ Fetch REAL user count from database
+	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
+	totalUsers := 0
+	activeUsers := 0
+	if err == nil {
+		totalUsers = len(users)
+		// Count active users (those with status "active")
+		for _, user := range users {
+			if user.Status == domain.UserStatusActive {
+				activeUsers++
+			}
+		}
+	}
+
+	// ✅ Fetch REAL security metrics from database
+	activeAlerts := 0
+	criticalAlerts := 0
+	securityIncidents := 0
+	alerts, _, err := h.alertService.GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
+	if err == nil {
+		activeAlerts = len(alerts)
+		// Count critical severity alerts
+		for _, alert := range alerts {
+			if alert.Severity == domain.AlertSeverityCritical {
+				criticalAlerts++
+			}
+		}
+	}
+	// Get open security incidents count
+	incidents, err := h.securityService.GetIncidents(c.Context(), orgID, domain.IncidentStatusOpen, 100, 0)
+	if err == nil {
+		securityIncidents = len(incidents)
+	}
+
 	return c.JSON(fiber.Map{
 		// Agent metrics
 		"total_agents":      totalAgents,
@@ -784,14 +848,14 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		"total_mcp_servers":  totalMCPServers,
 		"active_mcp_servers": activeMCPServers,
 
-		// User metrics (simplified for viewer - no user count access)
-		"total_users":  1, // Current user
-		"active_users": 1,
+		// User metrics ✅ REAL DATA
+		"total_users":  totalUsers,
+		"active_users": activeUsers,
 
-		// Security metrics (simplified for viewer - no alert access)
-		"active_alerts":      0,
-		"critical_alerts":    0,
-		"security_incidents": 0,
+		// Security metrics ✅ REAL DATA
+		"active_alerts":      activeAlerts,
+		"critical_alerts":    criticalAlerts,
+		"security_incidents": securityIncidents,
 
 		// Verification metrics (last 24 hours)
 		"total_verifications":      stats.TotalVerifications,

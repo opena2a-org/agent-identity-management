@@ -1084,6 +1084,20 @@ class APIClient {
     return this.request(`/api/v1/mcp-servers/${id}`);
   }
 
+  async getMCPServerConnectedAgents(id: string): Promise<{
+    connected_agents: Array<{
+      id: string;
+      name: string;
+      display_name: string;
+      status: string;
+      trust_score: number;
+      updated_at: string;
+    }>;
+    count: number;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${id}/agents`);
+  }
+
   async updateMCPServer(id: string, data: any): Promise<any> {
     return this.request(`/api/v1/mcp-servers/${id}`, {
       method: "PUT",
@@ -1100,7 +1114,19 @@ class APIClient {
   }
 
   async getMCPServerCapabilities(id: string): Promise<{
-    capabilities: string[]; // Simple array of capability type strings like ["tools", "prompts", "resources"]
+    capabilities: Array<{
+      id: string;
+      mcp_server_id: string;
+      name: string;
+      type: "tool" | "resource" | "prompt";
+      description: string;
+      schema: any;
+      detected_at: string;
+      last_verified_at?: string;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+    }>;
     total: number;
   }> {
     return this.request(`/api/v1/mcp-servers/${id}/capabilities`);

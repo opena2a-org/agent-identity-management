@@ -75,7 +75,7 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 
 	// Parse request body
 	var req domain.DetectionReportRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
