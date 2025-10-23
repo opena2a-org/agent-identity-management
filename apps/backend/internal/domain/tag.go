@@ -45,6 +45,7 @@ type TagRepository interface {
 	// Tag CRUD
 	Create(ctx context.Context, tag *Tag) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Tag, error)
+	Update(ctx context.Context, tag *Tag) error
 	List(ctx context.Context, organizationID uuid.UUID, category *TagCategory) ([]*Tag, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 

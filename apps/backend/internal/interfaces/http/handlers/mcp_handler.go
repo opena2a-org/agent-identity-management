@@ -496,41 +496,11 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 		})
 	}
 
-	// Fetch capabilities
-	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch capabilities",
-		})
-	}
-
-	// Group capabilities by type for easier frontend consumption
-	tools := []*domain.MCPServerCapability{}
-	resources := []*domain.MCPServerCapability{}
-	prompts := []*domain.MCPServerCapability{}
-
-	for _, cap := range capabilities {
-		switch cap.CapabilityType {
-		case domain.MCPCapabilityTypeTool:
-			tools = append(tools, cap)
-		case domain.MCPCapabilityTypeResource:
-			resources = append(resources, cap)
-		case domain.MCPCapabilityTypePrompt:
-			prompts = append(prompts, cap)
-		}
-	}
-
+	// Return capabilities from the server's capabilities JSONB column
+	// The capabilities are stored as a JSONB array in the mcp_servers table
 	return c.JSON(fiber.Map{
-		"capabilities": capabilities,
-		"total":        len(capabilities),
-		"tools":        tools,
-		"resources":    resources,
-		"prompts":      prompts,
-		"counts": fiber.Map{
-			"tools":     len(tools),
-			"resources": len(resources),
-			"prompts":   len(prompts),
-		},
+		"capabilities": server.Capabilities,
+		"total":        len(server.Capabilities),
 	})
 }
 
