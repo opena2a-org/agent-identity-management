@@ -44,31 +44,33 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 		hash := sha256.Sum256([]byte(apiKey))
 		keyHash := base64.StdEncoding.EncodeToString(hash[:])
 
-		// Look up API key in database
-		var keyData struct {
-			ID             uuid.UUID  `db:"id"`
-			OrganizationID uuid.UUID  `db:"organization_id"`
-			AgentID        uuid.UUID  `db:"agent_id"`
-			Name           string     `db:"name"`
-			IsActive       bool       `db:"is_active"`
-			ExpiresAt      *time.Time `db:"expires_at"`
-		}
+	// Look up API key in database and get the user who created it
+	var keyData struct {
+		ID             uuid.UUID  `db:"id"`
+		OrganizationID uuid.UUID  `db:"organization_id"`
+		AgentID        uuid.UUID  `db:"agent_id"`
+		UserID         uuid.UUID  `db:"user_id"`
+		Name           string     `db:"name"`
+		IsActive       bool       `db:"is_active"`
+		ExpiresAt      *time.Time `db:"expires_at"`
+	}
 
-		query := `
-			SELECT id, organization_id, agent_id, name, is_active, expires_at
-			FROM api_keys
-			WHERE key_hash = $1
-			LIMIT 1
-		`
+	query := `
+		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at
+		FROM api_keys ak
+		WHERE ak.key_hash = $1
+		LIMIT 1
+	`
 
-		err := db.QueryRow(query, keyHash).Scan(
-			&keyData.ID,
-			&keyData.OrganizationID,
-			&keyData.AgentID,
-			&keyData.Name,
-			&keyData.IsActive,
-			&keyData.ExpiresAt,
-		)
+	err := db.QueryRow(query, keyHash).Scan(
+		&keyData.ID,
+		&keyData.OrganizationID,
+		&keyData.AgentID,
+		&keyData.UserID,
+		&keyData.Name,
+		&keyData.IsActive,
+		&keyData.ExpiresAt,
+	)
 
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -94,13 +96,14 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 		updateQuery := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
 		_, _ = db.Exec(updateQuery, keyData.ID)
 
-		// Set context for downstream handlers
-		c.Locals("api_key_id", keyData.ID)
-		c.Locals("organization_id", keyData.OrganizationID)
-		c.Locals("agent_id", keyData.AgentID)
-		c.Locals("auth_method", "api_key")
+	// Set context for downstream handlers
+	c.Locals("api_key_id", keyData.ID)
+	c.Locals("organization_id", keyData.OrganizationID)
+	c.Locals("agent_id", keyData.AgentID)
+	c.Locals("user_id", keyData.UserID) // ✅ Set user_id for capability requests
+	c.Locals("auth_method", "api_key")
 
-		return c.Next()
+	return c.Next()
 	}
 }
 
@@ -133,31 +136,33 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 		hash := sha256.Sum256([]byte(apiKey))
 		keyHash := base64.StdEncoding.EncodeToString(hash[:])
 
-		// Look up API key
-		var keyData struct {
-			ID             uuid.UUID  `db:"id"`
-			OrganizationID uuid.UUID  `db:"organization_id"`
-			AgentID        uuid.UUID  `db:"agent_id"`
-			Name           string     `db:"name"`
-			IsActive       bool       `db:"is_active"`
-			ExpiresAt      *time.Time `db:"expires_at"`
-		}
+	// Look up API key
+	var keyData struct {
+		ID             uuid.UUID  `db:"id"`
+		OrganizationID uuid.UUID  `db:"organization_id"`
+		AgentID        uuid.UUID  `db:"agent_id"`
+		UserID         uuid.UUID  `db:"user_id"`
+		Name           string     `db:"name"`
+		IsActive       bool       `db:"is_active"`
+		ExpiresAt      *time.Time `db:"expires_at"`
+	}
 
-		query := `
-			SELECT id, organization_id, agent_id, name, is_active, expires_at
-			FROM api_keys
-			WHERE key_hash = $1
-			LIMIT 1
-		`
+	query := `
+		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at
+		FROM api_keys ak
+		WHERE ak.key_hash = $1
+		LIMIT 1
+	`
 
-		err := db.QueryRow(query, keyHash).Scan(
-			&keyData.ID,
-			&keyData.OrganizationID,
-			&keyData.AgentID,
-			&keyData.Name,
-			&keyData.IsActive,
-			&keyData.ExpiresAt,
-		)
+	err := db.QueryRow(query, keyHash).Scan(
+		&keyData.ID,
+		&keyData.OrganizationID,
+		&keyData.AgentID,
+		&keyData.UserID,
+		&keyData.Name,
+		&keyData.IsActive,
+		&keyData.ExpiresAt,
+	)
 
 		// If key not found or invalid, continue without auth
 		if err != nil {
@@ -173,12 +178,13 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 		updateQuery := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
 		_, _ = db.Exec(updateQuery, keyData.ID)
 
-		// Set context
-		c.Locals("api_key_id", keyData.ID)
-		c.Locals("organization_id", keyData.OrganizationID)
-		c.Locals("agent_id", keyData.AgentID)
-		c.Locals("auth_method", "api_key")
+	// Set context
+	c.Locals("api_key_id", keyData.ID)
+	c.Locals("organization_id", keyData.OrganizationID)
+	c.Locals("agent_id", keyData.AgentID)
+	c.Locals("user_id", keyData.UserID)
+	c.Locals("auth_method", "api_key")
 
-		return c.Next()
+	return c.Next()
 	}
 }

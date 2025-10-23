@@ -20,12 +20,98 @@ func NewCapabilityRequestHandlers(service *application.CapabilityRequestService)
 }
 
 // CreateCapabilityRequest godoc
-// @Summary Create a new capability request
-// @Description Agents can request additional capabilities after registration
+// @Summary Create a new capability request (SDK)
+// @Description Agents can request additional capabilities after registration via SDK
 // @Tags capability-requests
 // @Accept json
 // @Produce json
-// @Security Bearer
+// @Security ApiKeyAuth
+// @Param id path string true "Agent ID"
+// @Param request body domain.CreateCapabilityRequestInput true "Capability request details"
+// @Success 201 {object} domain.CapabilityRequest
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Router /api/v1/sdk-api/agents/{id}/capability-requests [post]
+func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
+	// Get agent ID from path
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid agent ID",
+		})
+	}
+
+	// Get user ID from API key context (the user who owns the API key)
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized - user ID not found",
+		})
+	}
+
+	// Parse request body
+	type RequestBody struct {
+		CapabilityType string `json:"capability_type" validate:"required"`
+		Reason         string `json:"reason" validate:"required,min=10"`
+	}
+
+	var req RequestBody
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.CapabilityType == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "capability_type is required",
+		})
+	}
+
+	if len(req.Reason) < 10 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "reason must be at least 10 characters",
+		})
+	}
+
+	// Create capability request input
+	input := &domain.CreateCapabilityRequestInput{
+		AgentID:        agentID,
+		CapabilityType: req.CapabilityType,
+		Reason:         req.Reason,
+		RequestedBy:    userID,
+	}
+
+	// Create the request
+	request, err := h.service.CreateRequest(c.Context(), input)
+	if err != nil {
+		// Check for specific error types
+		errMsg := err.Error()
+		if errMsg == "agent not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "agent not found",
+			})
+		}
+		// Check if capability already granted or pending request exists
+		if len(errMsg) > 10 {
+			if errMsg[:10] == "capability" || errMsg[:7] == "pending" {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"error": errMsg,
+				})
+			}
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to create capability request",
+			"details": errMsg,
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(request)
+}
+
 // ListCapabilityRequests godoc
 // @Summary List capability requests (Admin only)
 // @Description Get all capability requests with optional filtering
