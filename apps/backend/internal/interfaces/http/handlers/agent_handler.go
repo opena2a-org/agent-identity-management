@@ -421,6 +421,17 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		}
 	}
 
+	// 4. UPDATE AGENT LAST ACTIVE TIMESTAMP (for activity tracking)
+	// Update last_active regardless of whether action was allowed or denied
+	// This helps track when agents were last seen attempting actions
+	fmt.Printf("🔄 Updating last_active for agent %s...\n", agentID)
+	if err := h.agentService.UpdateLastActive(c.Context(), agentID); err != nil {
+		// Log but don't fail the request if timestamp update fails
+		fmt.Printf("❌ WARNING: Failed to update agent last_active: %v\n", err)
+	} else {
+		fmt.Printf("✅ Successfully updated last_active for agent %s\n", agentID)
+	}
+
 	if !decision {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"allowed":  false,

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,8 @@ type Agent struct {
 	CreatedBy                uuid.UUID   `json:"created_by"`
 	// ✅ NEW: Tags applied to this agent (populated by join)
 	Tags                     []Tag       `json:"tags"`
+	// ✅ NEW: Track when agent last performed an action (updated on every verify-action call)
+	LastActive               *time.Time  `json:"last_active"`
 }
 
 // AgentRepository defines the interface for agent persistence
@@ -72,4 +75,5 @@ type AgentRepository interface {
 	List(limit, offset int) ([]*Agent, error)
 	UpdateTrustScore(id uuid.UUID, newScore float64) error
 	MarkAsCompromised(id uuid.UUID) error
+	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
 }

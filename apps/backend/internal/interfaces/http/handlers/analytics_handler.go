@@ -764,19 +764,20 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
 	// Get REAL agent activity from agent_activity_metrics table
+	// Use agents.last_active column which is updated on every verify-action call
 	query := `
 		SELECT
 			a.id,
 			a.name,
 			a.status,
 			a.trust_score,
-			COALESCE(MAX(aam.hour_timestamp), a.created_at) as last_active,
+			COALESCE(a.last_active, a.created_at) as last_active,
 			COALESCE(SUM(aam.api_calls_count), 0) as api_calls,
 			COALESCE(SUM(aam.data_processed_bytes) / 1024.0 / 1024.0, 0) as data_processed_mb
 		FROM agents a
 		LEFT JOIN agent_activity_metrics aam ON a.id = aam.agent_id
 		WHERE a.organization_id = $1
-		GROUP BY a.id, a.name, a.status, a.trust_score, a.created_at
+		GROUP BY a.id, a.name, a.status, a.trust_score, a.created_at, a.last_active
 		ORDER BY last_active DESC
 		LIMIT $2 OFFSET $3
 	`

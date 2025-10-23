@@ -1040,3 +1040,8 @@ func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (pub
 	// 8. Return new credentials (for immediate use by caller)
 	return encodedKeys.PublicKeyBase64, encodedKeys.PrivateKeyBase64, nil
 }
+
+// UpdateLastActive updates the last_active timestamp for an agent
+func (s *AgentService) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
+	return s.agentRepo.UpdateLastActive(ctx, agentID)
+}

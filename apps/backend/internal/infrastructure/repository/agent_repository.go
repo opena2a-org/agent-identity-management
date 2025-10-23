@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -87,7 +88,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by
+		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active
 		FROM agents
 		WHERE id = $1
 	`
@@ -101,6 +102,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var documentationURL sql.NullString
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
+	var lastActive sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
@@ -124,6 +126,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.CreatedAt,
 		&agent.UpdatedAt,
 		&agent.CreatedBy,
+		&lastActive,
 	)
 
 	if err == sql.ErrNoRows {
@@ -151,6 +154,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 	if documentationURL.Valid {
 		agent.DocumentationURL = documentationURL.String
+	}
+	if lastActive.Valid {
+		agent.LastActive = &lastActive.Time
 	}
 
 	// Unmarshal talks_to from JSONB
@@ -678,3 +684,19 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	return agent, nil
 }
 
+
+// UpdateLastActive updates the last_active timestamp for an agent
+func (r *AgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
+	query := `
+		UPDATE agents
+		SET last_active = NOW()
+		WHERE id = $1
+	`
+
+	_, err := r.db.Exec(query, agentID)
+	if err != nil {
+		return fmt.Errorf("failed to update agent last_active: %w", err)
+	}
+
+	return nil
+}
