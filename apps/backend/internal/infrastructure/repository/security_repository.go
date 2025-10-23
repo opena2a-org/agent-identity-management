@@ -465,10 +465,10 @@ func (r *SecurityRepository) UpdateIncidentStatus(id uuid.UUID, status domain.In
 func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.SecurityMetrics, error) {
 	metrics := &domain.SecurityMetrics{}
 
-	// Count threats
+	// Count threats from alerts table
 	r.db.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_blocked THEN 1 ELSE 0 END), 0)
-		FROM security_threats
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_acknowledged THEN 1 ELSE 0 END), 0)
+		FROM alerts
 		WHERE organization_id = $1
 	`, orgID).Scan(&metrics.TotalThreats, &metrics.BlockedThreats)
 
@@ -481,10 +481,10 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 		WHERE organization_id = $1
 	`, orgID).Scan(&metrics.TotalAnomalies)
 
-	// Count high severity items
+	// Count high severity items from alerts table
 	r.db.QueryRow(`
 		SELECT COUNT(*) FROM (
-			SELECT 1 FROM security_threats WHERE organization_id = $1 AND severity = 'critical'
+			SELECT 1 FROM alerts WHERE organization_id = $1 AND severity = 'high'
 			UNION ALL
 			SELECT 1 FROM security_anomalies WHERE organization_id = $1 AND severity = 'critical'
 		) as high_severity
@@ -520,12 +520,12 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 		metrics.SecurityScore = 0
 	}
 
-	// Get threat trend (last 7 days)
+	// Get threat trend (last 7 days) from alerts table
 	trendRows, err := r.db.Query(`
 		SELECT
 			TO_CHAR(DATE(created_at), 'Mon DD') as date,
 			COUNT(*) as count
-		FROM security_threats
+		FROM alerts
 		WHERE organization_id = $1
 			AND created_at >= NOW() - INTERVAL '7 days'
 		GROUP BY DATE(created_at)
@@ -541,12 +541,12 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 		}
 	}
 
-	// Get severity distribution
+	// Get severity distribution from alerts table
 	sevRows, err := r.db.Query(`
 		SELECT
 			INITCAP(severity::TEXT) as severity,
 			COUNT(*) as count
-		FROM security_threats
+		FROM alerts
 		WHERE organization_id = $1
 		GROUP BY severity
 		ORDER BY

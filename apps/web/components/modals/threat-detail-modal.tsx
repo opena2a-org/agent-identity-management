@@ -118,7 +118,7 @@ export default function ThreatDetailModal({
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <Link
-                href={`/dashboard/audit?target=${threat.target_id}`}
+                href={`/dashboard/admin/compliance`}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               >
                 <FileText className="h-3 w-3" />
