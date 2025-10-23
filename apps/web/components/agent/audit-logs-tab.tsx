@@ -45,7 +45,17 @@ export function AuditLogsTab({ agentId, defaultLimit = 50 }: AuditLogsTabProps) 
     setError(null);
     try {
       const data = await api.getAgentAuditLogs(agentId, limit);
-      setLogs(data.logs);
+      // Transform backend response to match frontend interface
+      const transformedLogs = (data.logs || []).map((log: any) => ({
+        id: log.id,
+        action: log.action,
+        performed_by: log.user_id || log.performed_by || 'system',
+        performed_by_email: log.user_email || log.performed_by_email || '',
+        timestamp: log.created_at || log.timestamp,
+        details: log.details,
+        ip_address: log.ip_address,
+      }));
+      setLogs(transformedLogs);
       setTotal(data.total);
     } catch (err: any) {
       console.error('Failed to fetch audit logs:', err);
