@@ -256,7 +256,7 @@ func main() {
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
-	setupRoutes(v1, h, jwtService, repos.SDKToken, db)
+	setupRoutes(v1, h, services, jwtService, repos.SDKToken, db)
 
 	// Start server
 	port := cfg.Server.Port
@@ -738,7 +738,7 @@ func initEmailService() (domain.EmailService, error) {
 	return service, nil
 }
 
-func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
+func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
 	// SDK Token Tracking Middleware - TEMPORARILY DISABLED for debugging
 	// sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
 	// v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
@@ -787,16 +787,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
 	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.AuthMiddleware(jwtService)) // ✅ CHANGED: Use JWT middleware for web UI
+	detection.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Try Ed25519 first (for SDK agents)
+	detection.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
 	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
 	// ⭐ Agent Capability Detection endpoints - Report detected agent capabilities
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
+	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
-	// Agents routes - All other agent endpoints with JWT authentication
+	// Agents routes - All other agent endpoints with dual authentication (Ed25519 or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.AuthMiddleware(jwtService))
+	agents.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Try Ed25519 first (for SDK agents)
+	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/", middleware.MemberMiddleware(), h.Agent.CreateAgent)
@@ -808,6 +811,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	agents.Post("/:id/suspend", middleware.ManagerMiddleware(), h.Agent.SuspendAgent)
 	agents.Post("/:id/reactivate", middleware.ManagerMiddleware(), h.Agent.ReactivateAgent)
 	agents.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
+	agents.Put("/:id/keys", middleware.MemberMiddleware(), h.Agent.UpdateAgentKeys) // SDK key registration
 	// Runtime verification endpoints - CORE functionality
 	agents.Post("/:id/verify-action", h.Agent.VerifyAction)
 	agents.Post("/:id/log-action/:audit_id", h.Agent.LogActionResult)

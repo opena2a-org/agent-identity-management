@@ -143,7 +143,7 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
       setError(null)
 
       try {
-        // Fetch capabilities from backend API using the correct method
+        // First, fetch basic capabilities for badges
         const capabilities = await api.getAgentCapabilities(agentId, false)
 
         console.log('Agent capabilities:', capabilities)
@@ -154,8 +154,20 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
           setFetchedCapabilities(capabilityTypes)
         }
 
-        // Set to null for now to show basic capabilities view
-        setCapabilityReport(null)
+        // Try to fetch latest capability report
+        try {
+          const report = await api.getLatestCapabilityReport(agentId)
+          console.log('Latest capability report:', report)
+          setCapabilityReport(report)
+        } catch (reportErr: any) {
+          // If no report exists yet (404), that's fine - just show basic view
+          if (reportErr.message?.includes('404') || reportErr.message?.includes('not found')) {
+            console.log('No capability report found yet')
+            setCapabilityReport(null)
+          } else {
+            throw reportErr
+          }
+        }
       } catch (err: any) {
         console.error('Failed to fetch capabilities:', err)
         setError(err.message || 'Failed to load capability report')
@@ -257,90 +269,6 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
             </AlertDescription>
           </Alert>
         )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>What is Capability Detection?</CardTitle>
-            <CardDescription>
-              Automatic security analysis of your agent's code and runtime environment
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex gap-3">
-                <Folder className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">File System Access</div>
-                  <div className="text-sm text-muted-foreground">
-                    Detects read, write, delete, and execute operations
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Database className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Database Operations</div>
-                  <div className="text-sm text-muted-foreground">
-                    Identifies database access (PostgreSQL, MongoDB, etc.)
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Globe className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Network Capabilities</div>
-                  <div className="text-sm text-muted-foreground">
-                    Tracks HTTP, WebSocket, and external API calls
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Code className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Code Execution</div>
-                  <div className="text-sm text-muted-foreground">
-                    Detects eval(), exec(), and shell command usage
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Key className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Credential Access</div>
-                  <div className="text-sm text-muted-foreground">
-                    Monitors access to environment variables and secrets
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Chrome className="h-5 w-5 text-indigo-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Browser Automation</div>
-                  <div className="text-sm text-muted-foreground">
-                    Detects Puppeteer, Playwright, Selenium usage
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="bg-muted/50 p-4 rounded-lg">
-              <div className="font-medium mb-2">How to Enable:</div>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Install the AIM SDK in your agent application</li>
-                <li>Call <code className="bg-background px-1 py-0.5 rounded">detectAgentCapabilities()</code></li>
-                <li>Capabilities are automatically reported to the dashboard</li>
-                <li>Review security alerts and risk assessment</li>
-              </ol>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     )
   }

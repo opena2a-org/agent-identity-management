@@ -195,6 +195,7 @@ export interface DetectionStatusResponse {
   sdkVersion?: string;
   sdkInstalled: boolean;
   autoDetectEnabled: boolean;
+  protocol?: string; // SDK-detected protocol: "mcp", "a2a", "oauth", etc.
   detectedMCPs: DetectedMCPSummary[];
   lastReportedAt?: string;
 }
@@ -1381,6 +1382,12 @@ class APIClient {
   ): Promise<AgentCapability[]> {
     return this.request(
       `/api/v1/agents/${agentId}/capabilities?activeOnly=${activeOnly}`
+    );
+  }
+
+  async getLatestCapabilityReport(agentId: string): Promise<any> {
+    return this.request(
+      `/api/v1/detection/agents/${agentId}/capabilities/latest`
     );
   }
 

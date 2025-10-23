@@ -59,8 +59,8 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 	authMethod := c.Locals("auth_method")
 	var userID uuid.UUID
 
-	if authMethod == "api_key" {
-		// For API key auth, use a nil UUID to indicate system/agent action
+	if authMethod == "api_key" || authMethod == "ed25519" {
+		// For API key or Ed25519 auth, use a nil UUID to indicate system/agent action
 		userID = uuid.Nil
 	} else {
 		// For JWT auth, require user_id
@@ -193,8 +193,8 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 	authMethod := c.Locals("auth_method")
 	var userID uuid.UUID
 
-	if authMethod == "api_key" {
-		// For API key auth, use a nil UUID to indicate system/agent action
+	if authMethod == "api_key" || authMethod == "ed25519" {
+		// For API key or Ed25519 auth, use a nil UUID to indicate system/agent action
 		userID = uuid.Nil
 	} else {
 		// For JWT auth, require user_id
@@ -227,6 +227,8 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 		c.Context(), agentID, orgID, &req)
 
 	if err != nil {
+		// Log the error for debugging
+		println("❌ Error in ReportCapabilities:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -262,4 +264,49 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 	)
 
 	return c.Status(fiber.StatusOK).JSON(response)
+}
+
+// GetLatestCapabilityReport returns the latest capability report for an agent
+// GET /api/v1/detection/agents/:id/capabilities/latest
+// @Summary Get latest capability report
+// @Description Get the most recent capability report for an agent
+// @Tags detection
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} domain.AgentCapabilityReport
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent or report not found"
+// @Router /detection/agents/{id}/capabilities/latest [get]
+func (h *DetectionHandler) GetLatestCapabilityReport(c fiber.Ctx) error {
+	// Get agent ID from URL
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Get organization ID from auth context
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Get latest capability report
+	report, err := h.detectionService.GetLatestCapabilityReport(c.Context(), agentID, orgID)
+	if err != nil {
+		if err.Error() == "agent not found" || err.Error() == "no capability reports found for this agent" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(report)
 }

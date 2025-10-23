@@ -485,6 +485,93 @@ func (s *DetectionService) ReportCapabilities(
 	}, nil
 }
 
+// GetLatestCapabilityReport fetches the most recent capability report for an agent
+func (s *DetectionService) GetLatestCapabilityReport(
+	ctx context.Context,
+	agentID uuid.UUID,
+	orgID uuid.UUID,
+) (*domain.AgentCapabilityReport, error) {
+	// Verify agent exists and belongs to organization
+	var count int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM agents
+		WHERE id = $1 AND organization_id = $2
+	`, agentID, orgID).Scan(&count)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify agent: %w", err)
+	}
+	if count == 0 {
+		return nil, fmt.Errorf("agent not found")
+	}
+
+	// Query latest capability report
+	var (
+		detectedAt        time.Time
+		environmentJSON   []byte
+		aiModelsJSON      []byte
+		capabilitiesJSON  []byte
+		riskAssessmentJSON []byte
+	)
+
+	query := `
+		SELECT
+			detected_at,
+			environment,
+			ai_models,
+			capabilities,
+			risk_assessment
+		FROM agent_capability_reports
+		WHERE agent_id = $1
+		ORDER BY detected_at DESC
+		LIMIT 1
+	`
+
+	err = s.db.QueryRowContext(ctx, query, agentID).Scan(
+		&detectedAt,
+		&environmentJSON,
+		&aiModelsJSON,
+		&capabilitiesJSON,
+		&riskAssessmentJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no capability reports found for this agent")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch capability report: %w", err)
+	}
+
+	// Parse JSON fields
+	var environment domain.ProgrammingEnvironment
+	if err := json.Unmarshal(environmentJSON, &environment); err != nil {
+		return nil, fmt.Errorf("failed to parse environment: %w", err)
+	}
+
+	var aiModels []domain.AIModelUsage
+	if err := json.Unmarshal(aiModelsJSON, &aiModels); err != nil {
+		return nil, fmt.Errorf("failed to parse ai models: %w", err)
+	}
+
+	var capabilities domain.AgentCapabilities
+	if err := json.Unmarshal(capabilitiesJSON, &capabilities); err != nil {
+		return nil, fmt.Errorf("failed to parse capabilities: %w", err)
+	}
+
+	var riskAssessment domain.RiskAssessment
+	if err := json.Unmarshal(riskAssessmentJSON, &riskAssessment); err != nil {
+		return nil, fmt.Errorf("failed to parse risk assessment: %w", err)
+	}
+
+	return &domain.AgentCapabilityReport{
+		DetectedAt:     detectedAt.Format(time.RFC3339),
+		Environment:    environment,
+		AIModels:       aiModels,
+		Capabilities:   capabilities,
+		RiskAssessment: riskAssessment,
+	}, nil
+}
+
 // countHighSeverityAlerts counts CRITICAL and HIGH severity alerts
 func countHighSeverityAlerts(alerts []domain.SecurityAlert) int {
 	count := 0
