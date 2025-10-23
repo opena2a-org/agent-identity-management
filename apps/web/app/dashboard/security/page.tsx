@@ -635,7 +635,7 @@ export default function SecurityPage() {
                     Result
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">
-                    Confidence
+                    Trust Score
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">
                     Duration
@@ -694,10 +694,10 @@ export default function SecurityPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {event.confidence !== undefined ? (
+                      {event.trustScore !== undefined ? (
                         <div className="flex items-center">
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {(event.confidence * 100).toFixed(1)}%
+                            {(event.trustScore * 100).toFixed(1)}%
                           </div>
                         </div>
                       ) : (

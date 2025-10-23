@@ -59,7 +59,6 @@ func (s *VerificationEventService) LogVerificationEvent(
 		Protocol:         protocol,
 		VerificationType: verificationType,
 		Status:           status,
-		Confidence:       calculateConfidence(status, agent.TrustScore),
 		TrustScore:       agent.TrustScore,
 		DurationMs:       durationMs,
 		InitiatorType:    initiatorType,
@@ -115,7 +114,6 @@ func (s *VerificationEventService) CreateVerificationEvent(
 		MessageHash:      req.MessageHash,
 		Nonce:            req.Nonce,
 		PublicKey:        req.PublicKey,
-		Confidence:       req.Confidence,
 		TrustScore:       agent.TrustScore,
 		DurationMs:       req.DurationMs,
 		ErrorCode:        req.ErrorCode,
@@ -246,7 +244,6 @@ type CreateVerificationEventRequest struct {
 	MessageHash      *string
 	Nonce            *string
 	PublicKey        *string
-	Confidence       float64
 	DurationMs       int
 	ErrorCode        *string
 	ErrorReason      *string
@@ -268,34 +265,3 @@ type CreateVerificationEventRequest struct {
 	CurrentCapabilities  []string // Runtime: Capabilities being used
 }
 
-// calculateConfidence calculates confidence based on status and trust score
-func calculateConfidence(status domain.VerificationEventStatus, trustScore float64) float64 {
-	baseConfidence := trustScore / 100.0 // Convert 0-100 to 0-1
-
-	switch status {
-	case domain.VerificationEventStatusSuccess:
-		return min(baseConfidence+0.1, 1.0) // Boost by 10%
-	case domain.VerificationEventStatusFailed:
-		return max(baseConfidence-0.2, 0.0) // Reduce by 20%
-	case domain.VerificationEventStatusTimeout:
-		return max(baseConfidence-0.3, 0.0) // Reduce by 30%
-	case domain.VerificationEventStatusPending:
-		return baseConfidence
-	default:
-		return baseConfidence
-	}
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}

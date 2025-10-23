@@ -273,7 +273,6 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		Result:           result,
 		Signature:        &req.Signature,
 		PublicKey:        &req.PublicKey,
-		Confidence:       trustScore / 100.0, // Convert 0-100 to 0-1
 		DurationMs:       verificationDurationMs,
 		ErrorReason:      errorReasonPtr,
 		InitiatorType:    domain.InitiatorTypeAgent,

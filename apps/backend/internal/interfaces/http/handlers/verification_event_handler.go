@@ -243,7 +243,6 @@ func (h *VerificationEventHandler) CreateVerificationEvent(c fiber.Ctx) error {
 		MessageHash:      req.MessageHash,
 		Nonce:            req.Nonce,
 		PublicKey:        req.PublicKey,
-		Confidence:       req.Confidence,
 		DurationMs:       req.DurationMs,
 		ErrorCode:        req.ErrorCode,
 		ErrorReason:      req.ErrorReason,

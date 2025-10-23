@@ -153,7 +153,6 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 				VerificationType: domain.VerificationTypeIdentity,
 				Status:           domain.VerificationEventStatusSuccess,
 				Result:           &verifiedResult,
-				Confidence:       1.0,
 				DurationMs:       0,
 				InitiatorType:    domain.InitiatorTypeSystem,
 			}
