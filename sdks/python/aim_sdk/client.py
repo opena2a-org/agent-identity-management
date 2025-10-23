@@ -187,31 +187,79 @@ class AIMClient:
         # Prepare additional headers (merge with session headers)
         additional_headers = {}
 
-        # Add API key authentication if available
-        if self.api_key:
+        # Add Ed25519 signature authentication if signing key is available (highest priority)
+        if self.signing_key and self.public_key and self.agent_id:
+            try:
+                import time
+                import json
+
+                # Create timestamp
+                timestamp = str(int(time.time()))
+
+                # Create message to sign: method + endpoint + timestamp + body
+                message_parts = [method.upper(), endpoint, timestamp]
+                json_body_str = None
+                if data:
+                    json_body_str = json.dumps(data, sort_keys=True)
+                    message_parts.append(json_body_str)
+                    print(f"🔍 SDK signing JSON body: {json_body_str[:200]}...")
+                message = '\n'.join(message_parts)
+                print(f"🔍 SDK signing full message:\n{message[:500]}...")
+
+                # Sign the message
+                signature = self.signing_key.sign(message.encode('utf-8')).signature
+                signature_b64 = Base64Encoder.encode(signature).decode('utf-8')
+
+                # Add Ed25519 signature headers
+                additional_headers['X-Agent-ID'] = self.agent_id
+                additional_headers['X-Signature'] = signature_b64
+                additional_headers['X-Timestamp'] = timestamp
+                additional_headers['X-Public-Key'] = self.public_key
+
+                # CRITICAL: Use pre-serialized JSON to ensure exact same format as signed
+                if json_body_str:
+                    additional_headers['Content-Type'] = 'application/json'
+
+            except Exception as e:
+                # If Ed25519 signing fails, fall back to other methods
+                logger.warning(f"Ed25519 signing failed: {e}")
+
+        # Add API key authentication if available (fallback)
+        elif self.api_key:
             additional_headers['X-API-Key'] = self.api_key
 
-        # Add OAuth authorization if token manager is available (takes precedence over API key)
-        if self.oauth_token_manager:
+        # Add OAuth authorization if token manager is available (fallback)
+        elif self.oauth_token_manager:
             try:
                 access_token = self.oauth_token_manager.get_access_token()
                 if access_token:
                     additional_headers['Authorization'] = f'Bearer {access_token}'
             except Exception:
-                # If OAuth token fails, fall back to API key if available
+                # If OAuth token fails, no authentication will be added
                 pass
 
-        # Merge session headers with additional headers
+        # Merge session headers with additional headers (additional_headers take precedence)
         merged_headers = {**self.session.headers, **additional_headers}
 
         try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                json=data,
-                headers=merged_headers,
-                timeout=self.timeout
-            )
+            # CRITICAL: If we have pre-serialized JSON (for Ed25519 signing), use it directly
+            # Otherwise use json=data to let requests serialize it
+            if 'json_body_str' in locals() and json_body_str is not None:
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    data=json_body_str,
+                    headers=merged_headers,
+                    timeout=self.timeout
+                )
+            else:
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    json=data,
+                    headers=merged_headers,
+                    timeout=self.timeout
+                )
 
             # Handle authentication errors
             if response.status_code == 401:
@@ -417,6 +465,81 @@ class AIMClient:
             # Don't fail the action if logging fails
             pass
 
+    def register_keys(self) -> Dict:
+        """
+        Register the SDK's public key with AIM server.
+
+        This method should be called after generating keypairs in the SDK
+        but before attempting to authenticate API requests. The backend needs
+        to know the agent's public key to verify signatures.
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - message: str
+                - public_key: str - The registered public key
+                - key_created_at: str - Timestamp of key creation
+                - key_expires_at: str - Timestamp of key expiration
+
+        Raises:
+            ConfigurationError: If public key is not set
+            AuthenticationError: If not authorized to update keys
+            Exception: If registration fails
+
+        Example:
+            client = AIMClient(agent_id=agent_id, public_key=pub_key, private_key=priv_key, aim_url=aim_url)
+            result = client.register_keys()
+            print(f"Keys registered: {result['message']}")
+        """
+        if not self.public_key:
+            raise ConfigurationError("Public key must be set before registering keys")
+
+        try:
+            response = self._make_request(
+                method="PUT",
+                endpoint=f"/api/v1/agents/{self.agent_id}/keys",
+                data={"public_key": self.public_key}
+            )
+            return response
+        except Exception as e:
+            raise Exception(f"Failed to register keys: {e}")
+
+    def get_agent_details(self) -> Dict:
+        """
+        Retrieve details for the current agent from AIM server.
+
+        Returns:
+            Dict containing agent information:
+                - id: Agent UUID
+                - name: Agent name
+                - agent_type: Type of agent (ai_agent, human_agent, etc.)
+                - status: Agent status (active, suspended, revoked)
+                - trust_score: Current trust score (0-100)
+                - created_at: Creation timestamp
+                - updated_at: Last update timestamp
+                - last_verified_at: Last verification timestamp
+                - public_key: Agent's public key
+                - key_created_at: Key creation timestamp
+                - key_expires_at: Key expiration timestamp
+
+        Raises:
+            AuthenticationError: If agent credentials are invalid
+            Exception: If request fails
+
+        Example:
+            client = AIMClient(agent_id=agent_id, public_key=pub_key, private_key=priv_key, aim_url=aim_url)
+            agent = client.get_agent_details()
+            print(f"Agent: {agent['name']}, Trust Score: {agent['trust_score']}")
+        """
+        try:
+            response = self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents/{self.agent_id}"
+            )
+            return response
+        except Exception as e:
+            raise Exception(f"Failed to get agent details: {e}")
+
     def report_detections(
         self,
         detections: list
@@ -570,57 +693,74 @@ class AIMClient:
             AuthenticationError: If authentication fails
             VerificationError: If request fails
         """
-        if not self.api_key:
-            raise ConfigurationError("report_capabilities requires API key authentication mode")
+        # Build capability report structure for bulk reporting endpoint
+        import platform
+        import sys
 
-        granted_count = 0
-        total_count = len(capabilities)
+        # Map simple capability names to structured capability report
+        capability_report = {
+            "detectedAt": datetime.now(timezone.utc).isoformat(),
+            "environment": {
+                "language": "python",
+                "version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                "runtime": platform.python_implementation(),
+                "platform": platform.system(),
+                "arch": platform.machine(),
+                "frameworks": [],
+                "packageManagers": ["pip"]
+            },
+            "aiModels": [],
+            "capabilities": {},
+            "riskAssessment": {
+                "overallRiskScore": 0,
+                "riskLevel": "low",
+                "trustScoreImpact": 0,
+                "alerts": []
+            }
+        }
 
-        # Temporarily disable auto-retry for capability reporting to handle duplicates faster
-        original_auto_retry = self.auto_retry
-        self.auto_retry = False
+        # Map simple capability strings to structured capabilities
+        for cap in capabilities:
+            if cap in ["read_files", "write_files"]:
+                capability_report["capabilities"]["fileSystem"] = {
+                    "read": "read_files" in capabilities,
+                    "write": "write_files" in capabilities,
+                    "delete": False,
+                    "execute": False,
+                    "pathsAccessed": [],
+                    "detectionMethod": "import_analysis"
+                }
+            elif cap in ["execute_code"]:
+                capability_report["capabilities"]["codeExecution"] = {
+                    "eval": True,
+                    "exec": True,
+                    "shellCommands": False,
+                    "childProcesses": False,
+                    "vmExecution": False,
+                    "detectionMethod": "import_analysis"
+                }
+            elif cap in ["make_api_calls"]:
+                capability_report["capabilities"]["network"] = {
+                    "http": True,
+                    "https": True,
+                    "websocket": False,
+                    "tcp": False,
+                    "udp": False,
+                    "externalApis": [],
+                    "detectionMethod": "import_analysis"
+                }
 
-        try:
-            for capability_type in capabilities:
-                try:
-                    # Use SDK API endpoint for capability grant
-                    result = self._make_request(
-                        method="POST",
-                        endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capabilities",
-                        data={
-                            "capabilityType": capability_type,
-                            "scope": scope or {
-                                "source": "python_sdk_auto_detection",
-                                "detectedAt": datetime.now(timezone.utc).isoformat()
-                            }
-                        }
-                    )
-
-                    if result:
-                        granted_count += 1
-
-                except Exception as e:
-                    # Capability might already exist (duplicate key error) - count as granted
-                    # Check both the exception message and type
-                    error_str = str(e).lower()
-                    is_duplicate = (
-                        "duplicate" in error_str or
-                        "already exists" in error_str or
-                        "unique constraint" in error_str or
-                        "500" in error_str  # Backend returns 500 for duplicate key violations
-                    )
-                    if is_duplicate:
-                        granted_count += 1
-                    # Continue even if one capability fails for other reasons
-                    continue
-
-        finally:
-            # Restore original auto-retry setting
-            self.auto_retry = original_auto_retry
+        # Use bulk reporting endpoint (works with Ed25519 auth)
+        result = self._make_request(
+            method="POST",
+            endpoint=f"/api/v1/detection/agents/{self.agent_id}/capabilities/report",
+            data=capability_report
+        )
 
         return {
-            "granted": granted_count,
-            "total": total_count
+            "success": True,
+            "message": result.get("message", "Capabilities reported successfully"),
+            "data": result
         }
 
     def report_sdk_integration(
