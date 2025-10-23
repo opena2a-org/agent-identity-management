@@ -131,6 +131,11 @@ export function CreateAPIKeyModal({
   // Handle click on overlay (outside modal)
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
+      // Don't allow closing if API key is shown (user must copy it first)
+      if (success && apiKey) {
+        return;
+      }
+
       if (isFormDirty()) {
         if (
           confirm(
@@ -169,7 +174,7 @@ export function CreateAPIKeyModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Create API Key
+            {success ? "API Key Created Successfully" : "Create API Key"}
           </h2>
           <button
             onClick={handleClose}
@@ -184,7 +189,7 @@ export function CreateAPIKeyModal({
         <div className="p-6">
           {/* Show API Key (only after creation) */}
           {success && apiKey && (
-            <div className="mb-6 space-y-4">
+            <div className="space-y-4">
               <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
@@ -209,8 +214,10 @@ export function CreateAPIKeyModal({
                       ⚠️ IMPORTANT: Copy the Full API Key Now!
                     </p>
                     <p className="text-xs text-yellow-800 dark:text-yellow-400 mt-1">
-                      This is the complete API key (~52 characters). The API Keys page will only show a shortened prefix for security. 
-                      <strong className="block mt-1">You must copy the entire key below - it will never be shown again!</strong>
+                      <strong className="block mt-1">
+                        You must copy the entire key below - it will never be
+                        shown again!
+                      </strong>
                     </p>
                   </div>
                 </div>
@@ -222,7 +229,7 @@ export function CreateAPIKeyModal({
                 </label>
                 <div className="relative">
                   <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 border-2 border-blue-500 dark:border-blue-400 rounded-lg font-mono text-sm">
-                    <code className="flex-1 overflow-x-auto break-all">
+                    <code className="flex-1 overflow-x-auto break-all text-gray-900 dark:text-gray-100">
                       {showKey ? apiKey : "•".repeat(apiKey.length)}
                     </code>
                     <button
@@ -248,14 +255,17 @@ export function CreateAPIKeyModal({
                       ) : (
                         <>
                           <Copy className="h-4 w-4" />
-                          <span className="text-xs font-bold">Copy Full Key</span>
+                          <span className="text-xs font-bold">
+                            Copy Full Key
+                          </span>
                         </>
                       )}
                     </button>
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  💡 Tip: Save this key in a secure location (e.g., environment variables, password manager)
+                  💡 Tip: Save this key in a secure location (e.g., environment
+                  variables, password manager)
                 </p>
               </div>
 

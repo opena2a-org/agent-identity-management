@@ -40,6 +40,16 @@ type CreateTagInput struct {
 	CreatedBy      uuid.UUID
 }
 
+// UpdateTagInput represents input for updating a tag
+type UpdateTagInput struct {
+	Key         string
+	Value       string
+	Category    string
+	Description string
+	Color       string
+	UpdatedBy   uuid.UUID
+}
+
 // CreateTag creates a new tag with validation
 func (s *TagService) CreateTag(ctx context.Context, input CreateTagInput) (*domain.Tag, error) {
 	// Validate input
@@ -72,6 +82,68 @@ func (s *TagService) GetTagsByOrganization(ctx context.Context, orgID uuid.UUID,
 		return nil, fmt.Errorf("failed to get tags: %w", err)
 	}
 	return tags, nil
+}
+
+// UpdateTag updates an existing tag
+func (s *TagService) UpdateTag(ctx context.Context, tagID, orgID uuid.UUID, input UpdateTagInput) (*domain.Tag, error) {
+	// Get existing tag
+	tag, err := s.tagRepo.GetByID(ctx, tagID)
+	if err != nil {
+		return nil, fmt.Errorf("tag not found: %w", err)
+	}
+
+	// Verify tag belongs to organization
+	if tag.OrganizationID != orgID {
+		return nil, fmt.Errorf("tag does not belong to organization")
+	}
+
+	// Update fields if provided
+	if input.Key != "" {
+		if len(input.Key) > 100 {
+			return nil, fmt.Errorf("tag key must be 100 characters or less")
+		}
+		tag.Key = strings.TrimSpace(input.Key)
+	}
+
+	if input.Value != "" {
+		if len(input.Value) > 255 {
+			return nil, fmt.Errorf("tag value must be 255 characters or less")
+		}
+		tag.Value = strings.TrimSpace(input.Value)
+	}
+
+	if input.Category != "" {
+		category := domain.TagCategory(input.Category)
+		validCategories := map[domain.TagCategory]bool{
+			domain.TagCategoryResourceType:       true,
+			domain.TagCategoryEnvironment:        true,
+			domain.TagCategoryAgentType:          true,
+			domain.TagCategoryDataClassification: true,
+			domain.TagCategoryCustom:             true,
+		}
+		if !validCategories[category] {
+			return nil, fmt.Errorf("invalid tag category: %s", input.Category)
+		}
+		tag.Category = category
+	}
+
+	if input.Description != "" {
+		tag.Description = input.Description
+	}
+
+	if input.Color != "" {
+		if !strings.HasPrefix(input.Color, "#") || len(input.Color) != 7 {
+			return nil, fmt.Errorf("color must be a valid hex color (e.g., #3B82F6)")
+		}
+		tag.Color = input.Color
+	}
+
+	// Update tag in database
+	if err := s.tagRepo.Update(ctx, tag); err != nil {
+		return nil, fmt.Errorf("failed to update tag: %w", err)
+	}
+
+	return tag, nil
 }
 
 // DeleteTag deletes a tag (only if not in use)

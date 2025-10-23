@@ -5,13 +5,18 @@
 // to ensure proper URL detection for environment-agnostic deployments
 const getApiUrl = (): string => {
   // Defense: If somehow called during SSR, throw clear error
-  if (typeof window === 'undefined') {
-    throw new Error('getApiUrl() MUST be called in browser context only. Check your component for SSR issues.');
+  if (typeof window === "undefined") {
+    throw new Error(
+      "getApiUrl() MUST be called in browser context only. Check your component for SSR issues."
+    );
   }
 
   // 1. Check for runtime config (set by server via script injection)
   if ((window as any).__RUNTIME_CONFIG__?.apiUrl) {
-    console.log('[API] Using runtime config URL:', (window as any).__RUNTIME_CONFIG__.apiUrl);
+    console.log(
+      "[API] Using runtime config URL:",
+      (window as any).__RUNTIME_CONFIG__.apiUrl
+    );
     return (window as any).__RUNTIME_CONFIG__.apiUrl;
   }
 
@@ -20,21 +25,24 @@ const getApiUrl = (): string => {
   const { protocol, hostname } = window.location;
 
   // Match both 'aim-frontend' and 'aim-dev-frontend' or any variant with '-frontend'
-  if (hostname.includes('-frontend')) {
-    const backendHost = hostname.replace('-frontend', '-backend');
+  if (hostname.includes("-frontend")) {
+    const backendHost = hostname.replace("-frontend", "-backend");
     const detectedUrl = `${protocol}//${backendHost}`;
-    console.log('[API] Auto-detected URL from hostname:', detectedUrl);
+    console.log("[API] Auto-detected URL from hostname:", detectedUrl);
     return detectedUrl;
   }
 
   // 3. Check for NEXT_PUBLIC_API_URL environment variable
   if (process.env.NEXT_PUBLIC_API_URL) {
-    console.log('[API] Using NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+    console.log(
+      "[API] Using NEXT_PUBLIC_API_URL:",
+      process.env.NEXT_PUBLIC_API_URL
+    );
     return process.env.NEXT_PUBLIC_API_URL;
   }
 
   // 4. Fallback to localhost for local development
-  console.log('[API] Using localhost fallback (local development)');
+  console.log("[API] Using localhost fallback (local development)");
   return "http://localhost:8080";
 };
 
@@ -351,7 +359,13 @@ class APIClient {
     email: string;
     currentPassword: string;
     newPassword: string;
-  }): Promise<{ success: boolean; user?: User; accessToken?: string; refreshToken?: string; message?: string }> {
+  }): Promise<{
+    success: boolean;
+    user?: User;
+    accessToken?: string;
+    refreshToken?: string;
+    message?: string;
+  }> {
     // Use public endpoint for forced password changes (no auth required)
     // Backend expects: email, oldPassword, newPassword
     const payload = {
@@ -360,14 +374,17 @@ class APIClient {
       newPassword: data.newPassword,
     };
 
-    const response = await fetch(`${this.baseURL}/api/v1/public/change-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify(payload),
-    });
+    const response = await fetch(
+      `${this.baseURL}/api/v1/public/change-password`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.json();
@@ -497,19 +514,31 @@ class APIClient {
     return this.request(`/api/v1/agents/${id}/verify`, { method: "POST" });
   }
 
-  async suspendAgent(id: string): Promise<{ success: boolean; message: string }> {
+  async suspendAgent(
+    id: string
+  ): Promise<{ success: boolean; message: string }> {
     return this.request(`/api/v1/agents/${id}/suspend`, { method: "POST" });
   }
 
-  async reactivateAgent(id: string): Promise<{ success: boolean; message: string }> {
+  async reactivateAgent(
+    id: string
+  ): Promise<{ success: boolean; message: string }> {
     return this.request(`/api/v1/agents/${id}/reactivate`, { method: "POST" });
   }
 
-  async rotateAgentCredentials(id: string): Promise<{ api_key: string; message: string }> {
-    return this.request(`/api/v1/agents/${id}/rotate-credentials`, { method: "POST" });
+  async rotateAgentCredentials(
+    id: string
+  ): Promise<{ api_key: string; message: string }> {
+    return this.request(`/api/v1/agents/${id}/rotate-credentials`, {
+      method: "POST",
+    });
   }
 
-  async adjustAgentTrustScore(id: string, score: number, reason: string): Promise<{ success: boolean; new_score: number }> {
+  async adjustAgentTrustScore(
+    id: string,
+    score: number,
+    reason: string
+  ): Promise<{ success: boolean; new_score: number }> {
     return this.request(`/api/v1/agents/${id}/trust-score`, {
       method: "PUT",
       body: JSON.stringify({ score, reason }),
@@ -678,7 +707,6 @@ class APIClient {
     });
   }
 
-
   async getUnacknowledgedAlertCount(): Promise<number> {
     const alerts = await this.getAlerts(100, 0);
     return alerts.filter((a: any) => !a.is_acknowledged).length;
@@ -745,7 +773,6 @@ class APIClient {
   }> {
     return this.request("/api/v1/admin/dashboard/stats");
   }
-
 
   // Verification Activity - Get monthly verification activity data
   async getVerificationActivity(months = 6): Promise<{
@@ -822,20 +849,24 @@ class APIClient {
   }
 
   // Webhooks
-  async listWebhooks(): Promise<Array<{
-    id: string;
-    organization_id: string;
-    name: string;
-    url: string;
-    events: string[];
-    is_active: boolean;
-    secret: string;
-    created_at: string;
-    last_triggered_at?: string;
-    success_count: number;
-    failure_count: number;
-  }>> {
-    const response = await this.request<{ webhooks: any[] }>("/api/v1/webhooks");
+  async listWebhooks(): Promise<
+    Array<{
+      id: string;
+      organization_id: string;
+      name: string;
+      url: string;
+      events: string[];
+      is_active: boolean;
+      secret: string;
+      created_at: string;
+      last_triggered_at?: string;
+      success_count: number;
+      failure_count: number;
+    }>
+  > {
+    const response = await this.request<{ webhooks: any[] }>(
+      "/api/v1/webhooks"
+    );
     return response.webhooks || [];
   }
 
@@ -888,12 +919,15 @@ class APIClient {
     return this.request(`/api/v1/webhooks/${id}`, { method: "DELETE" });
   }
 
-  async updateWebhook(id: string, data: {
-    name?: string;
-    url?: string;
-    events?: string[];
-    is_active?: boolean;
-  }): Promise<{
+  async updateWebhook(
+    id: string,
+    data: {
+      name?: string;
+      url?: string;
+      events?: string[];
+      is_active?: boolean;
+    }
+  ): Promise<{
     id: string;
     organization_id: string;
     name: string;
@@ -999,7 +1033,6 @@ class APIClient {
     );
   }
 
-
   async getSecurityMetrics(): Promise<{
     total_threats: number;
     active_threats: number;
@@ -1067,26 +1100,8 @@ class APIClient {
   }
 
   async getMCPServerCapabilities(id: string): Promise<{
-    capabilities: Array<{
-      id: string;
-      mcp_server_id: string;
-      name: string;
-      type: "tool" | "resource" | "prompt";
-      description: string;
-      schema: any;
-      detected_at: string;
-      last_verified_at?: string;
-      is_active: boolean;
-    }>;
+    capabilities: string[]; // Simple array of capability type strings like ["tools", "prompts", "resources"]
     total: number;
-    tools: any[];
-    resources: any[];
-    prompts: any[];
-    counts: {
-      tools: number;
-      resources: number;
-      prompts: number;
-    };
   }> {
     return this.request(`/api/v1/mcp-servers/${id}/capabilities`);
   }
@@ -1155,7 +1170,6 @@ class APIClient {
       }
     );
   }
-
 
   // Auto-detect MCP servers from Claude Desktop config
   async detectAndMapMCPServers(
@@ -1297,6 +1311,13 @@ class APIClient {
   async createTag(data: CreateTagInput): Promise<Tag> {
     return this.request("/api/v1/tags", {
       method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTag(id: string, data: Partial<CreateTagInput>): Promise<Tag> {
+    return this.request(`/api/v1/tags/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     });
   }
@@ -1505,7 +1526,6 @@ class APIClient {
     });
   }
 
-
   // ========================================
   // Security Policies (Admin Only)
   // ========================================
@@ -1617,7 +1637,6 @@ class APIClient {
     return this.request("/api/v1/compliance/metrics");
   }
 
-
   // Get access review (users and their permissions)
   async getAccessReview(): Promise<{
     users: Array<{
@@ -1672,7 +1691,10 @@ class APIClient {
   }
 
   // Get compliance violations
-  async getComplianceViolations(framework?: string, severity?: string): Promise<{
+  async getComplianceViolations(
+    framework?: string,
+    severity?: string
+  ): Promise<{
     violations: Array<{
       id: string;
       framework: string;
@@ -1753,9 +1775,7 @@ class APIClient {
     }>;
     total: number;
   }> {
-    return this.request(
-      `/api/v1/agents/${agentId}/audit-logs?limit=${limit}`
-    );
+    return this.request(`/api/v1/agents/${agentId}/audit-logs?limit=${limit}`);
   }
 }
 
@@ -1764,7 +1784,7 @@ let _apiInstance: APIClient | null = null;
 
 function getAPIClient(): APIClient {
   if (!_apiInstance) {
-    console.log('[API] Creating APIClient instance for the first time');
+    console.log("[API] Creating APIClient instance for the first time");
     _apiInstance = new APIClient();
   }
   return _apiInstance;
@@ -1777,7 +1797,7 @@ export const api = new Proxy({} as APIClient, {
     const value = (instance as any)[prop];
 
     // Bind methods to the instance to preserve 'this' context
-    if (typeof value === 'function') {
+    if (typeof value === "function") {
       return value.bind(instance);
     }
 
@@ -1787,5 +1807,5 @@ export const api = new Proxy({} as APIClient, {
     const instance = getAPIClient();
     (instance as any)[prop] = value;
     return true;
-  }
+  },
 });
