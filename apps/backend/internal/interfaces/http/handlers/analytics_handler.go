@@ -42,13 +42,17 @@ func NewAnalyticsHandler(
 // @Description Get usage statistics for the organization
 // @Tags analytics
 // @Produce json
+// @Param days query int false "Number of days" default(30)
 // @Param period query string false "Period (day, week, month, year)" default(month)
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/usage [get]
 func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
+	
+	// Support both 'days' and 'period' parameters
+	daysStr := c.Query("days", "")
 	period := c.Query("period", "month")
-
+	
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -69,17 +73,34 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	var apiCalls int64
 	var dataVolumeMB float64
 
-	// Calculate time range based on period
+	// Calculate time range based on 'days' parameter or 'period'
 	var startTime time.Time
-	switch period {
-	case "day":
-		startTime = time.Now().AddDate(0, 0, -1)
-	case "week":
-		startTime = time.Now().AddDate(0, 0, -7)
-	case "year":
-		startTime = time.Now().AddDate(-1, 0, 0)
-	default: // month
-		startTime = time.Now().AddDate(0, -1, 0)
+	var periodLabel string
+	
+	if daysStr != "" {
+		// Use days parameter
+		days, err := strconv.Atoi(daysStr)
+		if err != nil {
+			days = 30
+		}
+		startTime = time.Now().AddDate(0, 0, -days)
+		periodLabel = fmt.Sprintf("Last %d days", days)
+	} else {
+		// Use period parameter
+		switch period {
+		case "day":
+			startTime = time.Now().AddDate(0, 0, -1)
+			periodLabel = "Last 24 hours"
+		case "week":
+			startTime = time.Now().AddDate(0, 0, -7)
+			periodLabel = "Last 7 days"
+		case "year":
+			startTime = time.Now().AddDate(-1, 0, 0)
+			periodLabel = "Last year"
+		default: // month
+			startTime = time.Now().AddDate(0, -1, 0)
+			periodLabel = "Last 30 days"
+		}
 	}
 
 	// Query real API calls
@@ -121,12 +142,12 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	}
 
 	stats := map[string]interface{}{
-		"period":        period,
+		"period":        periodLabel,    // Human-readable period label
 		"total_agents":  totalAgents,
 		"active_agents": activeAgents,
-		"api_calls":     apiCalls,      // ✅ REAL DATA
-		"data_volume":   dataVolumeMB,  // ✅ REAL DATA in MB
-		"uptime":        uptime,         // ✅ REAL DATA - calculated from verification events
+		"api_calls":     apiCalls,       // ✅ REAL DATA from database
+		"data_volume":   dataVolumeMB,   // ✅ REAL DATA in MB
+		"uptime":        uptime,          // ✅ REAL DATA - calculated from verification events
 		"generated_at":  time.Now().UTC(),
 	}
 

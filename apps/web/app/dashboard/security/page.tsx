@@ -662,14 +662,14 @@ export default function SecurityPage() {
                     <td className="px-4 py-3">
                       <div
                         className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
-                        title={event.agent_name || event.agent_id}
+                        title={event.agentName || event.agentId}
                       >
-                        {event.agent_name ||
-                          `ID: ${event.agent_id?.substring(0, 8)}...`}
+                        {event.agentName ||
+                          `ID: ${event.agentId?.substring(0, 8)}...`}
                       </div>
-                      {event.initiator_name && (
+                      {event.initiatorName && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                          By: {event.initiator_name}
+                          By: {event.initiatorName}
                         </div>
                       )}
                     </td>
@@ -677,9 +677,9 @@ export default function SecurityPage() {
                       <div className="text-sm text-gray-900 dark:text-gray-100">
                         {event.action || '-'}
                       </div>
-                      {event.resource_type && (
+                      {event.resourceType && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {event.resource_type}
+                          {event.resourceType}
                         </div>
                       )}
                     </td>
@@ -689,7 +689,7 @@ export default function SecurityPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {event.result === 'verified' ? (
+                      {event.status === 'success' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Verified
@@ -697,7 +697,7 @@ export default function SecurityPage() {
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                           <XCircle className="h-3 w-3 mr-1" />
-                          {event.result}
+                          {event.status}
                         </span>
                       )}
                     </td>
@@ -713,9 +713,9 @@ export default function SecurityPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {event.duration_ms !== undefined ? (
+                      {event.durationMs !== undefined ? (
                         <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {event.duration_ms}ms
+                          {event.durationMs}ms
                         </span>
                       ) : (
                         <span className="text-xs text-gray-400">-</span>
@@ -723,7 +723,7 @@ export default function SecurityPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {event.created_at && formatDateTime(event.created_at)}
+                        {event.createdAt && formatDateTime(event.createdAt)}
                       </div>
                     </td>
                   </tr>
