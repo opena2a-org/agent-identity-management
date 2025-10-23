@@ -128,6 +128,84 @@ func (h *TagHandler) GetTags(c fiber.Ctx) error {
 	return c.JSON(tags)
 }
 
+// UpdateTagRequest represents the request body for updating a tag
+type UpdateTagRequest struct {
+	Key         string `json:"key" validate:"omitempty,max=100"`
+	Value       string `json:"value" validate:"omitempty,max=255"`
+	Category    string `json:"category" validate:"omitempty"`
+	Description string `json:"description"`
+	Color       string `json:"color" validate:"omitempty,len=7"`
+}
+
+// UpdateTag godoc
+// @Summary Update a tag
+// @Description Update an existing tag
+// @Tags tags
+// @Accept json
+// @Produce json
+// @Param id path string true "Tag ID"
+// @Param tag body UpdateTagRequest true "Tag details to update"
+// @Success 200 {object} domain.Tag
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/tags/{id} [put]
+func (h *TagHandler) UpdateTag(c fiber.Ctx) error {
+	// Parse tag ID
+	tagID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid tag ID",
+		})
+	}
+
+	// Get authenticated user
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Unauthorized",
+		})
+	}
+
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found",
+		})
+	}
+
+	// Parse request body
+	var req UpdateTagRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid request body",
+		})
+	}
+
+	// Update tag
+	tag, err := h.tagService.UpdateTag(c.Context(), tagID, orgID, application.UpdateTagInput{
+		Key:         req.Key,
+		Value:       req.Value,
+		Category:    req.Category,
+		Description: req.Description,
+		Color:       req.Color,
+		UpdatedBy:   userID,
+	})
+	if err != nil {
+		if contains(err.Error(), "not found") {
+			return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
+				Error: err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(tag)
+}
+
 // DeleteTag godoc
 // @Summary Delete a tag
 // @Description Delete a tag (only if not in use)
