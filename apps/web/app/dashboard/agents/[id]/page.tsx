@@ -32,8 +32,6 @@ import { Separator } from "@/components/ui/separator";
 import { AutoDetectButton } from "@/components/agents/auto-detect-button";
 import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
-import { DetectionStatus } from "@/components/agents/detection-status";
-import { SDKSetupGuide } from "@/components/agents/sdk-setup-guide";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
 import { api } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
@@ -112,6 +110,7 @@ export default function AgentDetailsPage({
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [showRotateCredsConfirm, setShowRotateCredsConfirm] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
+  const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
   useEffect(() => {
@@ -143,6 +142,14 @@ export default function AgentDetailsPage({
         try {
           const ev = await api.getRecentVerificationEvents(60);
           setEvents(ev.events?.filter((e: any) => e.agentId === agentId) || []);
+        } catch (e) {
+          // non-fatal
+        }
+
+        // Fetch detection status (for detected MCP servers)
+        try {
+          const detectionStatus = await api.getDetectionStatus(agentId!);
+          setDetectedMCPs(detectionStatus.detectedMCPs || []);
         } catch (e) {
           // non-fatal
         }
@@ -639,14 +646,6 @@ export default function AgentDetailsPage({
             <Shield className="h-4 w-4 mr-2" />
             Trust Score
           </TabsTrigger>
-          <TabsTrigger value="detection">
-            <Bot className="h-4 w-4 mr-2" />
-            Detection
-          </TabsTrigger>
-          <TabsTrigger value="sdk">
-            <Shield className="h-4 w-4 mr-2" />
-            SDK Setup
-          </TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
@@ -655,25 +654,74 @@ export default function AgentDetailsPage({
             <CardHeader>
               <CardTitle>MCP Server Connections</CardTitle>
               <CardDescription>
-                Manage which MCP servers this agent can communicate with. Use
-                the buttons above to auto-detect from Claude Desktop config or
-                manually add servers.
+                Manage which MCP servers this agent can communicate with. Shows both manually connected servers and auto-detected servers from SDK runtime.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <MCPServerList
-                agentId={agent.id}
-                mcpServers={connectedMCPServers}
-                serverDetails={connectedMCPServerDetails.map(server => ({
-                  name: server.name,
-                  id: server.id,
-                  capabilities: server.capabilities,
-                  url: server.url
-                }))}
-                serverNameToId={serverNameToId}
-                onUpdate={handleRefresh}
-                showBulkActions={true}
-              />
+            <CardContent className="space-y-6">
+              {/* Manually Connected Servers */}
+              {connectedMCPServers.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Manually Connected</h3>
+                  <MCPServerList
+                    agentId={agent.id}
+                    mcpServers={connectedMCPServers}
+                    serverDetails={connectedMCPServerDetails.map(server => ({
+                      name: server.name,
+                      id: server.id,
+                      capabilities: server.capabilities,
+                      url: server.url
+                    }))}
+                    serverNameToId={serverNameToId}
+                    onUpdate={handleRefresh}
+                    showBulkActions={true}
+                  />
+                </div>
+              )}
+
+              {/* Auto-Detected Servers */}
+              {detectedMCPs.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Auto-Detected by SDK</h3>
+                  <div className="grid gap-3">
+                    {detectedMCPs.map((detection: any) => (
+                      <div key={detection.name} className="p-4 rounded-lg border bg-card">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-sm">{detection.name}</h4>
+                          </div>
+                          <div className="flex gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {Math.round(detection.confidenceScore)}% confidence
+                            </Badge>
+                            {detection.detectedBy && detection.detectedBy.length > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                {detection.detectedBy[0].replace(/_/g, ' ')}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Detected via SDK runtime monitoring
+                          {detection.lastSeen && ` • Last seen ${new Date(detection.lastSeen).toLocaleString()}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {connectedMCPServers.length === 0 && detectedMCPs.length === 0 && (
+                <div className="text-center py-12 px-4">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                    <ExternalLink className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No MCP Servers Detected</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
+                    This agent has no MCP servers connected or detected. Use the buttons above to add servers manually or install the AIM SDK to enable auto-detection.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -760,18 +808,6 @@ export default function AgentDetailsPage({
           <TrustScoreBreakdown agentId={agent.id} userRole={userRole} />
         </TabsContent>
 
-        <TabsContent value="detection">
-          <DetectionStatus agentId={agent.id} />
-        </TabsContent>
-
-        <TabsContent value="sdk">
-          <SDKSetupGuide
-            agentId={agent.id}
-            agentName={agent.name}
-            agentType={agent.agent_type}
-          />
-        </TabsContent>
-
         <TabsContent value="details" className="space-y-4">
           <Card>
             <CardHeader>
@@ -841,6 +877,15 @@ export default function AgentDetailsPage({
                     ) : (
                       <Badge variant="secondary">Unverified</Badge>
                     )}
+                  </span>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Protocols Agent Uses:
+                  </span>
+                  <span className="col-span-2 text-sm">
+                    <Badge variant="secondary">MCP</Badge>
                   </span>
                 </div>
                 <Separator />

@@ -91,6 +91,36 @@ export function DetectionStatus({ agentId }: DetectionStatusProps) {
 
   return (
     <div className="space-y-6">
+      {/* Protocol Detection */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Protocol Detection
+          </CardTitle>
+          <CardDescription>
+            Communication protocol used by this agent (auto-detected by SDK)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Detected Protocol</p>
+              <p className="text-2xl font-semibold mt-1">
+                {status.protocol || 'MCP'}
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-xs">
+              {status.protocol ? 'SDK Detected' : 'Default'}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-4">
+            Protocol is automatically detected by the AIM SDK based on runtime context.
+            Users can also explicitly declare protocol in secure() wrapper.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* SDK Installation Status */}
       <Card>
         <CardHeader>
