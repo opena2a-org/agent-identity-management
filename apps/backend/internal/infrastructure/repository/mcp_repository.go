@@ -3,11 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/opena2a/identity/backend/internal/domain"
 )
 
@@ -29,7 +29,13 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		RETURNING id, created_at, updated_at
 	`
 
-	err := r.db.QueryRow(
+	// Marshal capabilities to JSON (database uses JSONB, not text array)
+	capabilitiesJSON, err := json.Marshal(server.Capabilities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal capabilities: %w", err)
+	}
+
+	err = r.db.QueryRow(
 		query,
 		server.ID,
 		server.OrganizationID,
@@ -41,7 +47,7 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		server.Status,
 		server.IsVerified,
 		server.VerificationURL,
-		pq.Array(server.Capabilities),
+		capabilitiesJSON, // Use JSON bytes instead of pq.Array
 		server.TrustScore,
 		server.RegisteredByAgent, // Can be nil for user-registered servers
 		server.CreatedBy,          // ✅ FIXED: Added created_by field
@@ -67,7 +73,7 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 	`
 
 	server := &domain.MCPServer{}
-	var capabilities []string
+	var capabilitiesJSON []byte
 
 	err := r.db.QueryRow(query, id).Scan(
 		&server.ID,
@@ -81,7 +87,7 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 		&server.IsVerified,
 		&server.LastVerifiedAt,
 		&server.VerificationURL,
-		pq.Array(&capabilities),
+		&capabilitiesJSON, // Read as JSON bytes
 		&server.TrustScore,
 		&server.RegisteredByAgent,
 		&server.CreatedBy,
@@ -96,7 +102,13 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 		return nil, fmt.Errorf("failed to get mcp server: %w", err)
 	}
 
-	server.Capabilities = capabilities
+	// Unmarshal capabilities from JSONB
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &server.Capabilities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+		}
+	}
+
 	return server, nil
 }
 
@@ -125,7 +137,7 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 	var servers []*domain.MCPServer
 	for rows.Next() {
 		server := &domain.MCPServer{}
-		var capabilities []string
+		var capabilitiesJSON []byte
 
 		err := rows.Scan(
 			&server.ID,
@@ -139,7 +151,7 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 			&server.IsVerified,
 			&server.LastVerifiedAt,
 			&server.VerificationURL,
-			pq.Array(&capabilities),
+			&capabilitiesJSON, // Read as JSON bytes
 			&server.TrustScore,
 			&server.RegisteredByAgent,
 			&server.CreatedBy,
@@ -151,7 +163,13 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
 		}
 
-		server.Capabilities = capabilities
+		// Unmarshal capabilities from JSONB
+		if len(capabilitiesJSON) > 0 {
+			if err := json.Unmarshal(capabilitiesJSON, &server.Capabilities); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+			}
+		}
+
 		servers = append(servers, server)
 	}
 
@@ -169,7 +187,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 	`
 
 	server := &domain.MCPServer{}
-	var capabilities []string
+	var capabilitiesJSON []byte
 
 	err := r.db.QueryRow(query, url).Scan(
 		&server.ID,
@@ -183,7 +201,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 		&server.IsVerified,
 		&server.LastVerifiedAt,
 		&server.VerificationURL,
-		pq.Array(&capabilities),
+		&capabilitiesJSON, // Read as JSON bytes
 		&server.TrustScore,
 		&server.RegisteredByAgent,
 		&server.CreatedBy,
@@ -198,7 +216,13 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 		return nil, fmt.Errorf("failed to get mcp server: %w", err)
 	}
 
-	server.Capabilities = capabilities
+	// Unmarshal capabilities from JSONB
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &server.Capabilities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+		}
+	}
+
 	return server, nil
 }
 
@@ -222,7 +246,13 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 		RETURNING updated_at
 	`
 
-	err := r.db.QueryRow(
+	// Marshal capabilities to JSON
+	capabilitiesJSON, err := json.Marshal(server.Capabilities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal capabilities: %w", err)
+	}
+
+	err = r.db.QueryRow(
 		query,
 		server.Name,
 		server.Description,
@@ -233,7 +263,7 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 		server.IsVerified,
 		server.LastVerifiedAt,
 		server.VerificationURL,
-		pq.Array(server.Capabilities),
+		capabilitiesJSON, // Use JSON bytes
 		server.TrustScore,
 		time.Now().UTC(),
 		server.ID,
@@ -282,7 +312,7 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 	var servers []*domain.MCPServer
 	for rows.Next() {
 		server := &domain.MCPServer{}
-		var capabilities []string
+		var capabilitiesJSON []byte
 
 		err := rows.Scan(
 			&server.ID,
@@ -296,7 +326,7 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 			&server.IsVerified,
 			&server.LastVerifiedAt,
 			&server.VerificationURL,
-			pq.Array(&capabilities),
+			&capabilitiesJSON, // Read as JSON bytes
 			&server.TrustScore,
 			&server.RegisteredByAgent,
 			&server.CreatedBy,
@@ -307,7 +337,13 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
 		}
 
-		server.Capabilities = capabilities
+		// Unmarshal capabilities from JSONB
+		if len(capabilitiesJSON) > 0 {
+			if err := json.Unmarshal(capabilitiesJSON, &server.Capabilities); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+			}
+		}
+
 		servers = append(servers, server)
 	}
 

@@ -38,17 +38,17 @@ class OAuthTokenManager:
 
     def __init__(self, credentials_path: Optional[str] = None, use_secure_storage: bool = True):
         """
-        Initialize OAuth token manager.
+        Initialize OAuth token manager with intelligent credential discovery.
 
         Args:
-            credentials_path: Path to credentials.json file (default: ~/.aim/credentials.json)
+            credentials_path: Path to credentials.json file (default: auto-discover)
             use_secure_storage: Use encrypted storage if available (default: True)
         """
         if credentials_path:
             self.credentials_path = Path(credentials_path)
         else:
-            # Default location for SDK-embedded credentials
-            self.credentials_path = Path.home() / ".aim" / "credentials.json"
+            # Intelligent credential discovery
+            self.credentials_path = self._discover_credentials_path()
 
         self.credentials: Optional[Dict[str, Any]] = None
         self.access_token: Optional[str] = None
@@ -64,6 +64,32 @@ class OAuthTokenManager:
         # Load credentials if they exist
         if self._credentials_exist():
             self.load_credentials()
+
+    def _discover_credentials_path(self) -> Path:
+        """Intelligently discover credentials location with auto-copy for downloaded SDKs."""
+        import shutil
+        home_creds = Path.home() / ".aim" / "credentials.json"
+        if home_creds.exists():
+            return home_creds
+        try:
+            import aim_sdk
+            sdk_package_root = Path(aim_sdk.__file__).parent.parent
+            sdk_creds = sdk_package_root / ".aim" / "credentials.json"
+            if sdk_creds.exists():
+                try:
+                    home_creds.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(sdk_creds, home_creds)
+                    os.chmod(home_creds, 0o600)
+                    print(f"✅ SDK credentials installed to {home_creds}")
+                    return home_creds
+                except Exception as e:
+                    return sdk_creds
+        except:
+            pass
+        cwd_creds = Path.cwd() / ".aim" / "credentials.json"
+        if cwd_creds.exists():
+            return cwd_creds
+        return home_creds
 
     def _credentials_exist(self) -> bool:
         """Check if credentials exist (encrypted or plaintext)."""
@@ -167,14 +193,96 @@ class OAuthTokenManager:
 
         try:
             # Call token refresh endpoint (with rotation support)
+            refresh_url = f"{aim_url.rstrip('/')}/api/v1/auth/refresh"
+
             response = requests.post(
-                f"{aim_url.rstrip('/')}/api/v1/auth/refresh",
+                refresh_url,
                 json={"refresh_token": refresh_token},
                 timeout=10
             )
 
             if response.status_code != 200:
-                print(f"⚠️  Warning: Token refresh failed with status {response.status_code}")
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                error_msg = error_data.get('error', response.text)
+
+                # Check if token was revoked/expired - try automatic recovery
+                if 'revoked' in error_msg.lower() or 'invalid' in error_msg.lower():
+                    print("🔄 Token was revoked - attempting automatic recovery...")
+
+                    # Try token recovery endpoint (new feature - zero downtime!)
+                    recovery_url = f"{aim_url.rstrip('/')}/api/v1/auth/sdk/recover"
+                    try:
+                        recovery_response = requests.post(
+                            recovery_url,
+                            json={"old_refresh_token": refresh_token},
+                            timeout=10
+                        )
+
+                        if recovery_response.status_code == 200:
+                            recovery_data = recovery_response.json()
+                            self.access_token = recovery_data.get('access_token')
+                            new_refresh_token = recovery_data.get('refresh_token')
+
+                            if new_refresh_token:
+                                # Save recovered credentials
+                                self.credentials['refresh_token'] = new_refresh_token
+
+                                # Update sdk_token_id
+                                import base64
+                                try:
+                                    token_parts = new_refresh_token.split('.')
+                                    if len(token_parts) == 3:
+                                        payload_part = token_parts[1]
+                                        padding = 4 - len(payload_part) % 4
+                                        if padding != 4:
+                                            payload_part += '=' * padding
+                                        token_payload = json.loads(base64.b64decode(payload_part))
+                                        new_token_id = token_payload.get('jti')
+                                        if new_token_id:
+                                            self.credentials['sdk_token_id'] = new_token_id
+                                except Exception:
+                                    pass
+
+                                self.save_credentials(self.credentials)
+                                print("✅ Token recovered automatically! SDK credentials updated.")
+                                print("💡 No need to re-download the SDK - everything just works!")
+
+                                # Decode new access token expiry
+                                try:
+                                    import base64
+                                    payload_part = self.access_token.split('.')[1]
+                                    padding = 4 - len(payload_part) % 4
+                                    if padding != 4:
+                                        payload_part += '=' * padding
+                                    payload = json.loads(base64.b64decode(payload_part))
+                                    self.access_token_expiry = payload.get('exp')
+                                except Exception:
+                                    self.access_token_expiry = time.time() + 3600
+
+                                return self.access_token
+
+                    except Exception as recovery_error:
+                        # Recovery failed - fall back to manual instructions
+                        pass
+
+                    # If recovery failed, show manual instructions
+                    print("\n" + "=" * 80)
+                    print("⚠️  SDK TOKEN EXPIRED OR REVOKED")
+                    print("=" * 80)
+                    print("\nYour SDK refresh token is no longer valid. This can happen if:")
+                    print("  • The token expired (90 days since last use)")
+                    print("  • The token was revoked for security reasons")
+                    print("  • Another SDK/tool rotated your token")
+                    print("\n📥 TO FIX: Download a fresh SDK from the AIM dashboard")
+                    print(f"   1. Visit: {aim_url}")
+                    print("   2. Go to Settings → SDK Downloads")
+                    print("   3. Click 'Download Python SDK'")
+                    print("   4. Extract and run your code again")
+                    print("\n💡 TIP: Your agents and data are safe! Only the SDK credentials need updating.")
+                    print("=" * 80 + "\n")
+                else:
+                    print(f"⚠️  Token refresh failed with status {response.status_code}: {error_msg}")
+
                 return None
 
             data = response.json()
@@ -185,6 +293,24 @@ class OAuthTokenManager:
             if new_refresh_token and new_refresh_token != refresh_token:
                 # Token rotation: save new refresh token
                 self.credentials['refresh_token'] = new_refresh_token
+
+                # Also update sdk_token_id if present in the new token
+                import base64
+                try:
+                    # Decode new refresh token to get JTI
+                    token_parts = new_refresh_token.split('.')
+                    if len(token_parts) == 3:
+                        payload_part = token_parts[1]
+                        padding = 4 - len(payload_part) % 4
+                        if padding != 4:
+                            payload_part += '=' * padding
+                        token_payload = json.loads(base64.b64decode(payload_part))
+                        new_token_id = token_payload.get('jti')
+                        if new_token_id:
+                            self.credentials['sdk_token_id'] = new_token_id
+                except Exception:
+                    pass  # Continue even if JTI extraction fails
+
                 self.save_credentials(self.credentials)
                 print("🔄 Token rotated successfully")
 
