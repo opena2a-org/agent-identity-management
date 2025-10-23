@@ -175,6 +175,7 @@ function DashboardContent() {
   const [userRole, setUserRole] = useState<UserRole>("viewer");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [recentVerificationEvents, setRecentVerificationEvents] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<{
     id: string;
     email: string;
@@ -285,6 +286,17 @@ function DashboardContent() {
     }
   };
 
+  const fetchRecentVerificationEvents = async () => {
+    try {
+      // Fetch verification events from the last 15 minutes
+      const data = await api.getRecentVerificationEvents(15);
+      setRecentVerificationEvents(data.events || []);
+    } catch (err) {
+      console.error("Failed to fetch recent verification events:", err);
+      // Fail silently - keep empty array
+    }
+  };
+
   useEffect(() => {
     // Check if OAuth returned with a token
     const token = searchParams.get("token");
@@ -297,6 +309,7 @@ function DashboardContent() {
     fetchDashboardData();
     fetchVerificationActivity();
     fetchAuditLogs();
+    fetchRecentVerificationEvents();
   }, [searchParams]);
 
   if (loading) {
@@ -467,7 +480,7 @@ function DashboardContent() {
     },
     {
       name: "Recent Activity Count",
-      value: auditLogs?.length?.toLocaleString() || 0,
+      value: recentVerificationEvents?.length?.toLocaleString() || 0,
       icon: Activity,
       permission: "canViewRecentActivity" as const,
     },
