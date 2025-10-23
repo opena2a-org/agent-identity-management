@@ -449,48 +449,6 @@ export function Sidebar() {
           </nav>
         </>
       )}
-
-      {/* User Profile */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-        <div
-          className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
-        >
-          <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
-            {user?.email?.[0]?.toUpperCase() || "U"}
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                {user?.display_name || "User Account"}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user?.email || "Loading..."}
-              </p>
-            </div>
-          )}
-        </div>
-        {!collapsed && (
-          <div className="mt-3 space-y-1">
-            {/* Show Change Password link only for local users */}
-            {user?.provider === "local" && (
-              <Link
-                href="/change-password"
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                <Lock className="h-4 w-4" />
-                <span>Change Password</span>
-              </Link>
-            )}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-      </div>
     </>
   );
 
