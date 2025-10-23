@@ -70,6 +70,40 @@ func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tag,
 	return tag, nil
 }
 
+// Update updates an existing tag
+func (r *TagRepository) Update(ctx context.Context, tag *domain.Tag) error {
+	query := `
+		UPDATE tags
+		SET key = $1, value = $2, category = $3, description = $4, color = $5
+		WHERE id = $6
+	`
+
+	result, err := r.db.ExecContext(
+		ctx,
+		query,
+		tag.Key,
+		tag.Value,
+		tag.Category,
+		tag.Description,
+		tag.Color,
+		tag.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update tag: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("tag not found")
+	}
+
+	return nil
+}
+
 // List retrieves all tags for an organization, optionally filtered by category
 func (r *TagRepository) List(ctx context.Context, organizationID uuid.UUID, category *domain.TagCategory) ([]*domain.Tag, error) {
 	var query string

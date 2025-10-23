@@ -32,8 +32,38 @@ interface TagListProps {
 export function TagList({ tags, isLoading, onEdit, onDelete }: TagListProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Loading tags...</div>
+      <div className="animate-pulse">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tag</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </TableCell>
+                <TableCell>
+                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </TableCell>
+                <TableCell>
+                  <div className="h-4 w-48 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     );
   }
@@ -90,11 +120,7 @@ export function TagList({ tags, isLoading, onEdit, onDelete }: TagListProps) {
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onEdit(tag)}
-                >
+                <Button variant="ghost" size="sm" onClick={() => onEdit(tag)}>
                   <Edit className="h-4 w-4" />
                 </Button>
                 <AlertDialog>
@@ -107,9 +133,9 @@ export function TagList({ tags, isLoading, onEdit, onDelete }: TagListProps) {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete Tag</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Are you sure you want to delete the tag "
-                        {tag.key}:{tag.value}"? This action cannot be undone
-                        and will remove the tag from all agents and MCP servers.
+                        Are you sure you want to delete the tag "{tag.key}:
+                        {tag.value}"? This action cannot be undone and will
+                        remove the tag from all agents and MCP servers.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

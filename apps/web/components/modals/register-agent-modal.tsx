@@ -490,9 +490,9 @@ export function RegisterAgentModal({
                           📦 SDK Integration (Recommended)
                         </h5>
                         <p className="text-xs text-blue-800 dark:text-blue-200">
-                          Download ready-to-use SDK for{" "}
-                          <strong>Python</strong>. Includes
-                          cryptographic keys and automatic verification.
+                          Download ready-to-use SDK for <strong>Python</strong>.
+                          Includes cryptographic keys and automatic
+                          verification.
                         </p>
                       </div>
                     </div>
@@ -1107,22 +1107,37 @@ export function RegisterAgentModal({
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || success}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {editMode ? "Update Agent" : "Register Agent"}
-            </button>
+            {success && !editMode ? (
+              // Show Done button after successful registration
+              <button
+                type="button"
+                onClick={handleSkipSDK}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Done
+              </button>
+            ) : (
+              // Show normal form buttons
+              <>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || success}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {editMode ? "Update Agent" : "Register Agent"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

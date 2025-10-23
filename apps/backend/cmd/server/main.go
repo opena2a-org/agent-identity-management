@@ -976,6 +976,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	tags.Use(middleware.RateLimitMiddleware())
 	tags.Get("/", h.Tag.GetTags)
 	tags.Post("/", middleware.MemberMiddleware(), h.Tag.CreateTag)
+	tags.Put("/:id", middleware.MemberMiddleware(), h.Tag.UpdateTag)
 	tags.Get("/popular", h.Tag.GetPopularTags)
 	tags.Get("/search", h.Tag.SearchTags)
 	tags.Delete("/:id", middleware.ManagerMiddleware(), h.Tag.DeleteTag)

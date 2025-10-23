@@ -11,7 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { api, Tag, TagCategory } from "@/lib/api";
 import { toast } from "sonner";
 import { TagList } from "@/components/tags/tag-list";
@@ -23,7 +29,9 @@ export default function TagsPage() {
   const [filteredTags, setFilteredTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<TagCategory | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<TagCategory | "all">(
+    "all"
+  );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
@@ -101,12 +109,10 @@ export default function TagsPage() {
 
   const handleUpdateTag = async (tagId: string, tagData: any) => {
     try {
-      // Note: API client doesn't have updateTag method yet
-      // We'll need to add it, but for now we'll show error
-      toast.error("Update tag functionality not yet implemented", {
-        description: "This feature will be available soon",
-      });
+      await api.updateTag(tagId, tagData);
+      toast.success("Tag updated successfully");
       setEditingTag(null);
+      loadTags();
     } catch (error: any) {
       toast.error("Failed to update tag", {
         description: error.message || "Could not update tag",
@@ -128,7 +134,9 @@ export default function TagsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tags Management</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Tags Management
+          </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Organize agents and MCP servers with tags
           </p>
@@ -143,42 +151,79 @@ export default function TagsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Total Tags</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Total Tags
+            </CardTitle>
             <TagIcon className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{tags.length}</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Across all categories
-            </p>
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                <div className="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {tags.length}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Across all categories
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Categories</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Categories
+            </CardTitle>
             <Filter className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {new Set(tags.map((t) => t.category)).size}
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Active tag categories
-            </p>
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                <div className="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {new Set(tags.map((t) => t.category)).size}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Active tag categories
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Filtered Results</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Filtered Results
+            </CardTitle>
             <Search className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{filteredTags.length}</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Matching current filters
-            </p>
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                <div className="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {filteredTags.length}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Matching current filters
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -186,7 +231,9 @@ export default function TagsPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">Filter Tags</CardTitle>
+          <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">
+            Filter Tags
+          </CardTitle>
           <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
             Search and filter tags by category
           </CardDescription>
@@ -207,7 +254,9 @@ export default function TagsPage() {
             </div>
             <Select
               value={categoryFilter}
-              onValueChange={(value) => setCategoryFilter(value as TagCategory | "all")}
+              onValueChange={(value) =>
+                setCategoryFilter(value as TagCategory | "all")
+              }
             >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select category" />
@@ -228,9 +277,7 @@ export default function TagsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Tags ({filteredTags.length})</CardTitle>
-          <CardDescription>
-            Manage and organize your tags
-          </CardDescription>
+          <CardDescription>Manage and organize your tags</CardDescription>
         </CardHeader>
         <CardContent>
           <TagList
