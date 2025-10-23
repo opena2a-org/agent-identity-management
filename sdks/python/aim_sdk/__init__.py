@@ -39,6 +39,7 @@ secure = register_agent
 from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError
 from .detection import MCPDetector, auto_detect_mcps
 from .capability_detection import CapabilityDetector, auto_detect_capabilities
+from .protocol_detection import ProtocolDetector, auto_detect_protocol
 
 __version__ = "1.0.0"
 __all__ = [
@@ -52,5 +53,7 @@ __all__ = [
     "MCPDetector",
     "auto_detect_mcps",
     "CapabilityDetector",
-    "auto_detect_capabilities"
+    "auto_detect_capabilities",
+    "ProtocolDetector",
+    "auto_detect_protocol"
 ]

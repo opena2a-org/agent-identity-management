@@ -22,6 +22,7 @@ from .exceptions import (
 )
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
+from .protocol_detection import ProtocolDetector
 
 
 class AIMClient:
@@ -64,7 +65,8 @@ class AIMClient:
         auto_retry: bool = True,
         max_retries: int = 3,
         sdk_token_id: Optional[str] = None,
-        oauth_token_manager: Optional[Any] = None
+        oauth_token_manager: Optional[Any] = None,
+        protocol: Optional[str] = None
     ):
         # Validate required parameters
         if not agent_id:
@@ -124,6 +126,10 @@ class AIMClient:
                 sdk_token_id = sdk_creds['sdk_token_id']
 
         self.sdk_token_id = sdk_token_id
+
+        # Auto-detect communication protocol (MCP, A2A, OAuth, etc.)
+        protocol_detector = ProtocolDetector()
+        self.protocol = protocol_detector.detect_protocol(protocol)
 
         # Session for connection pooling
         self.session = requests.Session()
@@ -680,6 +686,64 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"SDK integration report failed: {e}")
 
+    def verify_action_with_protocol(
+        self,
+        action_type: str,
+        resource: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """
+        Request real-time action verification from AIM with protocol detection.
+
+        This is the modern verification endpoint that includes protocol auto-detection.
+        Protocol is automatically detected by the SDK based on runtime context.
+
+        Args:
+            action_type: Type of action (e.g., "read_file", "execute_code", "network_request")
+            resource: Resource being accessed (e.g., "/data/file.csv", "api.example.com")
+            metadata: Additional context about the action
+
+        Returns:
+            Verification result dict with:
+            - verified: bool (whether action is allowed)
+            - reason: str (explanation for decision)
+
+        Raises:
+            ActionDeniedError: If action is explicitly denied
+            VerificationError: If verification request fails
+        """
+        try:
+            # Build request payload
+            payload = {
+                "action_type": action_type,
+                "resource": resource or "",
+                "metadata": metadata or {},
+                "protocol": self.protocol  # SDK auto-detected protocol
+            }
+
+            # Call modern verify-action endpoint
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/agents/{self.agent_id}/verify-action",
+                data=payload
+            )
+
+            # Check if action is allowed
+            if result.get("verified"):
+                return {
+                    "verified": True,
+                    "reason": result.get("reason", "Action allowed by policy")
+                }
+            else:
+                raise ActionDeniedError(result.get("reason", "Action denied by policy"))
+
+        except ActionDeniedError:
+            raise
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Action verification failed: {e}")
+
     def perform_action(
         self,
         action_type: str,
@@ -858,7 +922,8 @@ def register_agent(
     capabilities: Optional[list] = None,
     auto_detect: bool = True,
     force_new: bool = False,
-    sdk_token_id: Optional[str] = None
+    sdk_token_id: Optional[str] = None,
+    protocol: Optional[str] = None
 ) -> AIMClient:
     """
     ONE-LINE agent registration with AIM - "The Stripe Moment"
@@ -940,7 +1005,8 @@ def register_agent(
                 public_key=existing_creds["public_key"],
                 private_key=existing_creds["private_key"],
                 aim_url=existing_creds["aim_url"],
-                oauth_token_manager=token_manager
+                oauth_token_manager=token_manager,
+                protocol=protocol  # Allow protocol override even for existing agents
             )
 
     # 2. Detect authentication mode (SDK vs Manual)
@@ -1139,7 +1205,8 @@ def _register_via_oauth(
         public_key=credentials["public_key"],
         private_key=credentials["private_key"],
         aim_url=credentials["aim_url"],
-        oauth_token_manager=token_manager  # Pass token manager for OAuth authentication
+        oauth_token_manager=token_manager,  # Pass token manager for OAuth authentication
+        protocol=protocol  # SDK auto-detects protocol or uses explicit override
     )
 
     if talks_to:
@@ -1197,7 +1264,8 @@ def _register_via_api_key(
         agent_id=credentials["agent_id"],
         public_key=credentials["public_key"],
         private_key=credentials["private_key"],
-        aim_url=credentials["aim_url"]
+        aim_url=credentials["aim_url"],
+        protocol=protocol  # SDK auto-detects protocol or uses explicit override
     )
 
     if talks_to:
