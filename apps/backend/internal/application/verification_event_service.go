@@ -91,6 +91,18 @@ func (s *VerificationEventService) CreateVerificationEvent(
 	agentIDPtr := &req.AgentID
 	agentNamePtr := &agent.DisplayName
 
+	// Set timestamps: StartedAt, CompletedAt, CreatedAt
+	now := time.Now()
+	startedAt := req.StartedAt
+	if startedAt.IsZero() {
+		startedAt = now
+	}
+
+	completedAt := req.CompletedAt
+	if completedAt == nil && (req.Status == domain.VerificationEventStatusSuccess || req.Status == domain.VerificationEventStatusFailed) {
+		completedAt = &now
+	}
+
 	event := &domain.VerificationEvent{
 		OrganizationID:   req.OrganizationID,
 		AgentID:          agentIDPtr,
@@ -116,8 +128,9 @@ func (s *VerificationEventService) CreateVerificationEvent(
 		ResourceType:     req.ResourceType,
 		ResourceID:       req.ResourceID,
 		Location:         req.Location,
-		StartedAt:        req.StartedAt,
-		CompletedAt:      req.CompletedAt,
+		StartedAt:        startedAt,
+		CompletedAt:      completedAt,
+		CreatedAt:        now,
 		Details:          req.Details,
 		Metadata:         req.Metadata,
 

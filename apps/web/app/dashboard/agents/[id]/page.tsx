@@ -83,6 +83,7 @@ interface MCPServer {
   trustScore?: number;
   last_verified_at?: string;
   created_at: string;
+  capabilities?: string[];
 }
 
 export default function AgentDetailsPage({
@@ -263,6 +264,23 @@ export default function AgentDetailsPage({
   allMCPServers.forEach((server) => {
     serverNameToId.set(server.name, server.id);
   });
+
+  // Get connected MCP server names and details
+  const connectedMCPServers = useMemo(() => {
+    if (!agent?.talks_to || allMCPServers.length === 0) return [];
+
+    // Filter MCP servers that this agent talks to
+    return allMCPServers
+      .filter((server) => agent.talks_to?.includes(server.id))
+      .map((server) => server.name);
+  }, [agent?.talks_to, allMCPServers]);
+
+  // Get connected MCP server details with capabilities
+  const connectedMCPServerDetails = useMemo(() => {
+    if (!agent?.talks_to || allMCPServers.length === 0) return [];
+
+    return allMCPServers.filter((server) => agent.talks_to?.includes(server.id));
+  }, [agent?.talks_to, allMCPServers]);
 
   // Loading state
   if (isLoading) {
@@ -541,11 +559,11 @@ export default function AgentDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {agent.talks_to?.length ?? 0}
+              {connectedMCPServers.length}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Connected MCP server
-              {(agent.talks_to?.length ?? 0) !== 1 ? "s" : ""}
+              {connectedMCPServers.length !== 1 ? "s" : ""}
             </p>
           </CardContent>
         </Card>
@@ -645,7 +663,13 @@ export default function AgentDetailsPage({
             <CardContent>
               <MCPServerList
                 agentId={agent.id}
-                mcpServers={agent.talks_to ?? []}
+                mcpServers={connectedMCPServers}
+                serverDetails={connectedMCPServerDetails.map(server => ({
+                  name: server.name,
+                  id: server.id,
+                  capabilities: server.capabilities,
+                  url: server.url
+                }))}
                 serverNameToId={serverNameToId}
                 onUpdate={handleRefresh}
                 showBulkActions={true}

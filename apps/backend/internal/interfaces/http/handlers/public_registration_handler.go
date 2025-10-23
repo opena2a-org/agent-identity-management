@@ -235,6 +235,10 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 
 	// Check users table first - if user exists there, they are automatically approved
 	user, err := h.authService.GetUserByEmail(c.Context(), email)
+	fmt.Printf("🔍 DEBUG: GetUserByEmail result for %s: user=%v, err=%v\n", email, user, err)
+	if user != nil {
+		fmt.Printf("🔍 DEBUG: User loaded - ID: %s, Email: %s, Role: '%s' (type: %T)\n", user.ID, user.Email, user.Role, user.Role)
+	}
 	if err == nil && user != nil {
 		// Check if user account is deactivated
 		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
@@ -248,8 +252,12 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 		if user.PasswordHash != nil && *user.PasswordHash != "" {
 			// Verify password from users table
 			passwordHasher := auth.NewPasswordHasher()
+			fmt.Printf("🔍 DEBUG: Verifying password for %s\n", user.Email)
+			fmt.Printf("🔍 DEBUG: Password hash from DB: %s\n", *user.PasswordHash)
+			fmt.Printf("🔍 DEBUG: Password length: %d chars\n", len(req.Password))
 			if err := passwordHasher.VerifyPassword(req.Password, *user.PasswordHash); err == nil {
 				// Check if user must change password (e.g., default admin on first login)
+				fmt.Printf("✅ DEBUG: Password verification PASSED for %s\n", user.Email)
 				if user.ForcePasswordChange {
 					return c.JSON(&LoginResponse{
 						Success:      false,
@@ -261,6 +269,8 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 
 				// User in users table = automatically approved, generate tokens
 				return h.generateApprovedLoginResponse(c, user)
+			} else {
+				fmt.Printf("❌ DEBUG: Password verification FAILED for %s: %v\n", user.Email, err)
 			}
 			// Password verification failed - continue to check registration requests
 		}
@@ -333,6 +343,7 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 	}
 
 	// Generate tokens
+	fmt.Printf("🔍 DEBUG: Generating JWT for user %s (email: %s, role: '%s', role type: %T)\n", user.ID, user.Email, user.Role, user.Role)
 	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
 		user.ID.String(),
 		user.OrganizationID.String(),

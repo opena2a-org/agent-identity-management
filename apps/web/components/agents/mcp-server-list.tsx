@@ -18,9 +18,17 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { api } from '@/lib/api'
 
+interface MCPServerDetails {
+  name: string
+  id: string
+  capabilities?: string[]
+  url?: string
+}
+
 interface MCPServerListProps {
   agentId: string
-  mcpServers: string[] // Array of MCP server names
+  mcpServers: string[] // Array of MCP server names (for backward compatibility)
+  serverDetails?: MCPServerDetails[] // Optional array of full server details with capabilities
   serverNameToId?: Map<string, string> // Optional mapping from server name to ID for navigation
   onUpdate?: () => void
   showBulkActions?: boolean
@@ -29,10 +37,16 @@ interface MCPServerListProps {
 export function MCPServerList({
   agentId,
   mcpServers,
+  serverDetails,
   serverNameToId,
   onUpdate,
   showBulkActions = true,
 }: MCPServerListProps) {
+  // Create a map from server name to details for easy lookup
+  const serverDetailsMap = new Map<string, MCPServerDetails>()
+  serverDetails?.forEach((server) => {
+    serverDetailsMap.set(server.name, server)
+  })
   const router = useRouter()
   const [selectedServers, setSelectedServers] = useState<Set<string>>(new Set())
   const [isRemoving, setIsRemoving] = useState(false)
@@ -191,7 +205,7 @@ export function MCPServerList({
               {/* Server Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                     <h4
                       className={`font-semibold text-sm truncate ${
@@ -203,13 +217,23 @@ export function MCPServerList({
                     >
                       {serverName}
                     </h4>
+                    {serverNameToId?.has(serverName) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleServerClick(serverName)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                   <Badge variant="secondary" className="text-xs whitespace-nowrap">
                     Connected
                   </Badge>
                 </div>
 
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mb-2">
                   This agent can communicate with the{' '}
                   <span
                     className={`font-medium ${
@@ -223,6 +247,18 @@ export function MCPServerList({
                   </span>{' '}
                   MCP server and access its tools and resources.
                 </p>
+
+                {/* Show capabilities if available */}
+                {serverDetailsMap.get(serverName)?.capabilities &&
+                 serverDetailsMap.get(serverName)!.capabilities!.length > 0 && (
+                  <div className="flex gap-1 flex-wrap mt-2">
+                    {serverDetailsMap.get(serverName)!.capabilities!.map((cap) => (
+                      <Badge key={cap} variant="outline" className="text-xs">
+                        {cap}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Remove Button */}

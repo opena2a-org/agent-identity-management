@@ -56,6 +56,7 @@ interface MCPServer {
   trust_score?: number;
   capability_count?: number;
   organization_id: string;
+  capabilities?: string[]; // Simple capability strings like ["tools", "resources"]
 }
 
 interface Capability {
@@ -419,10 +420,12 @@ export default function MCPServerDetailsPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{capabilities.length}</div>
+            <div className="text-2xl font-bold">
+              {(server.capabilities?.length || 0) + capabilities.length}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Tool{capabilities.length !== 1 ? "s" : ""} and resource
-              {capabilities.length !== 1 ? "s" : ""}
+              Tool{(server.capabilities?.length || 0) + capabilities.length !== 1 ? "s" : ""} and resource
+              {(server.capabilities?.length || 0) + capabilities.length !== 1 ? "s" : ""}
             </p>
           </CardContent>
         </Card>
@@ -474,7 +477,8 @@ export default function MCPServerDetailsPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {capabilities.length === 0 ? (
+              {/* Display simple string capabilities from server object */}
+              {(!server.capabilities || server.capabilities.length === 0) && capabilities.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">
                     No capabilities detected yet
@@ -482,6 +486,21 @@ export default function MCPServerDetailsPage({
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Show simple capabilities if available */}
+                  {server.capabilities && server.capabilities.length > 0 && (
+                    <div className="flex flex-wrap gap-2 p-4 border rounded-lg bg-muted/50">
+                      <span className="text-sm font-medium text-muted-foreground mr-2">
+                        Registered Capabilities:
+                      </span>
+                      {server.capabilities.map((cap) => (
+                        <Badge key={cap} variant="secondary" className="text-sm">
+                          {cap}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Show detailed capabilities if available (from future endpoint) */}
                   {capabilities.map((capability) => (
                     <div
                       key={capability.id}
