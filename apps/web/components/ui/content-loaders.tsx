@@ -453,3 +453,130 @@ export function MCPServerDetailSkeleton() {
     </div>
   );
 }
+
+// Developers/API Documentation Page Skeleton
+export function DevelopersPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div>
+        <Skeleton className="h-9 w-64 mb-2" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+
+      {/* Search and Filters Skeleton */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Skeleton className="flex-1 h-10 rounded-lg" />
+          <Skeleton className="h-10 w-32 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Sidebar Skeleton */}
+        <div className="lg:col-span-3">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 space-y-4">
+            {/* Categories */}
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-8 rounded-full ml-auto" />
+                </div>
+                {/* Endpoints under category */}
+                <div className="ml-6 space-y-1">
+                  {[...Array(3)].map((_, j) => (
+                    <div key={j} className="flex items-center gap-2">
+                      <Skeleton className="h-5 w-12 rounded" />
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content Area Skeleton */}
+        <div className="lg:col-span-9">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 space-y-3">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-6 w-16 rounded" />
+                <Skeleton className="h-6 w-64" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+            </div>
+
+            {/* Tabs */}
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-4 px-6">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-32" />
+                <Skeleton className="h-10 w-28" />
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div className="p-6 space-y-6">
+              {/* Authentication Section */}
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+              </div>
+
+              {/* Request Body Section */}
+              <div className="space-y-3">
+                <Skeleton className="h-5 w-32" />
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-24" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-5 w-16 rounded" />
+                        <Skeleton className="h-5 w-16 rounded" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                ))}
+              </div>
+
+              {/* Response Section */}
+              <div className="space-y-3">
+                <Skeleton className="h-5 w-32" />
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-5 w-16 rounded" />
+                    </div>
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                ))}
+              </div>
+
+              {/* Example Code */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-8 w-24 rounded-lg" />
+                </div>
+                <Skeleton className="h-32 w-full rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

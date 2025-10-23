@@ -69,7 +69,7 @@ const navigationBase: NavSection[] = [
         name: "Developers",
         href: "/dashboard/developers",
         icon: Code,
-        roles: ["admin", "manager", "member"],
+        roles: ["admin", "manager", "member", "viewer"],
       },
       {
         name: "API Keys",

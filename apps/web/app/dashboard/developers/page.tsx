@@ -1,12 +1,18 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState, useEffect, useMemo, Suspense } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Code,
   Copy,
@@ -39,9 +45,14 @@ import {
   BarChart3,
   Shield,
   Plug,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { apiDocumentation, type APIEndpoint, type EndpointCategory } from '@/lib/api-documentation';
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  apiDocumentation,
+  type APIEndpoint,
+  type EndpointCategory,
+} from "@/lib/api-documentation";
+import { DevelopersPageSkeleton } from "@/components/ui/content-loaders";
 
 // Icon map for categories
 const categoryIcons: Record<string, any> = {
@@ -65,26 +76,33 @@ const categoryIcons: Record<string, any> = {
   BarChart3,
 };
 
-export default function DevelopersPage() {
+function DevelopersPageContent() {
   // State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(apiDocumentation[0].category);
-  const [selectedEndpoint, setSelectedEndpoint] = useState<APIEndpoint | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    apiDocumentation[0].category
+  );
+  const [selectedEndpoint, setSelectedEndpoint] = useState<APIEndpoint | null>(
+    null
+  );
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("overview");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
+    new Set()
+  );
 
   // Filters
-  const [filterMethod, setFilterMethod] = useState<string>('all');
-  const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterMethod, setFilterMethod] = useState<string>("all");
+  const [filterRole, setFilterRole] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // API Playground state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userToken, setUserToken] = useState<string>('');
-  const [manualToken, setManualToken] = useState<string>('');
+  const [userToken, setUserToken] = useState<string>("");
+  const [manualToken, setManualToken] = useState<string>("");
   const [showTokenInput, setShowTokenInput] = useState(false);
-  const [requestBody, setRequestBody] = useState<string>('{}');
+  const [requestBody, setRequestBody] = useState<string>("{}");
   const [responseData, setResponseData] = useState<any>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
@@ -95,18 +113,22 @@ export default function DevelopersPage() {
     duration: number;
   } | null>(null);
 
-  // Check authentication status on mount
+  // Check authentication status and initialize on mount
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem("auth_token");
     if (token) {
       setIsAuthenticated(true);
       setUserToken(token);
     }
+    // Simulate initial load delay
+    setTimeout(() => setIsLoading(false), 300);
   }, []);
 
   // Auto-select first endpoint when category changes
   useEffect(() => {
-    const category = apiDocumentation.find(c => c.category === selectedCategory);
+    const category = apiDocumentation.find(
+      (c) => c.category === selectedCategory
+    );
     if (category && category.endpoints.length > 0) {
       setSelectedEndpoint(category.endpoints[0]);
       setResponseData(null);
@@ -117,20 +139,27 @@ export default function DevelopersPage() {
   // Filtered categories and endpoints
   const filteredData = useMemo(() => {
     return apiDocumentation
-      .map(category => {
-        const filteredEndpoints = category.endpoints.filter(endpoint => {
+      .map((category) => {
+        const filteredEndpoints = category.endpoints.filter((endpoint) => {
           // Search filter
-          const matchesSearch = searchTerm === '' ||
+          const matchesSearch =
+            searchTerm === "" ||
             endpoint.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
             endpoint.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            endpoint.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            endpoint.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+            endpoint.description
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()) ||
+            endpoint.tags.some((tag) =>
+              tag.toLowerCase().includes(searchTerm.toLowerCase())
+            );
 
           // Method filter
-          const matchesMethod = filterMethod === 'all' || endpoint.method === filterMethod;
+          const matchesMethod =
+            filterMethod === "all" || endpoint.method === filterMethod;
 
           // Role filter
-          const matchesRole = filterRole === 'all' || endpoint.roleRequired === filterRole;
+          const matchesRole =
+            filterRole === "all" || endpoint.roleRequired === filterRole;
 
           return matchesSearch && matchesMethod && matchesRole;
         });
@@ -141,7 +170,7 @@ export default function DevelopersPage() {
           matchCount: filteredEndpoints.length,
         };
       })
-      .filter(category => category.matchCount > 0);
+      .filter((category) => category.matchCount > 0);
   }, [searchTerm, filterMethod, filterRole]);
 
   // Total endpoint count
@@ -153,7 +182,7 @@ export default function DevelopersPage() {
   const copyToClipboard = async (text: string, type: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedCode(type);
-    toast.success('Copied to clipboard!');
+    toast.success("Copied to clipboard!");
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
@@ -170,9 +199,9 @@ export default function DevelopersPage() {
 
   // Clear all filters
   const clearFilters = () => {
-    setSearchTerm('');
-    setFilterMethod('all');
-    setFilterRole('all');
+    setSearchTerm("");
+    setFilterMethod("all");
+    setFilterRole("all");
   };
 
   // Execute API request
@@ -189,14 +218,14 @@ export default function DevelopersPage() {
     try {
       const token = isAuthenticated ? userToken : manualToken;
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
 
       if (selectedEndpoint.requiresAuth && token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
       let url = `${apiUrl}${selectedEndpoint.path}`;
 
       // Replace path parameters with actual values
@@ -204,7 +233,7 @@ export default function DevelopersPage() {
       if (pathParams) {
         try {
           const bodyData = JSON.parse(requestBody);
-          pathParams.forEach(param => {
+          pathParams.forEach((param) => {
             const paramName = param.substring(1);
             if (bodyData[paramName]) {
               url = url.replace(param, bodyData[paramName]);
@@ -221,7 +250,7 @@ export default function DevelopersPage() {
         headers,
       };
 
-      if (selectedEndpoint.method !== 'GET' && requestBody !== '{}') {
+      if (selectedEndpoint.method !== "GET" && requestBody !== "{}") {
         options.body = requestBody;
       }
 
@@ -248,14 +277,14 @@ export default function DevelopersPage() {
     } catch (error: any) {
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
-      setExecutionError(error.message || 'Network error occurred');
+      setExecutionError(error.message || "Network error occurred");
       setResponseMetadata({
         status: 0,
-        statusText: 'Network Error',
+        statusText: "Network Error",
         headers: {},
         duration,
       });
-      toast.error('Request failed: ' + error.message);
+      toast.error("Request failed: " + error.message);
     } finally {
       setIsExecuting(false);
     }
@@ -263,10 +292,10 @@ export default function DevelopersPage() {
 
   // Generate cURL command
   const generateCurl = () => {
-    if (!selectedEndpoint) return '';
+    if (!selectedEndpoint) return "";
 
     const token = isAuthenticated ? userToken : manualToken;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
     let curl = `curl -X ${selectedEndpoint.method} '${apiUrl}${selectedEndpoint.path}'`;
 
     if (selectedEndpoint.requiresAuth && token) {
@@ -275,7 +304,7 @@ export default function DevelopersPage() {
 
     curl += ` \\\n  -H 'Content-Type: application/json'`;
 
-    if (selectedEndpoint.method !== 'GET' && requestBody !== '{}') {
+    if (selectedEndpoint.method !== "GET" && requestBody !== "{}") {
       curl += ` \\\n  -d '${requestBody}'`;
     }
 
@@ -285,25 +314,42 @@ export default function DevelopersPage() {
   // Method badge color
   const getMethodColor = (method: string) => {
     switch (method) {
-      case 'GET': return 'bg-blue-500';
-      case 'POST': return 'bg-green-500';
-      case 'PUT': return 'bg-yellow-500';
-      case 'DELETE': return 'bg-red-500';
-      case 'PATCH': return 'bg-purple-500';
-      default: return 'bg-gray-500';
+      case "GET":
+        return "bg-blue-500";
+      case "POST":
+        return "bg-green-500";
+      case "PUT":
+        return "bg-yellow-500";
+      case "DELETE":
+        return "bg-red-500";
+      case "PATCH":
+        return "bg-purple-500";
+      default:
+        return "bg-gray-500";
     }
   };
 
   // Active filters count
-  const activeFiltersCount = (searchTerm !== '' ? 1 : 0) + (filterMethod !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0);
+  const activeFiltersCount =
+    (searchTerm !== "" ? 1 : 0) +
+    (filterMethod !== "all" ? 1 : 0) +
+    (filterRole !== "all" ? 1 : 0);
+
+  if (isLoading) {
+    return <DevelopersPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">API Documentation</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          API Documentation
+        </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Complete AIM API reference with {apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)} endpoints
+          Complete AIM API reference with{" "}
+          {apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)}{" "}
+          endpoints
         </p>
       </div>
 
@@ -341,7 +387,9 @@ export default function DevelopersPage() {
             {showFilters && (
               <div className="flex flex-wrap gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex-1 min-w-[200px]">
-                  <label className="text-sm font-medium mb-2 block">HTTP Method</label>
+                  <label className="text-sm font-medium mb-2 block">
+                    HTTP Method
+                  </label>
                   <select
                     value={filterMethod}
                     onChange={(e) => setFilterMethod(e.target.value)}
@@ -357,7 +405,9 @@ export default function DevelopersPage() {
                 </div>
 
                 <div className="flex-1 min-w-[200px]">
-                  <label className="text-sm font-medium mb-2 block">Required Role</label>
+                  <label className="text-sm font-medium mb-2 block">
+                    Required Role
+                  </label>
                   <select
                     value={filterRole}
                     onChange={(e) => setFilterRole(e.target.value)}
@@ -384,8 +434,14 @@ export default function DevelopersPage() {
 
             {/* Results Count */}
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing <span className="font-semibold">{totalEndpoints}</span> of{' '}
-              <span className="font-semibold">{apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)}</span> endpoints
+              Showing <span className="font-semibold">{totalEndpoints}</span> of{" "}
+              <span className="font-semibold">
+                {apiDocumentation.reduce(
+                  (sum, cat) => sum + cat.endpoints.length,
+                  0
+                )}
+              </span>{" "}
+              endpoints
             </div>
           </div>
         </CardContent>
@@ -413,7 +469,9 @@ export default function DevelopersPage() {
                     >
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        <span className="font-medium text-sm">{category.category}</span>
+                        <span className="font-medium text-sm">
+                          {category.category}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
@@ -436,21 +494,25 @@ export default function DevelopersPage() {
                             onClick={() => {
                               setSelectedEndpoint(endpoint);
                               setSelectedCategory(category.category);
-                              setActiveTab('overview');
+                              setActiveTab("overview");
                               setResponseData(null);
                               setExecutionError(null);
                             }}
                             className={`w-full text-left p-2 rounded text-sm transition-colors ${
                               selectedEndpoint === endpoint
-                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                                : "hover:bg-gray-100 dark:hover:bg-gray-800"
                             }`}
                           >
                             <div className="flex items-center gap-2">
-                              <Badge className={`${getMethodColor(endpoint.method)} text-white text-xs px-2 py-0`}>
+                              <Badge
+                                className={`${getMethodColor(endpoint.method)} text-white text-xs px-2 py-0`}
+                              >
                                 {endpoint.method}
                               </Badge>
-                              <span className="truncate">{endpoint.summary}</span>
+                              <span className="truncate">
+                                {endpoint.summary}
+                              </span>
                             </div>
                           </button>
                         ))}
@@ -477,10 +539,14 @@ export default function DevelopersPage() {
               <CardHeader>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Badge className={`${getMethodColor(selectedEndpoint.method)} text-white`}>
+                    <Badge
+                      className={`${getMethodColor(selectedEndpoint.method)} text-white`}
+                    >
                       {selectedEndpoint.method}
                     </Badge>
-                    <code className="text-lg font-mono">{selectedEndpoint.path}</code>
+                    <code className="text-lg font-mono">
+                      {selectedEndpoint.path}
+                    </code>
                   </div>
                   <CardDescription className="text-base">
                     {selectedEndpoint.description}
@@ -527,17 +593,23 @@ export default function DevelopersPage() {
                   <TabsContent value="overview" className="space-y-6 mt-6">
                     {/* Authentication Info */}
                     <div>
-                      <h3 className="text-sm font-semibold mb-2">Authentication</h3>
+                      <h3 className="text-sm font-semibold mb-2">
+                        Authentication
+                      </h3>
                       <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                         {selectedEndpoint.requiresAuth ? (
                           <>
                             <Lock className="h-4 w-4 text-red-600" />
-                            <span className="text-sm">{selectedEndpoint.auth}</span>
+                            <span className="text-sm">
+                              {selectedEndpoint.auth}
+                            </span>
                           </>
                         ) : (
                           <>
                             <Unlock className="h-4 w-4 text-green-600" />
-                            <span className="text-sm">No authentication required</span>
+                            <span className="text-sm">
+                              No authentication required
+                            </span>
                           </>
                         )}
                       </div>
@@ -546,23 +618,40 @@ export default function DevelopersPage() {
                     {/* Request Schema */}
                     {selectedEndpoint.requestSchema && (
                       <div>
-                        <h3 className="text-sm font-semibold mb-2">Request Body</h3>
+                        <h3 className="text-sm font-semibold mb-2">
+                          Request Body
+                        </h3>
                         <div className="space-y-2">
-                          {Object.entries(selectedEndpoint.requestSchema.properties).map(([key, prop]) => (
-                            <div key={key} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          {Object.entries(
+                            selectedEndpoint.requestSchema.properties
+                          ).map(([key, prop]) => (
+                            <div
+                              key={key}
+                              className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                            >
                               <div className="flex items-center justify-between mb-1">
                                 <code className="text-sm font-mono">{key}</code>
                                 <div className="flex gap-2">
-                                  <Badge variant="outline" className="text-xs">{prop.type}</Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {prop.type}
+                                  </Badge>
                                   {prop.required && (
-                                    <Badge variant="destructive" className="text-xs">Required</Badge>
+                                    <Badge
+                                      variant="destructive"
+                                      className="text-xs"
+                                    >
+                                      Required
+                                    </Badge>
                                   )}
                                 </div>
                               </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{prop.description}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {prop.description}
+                              </p>
                               {(prop as any).example && (
                                 <code className="text-xs text-gray-500 mt-1 block">
-                                  Example: {JSON.stringify((prop as any).example)}
+                                  Example:{" "}
+                                  {JSON.stringify((prop as any).example)}
                                 </code>
                               )}
                             </div>
@@ -574,18 +663,30 @@ export default function DevelopersPage() {
                     {/* Response Schema */}
                     {selectedEndpoint.responseSchema && (
                       <div>
-                        <h3 className="text-sm font-semibold mb-2">Response Body</h3>
+                        <h3 className="text-sm font-semibold mb-2">
+                          Response Body
+                        </h3>
                         <div className="space-y-2">
-                          {Object.entries(selectedEndpoint.responseSchema.properties).map(([key, prop]) => (
-                            <div key={key} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          {Object.entries(
+                            selectedEndpoint.responseSchema.properties
+                          ).map(([key, prop]) => (
+                            <div
+                              key={key}
+                              className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                            >
                               <div className="flex items-center justify-between mb-1">
                                 <code className="text-sm font-mono">{key}</code>
-                                <Badge variant="outline" className="text-xs">{prop.type}</Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {prop.type}
+                                </Badge>
                               </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{prop.description}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {prop.description}
+                              </p>
                               {(prop as any).example && (
                                 <code className="text-xs text-gray-500 mt-1 block">
-                                  Example: {JSON.stringify((prop as any).example)}
+                                  Example:{" "}
+                                  {JSON.stringify((prop as any).example)}
                                 </code>
                               )}
                             </div>
@@ -595,23 +696,36 @@ export default function DevelopersPage() {
                     )}
 
                     {/* Example Request */}
-                    {selectedEndpoint.example && selectedEndpoint.example !== 'No request body required' && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold">Example Request</h3>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copyToClipboard(selectedEndpoint.example, 'example')}
-                          >
-                            {copiedCode === 'example' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                          </Button>
+                    {selectedEndpoint.example &&
+                      selectedEndpoint.example !==
+                        "No request body required" && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-semibold">
+                              Example Request
+                            </h3>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                copyToClipboard(
+                                  selectedEndpoint.example,
+                                  "example"
+                                )
+                              }
+                            >
+                              {copiedCode === "example" ? (
+                                <CheckCircle className="h-4 w-4" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                          <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                            <code>{selectedEndpoint.example}</code>
+                          </pre>
                         </div>
-                        <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
-                          <code>{selectedEndpoint.example}</code>
-                        </pre>
-                      </div>
-                    )}
+                      )}
                   </TabsContent>
 
                   {/* Try it out Tab */}
@@ -629,8 +743,8 @@ export default function DevelopersPage() {
                             variant="outline"
                             onClick={() => {
                               setIsAuthenticated(false);
-                              setUserToken('');
-                              localStorage.removeItem('auth_token');
+                              setUserToken("");
+                              localStorage.removeItem("auth_token");
                             }}
                           >
                             Logout
@@ -640,10 +754,15 @@ export default function DevelopersPage() {
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <AlertCircle className="h-5 w-5 text-yellow-600" />
-                            <span className="font-medium">Not Authenticated</span>
+                            <span className="font-medium">
+                              Not Authenticated
+                            </span>
                           </div>
                           {!showTokenInput ? (
-                            <Button size="sm" onClick={() => setShowTokenInput(true)}>
+                            <Button
+                              size="sm"
+                              onClick={() => setShowTokenInput(true)}
+                            >
                               Add Token
                             </Button>
                           ) : (
@@ -662,7 +781,7 @@ export default function DevelopersPage() {
                                     setUserToken(manualToken);
                                     setIsAuthenticated(true);
                                     setShowTokenInput(false);
-                                    toast.success('Token added');
+                                    toast.success("Token added");
                                   }
                                 }}
                               >
@@ -675,9 +794,11 @@ export default function DevelopersPage() {
                     </div>
 
                     {/* Request Body Editor */}
-                    {selectedEndpoint.method !== 'GET' && (
+                    {selectedEndpoint.method !== "GET" && (
                       <div>
-                        <label className="text-sm font-semibold mb-2 block">Request Body</label>
+                        <label className="text-sm font-semibold mb-2 block">
+                          Request Body
+                        </label>
                         <Textarea
                           value={requestBody}
                           onChange={(e) => setRequestBody(e.target.value)}
@@ -712,11 +833,18 @@ export default function DevelopersPage() {
                           <span className="text-sm font-medium">Response</span>
                           <div className="flex gap-2">
                             <Badge
-                              variant={responseMetadata.status < 400 ? "default" : "destructive"}
+                              variant={
+                                responseMetadata.status < 400
+                                  ? "default"
+                                  : "destructive"
+                              }
                             >
-                              {responseMetadata.status} {responseMetadata.statusText}
+                              {responseMetadata.status}{" "}
+                              {responseMetadata.statusText}
                             </Badge>
-                            <Badge variant="outline">{responseMetadata.duration}ms</Badge>
+                            <Badge variant="outline">
+                              {responseMetadata.duration}ms
+                            </Badge>
                           </div>
                         </div>
                       </div>
@@ -726,13 +854,24 @@ export default function DevelopersPage() {
                     {responseData && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold">Response Body</h3>
+                          <h3 className="text-sm font-semibold">
+                            Response Body
+                          </h3>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => copyToClipboard(JSON.stringify(responseData, null, 2), 'response')}
+                            onClick={() =>
+                              copyToClipboard(
+                                JSON.stringify(responseData, null, 2),
+                                "response"
+                              )
+                            }
                           >
-                            {copiedCode === 'response' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            {copiedCode === "response" ? (
+                              <CheckCircle className="h-4 w-4" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                         <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm max-h-96">
@@ -746,7 +885,9 @@ export default function DevelopersPage() {
                       <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
                           <AlertCircle className="h-5 w-5 text-red-600" />
-                          <span className="font-semibold text-red-600">Error</span>
+                          <span className="font-semibold text-red-600">
+                            Error
+                          </span>
                         </div>
                         <pre className="text-sm text-red-800 dark:text-red-200 overflow-x-auto">
                           {executionError}
@@ -764,9 +905,15 @@ export default function DevelopersPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => copyToClipboard(generateCurl(), 'curl')}
+                          onClick={() =>
+                            copyToClipboard(generateCurl(), "curl")
+                          }
                         >
-                          {copiedCode === 'curl' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {copiedCode === "curl" ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
@@ -777,45 +924,67 @@ export default function DevelopersPage() {
                     {/* JavaScript Example */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-sm font-semibold">JavaScript (Fetch)</h3>
+                        <h3 className="text-sm font-semibold">
+                          JavaScript (Fetch)
+                        </h3>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => copyToClipboard(`fetch('${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}', {\n  method: '${selectedEndpoint.method}',\n  headers: {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ''}\n  },\n  ${selectedEndpoint.method !== 'GET' ? `body: JSON.stringify(${requestBody})\n` : ''}})\n.then(res => res.json())\n.then(data => console.log(data));`, 'js')}
+                          onClick={() =>
+                            copyToClipboard(
+                              `fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}', {\n  method: '${selectedEndpoint.method}',\n  headers: {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ""}\n  },\n  ${selectedEndpoint.method !== "GET" ? `body: JSON.stringify(${requestBody})\n` : ""}})\n.then(res => res.json())\n.then(data => console.log(data));`,
+                              "js"
+                            )
+                          }
                         >
-                          {copiedCode === 'js' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {copiedCode === "js" ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
-                        <code>{`fetch('${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}', {
+                        <code>{`fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}', {
   method: '${selectedEndpoint.method}',
   headers: {
     'Content-Type': 'application/json',
-    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ''}\n  },
-  ${selectedEndpoint.method !== 'GET' ? `body: JSON.stringify(${requestBody})\n` : ''}})\n.then(res => res.json())\n.then(data => console.log(data));`}</code>
+    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ""}\n  },
+  ${selectedEndpoint.method !== "GET" ? `body: JSON.stringify(${requestBody})\n` : ""}})\n.then(res => res.json())\n.then(data => console.log(data));`}</code>
                       </pre>
                     </div>
 
                     {/* Python Example */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-sm font-semibold">Python (requests)</h3>
+                        <h3 className="text-sm font-semibold">
+                          Python (requests)
+                        </h3>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => copyToClipboard(`import requests\n\nurl = '${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}'\nheaders = {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ''}\n}\n${selectedEndpoint.method !== 'GET' ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}\nprint(response.json())`, 'python')}
+                          onClick={() =>
+                            copyToClipboard(
+                              `import requests\n\nurl = '${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}'\nheaders = {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ""}\n}\n${selectedEndpoint.method !== "GET" ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}\nprint(response.json())`,
+                              "python"
+                            )
+                          }
                         >
-                          {copiedCode === 'python' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {copiedCode === "python" ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
                         <code>{`import requests
 
-url = '${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${selectedEndpoint.path}'
+url = '${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}'
 headers = {
     'Content-Type': 'application/json',
-    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ''}\n}
-${selectedEndpoint.method !== 'GET' ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}
+    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ""}\n}
+${selectedEndpoint.method !== "GET" ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}
 print(response.json())`}</code>
                       </pre>
                     </div>
@@ -834,5 +1003,13 @@ print(response.json())`}</code>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DevelopersPage() {
+  return (
+    <Suspense fallback={<DevelopersPageSkeleton />}>
+      <DevelopersPageContent />
+    </Suspense>
   );
 }
