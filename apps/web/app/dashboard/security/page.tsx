@@ -356,29 +356,21 @@ export default function SecurityPage() {
     {
       name: "Total Threats",
       value: metrics?.total_threats?.toLocaleString() || "0",
-      change: "+15.2%",
-      changeType: "negative",
       icon: AlertTriangle,
     },
     {
       name: "Active Threats",
       value: metrics?.active_threats?.toLocaleString() || "0",
-      change: "-12.5%",
-      changeType: "positive",
       icon: AlertOctagon,
     },
     {
       name: "Blocked Threats",
       value: metrics?.blocked_threats?.toLocaleString() || "0",
-      change: "+12.3%",
-      changeType: "positive",
       icon: CheckCircle,
     },
     {
       name: "Anomalies Detected",
       value: metrics?.total_anomalies?.toLocaleString() || "0",
-      change: "+8.3%",
-      changeType: "negative",
       icon: Activity,
     },
   ];

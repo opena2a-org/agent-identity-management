@@ -18,6 +18,9 @@ type AnalyticsHandler struct {
 	auditService             *application.AuditService
 	mcpService               *application.MCPService
 	verificationEventService *application.VerificationEventService
+	authService              *application.AuthService    // ✅ For fetching user counts
+	alertService             *application.AlertService   // ✅ For fetching alert counts
+	securityService          *application.SecurityService // ✅ For fetching incident counts
 	db                       *sql.DB // Database connection for real analytics queries
 }
 
@@ -26,6 +29,9 @@ func NewAnalyticsHandler(
 	auditService *application.AuditService,
 	mcpService *application.MCPService,
 	verificationEventService *application.VerificationEventService,
+	authService *application.AuthService,
+	alertService *application.AlertService,
+	securityService *application.SecurityService,
 	db *sql.DB,
 ) *AnalyticsHandler {
 	return &AnalyticsHandler{
@@ -33,6 +39,9 @@ func NewAnalyticsHandler(
 		auditService:             auditService,
 		mcpService:               mcpService,
 		verificationEventService: verificationEventService,
+		authService:              authService,
+		alertService:             alertService,
+		securityService:          securityService,
 		db:                       db,
 	}
 }
@@ -793,6 +802,40 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		}
 	}
 
+	// ✅ Fetch REAL user count from database
+	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
+	totalUsers := 0
+	activeUsers := 0
+	if err == nil {
+		totalUsers = len(users)
+		// Count active users (those with status "active")
+		for _, user := range users {
+			if user.Status == domain.UserStatusActive {
+				activeUsers++
+			}
+		}
+	}
+
+	// ✅ Fetch REAL security metrics from database
+	activeAlerts := 0
+	criticalAlerts := 0
+	securityIncidents := 0
+	alerts, _, err := h.alertService.GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
+	if err == nil {
+		activeAlerts = len(alerts)
+		// Count critical severity alerts
+		for _, alert := range alerts {
+			if alert.Severity == domain.AlertSeverityCritical {
+				criticalAlerts++
+			}
+		}
+	}
+	// Get open security incidents count
+	incidents, err := h.securityService.GetIncidents(c.Context(), orgID, domain.IncidentStatusOpen, 100, 0)
+	if err == nil {
+		securityIncidents = len(incidents)
+	}
+
 	return c.JSON(fiber.Map{
 		// Agent metrics
 		"total_agents":      totalAgents,
@@ -805,14 +848,14 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		"total_mcp_servers":  totalMCPServers,
 		"active_mcp_servers": activeMCPServers,
 
-		// User metrics (simplified for viewer - no user count access)
-		"total_users":  1, // Current user
-		"active_users": 1,
+		// User metrics ✅ REAL DATA
+		"total_users":  totalUsers,
+		"active_users": activeUsers,
 
-		// Security metrics (simplified for viewer - no alert access)
-		"active_alerts":      0,
-		"critical_alerts":    0,
-		"security_incidents": 0,
+		// Security metrics ✅ REAL DATA
+		"active_alerts":      activeAlerts,
+		"critical_alerts":    criticalAlerts,
+		"security_incidents": securityIncidents,
 
 		// Verification metrics (last 24 hours)
 		"total_verifications":      stats.TotalVerifications,
