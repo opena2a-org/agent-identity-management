@@ -1100,26 +1100,8 @@ class APIClient {
   }
 
   async getMCPServerCapabilities(id: string): Promise<{
-    capabilities: Array<{
-      id: string;
-      mcp_server_id: string;
-      name: string;
-      type: "tool" | "resource" | "prompt";
-      description: string;
-      schema: any;
-      detected_at: string;
-      last_verified_at?: string;
-      is_active: boolean;
-    }>;
+    capabilities: string[]; // Simple array of capability type strings like ["tools", "prompts", "resources"]
     total: number;
-    tools: any[];
-    resources: any[];
-    prompts: any[];
-    counts: {
-      tools: number;
-      resources: number;
-      prompts: number;
-    };
   }> {
     return this.request(`/api/v1/mcp-servers/${id}/capabilities`);
   }
