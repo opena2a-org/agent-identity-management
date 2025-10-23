@@ -315,11 +315,136 @@ func (s *ComplianceService) GetComplianceMetrics(
 	endDate time.Time,
 	interval string,
 ) (interface{}, error) {
-	// For MVP, return simple metrics
-	// In production, would calculate actual time-series data
+	// Get all agents for the organization
 	agents, err := s.agentRepo.GetByOrganization(orgID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Calculate real-time agent verification trend based on creation dates
+	agentVerificationTrend := []map[string]interface{}{}
+	trustScoreTrend := []map[string]interface{}{}
+
+	// Group agents by date based on interval
+	dateGroups := make(map[string]struct {
+		verified   int
+		totalScore float64
+		count      int
+	})
+
+	for _, agent := range agents {
+		// Only include agents created within the date range
+		if agent.CreatedAt.Before(startDate) || agent.CreatedAt.After(endDate) {
+			continue
+		}
+
+		// Format date based on interval
+		var dateKey string
+		switch interval {
+		case "week":
+			// Get start of week (Monday)
+			weekStart := agent.CreatedAt.AddDate(0, 0, -int(agent.CreatedAt.Weekday()-time.Monday))
+			dateKey = weekStart.Format("2006-01-02")
+		case "month":
+			dateKey = agent.CreatedAt.Format("2006-01")
+		default: // "day"
+			dateKey = agent.CreatedAt.Format("2006-01-02")
+		}
+
+		// Initialize if not exists
+		if _, exists := dateGroups[dateKey]; !exists {
+			dateGroups[dateKey] = struct {
+				verified   int
+				totalScore float64
+				count      int
+			}{}
+		}
+
+		// Update group data
+		group := dateGroups[dateKey]
+		if agent.Status == domain.AgentStatusVerified {
+			group.verified++
+		}
+		group.totalScore += agent.TrustScore
+		group.count++
+		dateGroups[dateKey] = group
+	}
+
+	// Convert map to sorted arrays
+	type dateMetric struct {
+		date       time.Time
+		verified   int
+		avgScore   float64
+		agentCount int
+	}
+	var sortedMetrics []dateMetric
+
+	for dateKey, group := range dateGroups {
+		var t time.Time
+		if interval == "month" {
+			t, _ = time.Parse("2006-01", dateKey)
+		} else {
+			t, _ = time.Parse("2006-01-02", dateKey)
+		}
+
+		avgScore := 0.0
+		if group.count > 0 {
+			avgScore = group.totalScore / float64(group.count)
+		}
+
+		sortedMetrics = append(sortedMetrics, dateMetric{
+			date:       t,
+			verified:   group.verified,
+			avgScore:   avgScore,
+			agentCount: group.count,
+		})
+	}
+
+	// Sort by date
+	for i := 0; i < len(sortedMetrics); i++ {
+		for j := i + 1; j < len(sortedMetrics); j++ {
+			if sortedMetrics[i].date.After(sortedMetrics[j].date) {
+				sortedMetrics[i], sortedMetrics[j] = sortedMetrics[j], sortedMetrics[i]
+			}
+		}
+	}
+
+	// Create a map of existing metrics by date
+	metricsMap := make(map[string]dateMetric)
+	for _, metric := range sortedMetrics {
+		metricsMap[metric.date.Format("2006-01-02")] = metric
+	}
+
+	// Fill in ALL dates in the range (even if no data, show 0)
+	currentDate := startDate
+	for currentDate.Before(endDate) || currentDate.Equal(endDate) {
+		dateKey := currentDate.Format("2006-01-02")
+		
+		// Check if we have data for this date
+		if metric, exists := metricsMap[dateKey]; exists {
+			// Use actual data
+			agentVerificationTrend = append(agentVerificationTrend, map[string]interface{}{
+				"date":     dateKey,
+				"verified": metric.verified,
+			})
+			trustScoreTrend = append(trustScoreTrend, map[string]interface{}{
+				"date":      dateKey,
+				"avg_score": metric.avgScore,
+			})
+		} else {
+			// No data for this date, use 0
+			agentVerificationTrend = append(agentVerificationTrend, map[string]interface{}{
+				"date":     dateKey,
+				"verified": 0,
+			})
+			trustScoreTrend = append(trustScoreTrend, map[string]interface{}{
+				"date":      dateKey,
+				"avg_score": 0.0,
+			})
+		}
+		
+		// Move to next day
+		currentDate = currentDate.AddDate(0, 0, 1)
 	}
 
 	metrics := map[string]interface{}{
@@ -328,14 +453,8 @@ func (s *ComplianceService) GetComplianceMetrics(
 			"end":      endDate.Format(time.RFC3339),
 			"interval": interval,
 		},
-		"agent_verification_trend": []map[string]interface{}{
-			{"date": startDate.Format("2006-01-02"), "verified": len(agents) - 2},
-			{"date": endDate.Format("2006-01-02"), "verified": len(agents)},
-		},
-		"trust_score_trend": []map[string]interface{}{
-			{"date": startDate.Format("2006-01-02"), "avg_score": 0.65},
-			{"date": endDate.Format("2006-01-02"), "avg_score": 0.75},
-		},
+		"agent_verification_trend": agentVerificationTrend,
+		"trust_score_trend":        trustScoreTrend,
 	}
 
 	return metrics, nil
