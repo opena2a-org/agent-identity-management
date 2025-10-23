@@ -37,7 +37,7 @@ from .client import AIMClient, register_agent
 secure = register_agent
 
 from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError
-from .detection import MCPDetector, auto_detect_mcps
+from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 

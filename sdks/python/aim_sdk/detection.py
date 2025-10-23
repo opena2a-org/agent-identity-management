@@ -32,6 +32,9 @@ except ImportError:
 
 __version__ = "1.0.0"
 
+# Global MCP call tracker for runtime detection
+_mcp_call_tracker = {}
+
 
 class MCPDetector:
     """
@@ -236,6 +239,119 @@ class MCPDetector:
         if parts:
             return parts[0]
         return None
+
+    @staticmethod
+    def track_mcp_call(mcp_server: str, tool_name: Optional[str] = None):
+        """
+        Track a runtime MCP server call for auto-discovery.
+
+        This method should be called whenever your agent invokes an MCP tool.
+        The SDK will aggregate these calls and automatically report them to AIM.
+
+        Args:
+            mcp_server: Name of the MCP server being called
+            tool_name: Optional name of the specific tool/function being invoked
+
+        Example:
+            from aim_sdk import MCPDetector
+
+            # Before calling MCP tool
+            MCPDetector.track_mcp_call("filesystem", "read_file")
+
+            # Then call your MCP tool
+            result = mcp_client.call_tool("filesystem", "read_file", {...})
+        """
+        if mcp_server not in _mcp_call_tracker:
+            _mcp_call_tracker[mcp_server] = {
+                "first_call": datetime.now(timezone.utc).isoformat(),
+                "call_count": 0,
+                "tools_used": set()
+            }
+
+        _mcp_call_tracker[mcp_server]["call_count"] += 1
+        _mcp_call_tracker[mcp_server]["last_call"] = datetime.now(timezone.utc).isoformat()
+
+        if tool_name:
+            _mcp_call_tracker[mcp_server]["tools_used"].add(tool_name)
+
+    @staticmethod
+    def get_runtime_detections(sdk_version: str = f"aim-sdk-python@{__version__}") -> List[Dict[str, Any]]:
+        """
+        Get MCP detections from runtime tracking.
+
+        Returns MCP servers that were tracked via track_mcp_call().
+
+        Args:
+            sdk_version: SDK version string
+
+        Returns:
+            List of detection events with method 'sdk_runtime'
+        """
+        detections = []
+
+        for mcp_server, stats in _mcp_call_tracker.items():
+            # Convert tools_used set to list for JSON serialization
+            tools_list = list(stats.get("tools_used", set()))
+
+            detection = {
+                "mcpServer": mcp_server,
+                "detectionMethod": "sdk_runtime",
+                "confidence": 100.0,  # Runtime calls are definitive
+                "details": {
+                    "call_count": stats.get("call_count", 0),
+                    "first_call": stats.get("first_call"),
+                    "last_call": stats.get("last_call"),
+                    "tools_used": tools_list
+                },
+                "sdkVersion": sdk_version,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            detections.append(detection)
+
+        return detections
+
+    def detect_all_with_runtime(self) -> List[Dict[str, Any]]:
+        """
+        Run all detection methods INCLUDING runtime tracking.
+
+        This combines static detection (config, imports) with runtime tracking.
+
+        Returns:
+            List of detection events from all sources
+        """
+        detections = []
+
+        # Static detection (config + imports)
+        detections.extend(self.detect_from_claude_config())
+        detections.extend(self.detect_from_imports())
+
+        # Runtime detection (tracked calls)
+        detections.extend(self.get_runtime_detections(self.sdk_version))
+
+        return detections
+
+
+def track_mcp_call(mcp_server: str, tool_name: Optional[str] = None):
+    """
+    Track a runtime MCP server call for auto-discovery (convenience function).
+
+    This function should be called whenever your agent invokes an MCP tool.
+    The SDK will aggregate these calls and automatically report them to AIM.
+
+    Args:
+        mcp_server: Name of the MCP server being called
+        tool_name: Optional name of the specific tool/function being invoked
+
+    Example:
+        from aim_sdk import track_mcp_call
+
+        # Track before calling MCP tool
+        track_mcp_call("filesystem", "read_file")
+
+        # Then call your MCP tool
+        result = mcp_client.call_tool("filesystem", "read_file", {...})
+    """
+    MCPDetector.track_mcp_call(mcp_server, tool_name)
 
 
 def auto_detect_mcps(
