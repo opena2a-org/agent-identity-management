@@ -411,6 +411,67 @@ class AIMClient:
             # Don't fail the action if logging fails
             pass
 
+    def request_capability(
+        self,
+        capability_type: str,
+        reason: str
+    ) -> Dict:
+        """
+        Request an additional capability for the agent.
+
+        When an agent needs a capability that wasn't granted during registration,
+        it can request it through this method. The request will be sent to admins
+        for approval.
+
+        Args:
+            capability_type: Type of capability being requested (e.g., "write_database", "send_bulk_email")
+            reason: Business justification for the capability request (minimum 10 characters)
+
+        Returns:
+            Dict containing:
+            - id: str - Capability request ID
+            - agent_id: str - Agent ID
+            - capability_type: str - Requested capability
+            - status: str - Request status ("pending", "approved", "rejected")
+            - requested_at: str - ISO timestamp of request
+
+        Raises:
+            ConfigurationError: If reason is too short or capability_type is invalid
+            VerificationError: If request fails
+
+        Example:
+            result = client.request_capability(
+                capability_type="write_database",
+                reason="Need to update user records in the database for analytics"
+            )
+            print(f"Request ID: {result['id']}, Status: {result['status']}")
+        """
+        # Validate inputs
+        if not capability_type or not isinstance(capability_type, str):
+            raise ConfigurationError("capability_type must be a non-empty string")
+        
+        if not reason or len(reason) < 10:
+            raise ConfigurationError("reason must be at least 10 characters")
+
+        # Prepare request payload
+        request_data = {
+            "capability_type": capability_type,
+            "reason": reason
+        }
+
+        try:
+            # Make request to SDK API endpoint
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capability-requests",
+                data=request_data
+            )
+
+            return result
+
+        except Exception as e:
+            raise VerificationError(f"Capability request failed: {e}")
+
     def report_detections(
         self,
         detections: list

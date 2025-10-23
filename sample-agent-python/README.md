@@ -5,6 +5,7 @@ Production-ready Python demonstration agent showcasing the [AIM (Agent Identity 
 ## Overview
 
 This demo demonstrates:
+
 - **One-line agent registration** with automatic security
 - **MCP (Model Context Protocol)** usage and detection
 - **Capability management** and real-time trust scoring
@@ -45,11 +46,15 @@ API_KEY = 'your-api-key-here'
 ### Running the Demo
 
 ```bash
-# Run with clean credentials
+# Run basic demo (registration + capabilities)
 ./run-demo.sh
 
-# Or directly
+# Test agent activities (safe + dangerous operations)
+./test-activities.sh
+
+# Or run directly
 python3 demo.py
+python3 test-activities.py
 ```
 
 ## What the Demo Does
@@ -66,27 +71,44 @@ agent = secure(name="python-demo-agent", api_key=API_KEY, aim_url=AIM_URL)
 ```
 
 This automatically:
+
 - ✅ Generates Ed25519 cryptographic keys
 - ✅ Registers agent with AIM platform
 - ✅ Detects MCP servers from Claude Desktop config
 - ✅ Reports capabilities to AIM
 - ✅ Stores credentials securely in system keyring
 
-### 2. Safe Operations
+### 2. Activity Testing (`test-activities.py`)
 
-Shows approved actions that execute successfully:
-- File reading operations
-- Data processing
-- API calls
+**NEW!** Comprehensive activity testing that demonstrates:
 
-### 3. Dangerous Operations
+#### Safe Operations (✅ Approved)
 
-Demonstrates blocked actions with real-time alerts:
-- System commands
-- File deletion attempts
-- Database modifications
+- Database queries (LOW risk)
+- API calls (LOW risk)
+- File reading (LOW risk)
+- Email sending (MEDIUM risk)
+- Cache operations (LOW risk)
 
-### 4. MCP Usage
+#### Dangerous Operations (⚠️ Blocked)
+
+- Code execution attempts (CRITICAL risk)
+- Database deletion (CRITICAL risk)
+- System file modification (CRITICAL risk)
+- Network scanning (HIGH risk)
+- Credential access (CRITICAL risk)
+- Data exfiltration (CRITICAL risk)
+
+#### Real-Time Monitoring
+
+- All activities logged to dashboard
+- Security alerts for dangerous operations
+- Trust score impact tracking
+- Complete audit trail
+
+**See [ACTIVITY_TESTING_GUIDE.md](./ACTIVITY_TESTING_GUIDE.md) for detailed instructions.**
+
+### 3. MCP Usage
 
 Simulates using an MCP server as a tool (reading a file via MCP).
 
@@ -122,41 +144,50 @@ The server will display its public key. Copy it for registration.
 The test server provides:
 
 **Tools:**
+
 - `echo` - Echo back text
 - `calculate` - Perform math calculations
 - `timestamp` - Get current UTC timestamp
 
 **Resources:**
+
 - `server://status` - Server health and statistics
 - `server://config` - Server configuration
 
 **Prompts:**
+
 - `greeting` - Generate friendly greetings
 
 ## Files
 
-- **`demo.py`** - Main demonstration script
+- **`demo.py`** - Main demonstration script (registration + capabilities)
+- **`test-activities.py`** - Activity testing script (safe + dangerous operations)
 - **`test-mcp-server.py`** - Local MCP server for testing
 - **`setup.sh`** - Installation script
-- **`run-demo.sh`** - Clean run script
+- **`run-demo.sh`** - Run basic demo
+- **`test-activities.sh`** - Run activity tests
 - **`requirements.txt`** - Python dependencies
 - **`aim-sdk-python/`** - AIM Python SDK
+- **`ACTIVITY_TESTING_GUIDE.md`** - Detailed activity testing guide
 
 ## Features Demonstrated
 
 ### Security
+
 - ✅ Ed25519 cryptographic signing on every API request
 - ✅ Secure credential storage (system keyring)
 - ✅ Automatic duplicate prevention
 - ✅ Real-time trust scoring (8-factor ML algorithm)
 
 ### Governance
+
 - ✅ MCP usage detection and reporting
 - ✅ Capability request and management
 - ✅ Action verification (safe vs dangerous)
 - ✅ Audit logging
 
 ### Automation
+
 - ✅ One-line registration
 - ✅ Auto MCP detection
 - ✅ Auto capability reporting
@@ -184,22 +215,36 @@ The test server provides:
 ## Dashboard Monitoring
 
 All agent activity is visible in real-time:
+
 - **Agent Status**: `http://localhost:3000/dashboard/agents`
-- **MCP Servers**: `http://localhost:3000/dashboard/mcp`
-- **Audit Logs**: `http://localhost:3000/dashboard/audit`
+- **Recent Activity**: See all operations (safe + dangerous)
+- **Security Alerts**: View blocked operations
 - **Trust Score**: Live updates based on behavior
+- **Violations**: Critical security incidents
+- **MCP Servers**: `http://localhost:3000/dashboard/mcp`
+- **Audit Logs**: Complete audit trail
+
+After running `test-activities.py`, you'll see:
+
+- ✅ 5 safe operations logged
+- ⚠️ 6 security alerts triggered
+- 🔄 8 mixed activities recorded
+- 📊 Trust score impact visualization
 
 ## Troubleshooting
 
 ### "Registration failed: invalid API key"
+
 - Generate a new API key from the dashboard
 - Update `API_KEY` in `demo.py`
 
 ### "Agent already exists"
+
 - The SDK automatically reuses existing agents
 - To force new registration: `rm -rf ~/.aim`
 
 ### "MCP verification failed"
+
 - Ensure the MCP server is running
 - Check the public key matches
 - Verify the URL is correct
@@ -209,6 +254,7 @@ All agent activity is visible in real-time:
 For production agents:
 
 1. **Secure API Key Storage**: Use environment variables
+
    ```python
    import os
    API_KEY = os.getenv('AIM_API_KEY')
@@ -233,6 +279,7 @@ See main repository for license information.
 ## Support
 
 For issues or questions:
+
 - Open an issue in the main repository
 - Check the documentation
 - Review audit logs in the dashboard

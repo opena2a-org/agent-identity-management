@@ -243,10 +243,11 @@ func main() {
 	sdkAPI := app.Group("/api/v1/sdk-api")
 	sdkAPI.Use(middleware.APIKeyMiddleware(db))
 	sdkAPI.Use(middleware.RateLimitMiddleware())
-	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)          // Get agent by ID or name (SDK)
-	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)    // SDK capability reporting
-	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)     // SDK MCP registration
-	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection) // SDK MCP detection and integration reporting
+	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                       // Get agent by ID or name (SDK)
+	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                 // SDK capability reporting
+	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
+	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)                  // SDK MCP registration
+	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)              // SDK MCP detection and integration reporting
 	
 	// ✅ Action verification for SDK (API key auth)
 	sdkAPI.Post("/verifications", h.Verification.CreateVerification)                 // Request verification for agent action (SDK)

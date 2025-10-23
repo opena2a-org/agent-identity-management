@@ -134,6 +134,20 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification ID
 	verificationID := uuid.New()
 
+	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert if agent doesn't have permission
+	shouldCreateAlert := false
+	if status == "approved" {
+		// Check if agent has the capability for this action
+		hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
+		if err != nil {
+			fmt.Printf("⚠️  Error checking capability: %v\n", err)
+		} else if !hasCapability {
+			// Agent is attempting an action without proper capability - CREATE ALERT
+			shouldCreateAlert = true
+			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting unauthorized action: %s\n", agent.Name, req.ActionType)
+		}
+	}
+
 	// Create audit log entry
 	auditEntry := &domain.AuditLog{
 		ID:             uuid.New(),
@@ -163,6 +177,38 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	if err := h.auditService.Log(c.Context(), auditEntry); err != nil {
 		// Log error but don't fail the request
 		fmt.Printf("Failed to create audit log: %v\n", err)
+	}
+
+	// ✅ CREATE SECURITY ALERT if capability violation detected
+	if shouldCreateAlert {
+		alertTitle := fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
+		alertDescription := fmt.Sprintf(
+			"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
+			"This action was logged but allowed for monitoring purposes. "+
+			"Trust Score: %.2f. Verification ID: %s",
+			agent.Name, agent.ID.String(), req.ActionType, req.Resource,
+			trustScore, verificationID.String(),
+		)
+
+		alert := &domain.Alert{
+			ID:             uuid.New(),
+			OrganizationID: agent.OrganizationID,
+			AlertType:      domain.AlertSecurityBreach,
+			Severity:       domain.AlertSeverityHigh,
+			Title:          alertTitle,
+			Description:    alertDescription,
+			ResourceType:   "agent",
+			ResourceID:     agentID,
+			IsAcknowledged: false,
+			CreatedAt:      time.Now(),
+		}
+
+		// Save alert to database using AgentService's alert repository
+		if err := h.agentService.CreateSecurityAlert(c.Context(), alert); err != nil {
+			fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
+		} else {
+			fmt.Printf("✅ Security alert created: %s\n", alert.ID.String())
+		}
 	}
 
 	// ✅ Create verification event for dashboard visibility

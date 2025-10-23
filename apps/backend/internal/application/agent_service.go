@@ -360,6 +360,34 @@ func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, 
 	return nil
 }
 
+// CreateSecurityAlert creates a security alert in the database
+func (s *AgentService) CreateSecurityAlert(ctx context.Context, alert *domain.Alert) error {
+	return s.alertRepo.Create(alert)
+}
+
+// HasCapability checks if an agent has a specific capability
+func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, actionType string, resource string) (bool, error) {
+	// Get agent's active capabilities
+	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get capabilities: %w", err)
+	}
+
+	// If agent has no capabilities, return false
+	if len(capabilities) == 0 {
+		return false, nil
+	}
+
+	// Check if action matches any capability
+	for _, capability := range capabilities {
+		if s.matchesCapability(actionType, resource, capability.CapabilityType) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // VerifyAction verifies if an agent can perform an action
 // ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
 // This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
