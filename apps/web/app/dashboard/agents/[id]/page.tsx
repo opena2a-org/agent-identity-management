@@ -562,7 +562,7 @@ export default function AgentDetailsPage({
         <TabsList>
           <TabsTrigger value="connections">
             <ExternalLink className="h-4 w-4 mr-2" />
-            Connections
+            MCPs
           </TabsTrigger>
           <TabsTrigger value="capabilities">
             <Shield className="h-4 w-4 mr-2" />

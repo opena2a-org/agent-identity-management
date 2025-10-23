@@ -84,17 +84,39 @@ export default function UsageStatisticsPage() {
   if (loading) {
     return (
       <AuthGuard>
-        <div className="p-8 space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold">Usage Statistics</h1>
-            <p className="text-muted-foreground">Loading usage data...</p>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-9 w-64" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <Skeleton className="h-10 w-40" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-32" />
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Skeleton className="h-6 w-6 rounded" />
+                  </div>
+                  <div className="ml-5 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
-          <Skeleton className="h-96" />
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="p-6">
+              <Skeleton className="h-96 w-full" />
+            </div>
+          </div>
         </div>
       </AuthGuard>
     );
@@ -103,11 +125,11 @@ export default function UsageStatisticsPage() {
   if (error || !data) {
     return (
       <AuthGuard>
-        <div className="p-8">
+        <div className="space-y-6">
           <div className="text-center py-16">
-            <Activity className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-semibold mb-2">Unable to Load Statistics</h2>
-            <p className="text-muted-foreground">{error || 'No usage data available'}</p>
+            <Activity className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+            <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Unable to Load Statistics</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{error || 'No usage data available'}</p>
           </div>
         </div>
       </AuthGuard>
@@ -116,15 +138,14 @@ export default function UsageStatisticsPage() {
 
   return (
     <AuthGuard>
-      <div className="p-8 space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <BarChart3 className="h-8 w-8" />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               Usage Statistics
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               API usage and user activity metrics for {data.period}
             </p>
           </div>
@@ -144,75 +165,99 @@ export default function UsageStatisticsPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Activity className="h-10 w-10 text-blue-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Total API Calls</div>
-                  <div className="text-3xl font-bold text-blue-600">
-                    {data?.api_calls?.total?.toLocaleString() || '0'}
-                  </div>
-                </div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Activity className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Total API Calls
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {data?.api_calls?.total?.toLocaleString() || '0'}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Users className="h-10 w-10 text-purple-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Active Users</div>
-                  <div className="text-3xl font-bold text-purple-600">
-                    {data?.active_users?.total || 0}
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Users className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Active Users
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {data?.active_users?.total || 0}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-10 w-10 text-green-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Success Rate</div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {((data?.agent_metrics?.success_rate || 0) * 100).toFixed(1)}%
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Success Rate
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                      {((data?.agent_metrics?.success_rate || 0) * 100).toFixed(1)}%
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <XCircle className="h-10 w-10 text-orange-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Failed Requests</div>
-                  <div className="text-3xl font-bold text-orange-600">
-                    {data?.agent_metrics?.failed_requests?.toLocaleString() || '0'}
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <XCircle className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Failed Requests
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                      {data?.agent_metrics?.failed_requests?.toLocaleString() || '0'}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* API Calls Over Time */}
         <Card>
           <CardHeader>
-            <CardTitle>API Calls Over Time</CardTitle>
-            <CardDescription>Daily API request volume</CardDescription>
+            <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">API Calls Over Time</CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">Daily API request volume</CardDescription>
           </CardHeader>
           <CardContent>
             {data?.api_calls?.by_day && data.api_calls.by_day.length > 0 ? (
-              <div className="relative h-64 border rounded-lg p-4 bg-gradient-to-b from-white to-gray-50">
+              <div className="relative h-64 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
                 {/* Y-axis labels */}
-                <div className="absolute left-2 top-4 bottom-4 flex flex-col justify-between text-xs text-muted-foreground">
+                <div className="absolute left-2 top-4 bottom-4 flex flex-col justify-between text-xs text-gray-500 dark:text-gray-400">
                   {[...Array(5)].map((_, i) => {
                     const max = Math.max(...data.api_calls.by_day.map(d => d.count));
                     const value = Math.ceil(max * (4 - i) / 4);
@@ -230,16 +275,16 @@ export default function UsageStatisticsPage() {
                       <div key={index} className="flex-1 flex flex-col items-center gap-1 group">
                         <div className="relative w-full">
                           <div
-                            className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                            className="w-full bg-blue-500 dark:bg-blue-600 rounded-t transition-all hover:bg-blue-600 dark:hover:bg-blue-500"
                             style={{ height: `${height * 2}px` }}
                             title={`${formatDate(day.date)}: ${day.count} calls`}
                           />
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded shadow">
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 rounded shadow border border-gray-200 dark:border-gray-700">
                             {day.count}
                           </div>
                         </div>
                         {index % Math.ceil(data.api_calls.by_day.length / 7) === 0 && (
-                          <span className="text-xs text-muted-foreground rotate-45 origin-top-left mt-2">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 rotate-45 origin-top-left mt-2">
                             {formatDate(day.date)}
                           </span>
                         )}
@@ -249,10 +294,10 @@ export default function UsageStatisticsPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-64 text-center text-muted-foreground">
+              <div className="flex items-center justify-center h-64 text-center">
                 <div>
                   <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No API call data available for the selected period</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No API call data available for the selected period</p>
                 </div>
               </div>
             )}
@@ -263,8 +308,8 @@ export default function UsageStatisticsPage() {
           {/* Top API Endpoints */}
           <Card>
             <CardHeader>
-              <CardTitle>Top API Endpoints</CardTitle>
-              <CardDescription>Most frequently accessed endpoints</CardDescription>
+              <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">Top API Endpoints</CardTitle>
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-400">Most frequently accessed endpoints</CardDescription>
             </CardHeader>
             <CardContent>
               {data?.api_calls?.by_endpoint && data.api_calls.by_endpoint.length > 0 ? (
@@ -294,10 +339,10 @@ export default function UsageStatisticsPage() {
                   ))}
                 </div>
               ) : (
-                <div className="flex items-center justify-center py-8 text-center text-muted-foreground">
+                <div className="flex items-center justify-center py-8 text-center">
                   <div>
                     <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p>No endpoint data available</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No endpoint data available</p>
                   </div>
                 </div>
               )}
@@ -307,8 +352,8 @@ export default function UsageStatisticsPage() {
           {/* Active Users by Role */}
           <Card>
             <CardHeader>
-              <CardTitle>Active Users by Role</CardTitle>
-              <CardDescription>User distribution across roles</CardDescription>
+              <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">Active Users by Role</CardTitle>
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-400">User distribution across roles</CardDescription>
             </CardHeader>
             <CardContent>
               {data?.active_users?.by_role && data.active_users.by_role.length > 0 ? (
@@ -339,10 +384,10 @@ export default function UsageStatisticsPage() {
                   })}
                 </div>
               ) : (
-                <div className="flex items-center justify-center py-8 text-center text-muted-foreground">
+                <div className="flex items-center justify-center py-8 text-center">
                   <div>
                     <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p>No user role data available</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No user role data available</p>
                   </div>
                 </div>
               )}
@@ -353,33 +398,33 @@ export default function UsageStatisticsPage() {
         {/* Agent Metrics */}
         <Card>
           <CardHeader>
-            <CardTitle>Agent Request Metrics</CardTitle>
-            <CardDescription>Agent-initiated API requests breakdown</CardDescription>
+            <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">Agent Request Metrics</CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">Agent-initiated API requests breakdown</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col items-center p-6 bg-gray-50 border rounded-lg">
-                <Activity className="h-12 w-12 text-gray-600 mb-3" />
-                <div className="text-3xl font-bold text-gray-600">
+              <div className="flex flex-col items-center p-6 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <Activity className="h-6 w-6 text-gray-600 dark:text-gray-400 mb-3" />
+                <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {data?.agent_metrics?.total_requests?.toLocaleString() || '0'}
                 </div>
-                <div className="text-sm text-muted-foreground">Total Requests</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Total Requests</div>
               </div>
 
-              <div className="flex flex-col items-center p-6 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-12 w-12 text-green-600 mb-3" />
-                <div className="text-3xl font-bold text-green-600">
+              <div className="flex flex-col items-center p-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 mb-3" />
+                <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
                   {data?.agent_metrics?.successful_requests?.toLocaleString() || '0'}
                 </div>
-                <div className="text-sm text-muted-foreground">Successful</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Successful</div>
               </div>
 
-              <div className="flex flex-col items-center p-6 bg-red-50 border border-red-200 rounded-lg">
-                <XCircle className="h-12 w-12 text-red-600 mb-3" />
-                <div className="text-3xl font-bold text-red-600">
+              <div className="flex flex-col items-center p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <XCircle className="h-6 w-6 text-red-600 dark:text-red-400 mb-3" />
+                <div className="text-2xl font-semibold text-red-600 dark:text-red-400">
                   {data?.agent_metrics?.failed_requests?.toLocaleString() || '0'}
                 </div>
-                <div className="text-sm text-muted-foreground">Failed</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Failed</div>
               </div>
             </div>
           </CardContent>

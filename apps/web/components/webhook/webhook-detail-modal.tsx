@@ -176,7 +176,7 @@ export function WebhookDetailModal({
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="deliveries">
-              Delivery History ({webhook.deliveries.length})
+              Delivery History ({webhook.deliveries?.length || 0})
             </TabsTrigger>
           </TabsList>
 
@@ -343,7 +343,7 @@ export function WebhookDetailModal({
                 </div>
               </CardHeader>
               <CardContent>
-                {webhook.deliveries.length === 0 ? (
+                {(webhook.deliveries?.length || 0) === 0 ? (
                   <div className="text-center py-12">
                     <Clock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-muted-foreground">No deliveries yet</p>
@@ -362,7 +362,7 @@ export function WebhookDetailModal({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {webhook.deliveries.map((delivery) => (
+                      {webhook.deliveries?.map((delivery) => (
                         <TableRow key={delivery.id}>
                           <TableCell>
                             <code className="text-xs bg-muted px-2 py-1 rounded">

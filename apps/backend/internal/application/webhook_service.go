@@ -30,9 +30,10 @@ func NewWebhookService(webhookRepo *repository.WebhookRepository) *WebhookServic
 
 // CreateWebhookRequest represents the request to create a webhook
 type CreateWebhookRequest struct {
-	Name   string                 `json:"name" validate:"required"`
-	URL    string                 `json:"url" validate:"required,url"`
-	Events []domain.WebhookEvent  `json:"events" validate:"required"`
+	Name     string                 `json:"name" validate:"required"`
+	URL      string                 `json:"url" validate:"required,url"`
+	Events   []domain.WebhookEvent  `json:"events" validate:"required"`
+	IsActive *bool                  `json:"is_active,omitempty"` // Pointer to distinguish between false and not provided
 }
 
 // CreateWebhook creates a new webhook subscription
@@ -79,11 +80,46 @@ func (s *WebhookService) DeleteWebhook(ctx context.Context, id uuid.UUID) error 
 	return s.webhookRepo.Delete(id)
 }
 
-// TestWebhook sends a test payload to a webhook
-func (s *WebhookService) TestWebhook(ctx context.Context, id uuid.UUID) error {
+// UpdateWebhook updates an existing webhook
+func (s *WebhookService) UpdateWebhook(ctx context.Context, id uuid.UUID, req *CreateWebhookRequest) (*domain.Webhook, error) {
+	// Get existing webhook
 	webhook, err := s.webhookRepo.GetByID(id)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	// Update fields
+	webhook.Name = req.Name
+	webhook.URL = req.URL
+	webhook.Events = req.Events
+
+	// Update IsActive if provided
+	if req.IsActive != nil {
+		webhook.IsActive = *req.IsActive
+	}
+
+	webhook.UpdatedAt = time.Now().UTC()
+
+	// Save changes
+	if err := s.webhookRepo.Update(webhook); err != nil {
+		return nil, err
+	}
+
+	return webhook, nil
+}
+
+// WebhookTestResult contains the result of a webhook test
+type WebhookTestResult struct {
+	Success      bool
+	StatusCode   int
+	ErrorMessage string
+}
+
+// TestWebhook sends a test payload to a webhook
+func (s *WebhookService) TestWebhook(ctx context.Context, id uuid.UUID) (*WebhookTestResult, error) {
+	webhook, err := s.webhookRepo.GetByID(id)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create test payload
@@ -96,14 +132,26 @@ func (s *WebhookService) TestWebhook(ctx context.Context, id uuid.UUID) error {
 		},
 	}
 
-	return s.sendWebhook(webhook, "webhook.test", payload)
+	// Send webhook and capture result
+	statusCode, deliveryErr := s.sendWebhookWithResult(webhook, "webhook.test", payload)
+
+	result := &WebhookTestResult{
+		Success:    statusCode >= 200 && statusCode < 300,
+		StatusCode: statusCode,
+	}
+
+	if deliveryErr != nil {
+		result.ErrorMessage = deliveryErr.Error()
+	}
+
+	return result, nil
 }
 
-// sendWebhook sends a webhook payload
-func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payload interface{}) error {
+// sendWebhookWithResult sends a webhook payload and returns status code and error
+func (s *WebhookService) sendWebhookWithResult(webhook *domain.Webhook, event string, payload interface{}) (int, error) {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Create signature
@@ -112,7 +160,7 @@ func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payl
 	// Send HTTP request
 	req, err := http.NewRequest("POST", webhook.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -122,7 +170,7 @@ func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payl
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 
@@ -145,10 +193,16 @@ func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payl
 	s.webhookRepo.RecordDelivery(delivery)
 
 	if !delivery.Success {
-		return fmt.Errorf("webhook delivery failed with status %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("webhook delivery failed with status %d", resp.StatusCode)
 	}
 
-	return nil
+	return resp.StatusCode, nil
+}
+
+// sendWebhook sends a webhook payload
+func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payload interface{}) error {
+	_, err := s.sendWebhookWithResult(webhook, event, payload)
+	return err
 }
 
 // Helper functions

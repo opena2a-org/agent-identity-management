@@ -189,16 +189,21 @@ export default function MonitoringPage() {
         </div>
 
         {/* Stats Cards Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700"
+              className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
             >
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-8 w-20" />
-                <Skeleton className="h-3 w-24" />
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Skeleton className="h-6 w-6 rounded" />
+                </div>
+                <div className="ml-5 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
               </div>
             </div>
           ))}
@@ -233,10 +238,10 @@ export default function MonitoringPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Verification Monitoring
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Real-time cryptographic verification analytics
           </p>
         </div>
@@ -266,77 +271,111 @@ export default function MonitoringPage() {
 
       {/* Statistics Cards */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {/* Total Verifications */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-600">
-                Total Verifications
-              </h3>
-              <Activity className="h-5 w-5 text-blue-600" />
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Activity className="h-6 w-6 text-gray-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Total Verifications
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {statistics?.totalVerifications?.toLocaleString() || "0"}
+                    </div>
+                  </dd>
+                </dl>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {statistics?.verificationsPerMinute?.toFixed(2) || "0"} per minute
+                </p>
+              </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {statistics?.totalVerifications?.toLocaleString() || "0"}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              {statistics?.verificationsPerMinute?.toFixed(2) || "0"} per minute
-            </p>
           </div>
 
           {/* Success Rate */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-600">
-                Success Rate
-              </h3>
-              <CheckCircle className="h-5 w-5 text-green-600" />
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-6 w-6 text-gray-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Success Rate
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {statistics?.successRate?.toFixed(1) || "0"}%
+                    </div>
+                  </dd>
+                </dl>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {statistics?.successCount || 0} / {statistics?.totalVerifications || 0} successful
+                </p>
+              </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {statistics?.successRate?.toFixed(1) || "0"}%
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              {statistics?.successCount || 0} /{" "}
-              {statistics?.totalVerifications || 0} successful
-            </p>
           </div>
 
           {/* Average Latency */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-600">Avg Latency</h3>
-              <Clock className="h-5 w-5 text-purple-600" />
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Clock className="h-6 w-6 text-gray-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Avg Latency
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {statistics?.avgDurationMs ? Math.round(statistics.avgDurationMs) : "0"}ms
+                    </div>
+                  </dd>
+                </dl>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Average duration
+                </p>
+              </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {statistics?.avgDurationMs
-                ? Math.round(statistics.avgDurationMs)
-                : "0"}
-              ms
-            </p>
-            <p className="text-sm text-gray-500 mt-1">Average duration</p>
           </div>
 
           {/* Unique Agents */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-600">
-                Active Agents
-              </h3>
-              <Activity className="h-5 w-5 text-indigo-600" />
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Activity className="h-6 w-6 text-gray-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Active Agents
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {statistics?.uniqueAgentsVerified || "0"}
+                    </div>
+                  </dd>
+                </dl>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Verified agents
+                </p>
+              </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {statistics?.uniqueAgentsVerified || "0"}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">Verified agents</p>
           </div>
         </div>
       )}
 
       {/* Distribution Charts Row */}
       {statistics && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Protocol Distribution */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Protocol Distribution
             </h3>
             <div className="space-y-3">
@@ -368,8 +407,8 @@ export default function MonitoringPage() {
           </div>
 
           {/* Type Distribution */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Verification Type
             </h3>
             <div className="space-y-3">
@@ -401,8 +440,8 @@ export default function MonitoringPage() {
           </div>
 
           {/* Status Breakdown */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Status Breakdown
             </h3>
             <div className="space-y-3">
@@ -468,10 +507,10 @@ export default function MonitoringPage() {
       )}
 
       {/* Recent Events Feed */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               Recent Events
             </h2>
 
@@ -545,14 +584,14 @@ export default function MonitoringPage() {
           </div>
         </div>
 
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {recentEvents.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">
+              <p className="text-gray-600 dark:text-gray-400">
                 No verification events in the selected time range
               </p>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {eventTimeRange === "15min" &&
                   "No events in the last 15 minutes"}
                 {eventTimeRange === "1h" && "No events in the last hour"}
@@ -564,7 +603,7 @@ export default function MonitoringPage() {
             recentEvents.slice(0, 10).map((event) => (
               <div
                 key={event.id}
-                className="px-6 py-4 hover:bg-gray-50 transition-colors"
+                className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -575,20 +614,20 @@ export default function MonitoringPage() {
                         {getStatusIcon(event.status)}
                         {event.status}
                       </span>
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {event.agentName}
                       </span>
-                      <span className="text-xs text-gray-500">•</span>
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">•</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-300">
                         {event.protocol}
                       </span>
-                      <span className="text-xs text-gray-500">•</span>
-                      <span className="text-xs text-gray-600 capitalize">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">•</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-300 capitalize">
                         {event.verificationType}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
                       <span>Duration: {event.durationMs}ms</span>
                       <span>
                         Confidence: {(event.confidence * 100).toFixed(1)}%
@@ -600,7 +639,7 @@ export default function MonitoringPage() {
                     </div>
                   </div>
 
-                  <div className="text-right text-sm text-gray-500">
+                  <div className="text-right text-sm text-gray-500 dark:text-gray-400">
                     {formatTime(event.createdAt)}
                   </div>
                 </div>

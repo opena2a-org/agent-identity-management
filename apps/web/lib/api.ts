@@ -27,8 +27,13 @@ const getApiUrl = (): string => {
     return detectedUrl;
   }
 
-  // 3. Fallback to localhost for local development
-  // Note: process.env.NEXT_PUBLIC_API_URL is baked in at build time and cannot be trusted in production
+  // 3. Check for NEXT_PUBLIC_API_URL environment variable
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    console.log('[API] Using NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  // 4. Fallback to localhost for local development
   console.log('[API] Using localhost fallback (local development)');
   return "http://localhost:8080";
 };
@@ -1671,6 +1676,58 @@ class APIClient {
     };
   }> {
     return this.request("/api/v1/compliance/data-retention");
+  }
+
+  // Get compliance violations
+  async getComplianceViolations(framework?: string, severity?: string): Promise<{
+    violations: Array<{
+      id: string;
+      framework: string;
+      violation_type: string;
+      severity: string;
+      description: string;
+      affected_resource: string;
+      detected_at: string;
+      remediated: boolean;
+      remediation_notes?: string;
+      remediated_by?: string;
+      remediated_at?: string;
+    }>;
+    total: number;
+    filters: {
+      framework: string;
+      severity: string;
+    };
+  }> {
+    const params = new URLSearchParams();
+    if (framework) params.append("framework", framework);
+    if (severity) params.append("severity", severity);
+
+    const queryString = params.toString();
+    const url = queryString
+      ? `/api/v1/compliance/violations?${queryString}`
+      : "/api/v1/compliance/violations";
+
+    return this.request(url);
+  }
+
+  // Remediate a compliance violation
+  async remediateViolation(
+    violationId: string,
+    remediationNotes: string,
+    remediationDate?: string
+  ): Promise<{
+    message: string;
+    violation_id: string;
+    remediated_at: string;
+  }> {
+    return this.request(`/api/v1/compliance/remediate/${violationId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        remediation_notes: remediationNotes,
+        remediation_date: remediationDate,
+      }),
+    });
   }
 
   // Resolve alert

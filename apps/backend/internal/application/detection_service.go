@@ -397,8 +397,9 @@ func (s *DetectionService) ReportCapabilities(
 		return nil, fmt.Errorf("failed to calculate trust score: %v", err)
 	}
 
-	// Convert from 0-1 scale to 0-100 scale for storage
-	newTrustScore := trustScore.Score * 100
+	// Trust score is already on 0-1 scale (0.0-1.0), use it directly
+	// Database constraints enforce 0.0-1.0 range
+	newTrustScore := trustScore.Score
 
 	// 4. Convert capability report to JSON
 	envJSON, _ := json.Marshal(req.Environment)

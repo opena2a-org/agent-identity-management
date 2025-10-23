@@ -129,8 +129,8 @@ export default function SDKTokensPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">SDK Tokens</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SDK Tokens</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage your SDK authentication tokens and monitor their usage
           </p>
         </div>
@@ -165,38 +165,38 @@ export default function SDKTokensPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Tokens</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Active Tokens</CardTitle>
             <Shield className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeTokens.length}</div>
-            <p className="text-xs text-muted-foreground">Currently valid</p>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{activeTokens.length}</div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Currently valid</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Usage</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Total Usage</CardTitle>
             <Key className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {tokens.reduce((sum, t) => sum + t.usageCount, 0)}
             </div>
-            <p className="text-xs text-muted-foreground">API requests</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">API requests</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">
               Revoked Tokens
             </CardTitle>
             <Trash2 className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{revokedTokens.length}</div>
-            <p className="text-xs text-muted-foreground">No longer valid</p>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{revokedTokens.length}</div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">No longer valid</p>
           </CardContent>
         </Card>
       </div>
@@ -205,9 +205,9 @@ export default function SDKTokensPage() {
       {tokens.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Key className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium mb-2">No SDK tokens found</p>
-            <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
+            <Key className="h-12 w-12 text-gray-400 mb-4" />
+            <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No SDK tokens found</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-md mb-4">
               Download the SDK to automatically generate an authentication token
             </p>
             <Button onClick={() => (window.location.href = "/dashboard/sdk")}>
@@ -229,12 +229,12 @@ export default function SDKTokensPage() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <CardTitle className="text-lg">
+                        <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">
                           {token.deviceName || "Unknown Device"}
                         </CardTitle>
                         <Badge variant={status.color}>{status.label}</Badge>
                       </div>
-                      <CardDescription className="font-mono text-xs">
+                      <CardDescription className="font-mono text-xs text-gray-500 dark:text-gray-400">
                         Token ID: {token.tokenId}
                       </CardDescription>
                     </div>

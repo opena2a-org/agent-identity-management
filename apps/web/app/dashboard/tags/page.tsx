@@ -128,8 +128,8 @@ export default function TagsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tags Management</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tags Management</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Organize agents and MCP servers with tags
           </p>
         </div>
@@ -143,12 +143,12 @@ export default function TagsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tags</CardTitle>
-            <TagIcon className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Total Tags</CardTitle>
+            <TagIcon className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{tags.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{tags.length}</div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Across all categories
             </p>
           </CardContent>
@@ -156,14 +156,14 @@ export default function TagsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categories</CardTitle>
-            <Filter className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Categories</CardTitle>
+            <Filter className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {new Set(tags.map((t) => t.category)).size}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Active tag categories
             </p>
           </CardContent>
@@ -171,12 +171,12 @@ export default function TagsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Filtered Results</CardTitle>
-            <Search className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Filtered Results</CardTitle>
+            <Search className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{filteredTags.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{filteredTags.length}</div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Matching current filters
             </p>
           </CardContent>
@@ -186,8 +186,8 @@ export default function TagsPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Filter Tags</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">Filter Tags</CardTitle>
+          <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
             Search and filter tags by category
           </CardDescription>
         </CardHeader>

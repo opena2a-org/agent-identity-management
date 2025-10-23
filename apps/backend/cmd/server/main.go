@@ -882,14 +882,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	compliance := v1.Group("/compliance")
 	compliance.Use(middleware.AuthMiddleware(jwtService))
 	compliance.Use(middleware.AdminMiddleware())
-	compliance.Use(middleware.StrictRateLimitMiddleware())
+	compliance.Use(middleware.RateLimitMiddleware()) // Changed from StrictRateLimitMiddleware to allow multiple simultaneous requests
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
-	compliance.Get("/audit-log/data-retention", h.Compliance.GetDataRetention)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
-	compliance.Get("/data-retention", h.Compliance.GetDataRetentionPolicies)
+	compliance.Get("/export", h.Compliance.ExportComplianceReport) // Export compliance report
+	// Data retention and violations endpoints removed
 
 	// MCP Server routes (authentication required)
 	mcpServers := v1.Group("/mcp-servers")
@@ -935,7 +935,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, jwtService *auth.JWTService, sdkT
 	webhooks.Post("/", middleware.MemberMiddleware(), h.Webhook.CreateWebhook)
 	webhooks.Get("/", h.Webhook.ListWebhooks)
 	webhooks.Get("/:id", h.Webhook.GetWebhook)
+	webhooks.Put("/:id", middleware.MemberMiddleware(), h.Webhook.UpdateWebhook) // Update webhook
 	webhooks.Delete("/:id", middleware.MemberMiddleware(), h.Webhook.DeleteWebhook)
+	webhooks.Post("/:id/test", h.Webhook.TestWebhook) // Test webhook endpoint
 
 	// Verification routes (authentication required) - Agent action verification
 	verifications := v1.Group("/verifications")

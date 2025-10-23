@@ -34,7 +34,6 @@ import {
   ChartSkeleton,
 } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
-import { TrustTrends } from "@/components/analytics/trust-trends";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 
 interface DashboardStats {
@@ -535,11 +534,11 @@ function DashboardContent() {
                       >
                         <div className="w-full flex gap-1">
                           <div
-                            className="w-1/2 animate-pulse bg-green-200 dark:bg-green-800 rounded"
+                            className="w-1/2 animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
                             style={{ height: `${verifiedHeight}px` }}
                           />
                           <div
-                            className="w-1/2 animate-pulse bg-yellow-200 dark:bg-yellow-800 rounded"
+                            className="w-1/2 animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
                             style={{ height: `${pendingHeight}px` }}
                           />
                         </div>
@@ -895,7 +894,6 @@ function DashboardContent() {
 
       {/* Analytics Sections */}
       <div className="grid grid-cols-1 gap-6">
-        <TrustTrends defaultDays={30} />
         <ActivityTimeline defaultLimit={20} />
       </div>
     </div>

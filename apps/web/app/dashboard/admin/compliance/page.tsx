@@ -12,6 +12,9 @@ import {
   FileText,
   Loader2,
   XCircle,
+  Database,
+  AlertCircle,
+  Filter,
 } from "lucide-react";
 import {
   LineChart,
@@ -25,6 +28,24 @@ import {
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 // Backend response structure
 interface ComplianceStatus {
@@ -81,6 +102,7 @@ interface CheckResult {
     severity?: string;
   }>;
 }
+
 
 function StatCard({ stat }: { stat: any }) {
   return (
@@ -328,7 +350,6 @@ export default function CompliancePage() {
   useEffect(() => {
     fetchComplianceData();
   }, []);
-
 
   const handleRunComplianceCheck = async () => {
     try {
@@ -605,6 +626,10 @@ export default function CompliancePage() {
           </table>
         </div>
       </div>
+
+      {/* Data Retention Policies section removed */}
+      {/* Compliance Violations section removed */}
+      {/* Remediation Dialog removed */}
     </div>
     </AuthGuard>
   );

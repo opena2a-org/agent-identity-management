@@ -11,7 +11,8 @@ import {
   XCircle,
   Clock,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  TrendingUp
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
@@ -145,136 +146,178 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Agent Activity Timeline
-            </CardTitle>
-            <CardDescription>
-              Recent agent actions and their outcomes
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </>
-            )}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="bg-gray-50">
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground mb-1">Total Activities</div>
-              <div className="text-2xl font-bold">
-                {data.summary.total_activities}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-green-50 border-green-200">
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground mb-1">Successful</div>
-              <div className="text-2xl font-bold text-green-600">
-                {data.summary.success_count}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-red-50 border-red-200">
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground mb-1">Failed</div>
-              <div className="text-2xl font-bold text-red-600">
-                {data.summary.failure_count}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-blue-50 border-blue-200">
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground mb-1">Success Rate</div>
-              <div className="text-2xl font-bold text-blue-600">
-                {(data.summary.success_rate * 100).toFixed(1)}%
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Timeline */}
-        <div className="space-y-1">
-          <h4 className="text-sm font-semibold mb-4">Recent Activity</h4>
-          {data.activities.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-              <p>No activities recorded yet</p>
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+          Agent Activity Timeline
+        </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          {refreshing ? (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              Refreshing...
+            </>
           ) : (
-            <div className="space-y-1">
-              {data.activities.map((activity, index) => (
-                <div
-                  key={`${activity.agent_id}-${activity.timestamp}-${index}`}
-                  className="flex gap-4 p-4 rounded-lg border bg-white hover:bg-gray-50 transition-colors"
-                >
-                  {/* Status Icon */}
-                  <div className="flex-shrink-0 mt-1">
-                    {getStatusIcon(activity.status)}
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Summary Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Total Activities */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <Activity className="h-6 w-6 text-gray-400" />
+            </div>
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  Total Activities
+                </dt>
+                <dd className="flex items-baseline">
+                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                    {data.summary.total_activities}
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        {/* Successful */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  Successful
+                </dt>
+                <dd className="flex items-baseline">
+                  <div className="text-2xl font-semibold text-green-600">
+                    {data.summary.success_count}
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        {/* Failed */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <XCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  Failed
+                </dt>
+                <dd className="flex items-baseline">
+                  <div className="text-2xl font-semibold text-red-600">
+                    {data.summary.failure_count}
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        {/* Success Rate */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <TrendingUp className="h-6 w-6 text-gray-400" />
+            </div>
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  Success Rate
+                </dt>
+                <dd className="flex items-baseline">
+                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                    {(data.summary.success_rate * 100).toFixed(1)}%
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+          Recent Activity
+        </h3>
+        {data.activities.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+            <p>No activities recorded yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {data.activities.map((activity, index) => (
+              <div
+                key={`${activity.agent_id}-${activity.timestamp}-${index}`}
+                className="flex gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                {/* Status Icon */}
+                <div className="flex-shrink-0 mt-1">
+                  {getStatusIcon(activity.status)}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-4 mb-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                        {activity.agent_name}
+                      </span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {activity.action}
+                      </span>
+                      {getStatusBadge(activity.status)}
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {formatDistanceToNow(new Date(activity.timestamp), {
+                        addSuffix: true,
+                      })}
+                    </span>
                   </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4 mb-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm">
-                          {activity.agent_name}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {activity.action}
-                        </span>
-                        {getStatusBadge(activity.status)}
-                      </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(activity.timestamp), {
-                          addSuffix: true,
-                        })}
-                      </span>
-                    </div>
+                  {activity.details && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {activity.details}
+                    </p>
+                  )}
 
-                    {activity.details && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {activity.details}
-                      </p>
-                    )}
-
-                    <div className="text-xs text-muted-foreground mt-1 font-mono">
-                      Agent ID: {activity.agent_id.substring(0, 8)}...
-                    </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                    Agent ID: {activity.agent_id.substring(0, 8)}...
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Load More */}
         {data.activities.length > 0 && data.summary.total_activities > limit && (
-          <div className="text-center">
+          <div className="text-center mt-4">
             <Button
               variant="outline"
               onClick={() => setLimit(limit + 50)}
@@ -283,7 +326,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

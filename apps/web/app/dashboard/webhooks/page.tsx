@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -13,13 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +30,7 @@ import {
   Trash2,
   Power,
   PowerOff,
+  Ban,
   TestTube,
   Eye,
   CheckCircle,
@@ -193,15 +186,42 @@ export default function WebhooksPage() {
   if (loading) {
     return (
       <AuthGuard>
-        <div className="p-8 space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold">Webhooks</h1>
-            <p className="text-muted-foreground">Loading webhooks...</p>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-9 w-64" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <Skeleton className="h-10 w-40" />
           </div>
-          <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-16" />
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Skeleton className="h-6 w-6 rounded" />
+                  </div>
+                  <div className="ml-5 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                </div>
+              </div>
             ))}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="p-6">
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </AuthGuard>
@@ -211,11 +231,11 @@ export default function WebhooksPage() {
   if (error) {
     return (
       <AuthGuard>
-        <div className="p-8">
+        <div className="space-y-6">
           <div className="text-center py-16">
-            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-semibold mb-2">Unable to Load Webhooks</h2>
-            <p className="text-muted-foreground">{error}</p>
+            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+            <h2 className="text-2xl font-semibold mb-2 text-gray-900">Unable to Load Webhooks</h2>
+            <p className="text-gray-600">{error}</p>
             <Button onClick={fetchWebhooks} className="mt-4">
               Try Again
             </Button>
@@ -227,79 +247,107 @@ export default function WebhooksPage() {
 
   return (
     <AuthGuard>
-      <div className="p-8 space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Webhook className="h-8 w-8" />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               Webhooks
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Manage webhook endpoints and monitor delivery status
             </p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
             Create Webhook
-          </Button>
+          </button>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Webhook className="h-10 w-10 text-blue-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Total Webhooks</div>
-                  <div className="text-3xl font-bold">{webhooks.length}</div>
-                </div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Webhook className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Total Webhooks
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {webhooks.length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Power className="h-10 w-10 text-green-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Active</div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {webhooks.filter((w) => w.is_active).length}
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Power className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Active
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                      {webhooks.filter((w) => w.is_active).length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-10 w-10 text-green-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Total Successes</div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {webhooks.reduce((sum, w) => sum + w.success_count, 0).toLocaleString()}
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Total Successes
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                      {webhooks.reduce((sum, w) => sum + w.success_count, 0).toLocaleString()}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <XCircle className="h-10 w-10 text-red-600" />
-                <div>
-                  <div className="text-sm text-muted-foreground">Total Failures</div>
-                  <div className="text-3xl font-bold text-red-600">
-                    {webhooks.reduce((sum, w) => sum + w.failure_count, 0).toLocaleString()}
-                  </div>
-                </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <XCircle className="h-6 w-6 text-gray-400" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Total Failures
+                  </dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                      {webhooks.reduce((sum, w) => sum + w.failure_count, 0).toLocaleString()}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Webhooks Table */}
@@ -420,50 +468,41 @@ export default function WebhooksPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleViewDetails(webhook)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleTestWebhook(webhook.id)}
-                                disabled={testingWebhookId === webhook.id}
-                              >
-                                <TestTube className="h-4 w-4 mr-2" />
-                                {testingWebhookId === webhook.id ? 'Testing...' : 'Test Webhook'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleViewDetails(webhook)}
+                              className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              title="View details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleTestWebhook(webhook.id)}
+                              disabled={testingWebhookId === webhook.id}
+                              className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Test webhook"
+                            >
+                              <TestTube className="h-4 w-4" />
+                            </button>
+                            {webhook.is_active ? (
+                              <button
                                 onClick={() => handleToggleWebhook(webhook)}
                                 disabled={togglingWebhookId === webhook.id}
+                                className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Disable webhook"
                               >
-                                {webhook.is_active ? (
-                                  <>
-                                    <PowerOff className="h-4 w-4 mr-2" />
-                                    Disable
-                                  </>
-                                ) : (
-                                  <>
-                                    <Power className="h-4 w-4 mr-2" />
-                                    Enable
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
+                                <Ban className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <button
                                 onClick={() => setDeleteWebhookId(webhook.id)}
-                                className="text-red-600"
+                                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                title="Delete webhook permanently"
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
