@@ -1,364 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Code,
-  Book,
-  Terminal,
   Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
+  CheckCircle,
   Search,
   Filter,
-  Download,
-  ExternalLink
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Key,
+  LogIn,
+  AlertCircle,
+  Lock,
+  Unlock
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-// API endpoint categories with complete documentation
-const apiEndpoints = [
-  {
-    category: 'Authentication & Authorization',
-    description: 'User authentication, session management, and access control',
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/v1/auth/login/local',
-        description: 'Email/password authentication. Returns JWT token and user information.',
-        auth: 'None',
-        request: {
-          email: 'string (required) - User email address',
-          password: 'string (required) - User password'
-        },
-        response: {
-          token: 'string - JWT access token',
-          user: 'object - User information (id, email, role, organization)'
-        },
-        example: `curl -X POST https://api.aim.com/api/v1/auth/login/local \\
-  -H "Content-Type: application/json" \\
-  -d '{"email":"user@example.com","password":"secret"}'`
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/auth/refresh',
-        description: 'Refresh access token using refresh token. Implements token rotation for security.',
-        auth: 'Refresh Token',
-        request: {
-          refresh_token: 'string (required) - Valid refresh token'
-        },
-        response: {
-          token: 'string - New JWT access token',
-          refresh_token: 'string - New refresh token (rotation)'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/auth/me',
-        description: 'Get currently authenticated user information.',
-        auth: 'JWT',
-        response: {
-          id: 'string - User UUID',
-          email: 'string - User email',
-          role: 'string - User role (admin|manager|member|viewer)',
-          organization_id: 'string - Organization UUID'
-        }
-      }
-    ]
-  },
-  {
-    category: 'Agent Lifecycle Management',
-    description: 'Create, manage, and control AI agent identities',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v1/agents',
-        description: 'List all agents in organization. Supports filtering and pagination.',
-        auth: 'JWT',
-        query: {
-          status: 'string (optional) - Filter by status (verified|pending|suspended)',
-          page: 'number (optional) - Page number (default: 1)',
-          limit: 'number (optional) - Results per page (default: 20, max: 100)'
-        },
-        response: {
-          agents: 'array - List of agent objects',
-          total: 'number - Total count',
-          page: 'number - Current page',
-          pages: 'number - Total pages'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/agents',
-        description: 'Register a new agent. Automatically generates Ed25519 keypair.',
-        auth: 'JWT (member+)',
-        request: {
-          name: 'string (required) - Agent display name',
-          type: 'string (required) - Agent type (ai_agent|mcp_server|autonomous_agent)',
-          description: 'string (optional) - Agent description'
-        },
-        response: {
-          agent: 'object - Created agent with credentials',
-          api_key: 'string - API key (shown only once!)'
-        },
-        example: `curl -X POST https://api.aim.com/api/v1/agents \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"MyAgent","type":"ai_agent"}'`
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/agents/:id/suspend',
-        description: 'Temporarily suspend an agent. All API keys become invalid immediately.',
-        auth: 'JWT (manager+)',
-        response: {
-          success: 'boolean',
-          message: 'string'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/agents/:id/reactivate',
-        description: 'Reactivate a suspended agent. Previous API keys remain invalid.',
-        auth: 'JWT (manager+)',
-        response: {
-          success: 'boolean',
-          message: 'string'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/agents/:id/rotate-credentials',
-        description: 'Generate new API key and revoke old one. Use for key rotation or security incidents.',
-        auth: 'JWT (member+)',
-        response: {
-          api_key: 'string - New API key (shown only once!)',
-          message: 'string'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/agents/:id/verify',
-        description: 'Manually verify agent identity (admin action).',
-        auth: 'JWT (manager+)',
-        response: {
-          success: 'boolean',
-          agent: 'object - Updated agent'
-        }
-      }
-    ]
-  },
-  {
-    category: 'Compliance & Audit',
-    description: 'Compliance monitoring, audit logging, and access reviews',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v1/compliance/status',
-        description: 'Get overall compliance status and score.',
-        auth: 'JWT (admin)',
-        response: {
-          score: 'number - Compliance score (0-100)',
-          status: 'string - compliant|non_compliant|needs_review',
-          last_check: 'string - ISO 8601 timestamp'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/compliance/metrics',
-        description: 'Get detailed compliance metrics.',
-        auth: 'JWT (admin)',
-        response: {
-          verification_rate: 'number - Percentage of verified agents',
-          audit_coverage: 'number - Percentage of actions audited',
-          policy_compliance: 'number - Policy adherence rate'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/compliance/access-review',
-        description: 'List all users with access for quarterly access review.',
-        auth: 'JWT (admin)',
-        response: {
-          users: 'array - Users with access details',
-          last_review: 'string - Last review date',
-          next_review: 'string - Next scheduled review'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/compliance/check',
-        description: 'Run compliance check and generate report.',
-        auth: 'JWT (admin)',
-        response: {
-          report_id: 'string - Report UUID',
-          status: 'string - Check status',
-          findings: 'array - Compliance findings'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/compliance/export',
-        description: 'Export compliance report as PDF or CSV.',
-        auth: 'JWT (admin)',
-        query: {
-          format: 'string (required) - Export format (pdf|csv)',
-          from_date: 'string (optional) - Start date (ISO 8601)',
-          to_date: 'string (optional) - End date (ISO 8601)'
-        },
-        response: 'Binary file download'
-      }
-    ]
-  },
-  {
-    category: 'Security & Alerts',
-    description: 'Security monitoring, threat detection, and alert management',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v1/admin/alerts',
-        description: 'List security alerts with filtering options.',
-        auth: 'JWT (admin|manager)',
-        query: {
-          severity: 'string (optional) - Filter by severity (low|medium|high|critical)',
-          status: 'string (optional) - Filter by status (new|acknowledged|resolved)',
-          limit: 'number (optional) - Results per page (default: 20)'
-        },
-        response: {
-          alerts: 'array - Security alerts',
-          unacknowledged_count: 'number - Unread alert count'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/admin/alerts/:id/acknowledge',
-        description: 'Mark alert as acknowledged by current user.',
-        auth: 'JWT (admin)',
-        response: {
-          success: 'boolean',
-          alert: 'object - Updated alert'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/admin/alerts/:id/resolve',
-        description: 'Mark alert as resolved with optional resolution notes.',
-        auth: 'JWT (admin)',
-        request: {
-          notes: 'string (optional) - Resolution notes'
-        },
-        response: {
-          success: 'boolean',
-          alert: 'object - Updated alert'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/admin/security-policies',
-        description: 'List all security policies.',
-        auth: 'JWT (admin)',
-        response: {
-          policies: 'array - Security policy objects'
-        }
-      }
-    ]
-  },
-  {
-    category: 'Analytics & Reporting',
-    description: 'Usage analytics, verification activity, and trust score trends',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v1/analytics/dashboard',
-        description: 'Get high-level dashboard statistics.',
-        auth: 'JWT',
-        response: {
-          total_agents: 'number - Total agent count',
-          verified_agents: 'number - Verified agent count',
-          total_verifications: 'number - Verification event count',
-          success_rate: 'number - Verification success rate (0-100)'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/analytics/verification-activity',
-        description: 'Get verification events over time for charting.',
-        auth: 'JWT',
-        query: {
-          days: 'number (optional) - Number of days to query (default: 30)',
-          interval: 'string (optional) - Time interval (hour|day|week)'
-        },
-        response: {
-          data: 'array - Time-series data points',
-          total_events: 'number - Total event count'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/analytics/trends',
-        description: 'Get trust score trends over time.',
-        auth: 'JWT',
-        query: {
-          agent_id: 'string (optional) - Filter by agent UUID',
-          days: 'number (optional) - Number of days (default: 30)'
-        },
-        response: {
-          trends: 'array - Trust score trend data'
-        }
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/analytics/agents/activity',
-        description: 'Get agent activity logs and statistics.',
-        auth: 'JWT',
-        query: {
-          agent_id: 'string (optional) - Filter by agent UUID',
-          action_type: 'string (optional) - Filter by action type',
-          limit: 'number (optional) - Results per page'
-        },
-        response: {
-          activities: 'array - Activity log entries',
-          total: 'number - Total count'
-        }
-      }
-    ]
-  },
-  {
-    category: 'SDK & Integration',
-    description: 'SDK download, token management, and programmatic access',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v1/sdk/download',
-        description: 'Download Python SDK with embedded credentials for quick start.',
-        auth: 'JWT',
-        response: 'Binary file download (.zip)'
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/users/me/sdk-tokens',
-        description: 'List all SDK tokens for current user.',
-        auth: 'JWT',
-        response: {
-          tokens: 'array - SDK token objects',
-          active_count: 'number - Active token count'
-        }
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/users/me/sdk-tokens/:id/revoke',
-        description: 'Revoke specific SDK token immediately.',
-        auth: 'JWT',
-        response: {
-          success: 'boolean',
-          message: 'string'
-        }
-      }
-    ]
-  }
-];
+interface APIEndpoint {
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  path: string;
+  description: string;
+  auth: string;
+  request?: Record<string, string>;
+  response?: Record<string, string>;
+  example: string;
+  requiresAuth: boolean;
+}
+
+interface EndpointCategory {
+  category: string;
+  description: string;
+  endpoints: APIEndpoint[];
+}
 
 export default function DevelopersPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -366,129 +46,604 @@ export default function DevelopersPage() {
   const [expandedEndpoints, setExpandedEndpoints] = useState<Set<string>>(new Set());
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // API Playground state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userToken, setUserToken] = useState<string>('');
+  const [manualToken, setManualToken] = useState<string>('');
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [playgroundEndpoint, setPlaygroundEndpoint] = useState<string | null>(null);
+  const [requestBody, setRequestBody] = useState<string>('{}');
+  const [responseData, setResponseData] = useState<any>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      setIsAuthenticated(true);
+      setUserToken(token);
+    }
+  }, []);
+
+  const apiEndpoints: EndpointCategory[] = [
+    {
+      category: 'Authentication & Authorization',
+      description: 'OAuth 2.0, JWT tokens, and user authentication',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v1/oauth/google/login',
+          description: 'Initiate Google OAuth login flow',
+          auth: 'None (public)',
+          response: {
+            redirect_url: 'string - Google OAuth consent page URL'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/oauth/google/login`,
+          requiresAuth: false
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/auth/me',
+          description: 'Get current authenticated user profile',
+          auth: 'JWT (all roles)',
+          response: {
+            id: 'string - User ID',
+            email: 'string - User email',
+            role: 'string - User role (admin|manager|member|viewer)',
+            organization_id: 'string - Organization ID'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/auth/me \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/auth/logout',
+          description: 'Logout and invalidate JWT token',
+          auth: 'JWT (all roles)',
+          example: `curl -X POST https://api.aim.com/api/v1/auth/logout \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        }
+      ]
+    },
+    {
+      category: 'Agent Lifecycle Management',
+      description: 'Create, manage, and control AI agent identities',
+      endpoints: [
+        {
+          method: 'POST',
+          path: '/api/v1/agents',
+          description: 'Register a new agent. Automatically generates Ed25519 keypair.',
+          auth: 'JWT (member+)',
+          request: {
+            name: 'string (required) - Agent display name',
+            type: 'string (required) - Agent type (ai_agent|mcp_server|autonomous_agent)',
+            description: 'string (optional) - Agent description'
+          },
+          response: {
+            agent: 'object - Created agent with credentials',
+            api_key: 'string - API key (shown only once!)'
+          },
+          example: `curl -X POST https://api.aim.com/api/v1/agents \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"MyAgent","type":"ai_agent"}'`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/agents',
+          description: 'List all agents in your organization',
+          auth: 'JWT (member+)',
+          response: {
+            agents: 'array - List of agent objects',
+            total: 'number - Total count'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/agents \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/agents/:id',
+          description: 'Get detailed information about a specific agent',
+          auth: 'JWT (member+)',
+          response: {
+            id: 'string - Agent ID',
+            name: 'string - Agent name',
+            public_key: 'string - Ed25519 public key',
+            trust_score: 'number - Trust score (0-100)',
+            status: 'string - Agent status'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/agents/AGENT_ID \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'PUT',
+          path: '/api/v1/agents/:id',
+          description: 'Update agent metadata (name, description, metadata)',
+          auth: 'JWT (member+)',
+          request: {
+            name: 'string (optional) - New agent name',
+            description: 'string (optional) - New description',
+            metadata: 'object (optional) - Custom metadata'
+          },
+          example: `curl -X PUT https://api.aim.com/api/v1/agents/AGENT_ID \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Updated Agent Name"}'`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/agents/:id/suspend',
+          description: 'Suspend an agent (revokes access immediately)',
+          auth: 'JWT (manager+)',
+          example: `curl -X POST https://api.aim.com/api/v1/agents/AGENT_ID/suspend \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/agents/:id/reactivate',
+          description: 'Reactivate a suspended agent',
+          auth: 'JWT (manager+)',
+          example: `curl -X POST https://api.aim.com/api/v1/agents/AGENT_ID/reactivate \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        }
+      ]
+    },
+    {
+      category: 'Compliance & Audit',
+      description: 'Compliance monitoring, audit trails, and regulatory reporting',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v1/compliance/status',
+          description: 'Get overall compliance status and health',
+          auth: 'JWT (admin)',
+          response: {
+            overall_status: 'string - compliant|warning|critical',
+            last_check: 'string - ISO 8601 timestamp',
+            violations: 'array - Active violations'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/compliance/status \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/compliance/metrics',
+          description: 'Get compliance metrics (SOC 2, HIPAA, GDPR)',
+          auth: 'JWT (admin)',
+          response: {
+            soc2: 'object - SOC 2 compliance metrics',
+            hipaa: 'object - HIPAA compliance metrics',
+            gdpr: 'object - GDPR compliance metrics'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/compliance/metrics \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/compliance/access-review',
+          description: 'Get access review report (user permissions audit)',
+          auth: 'JWT (admin)',
+          response: {
+            users: 'array - Users with access details',
+            last_review: 'string - Last review date'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/compliance/access-review \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/compliance/check',
+          description: 'Run manual compliance check across all systems',
+          auth: 'JWT (admin)',
+          response: {
+            check_id: 'string - Compliance check ID',
+            status: 'string - running|completed',
+            findings: 'array - Compliance findings'
+          },
+          example: `curl -X POST https://api.aim.com/api/v1/compliance/check \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/compliance/export',
+          description: 'Export compliance report (PDF/JSON)',
+          auth: 'JWT (admin)',
+          response: {
+            report_url: 'string - Download URL',
+            format: 'string - pdf|json',
+            expires_at: 'string - URL expiration time'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/compliance/export?format=pdf \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        }
+      ]
+    },
+    {
+      category: 'Security & Alerts',
+      description: 'Security monitoring, threat detection, and alert management',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v1/admin/alerts',
+          description: 'List all security alerts',
+          auth: 'JWT (admin)',
+          response: {
+            alerts: 'array - Security alerts',
+            total: 'number - Total alert count'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/admin/alerts \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/admin/alerts/:id/acknowledge',
+          description: 'Acknowledge a security alert',
+          auth: 'JWT (admin)',
+          example: `curl -X POST https://api.aim.com/api/v1/admin/alerts/ALERT_ID/acknowledge \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/admin/alerts/:id/resolve',
+          description: 'Mark security alert as resolved',
+          auth: 'JWT (admin)',
+          example: `curl -X POST https://api.aim.com/api/v1/admin/alerts/ALERT_ID/resolve \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/admin/security-policies',
+          description: 'List all security policies',
+          auth: 'JWT (admin)',
+          response: {
+            policies: 'array - Security policies',
+            total: 'number - Total policy count'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/admin/security-policies \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        }
+      ]
+    },
+    {
+      category: 'Analytics & Reporting',
+      description: 'Usage statistics, trust trends, and activity monitoring',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v1/analytics/dashboard',
+          description: 'Get dashboard statistics (agents, verifications, trust score)',
+          auth: 'JWT (member+)',
+          response: {
+            total_agents: 'number - Total agent count',
+            verified_agents: 'number - Verified agents',
+            avg_trust_score: 'number - Average trust score',
+            total_verifications: 'number - Verification count'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/analytics/dashboard \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/analytics/usage',
+          description: 'Get usage statistics (API calls, active agents)',
+          auth: 'JWT (manager+)',
+          response: {
+            api_calls: 'number - Total API calls',
+            active_agents: 'number - Active agents',
+            bandwidth: 'number - Bandwidth used (bytes)'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/analytics/usage \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/analytics/trends',
+          description: 'Get trust score trends over time',
+          auth: 'JWT (member+)',
+          response: {
+            trends: 'array - Time-series trust score data',
+            period: 'string - Time period (7d|30d|90d)'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/analytics/trends?period=30d \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/analytics/verification-activity',
+          description: 'Get verification activity history',
+          auth: 'JWT (member+)',
+          response: {
+            verifications: 'array - Verification events',
+            total: 'number - Total verification count'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/analytics/verification-activity \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"`,
+          requiresAuth: true
+        }
+      ]
+    },
+    {
+      category: 'SDK & Integration',
+      description: 'Client SDKs, webhooks, and third-party integrations',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v1/sdk/python',
+          description: 'Download Python SDK package',
+          auth: 'None (public)',
+          response: {
+            download_url: 'string - Python SDK download URL',
+            version: 'string - SDK version',
+            docs_url: 'string - Documentation URL'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/sdk/python`,
+          requiresAuth: false
+        },
+        {
+          method: 'GET',
+          path: '/api/v1/sdk/typescript',
+          description: 'Download TypeScript SDK package',
+          auth: 'None (public)',
+          response: {
+            download_url: 'string - TypeScript SDK download URL',
+            version: 'string - SDK version',
+            docs_url: 'string - Documentation URL'
+          },
+          example: `curl -X GET https://api.aim.com/api/v1/sdk/typescript`,
+          requiresAuth: false
+        },
+        {
+          method: 'POST',
+          path: '/api/v1/webhooks',
+          description: 'Register a webhook for event notifications',
+          auth: 'JWT (manager+)',
+          request: {
+            url: 'string (required) - Webhook URL',
+            events: 'array (required) - Event types to subscribe to',
+            secret: 'string (optional) - Webhook signing secret'
+          },
+          example: `curl -X POST https://api.aim.com/api/v1/webhooks \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"url":"https://example.com/webhook","events":["agent.created"]}'`,
+          requiresAuth: true
+        }
+      ]
+    }
+  ];
+
+  const filteredEndpoints = apiEndpoints
+    .map(category => ({
+      ...category,
+      endpoints: category.endpoints.filter(endpoint => {
+        const matchesSearch = searchTerm === '' ||
+          endpoint.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          endpoint.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = selectedCategory === null || category.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      })
+    }))
+    .filter(category => category.endpoints.length > 0);
+
   const toggleEndpoint = (path: string) => {
     const newExpanded = new Set(expandedEndpoints);
     if (newExpanded.has(path)) {
       newExpanded.delete(path);
+      // Close playground when collapsing endpoint
+      if (playgroundEndpoint === path) {
+        setPlaygroundEndpoint(null);
+        setResponseData(null);
+        setExecutionError(null);
+      }
     } else {
       newExpanded.add(path);
     }
     setExpandedEndpoints(newExpanded);
   };
 
-  const copyToClipboard = (text: string, id: string) => {
+  const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedCode(id);
+    setCopiedCode(label);
+    toast.success('Copied to clipboard!');
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
   const getMethodColor = (method: string) => {
     switch (method) {
-      case 'GET': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300';
-      case 'POST': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300';
-      case 'PUT': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300';
-      case 'DELETE': return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
-      default: return 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300';
+      case 'GET': return 'bg-blue-500';
+      case 'POST': return 'bg-green-500';
+      case 'PUT': return 'bg-yellow-500';
+      case 'DELETE': return 'bg-red-500';
+      default: return 'bg-gray-500';
     }
   };
 
-  const filteredEndpoints = apiEndpoints.filter(category => {
-    if (selectedCategory && category.category !== selectedCategory) return false;
-    if (!searchTerm) return true;
+  const executeAPIRequest = async (endpoint: APIEndpoint) => {
+    setIsExecuting(true);
+    setExecutionError(null);
+    setResponseData(null);
 
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      category.category.toLowerCase().includes(searchLower) ||
-      category.description.toLowerCase().includes(searchLower) ||
-      category.endpoints.some(endpoint =>
-        endpoint.path.toLowerCase().includes(searchLower) ||
-        endpoint.description.toLowerCase().includes(searchLower)
-      )
-    );
-  });
+    try {
+      // Determine which token to use
+      const token = isAuthenticated ? userToken : manualToken;
+
+      if (endpoint.requiresAuth && !token) {
+        setExecutionError('Authentication required. Please login or provide a JWT token.');
+        setIsExecuting(false);
+        return;
+      }
+
+      // Build request
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const fetchOptions: RequestInit = {
+        method: endpoint.method,
+        headers,
+      };
+
+      // Add body for POST/PUT requests
+      if ((endpoint.method === 'POST' || endpoint.method === 'PUT') && requestBody) {
+        try {
+          JSON.parse(requestBody); // Validate JSON
+          fetchOptions.body = requestBody;
+        } catch (err) {
+          setExecutionError('Invalid JSON in request body');
+          setIsExecuting(false);
+          return;
+        }
+      }
+
+      // Execute request
+      const response = await fetch(`http://localhost:8080${endpoint.path}`, fetchOptions);
+
+      const contentType = response.headers.get('content-type');
+      let data;
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = { message: await response.text() };
+      }
+
+      if (!response.ok) {
+        setExecutionError(`HTTP ${response.status}: ${data.error || data.message || 'Request failed'}`);
+      } else {
+        setResponseData(data);
+        toast.success('Request executed successfully!');
+      }
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : 'Network error');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl">
+    <div className="p-8 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">API Documentation</h1>
-        <p className="text-muted-foreground mt-1">
-          Complete reference for AIM REST API endpoints
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">API Documentation</h1>
+          <p className="text-muted-foreground mt-1">
+            Complete reference for AIM REST API with interactive playground
+          </p>
+        </div>
+
+        {/* Authentication Status */}
+        <div className="flex items-center gap-3">
+          {isAuthenticated ? (
+            <Badge variant="default" className="flex items-center gap-2">
+              <Unlock className="h-3 w-3" />
+              Authenticated
+            </Badge>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.href = '/auth/login'}
+            >
+              <LogIn className="mr-2 h-4 w-4" />
+              Login to Test APIs
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Quick Start Card */}
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10">
+      {/* Quick Start Guide */}
+      <Card className="border-blue-200 bg-blue-50">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <CardTitle className="text-blue-900 dark:text-blue-100">Quick Start</CardTitle>
-          </div>
-          <CardDescription className="text-blue-700 dark:text-blue-300">
-            Get started with the AIM API in under 5 minutes
+          <CardTitle className="flex items-center gap-2">
+            <Code className="h-5 w-5 text-blue-600" />
+            Quick Start
+          </CardTitle>
+          <CardDescription className="text-blue-900">
+            Get started with AIM API in 3 simple steps
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">1</div>
-                <span className="font-semibold text-blue-900 dark:text-blue-100">Get API Key</span>
+        <CardContent>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                1
               </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300 pl-8">
-                Register an agent or download SDK to get your API key
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">2</div>
-                <span className="font-semibold text-blue-900 dark:text-blue-100">Make Request</span>
+              <div>
+                <h3 className="font-semibold text-blue-900">Authenticate</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Login with Google OAuth or use email/password to get JWT token
+                </p>
               </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300 pl-8">
-                Use Bearer token authentication in Authorization header
-              </p>
             </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">3</div>
-                <span className="font-semibold text-blue-900 dark:text-blue-100">Handle Response</span>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                2
               </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300 pl-8">
-                All responses are JSON with consistent error structure
-              </p>
+              <div>
+                <h3 className="font-semibold text-blue-900">Make Requests</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Include JWT token in Authorization header for all API calls
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700">
-              <Download className="h-4 w-4 mr-2" />
-              Download SDK
-            </Button>
-            <Button variant="outline" size="sm">
-              <Book className="h-4 w-4 mr-2" />
-              View Examples
-            </Button>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                3
+              </div>
+              <div>
+                <h3 className="font-semibold text-blue-900">Test Live</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Use the interactive playground below to test endpoints directly
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
             placeholder="Search endpoints..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="pl-10"
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2">
           <Button
             variant={selectedCategory === null ? 'default' : 'outline'}
             size="sm"
             onClick={() => setSelectedCategory(null)}
           >
+            <Filter className="mr-2 h-4 w-4" />
             All
           </Button>
           {apiEndpoints.map(category => (
@@ -496,194 +651,234 @@ export default function DevelopersPage() {
               key={category.category}
               variant={selectedCategory === category.category ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSelectedCategory(category.category)}
+              onClick={() => setSelectedCategory(
+                selectedCategory === category.category ? null : category.category
+              )}
             >
-              {category.category}
+              {category.category.split(' ')[0]}
             </Button>
           ))}
         </div>
       </div>
 
       {/* API Endpoints */}
-      {filteredEndpoints.map((category) => (
-        <div key={category.category} className="space-y-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{category.category}</h2>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{category.description}</p>
-          </div>
+      <div className="space-y-6">
+        {filteredEndpoints.map((category) => (
+          <div key={category.category} className="space-y-3">
+            <div>
+              <h2 className="text-xl font-semibold">{category.category}</h2>
+              <p className="text-sm text-muted-foreground">{category.description}</p>
+            </div>
 
-          <div className="space-y-3">
-            {category.endpoints.map((endpoint, idx) => {
-              const endpointId = `${category.category}-${idx}`;
-              const isExpanded = expandedEndpoints.has(endpointId);
+            {category.endpoints.map((endpoint) => {
+              const isExpanded = expandedEndpoints.has(endpoint.path);
+              const isPlaygroundActive = playgroundEndpoint === endpoint.path;
 
               return (
-                <Card key={endpointId} className="overflow-hidden">
-                  <button
-                    onClick={() => toggleEndpoint(endpointId)}
-                    className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                <Card key={endpoint.path} className="hover:shadow-md transition-shadow">
+                  <CardHeader
+                    className="cursor-pointer"
+                    onClick={() => toggleEndpoint(endpoint.path)}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold ${getMethodColor(endpoint.method)}`}>
-                        {endpoint.method}
-                      </span>
-                      <code className="text-sm font-mono text-gray-900 dark:text-gray-100 flex-1">
-                        {endpoint.path}
-                      </code>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <Badge className={`${getMethodColor(endpoint.method)} text-white`}>
+                          {endpoint.method}
+                        </Badge>
+                        <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+                          {endpoint.path}
+                        </code>
+                        {endpoint.requiresAuth && (
+                          <Lock className="h-4 w-4 text-yellow-600" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+                    <CardDescription className="mt-2">
+                      {endpoint.description}
+                    </CardDescription>
+                    <div className="flex items-center gap-2 mt-1">
                       <Badge variant="outline" className="text-xs">
                         {endpoint.auth}
                       </Badge>
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      )}
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-20">
-                      {endpoint.description}
-                    </p>
-                  </button>
+                  </CardHeader>
 
                   {isExpanded && (
-                    <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
-                      {/* Request Parameters */}
+                    <CardContent className="space-y-4 border-t pt-4">
+                      {/* Request/Response Documentation */}
                       {endpoint.request && (
                         <div>
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Request Body</h4>
-                          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 space-y-1">
+                          <h4 className="font-semibold mb-2">Request Body:</h4>
+                          <div className="bg-muted p-3 rounded-md space-y-1">
                             {Object.entries(endpoint.request).map(([key, value]) => (
-                              <div key={key} className="flex gap-2 text-sm">
-                                <code className="text-blue-600 dark:text-blue-400 font-mono">{key}:</code>
-                                <span className="text-gray-600 dark:text-gray-400">{value}</span>
+                              <div key={key} className="text-sm font-mono">
+                                <span className="text-blue-600">• {key}</span>: {value}
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Query Parameters */}
-                      {endpoint.query && (
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Query Parameters</h4>
-                          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 space-y-1">
-                            {Object.entries(endpoint.query).map(([key, value]) => (
-                              <div key={key} className="flex gap-2 text-sm">
-                                <code className="text-purple-600 dark:text-purple-400 font-mono">{key}:</code>
-                                <span className="text-gray-600 dark:text-gray-400">{value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Response */}
                       {endpoint.response && (
                         <div>
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Response</h4>
-                          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 space-y-1">
-                            {typeof endpoint.response === 'string' ? (
-                              <span className="text-sm text-gray-600 dark:text-gray-400">{endpoint.response}</span>
-                            ) : (
-                              Object.entries(endpoint.response).map(([key, value]) => (
-                                <div key={key} className="flex gap-2 text-sm">
-                                  <code className="text-green-600 dark:text-green-400 font-mono">{key}:</code>
-                                  <span className="text-gray-600 dark:text-gray-400">{value}</span>
-                                </div>
-                              ))
-                            )}
+                          <h4 className="font-semibold mb-2">Response:</h4>
+                          <div className="bg-muted p-3 rounded-md space-y-1">
+                            {Object.entries(endpoint.response).map(([key, value]) => (
+                              <div key={key} className="text-sm font-mono">
+                                <span className="text-green-600">• {key}</span>: {value}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Example curl */}
-                      {endpoint.example && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Example Request</h4>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(endpoint.example!, `example-${endpointId}`)}
-                              className="h-8"
-                            >
-                              {copiedCode === `example-${endpointId}` ? (
-                                <Check className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                          <pre className="bg-gray-900 dark:bg-black text-gray-100 rounded-lg p-3 overflow-x-auto text-xs font-mono">
-                            {endpoint.example}
-                          </pre>
+                      {/* Example curl command */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold">Example Request:</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(endpoint.example, endpoint.path);
+                            }}
+                          >
+                            {copiedCode === endpoint.path ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
                         </div>
-                      )}
-                    </div>
+                        <pre className="bg-gray-900 text-gray-100 p-4 rounded-md overflow-x-auto text-sm">
+                          <code>{endpoint.example}</code>
+                        </pre>
+                      </div>
+
+                      {/* Interactive API Playground */}
+                      <div className="border-t pt-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold flex items-center gap-2">
+                            <Play className="h-4 w-4 text-blue-600" />
+                            Interactive Playground
+                          </h4>
+                          {!isAuthenticated && endpoint.requiresAuth && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowTokenInput(!showTokenInput)}
+                            >
+                              <Key className="mr-2 h-3 w-3" />
+                              {showTokenInput ? 'Hide Token' : 'Add Token'}
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Token Input for Unauthenticated Users */}
+                        {!isAuthenticated && endpoint.requiresAuth && showTokenInput && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">JWT Token:</label>
+                            <Input
+                              placeholder="Paste your JWT token here..."
+                              value={manualToken}
+                              onChange={(e) => setManualToken(e.target.value)}
+                              type="password"
+                            />
+                          </div>
+                        )}
+
+                        {/* Request Body Editor (for POST/PUT) */}
+                        {(endpoint.method === 'POST' || endpoint.method === 'PUT') && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Request Body (JSON):</label>
+                            <Textarea
+                              placeholder='{"key": "value"}'
+                              value={requestBody}
+                              onChange={(e) => setRequestBody(e.target.value)}
+                              className="font-mono text-sm"
+                              rows={6}
+                            />
+                          </div>
+                        )}
+
+                        {/* Execute Button */}
+                        <Button
+                          onClick={() => {
+                            setPlaygroundEndpoint(endpoint.path);
+                            executeAPIRequest(endpoint);
+                          }}
+                          disabled={isExecuting}
+                          className="w-full"
+                        >
+                          {isExecuting ? (
+                            <>Executing...</>
+                          ) : (
+                            <>
+                              <Play className="mr-2 h-4 w-4" />
+                              Execute Request
+                            </>
+                          )}
+                        </Button>
+
+                        {/* Response Display */}
+                        {(responseData || executionError) && isPlaygroundActive && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium">Response:</label>
+                              {responseData && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => copyToClipboard(
+                                    JSON.stringify(responseData, null, 2),
+                                    `response-${endpoint.path}`
+                                  )}
+                                >
+                                  {copiedCode === `response-${endpoint.path}` ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+
+                            {executionError ? (
+                              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-sm font-semibold text-red-900">Error</p>
+                                    <p className="text-sm text-red-700 mt-1">{executionError}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <pre className="bg-green-50 border border-green-200 rounded-md p-4 overflow-x-auto text-sm">
+                                <code className="text-green-900">
+                                  {JSON.stringify(responseData, null, 2)}
+                                </code>
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
                   )}
                 </Card>
               );
             })}
           </div>
-        </div>
-      ))}
-
-      {/* No Results */}
-      {filteredEndpoints.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Search className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No endpoints found</h3>
-            <p className="text-gray-600 dark:text-gray-400 text-center max-w-md">
-              Try adjusting your search or filter criteria
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Footer Resources */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Additional Resources</CardTitle>
-          <CardDescription>Learn more about integrating with AIM</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <a
-              href="/docs/quickstart"
-              className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <Terminal className="h-5 w-5 text-blue-600" />
-              <div className="flex-1">
-                <div className="font-semibold text-sm">Quick Start Guide</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">Get started in 5 minutes</div>
-              </div>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
-            </a>
-            <a
-              href="/docs/sdk"
-              className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <Code className="h-5 w-5 text-purple-600" />
-              <div className="flex-1">
-                <div className="font-semibold text-sm">SDK Documentation</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">Python, Node.js, Go SDKs</div>
-              </div>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
-            </a>
-            <a
-              href="/docs/examples"
-              className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <Book className="h-5 w-5 text-green-600" />
-              <div className="flex-1">
-                <div className="font-semibold text-sm">Code Examples</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">Real-world use cases</div>
-              </div>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
-            </a>
-          </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     </div>
   );
 }
