@@ -189,6 +189,7 @@ function AgentsPageContent() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Extract user role from JWT token
   useEffect(() => {
@@ -300,8 +301,10 @@ function AgentsPageContent() {
 
   // Handler functions
   const handleAgentCreated = (newAgent: Agent) => {
+    // Add the new agent to the list without closing the modal
+    // The modal will close itself when user clicks "Done" or downloads SDK
     setAgents([newAgent, ...agents]);
-    setShowRegisterModal(false);
+    // Don't close modal here - let the modal handle it after user sees SDK download
   };
 
   const handleAgentUpdated = (updatedAgent: Agent) => {
@@ -329,6 +332,7 @@ function AgentsPageContent() {
   const confirmDelete = async () => {
     if (!selectedAgent) return;
 
+    setDeleteLoading(true);
     try {
       await api.deleteAgent(selectedAgent.id);
       setAgents(agents.filter((a) => a.id !== selectedAgent.id));
@@ -336,6 +340,7 @@ function AgentsPageContent() {
       console.error("Failed to delete agent:", err);
       setError(err instanceof Error ? err.message : "Failed to delete agent");
     } finally {
+      setDeleteLoading(false);
       setShowDeleteConfirm(false);
       setShowDetailModal(false);
       setSelectedAgent(null);
@@ -587,10 +592,13 @@ function AgentsPageContent() {
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
+        loading={deleteLoading}
         onConfirm={confirmDelete}
         onCancel={() => {
-          setShowDeleteConfirm(false);
-          setSelectedAgent(null);
+          if (!deleteLoading) {
+            setShowDeleteConfirm(false);
+            setSelectedAgent(null);
+          }
         }}
       />
     </div>
