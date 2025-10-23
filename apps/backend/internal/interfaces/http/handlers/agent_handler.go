@@ -11,11 +11,13 @@ import (
 )
 
 type AgentHandler struct {
-	agentService       *application.AgentService
-	mcpService         *application.MCPService
-	auditService       *application.AuditService
-	apiKeyService      *application.APIKeyService
-	trustScoreHandler  *TrustScoreHandler
+	agentService              *application.AgentService
+	mcpService                *application.MCPService
+	auditService              *application.AuditService
+	apiKeyService             *application.APIKeyService
+	trustScoreHandler         *TrustScoreHandler
+	alertService              *application.AlertService
+	verificationEventService  *application.VerificationEventService
 }
 
 func NewAgentHandler(
@@ -24,13 +26,17 @@ func NewAgentHandler(
 	auditService *application.AuditService,
 	apiKeyService *application.APIKeyService,
 	trustScoreHandler *TrustScoreHandler,
+	alertService *application.AlertService,
+	verificationEventService *application.VerificationEventService,
 ) *AgentHandler {
 	return &AgentHandler{
-		agentService:      agentService,
-		mcpService:        mcpService,
-		auditService:      auditService,
-		apiKeyService:     apiKeyService,
-		trustScoreHandler: trustScoreHandler,
+		agentService:             agentService,
+		mcpService:               mcpService,
+		auditService:             auditService,
+		apiKeyService:            apiKeyService,
+		trustScoreHandler:        trustScoreHandler,
+		alertService:             alertService,
+		verificationEventService: verificationEventService,
 	}
 }
 
@@ -308,6 +314,17 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		})
 	}
 
+	// Get agent and organization details for logging
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+
+	orgID := agent.OrganizationID
+	startTime := c.Context().Time()
+
 	// Fetch agent and verify capabilities
 	decision, reason, auditID, err := h.agentService.VerifyAction(
 		c.Context(),
@@ -321,6 +338,87 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Verification failed",
 		})
+	}
+
+	// Calculate duration
+	durationMs := int(c.Context().Time().Sub(startTime).Milliseconds())
+
+	// 1. LOG AUDIT ENTRY (for all verification attempts)
+	auditMetadata := map[string]interface{}{
+		"action_type": req.ActionType,
+		"resource":    req.Resource,
+		"allowed":     decision,
+		"reason":      reason,
+		"audit_id":    auditID,
+	}
+	if req.Metadata != nil {
+		auditMetadata["request_metadata"] = req.Metadata
+	}
+
+	userID := uuid.Nil // System action - no specific user
+	if userIDLocal := c.Locals("user_id"); userIDLocal != nil {
+		if uid, ok := userIDLocal.(uuid.UUID); ok {
+			userID = uid
+		}
+	}
+
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionVerify,
+		"agent_action",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		auditMetadata,
+	)
+
+	// 2. RECORD VERIFICATION EVENT (for monitoring dashboard)
+	verificationStatus := domain.VerificationEventStatusSuccess
+
+	if !decision {
+		verificationStatus = domain.VerificationEventStatusFailed
+	}
+
+	h.verificationEventService.LogVerificationEvent(
+		c.Context(),
+		orgID,
+		agentID,
+		domain.VerificationProtocolA2A,
+		domain.VerificationTypeCapability,
+		verificationStatus,
+		durationMs,
+		domain.InitiatorTypeAgent,
+		nil, // No specific initiator ID for agent self-verification
+		map[string]interface{}{
+			"action_type": req.ActionType,
+			"resource":    req.Resource,
+			"allowed":     decision,
+			"reason":      reason,
+		},
+	)
+
+	// 3. CREATE SECURITY ALERT (only for capability violations)
+	if !decision && (reason == "capability_not_granted" ||
+		reason == "Agent has no granted capabilities - action denied (admin must grant capabilities first)" ||
+		reason == "Agent has no granted capabilities - action denied") {
+
+		alert := &domain.Alert{
+			OrganizationID: orgID,
+			AlertType:      domain.AlertSecurityBreach, // Using security_breach for capability violations
+			Severity:       domain.AlertSeverityHigh,
+			Title:          fmt.Sprintf("Capability Violation: %s attempted %s", agent.DisplayName, req.ActionType),
+			Description:    fmt.Sprintf("Agent '%s' attempted action '%s' on resource '%s' without required capability. Reason: %s",
+				agent.DisplayName, req.ActionType, req.Resource, reason),
+			ResourceType:   "agent",
+			ResourceID:     agentID,
+		}
+
+		// Create alert (non-blocking - don't fail the verification if alert creation fails)
+		if err := h.alertService.CreateAlert(c.Context(), alert); err != nil {
+			fmt.Printf("WARNING: Failed to create security alert for capability violation: %v\n", err)
+		}
 	}
 
 	if !decision {

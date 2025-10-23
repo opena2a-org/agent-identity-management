@@ -612,6 +612,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.APIKey,
 			handlers.NewTrustScoreHandler(services.Trust, services.Agent, services.Audit),
+			services.Alert,             // ✅ For creating security alerts on capability violations
+			services.VerificationEvent, // ✅ For recording action verification attempts in Security Dashboard
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
