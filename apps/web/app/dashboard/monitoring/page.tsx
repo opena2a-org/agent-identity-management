@@ -100,7 +100,25 @@ export default function MonitoringPage() {
     try {
       const minutes = getMinutesFromTimeRange(eventTimeRange);
       const response = await api.getRecentVerificationEvents(minutes);
-      setRecentEvents(response.events || []);
+      // Transform snake_case from backend to camelCase for frontend
+      const transformedEvents = (response.events || []).map((event: any) => ({
+        id: event.id,
+        agentId: event.agent_id,
+        agentName: event.agent_name || '',
+        protocol: event.protocol,
+        verificationType: event.verification_type,
+        status: event.status,
+        confidence: event.confidence || 0,
+        trustScore: event.trust_score || 0,
+        durationMs: event.duration_ms || 0,
+        initiatorType: event.initiator_type,
+        initiatorName: event.initiator_name,
+        initiatorIp: event.initiator_ip,
+        startedAt: event.started_at,
+        completedAt: event.completed_at,
+        createdAt: event.created_at,
+      }));
+      setRecentEvents(transformedEvents);
     } catch (err: any) {
       console.error("Failed to fetch recent events:", err);
     }
