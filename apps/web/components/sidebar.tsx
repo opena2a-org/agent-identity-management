@@ -35,10 +35,12 @@ import {
 } from "@/lib/permissions";
 
 // ✅ Navigation with role-based access control
+// Organized by natural user workflow: Core → Development → Monitoring → Configuration → Administration
 const navigationBase: NavSection[] = [
   {
+    title: "Core",
     items: [
-      // Everyone can see Dashboard and Agents
+      // Everyone starts here
       {
         name: "Dashboard",
         href: "/dashboard",
@@ -51,17 +53,22 @@ const navigationBase: NavSection[] = [
         icon: Shield,
         roles: ["admin", "manager", "member", "viewer"],
       },
-      // Member+ can access MCP Servers and API Keys
       {
         name: "MCP Servers",
         href: "/dashboard/mcp",
         icon: Server,
         roles: ["admin", "manager", "member"],
       },
+    ],
+  },
+  {
+    title: "Development",
+    items: [
+      // Developer resources and tools
       {
-        name: "Tags",
-        href: "/dashboard/tags",
-        icon: Tag,
+        name: "Developers",
+        href: "/dashboard/developers",
+        icon: Code,
         roles: ["admin", "manager", "member"],
       },
       {
@@ -82,7 +89,12 @@ const navigationBase: NavSection[] = [
         icon: Lock,
         roles: ["admin", "manager", "member"],
       },
-      // Manager+ can access monitoring and security
+    ],
+  },
+  {
+    title: "Monitoring",
+    items: [
+      // Analytics and monitoring for managers
       {
         name: "Agent Verifications",
         href: "/dashboard/monitoring",
@@ -96,22 +108,28 @@ const navigationBase: NavSection[] = [
         roles: ["admin", "manager"],
       },
       {
-        name: "Webhooks",
-        href: "/dashboard/webhooks",
-        icon: Webhook,
-        roles: ["admin"], // Admin-only webhook management
-      },
-      {
         name: "Security",
         href: "/dashboard/security",
         icon: AlertTriangle,
         roles: ["admin", "manager"],
       },
+    ],
+  },
+  {
+    title: "Configuration",
+    items: [
+      // System configuration
       {
-        name: "Developers",
-        href: "/dashboard/developers",
-        icon: Code,
-        roles: ["admin", "manager", "member"], // API docs for developers
+        name: "Tags",
+        href: "/dashboard/tags",
+        icon: Tag,
+        roles: ["admin", "manager", "member"],
+      },
+      {
+        name: "Webhooks",
+        href: "/dashboard/webhooks",
+        icon: Webhook,
+        roles: ["admin"],
       },
     ],
   },
