@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -11,6 +12,15 @@ import (
 // AuthMiddleware validates JWT tokens and sets user context
 func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		// Check if already authenticated by Ed25519 middleware
+		authenticatedVia := c.Locals("authenticated_via")
+		fmt.Printf("🔒 JWT middleware: authenticated_via = %v\n", authenticatedVia)
+		if authenticatedVia == "ed25519" {
+			// Already authenticated - skip JWT validation
+			fmt.Printf("✅ JWT middleware: Skipping JWT - Ed25519 already authenticated\n")
+			return c.Next()
+		}
+
 		// Try to get token from Authorization header first
 		authHeader := c.Get("Authorization")
 		var token string
