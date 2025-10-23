@@ -306,6 +306,7 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		ActionType string                 `json:"action_type"` // "read_file", "write_file", "execute_code", "network_request", "database_query"
 		Resource   string                 `json:"resource"`    // e.g., "/data/file.csv" or "SELECT * FROM users"
 		Metadata   map[string]interface{} `json:"metadata"`    // Additional context
+		Protocol   *string                `json:"protocol,omitempty"` // Optional: "mcp", "a2a", "acp", "did", "oauth", "saml" - SDK auto-detects or user declares
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
@@ -381,19 +382,32 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		verificationStatus = domain.VerificationEventStatusFailed
 	}
 
-	// Determine protocol based on agent's talks_to configuration
-	// - If agent communicates with other agents (non-empty talks_to), use A2A protocol
-	// - If agent is standalone (empty talks_to), use MCP protocol
-	protocol := domain.VerificationProtocolMCP // Default to MCP for standalone agents
-	if len(agent.TalksTo) > 0 {
-		protocol = domain.VerificationProtocolA2A // Agent-to-Agent communication
+	// Determine protocol: SDK auto-detects and sends protocol, or we default to MCP
+	// Protocol is independent of talks_to (which tracks MCP server dependencies via tool calling)
+	protocol := domain.VerificationProtocolMCP // Default to MCP
+	if req.Protocol != nil && *req.Protocol != "" {
+		// SDK provided protocol - trust the SDK's auto-detection or user's explicit declaration
+		switch *req.Protocol {
+		case "mcp":
+			protocol = domain.VerificationProtocolMCP
+		case "a2a":
+			protocol = domain.VerificationProtocolA2A
+		case "acp":
+			protocol = domain.VerificationProtocolACP
+		case "did":
+			protocol = domain.VerificationProtocolDID
+		case "oauth":
+			protocol = domain.VerificationProtocolOAuth
+		case "saml":
+			protocol = domain.VerificationProtocolSAML
+		}
 	}
 
 	h.verificationEventService.LogVerificationEvent(
 		c.Context(),
 		orgID,
 		agentID,
-		protocol, // Dynamic protocol based on agent configuration
+		protocol, // SDK auto-detects protocol or user explicitly declares in secure()
 		domain.VerificationTypeCapability,
 		verificationStatus,
 		durationMs,
