@@ -381,11 +381,19 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		verificationStatus = domain.VerificationEventStatusFailed
 	}
 
+	// Determine protocol based on agent's talks_to configuration
+	// - If agent communicates with other agents (non-empty talks_to), use A2A protocol
+	// - If agent is standalone (empty talks_to), use MCP protocol
+	protocol := domain.VerificationProtocolMCP // Default to MCP for standalone agents
+	if len(agent.TalksTo) > 0 {
+		protocol = domain.VerificationProtocolA2A // Agent-to-Agent communication
+	}
+
 	h.verificationEventService.LogVerificationEvent(
 		c.Context(),
 		orgID,
 		agentID,
-		domain.VerificationProtocolA2A,
+		protocol, // Dynamic protocol based on agent configuration
 		domain.VerificationTypeCapability,
 		verificationStatus,
 		durationMs,
