@@ -496,11 +496,18 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 		})
 	}
 
-	// Return capabilities from the server's capabilities JSONB column
-	// The capabilities are stored as a JSONB array in the mcp_servers table
+	// Fetch detailed capabilities from mcp_server_capabilities table
+	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch capabilities",
+		})
+	}
+
+	// Return detailed capabilities with full metadata
 	return c.JSON(fiber.Map{
-		"capabilities": server.Capabilities,
-		"total":        len(server.Capabilities),
+		"capabilities": capabilities,
+		"total":        len(capabilities),
 	})
 }
 
