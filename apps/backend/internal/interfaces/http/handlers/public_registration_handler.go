@@ -326,6 +326,12 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 
 // generateApprovedLoginResponse generates tokens and response for approved users
 func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, user *domain.User) error {
+	// Update last login timestamp
+	if err := h.authService.UpdateLastLogin(c.Context(), user); err != nil {
+		// Log warning but continue - this is non-critical
+		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
+	}
+
 	// Generate tokens
 	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
 		user.ID.String(),

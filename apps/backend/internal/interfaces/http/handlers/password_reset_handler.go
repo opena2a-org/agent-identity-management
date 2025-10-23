@@ -10,16 +10,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type PasswordResetHandler struct {
-	db *sql.DB
+	db           *sql.DB
+	emailService domain.EmailService
 }
 
-func NewPasswordResetHandler(db *sql.DB) *PasswordResetHandler {
+func NewPasswordResetHandler(db *sql.DB, emailService domain.EmailService) *PasswordResetHandler {
 	return &PasswordResetHandler{
-		db: db,
+		db:           db,
+		emailService: emailService,
 	}
 }
 
@@ -98,17 +101,38 @@ func (h *PasswordResetHandler) RequestPasswordReset(c fiber.Ctx) error {
 		frontendURL = "http://localhost:3000"
 	}
 
-	// TODO: Integrate with email service
-	// For now, log the reset link (console email mode)
 	resetLink := fmt.Sprintf("%s/auth/reset-password?token=%s&email=%s", frontendURL, resetToken, req.Email)
-	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("📧 PASSWORD RESET EMAIL\n")
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("To: %s\n", req.Email)
-	fmt.Printf("User: %s\n", userName)
-	fmt.Printf("Reset Link: %s\n", resetLink)
-	fmt.Printf("Expires: %s (1 hour)\n", expiresAt.Format(time.RFC1123))
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+
+	// Send email using email service
+	if h.emailService != nil {
+		emailData := map[string]interface{}{
+			"UserName":    userName,
+			"UserEmail":   req.Email,
+			"ResetToken":  resetToken,
+			"ResetURL":    resetLink,
+			"DashboardURL": frontendURL,
+		}
+
+		if err := h.emailService.SendTemplatedEmail(
+			domain.TemplatePasswordReset,
+			req.Email,
+			emailData,
+		); err != nil {
+			// Log error but don't fail - fallback to console
+			fmt.Printf("[WARN] Failed to send password reset email to %s: %v\n", req.Email, err)
+			fmt.Printf("Reset Link (console fallback): %s\n", resetLink)
+		}
+	} else {
+		// Fallback: log to console
+		fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("📧 PASSWORD RESET EMAIL\n")
+		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("To: %s\n", req.Email)
+		fmt.Printf("User: %s\n", userName)
+		fmt.Printf("Reset Link: %s\n", resetLink)
+		fmt.Printf("Expires: %s (1 hour)\n", expiresAt.Format(time.RFC1123))
+		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	}
 
 	return c.JSON(fiber.Map{
 		"success": true,

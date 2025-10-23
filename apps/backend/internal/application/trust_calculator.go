@@ -327,3 +327,9 @@ func (c *TrustCalculator) GetLatestTrustScore(ctx context.Context, agentID uuid.
 func (c *TrustCalculator) GetTrustScoreHistory(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScore, error) {
 	return c.trustScoreRepo.GetHistory(agentID, limit)
 }
+
+// GetTrustScoreHistoryAuditTrail returns audit trail from trust_score_history table
+// This includes who changed it, when, and why - for frontend UI display
+func (c *TrustCalculator) GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {
+	return c.trustScoreRepo.GetHistoryAuditTrail(agentID, limit)
+}

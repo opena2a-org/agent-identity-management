@@ -14,13 +14,14 @@ import (
 
 // AgentService handles agent business logic
 type AgentService struct {
-	agentRepo      domain.AgentRepository
-	trustCalc      domain.TrustScoreCalculator
-	trustScoreRepo domain.TrustScoreRepository
-	keyVault       *crypto.KeyVault              // ✅ For secure private key storage
-	alertRepo      domain.AlertRepository         // ✅ For creating security alerts
-	policyService  *SecurityPolicyService         // ✅ For policy-based enforcement
-	capabilityRepo domain.CapabilityRepository    // ✅ For checking agent capabilities
+	agentRepo              domain.AgentRepository
+	trustCalc              domain.TrustScoreCalculator
+	trustScoreRepo         domain.TrustScoreRepository
+	keyVault               *crypto.KeyVault                  // ✅ For secure private key storage
+	alertRepo              domain.AlertRepository             // ✅ For creating security alerts
+	policyService          *SecurityPolicyService             // ✅ For policy-based enforcement
+	capabilityRepo         domain.CapabilityRepository        // ✅ For checking agent capabilities
+	verificationEventService *VerificationEventService        // ✅ For creating verification events
 }
 
 // NewAgentService creates a new agent service
@@ -29,18 +30,20 @@ func NewAgentService(
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
 	keyVault *crypto.KeyVault,
-	alertRepo domain.AlertRepository,         // ✅ NEW: AlertRepository for security alerts
-	policyService *SecurityPolicyService,     // ✅ NEW: Security Policy Service
-	capabilityRepo domain.CapabilityRepository, // ✅ NEW: CapabilityRepository for capability checks
+	alertRepo domain.AlertRepository,               // ✅ NEW: AlertRepository for security alerts
+	policyService *SecurityPolicyService,           // ✅ NEW: Security Policy Service
+	capabilityRepo domain.CapabilityRepository,     // ✅ NEW: CapabilityRepository for capability checks
+	verificationEventService *VerificationEventService, // ✅ NEW: For creating verification events
 ) *AgentService {
 	return &AgentService{
-		agentRepo:      agentRepo,
-		trustCalc:      trustCalc,
-		trustScoreRepo: trustScoreRepo,
-		keyVault:       keyVault,
-		alertRepo:      alertRepo,
-		policyService:  policyService,
-		capabilityRepo: capabilityRepo,
+		agentRepo:              agentRepo,
+		trustCalc:              trustCalc,
+		trustScoreRepo:         trustScoreRepo,
+		keyVault:               keyVault,
+		alertRepo:              alertRepo,
+		policyService:          policyService,
+		capabilityRepo:         capabilityRepo,
+		verificationEventService: verificationEventService,
 	}
 }
 
@@ -137,6 +140,29 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			fmt.Printf("Warning: failed to auto-verify agent: %v\n", err)
 		} else {
 			fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
+		}
+
+		// ✅ CREATE VERIFICATION EVENT for dashboard chart
+		// This populates the Agent Verification Activity chart
+		if s.verificationEventService != nil {
+			verifiedResult := domain.VerificationResultVerified
+			verificationReq := &CreateVerificationEventRequest{
+				OrganizationID:   orgID,
+				AgentID:          agent.ID,
+				Protocol:         domain.VerificationProtocolA2A,
+				VerificationType: domain.VerificationTypeIdentity,
+				Status:           domain.VerificationEventStatusSuccess,
+				Result:           &verifiedResult,
+				Confidence:       1.0,
+				DurationMs:       0,
+				InitiatorType:    domain.InitiatorTypeSystem,
+			}
+
+			if _, err := s.verificationEventService.CreateVerificationEvent(ctx, verificationReq); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create verification event: %v\n", err)
+			} else {
+				fmt.Printf("✅ Created verification event for agent %s\n", agent.Name)
+			}
 		}
 
 		// Recalculate trust score with verified status (verification boosts score)

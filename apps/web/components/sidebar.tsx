@@ -83,7 +83,7 @@ const navigationBase: NavSection[] = [
       },
       // Manager+ can access monitoring and security
       {
-        name: "Activity Monitoring",
+        name: "Agent Verifications",
         href: "/dashboard/monitoring",
         icon: Activity,
         roles: ["admin", "manager"],

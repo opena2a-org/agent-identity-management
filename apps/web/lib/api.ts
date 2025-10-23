@@ -516,6 +516,73 @@ class APIClient {
     });
   }
 
+  async getAgentTrustScoreHistory(id: string): Promise<{
+    agent_id: string;
+    history: Array<{
+      timestamp: string;
+      trust_score: number;
+      reason: string;
+      changed_by: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/agents/${id}/trust-score/history`);
+  }
+
+  async getAgentAuditLogs(id: string, page = 1, limit = 50): Promise<{
+    logs: Array<{
+      id: string;
+      agent_id: string;
+      action: string;
+      details: string;
+      created_at: string;
+      user_id?: string;
+      user_email?: string;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.request(`/api/v1/agents/${id}/audit-logs?page=${page}&limit=${limit}`);
+  }
+
+  // Verification Events
+  async getRecentVerificationEvents(minutes = 15): Promise<{
+    events: Array<{
+      id: string;
+      agent_id: string;
+      agent_name?: string;
+      protocol: string;
+      verification_type: string;
+      status: string;
+      result: string;
+      confidence?: number;
+      duration_ms?: number;
+      action?: string;
+      resource_type?: string;
+      initiator_name?: string;
+      initiator_ip?: string;
+      created_at: string;
+      error_reason?: string;
+    }>;
+    minutes: number;
+    count: number;
+  }> {
+    return this.request(`/api/v1/verification-events/recent?minutes=${minutes}`);
+  }
+
+  async getVerificationEventsStatistics(period = '24h'): Promise<{
+    total_events: number;
+    successful_events: number;
+    failed_events: number;
+    success_rate: number;
+    avg_duration_ms: number;
+    by_status: Record<string, number>;
+    by_result: Record<string, number>;
+    by_protocol: Record<string, number>;
+  }> {
+    return this.request(`/api/v1/verification-events/statistics?period=${period}`);
+  }
+
   // API Keys
   async listAPIKeys(): Promise<{ api_keys: APIKey[] }> {
     return this.request("/api/v1/api-keys");
@@ -757,31 +824,12 @@ class APIClient {
 
   async getUsageStatistics(days = 30): Promise<{
     period: string;
-    api_calls: {
-      total: number;
-      by_endpoint: Array<{
-        endpoint: string;
-        count: number;
-        percentage: number;
-      }>;
-      by_day: Array<{
-        date: string;
-        count: number;
-      }>;
-    };
-    active_users: {
-      total: number;
-      by_role: Array<{
-        role: string;
-        count: number;
-      }>;
-    };
-    agent_metrics: {
-      total_requests: number;
-      successful_requests: number;
-      failed_requests: number;
-      success_rate: number;
-    };
+    api_calls: number;
+    active_agents: number;
+    total_agents: number;
+    data_volume: number;
+    uptime: number;
+    generated_at: string;
   }> {
     return this.request(`/api/v1/analytics/usage?days=${days}`);
   }

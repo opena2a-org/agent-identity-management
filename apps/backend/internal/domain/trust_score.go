@@ -51,6 +51,21 @@ type TrustScoreRepository interface {
 	GetByAgent(agentID uuid.UUID) (*TrustScore, error)
 	GetLatest(agentID uuid.UUID) (*TrustScore, error)
 	GetHistory(agentID uuid.UUID, limit int) ([]*TrustScore, error)
+	GetHistoryAuditTrail(agentID uuid.UUID, limit int) ([]*TrustScoreHistoryEntry, error)
+}
+
+// TrustScoreHistoryEntry represents an audit trail entry for trust score changes
+// Maps to trust_score_history table in database
+type TrustScoreHistoryEntry struct {
+	ID             uuid.UUID  `json:"id"`
+	AgentID        uuid.UUID  `json:"agent_id"`
+	OrganizationID uuid.UUID  `json:"organization_id"`
+	TrustScore     float64    `json:"trust_score"` // 0-1
+	PreviousScore  *float64   `json:"previous_score,omitempty"` // 0-1, nullable
+	ChangeReason   string     `json:"reason"` // Frontend expects "reason" not "change_reason"
+	ChangedBy      *uuid.UUID `json:"changed_by,omitempty"` // NULL for automated changes
+	RecordedAt     time.Time  `json:"timestamp"` // Frontend expects "timestamp" not "recorded_at"
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // TrustScoreCalculator defines the interface for trust score calculation

@@ -144,3 +144,44 @@ func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*doma
 	}
 	return scores, nil
 }
+
+// GetHistoryAuditTrail returns trust score audit trail from trust_score_history table
+// This provides the full audit trail with who changed it and why (for frontend UI)
+func (r *TrustScoreRepository) GetHistoryAuditTrail(agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {
+	query := `
+		SELECT
+			id, agent_id, organization_id, trust_score, previous_score,
+			change_reason, changed_by, recorded_at, created_at
+		FROM trust_score_history
+		WHERE agent_id = $1
+		ORDER BY recorded_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.Query(query, agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*domain.TrustScoreHistoryEntry
+	for rows.Next() {
+		entry := &domain.TrustScoreHistoryEntry{}
+		err := rows.Scan(
+			&entry.ID,
+			&entry.AgentID,
+			&entry.OrganizationID,
+			&entry.TrustScore,
+			&entry.PreviousScore,
+			&entry.ChangeReason,
+			&entry.ChangedBy,
+			&entry.RecordedAt,
+			&entry.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}

@@ -250,7 +250,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {(data.summary.success_rate * 100).toFixed(1)}%
+                    {data.summary.success_rate.toFixed(1)}%
                   </div>
                 </dd>
               </dl>

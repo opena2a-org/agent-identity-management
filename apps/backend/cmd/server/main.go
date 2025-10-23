@@ -441,14 +441,28 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Alert,  // For security alerts scoring
 	)
 
+	// ✅ Initialize drift detection service BEFORE verification event service
+	driftDetectionService := application.NewDriftDetectionService(
+		repos.Agent,
+		repos.Alert,
+	)
+
+	// ✅ Initialize verification event service BEFORE agent service
+	verificationEventService := application.NewVerificationEventService(
+		repos.VerificationEvent,
+		repos.Agent,
+		driftDetectionService,
+	)
+
 	agentService := application.NewAgentService(
 		repos.Agent,
 		trustCalculator,
 		repos.TrustScore,
-		keyVault,              // ✅ NEW: Inject KeyVault for automatic key generation
-		repos.Alert,           // ✅ NEW: Inject AlertRepository for security alerts
-		securityPolicyService, // ✅ NEW: Inject SecurityPolicyService for policy evaluation
-		repos.Capability,      // ✅ NEW: Inject CapabilityRepository for capability checks
+		keyVault,                    // ✅ NEW: Inject KeyVault for automatic key generation
+		repos.Alert,                 // ✅ NEW: Inject AlertRepository for security alerts
+		securityPolicyService,       // ✅ NEW: Inject SecurityPolicyService for policy evaluation
+		repos.Capability,            // ✅ NEW: Inject CapabilityRepository for capability checks
+		verificationEventService,    // ✅ NEW: Inject VerificationEventService for creating verification events
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -489,18 +503,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 
 	webhookService := application.NewWebhookService(
 		repos.Webhook,
-	)
-
-	// Initialize drift detection service for WHO/WHAT verification
-	driftDetectionService := application.NewDriftDetectionService(
-		repos.Agent,
-		repos.Alert,
-	)
-
-	verificationEventService := application.NewVerificationEventService(
-		repos.VerificationEvent,
-		repos.Agent,
-		driftDetectionService,
 	)
 
 	// Initialize RegistrationService for email/password user registration workflow

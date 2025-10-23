@@ -203,7 +203,8 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 	})
 }
 
-// GetTrustScoreHistory returns trust score history for an agent
+// GetTrustScoreHistory returns trust score audit trail for an agent
+// Returns complete audit trail with who changed it, when, and why
 func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -228,21 +229,23 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	}
 
 	// Optional: limit results
-	limit := 30 // Default to last 30 scores
+	limit := 30 // Default to last 30 entries
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
 
-	// Get trust score history
-	history, err := h.trustCalculator.GetTrustScoreHistory(c.Context(), agentID, limit)
+	// Get trust score audit trail from trust_score_history table
+	history, err := h.trustCalculator.GetTrustScoreHistoryAuditTrail(c.Context(), agentID, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch trust score history",
 		})
 	}
 
+	// Return audit trail with proper JSON field names for frontend
+	// Domain model already has correct JSON tags mapping to frontend expectations
 	return c.JSON(fiber.Map{
 		"agent_id":   agentID,
 		"agent_name": agent.Name,

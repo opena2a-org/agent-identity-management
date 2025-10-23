@@ -813,6 +813,9 @@ function DashboardContent() {
                     Initiated By
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Resource ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -834,6 +837,9 @@ function DashboardContent() {
                         <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
                       </td>
                       <td className="px-6 py-4">
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-28 rounded"></div>
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
                       </td>
                       <td className="px-6 py-4">
@@ -846,7 +852,7 @@ function DashboardContent() {
                   ))
                 ) : auditLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
+                    <td colSpan={6} className="px-6 py-12 text-center">
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         No recent activity found
                       </p>
@@ -866,6 +872,11 @@ function DashboardContent() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-700 dark:text-gray-300">
                           {getInitiatedBy(log)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={log.resource_id}>
+                          {log.resource_id ? `${log.resource_id.substring(0, 8)}...` : 'N/A'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

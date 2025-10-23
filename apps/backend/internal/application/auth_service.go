@@ -266,3 +266,16 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*Valid
 		APIKey:       key,
 	}, nil
 }
+
+// UpdateLastLogin updates a user's last_login_at timestamp
+func (s *AuthService) UpdateLastLogin(ctx context.Context, user *domain.User) error {
+	now := time.Now()
+	user.LastLoginAt = &now
+	user.UpdatedAt = now
+	if err := s.userRepo.Update(user); err != nil {
+		// Log error but don't fail - this is non-critical
+		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
+		return err
+	}
+	return nil
+}

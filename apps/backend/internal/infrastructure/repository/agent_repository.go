@@ -35,7 +35,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
 	if agent.TrustScore == 0 {
-		agent.TrustScore = 9.999 // Default score (changed from 0.5 to maximum valid value for numeric(4,3))
+		agent.TrustScore = 0.5 // Default score (50% - middle of 0.0 to 1.0 range)
 	}
 	if agent.Status == "" {
 		agent.Status = domain.AgentStatusPending

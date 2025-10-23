@@ -105,9 +105,11 @@ export default function AgentDetailsPage({
   const [deleting, setDeleting] = useState(false);
   const [suspending, setSuspending] = useState(false);
   const [reactivating, setReactivating] = useState(false);
+  const [rotatingCreds, setRotatingCreds] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [showRotateCredsConfirm, setShowRotateCredsConfirm] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
@@ -225,6 +227,21 @@ export default function AgentDetailsPage({
       alert(e?.message || "Reactivate failed");
     } finally {
       setReactivating(false);
+    }
+  };
+
+  const handleRotateCredentials = async () => {
+    if (!agentId) return;
+    setRotatingCreds(true);
+    try {
+      const result = await api.rotateAgentCredentials(agentId);
+      alert(`Credentials rotated successfully!\n\nNew API Key:\n${result.api_key}\n\nPlease save this key - you won't be able to see it again.`);
+      handleRefresh();
+    } catch (e: any) {
+      alert(e?.message || "Credential rotation failed");
+    } finally {
+      setRotatingCreds(false);
+      setShowRotateCredsConfirm(false);
     }
   };
 
@@ -467,6 +484,25 @@ export default function AgentDetailsPage({
                 ) : (
                   <>
                     <Play className="h-4 w-4 mr-1" /> Reactivate
+                  </>
+                )}
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="outline"
+                onClick={() => setShowRotateCredsConfirm(true)}
+                disabled={rotatingCreds}
+                className="border-blue-500 text-blue-600 hover:bg-blue-50"
+              >
+                {rotatingCreds ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
+                    Rotating...
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="h-4 w-4 mr-1" /> Rotate Credentials
                   </>
                 )}
               </Button>
@@ -881,6 +917,29 @@ export default function AgentDetailsPage({
               className="bg-orange-600 hover:bg-orange-700"
             >
               {suspending ? "Suspending..." : "Suspend"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Rotate Credentials Confirmation Dialog */}
+      <AlertDialog open={showRotateCredsConfirm} onOpenChange={setShowRotateCredsConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rotate Agent Credentials</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will generate new credentials for "{agent.name}". The old API key will be immediately revoked and can no longer be used.
+              <br /><br />
+              <strong>Warning:</strong> Any applications using the old key will lose access until updated with the new key.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRotateCredentials}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {rotatingCreds ? "Rotating..." : "Rotate Credentials"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

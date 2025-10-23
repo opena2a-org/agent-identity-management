@@ -451,13 +451,13 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	query := `
 		WITH monthly_activity AS (
 			SELECT
-				DATE_TRUNC('month', created_at) as month_start,
-				COUNT(*) FILTER (WHERE status = 'verified') as verified,
+				DATE_TRUNC('month', started_at) as month_start,
+				COUNT(*) FILTER (WHERE status = 'success') as verified,
 				COUNT(*) FILTER (WHERE status = 'pending' OR status = 'failed') as pending
 			FROM verification_events
 			WHERE organization_id = $1
-				AND created_at >= NOW() - INTERVAL '1 month' * $2
-			GROUP BY DATE_TRUNC('month', created_at)
+				AND started_at >= NOW() - INTERVAL '1 month' * $2
+			GROUP BY DATE_TRUNC('month', started_at)
 			ORDER BY month_start ASC
 		)
 		SELECT month_start, verified, pending

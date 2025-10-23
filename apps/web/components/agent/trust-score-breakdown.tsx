@@ -13,10 +13,12 @@ import {
   Clock,
   TrendingUp,
   ThumbsUp,
-  Info
+  Info,
+  History
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface TrustScoreBreakdownProps {
   agentId: string;
@@ -59,6 +61,18 @@ interface TrustScoreBreakdown {
   };
   confidence: number;
   calculatedAt: string;
+}
+
+interface TrustScoreHistoryEntry {
+  timestamp: string;
+  trust_score: number;
+  reason: string;
+  changed_by: string;
+}
+
+interface TrustScoreHistory {
+  agent_id: string;
+  history: TrustScoreHistoryEntry[];
 }
 
 // Factor metadata: icons, labels, and descriptions
@@ -123,8 +137,11 @@ const factorMetadata = {
 
 export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScoreBreakdownProps) {
   const [breakdown, setBreakdown] = useState<TrustScoreBreakdown | null>(null);
+  const [history, setHistory] = useState<TrustScoreHistory | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBreakdown = async () => {
@@ -141,7 +158,22 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
       }
     };
 
+    const fetchHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const data = await api.getAgentTrustScoreHistory(agentId);
+        setHistory(data);
+      } catch (err: any) {
+        console.error('Failed to fetch trust score history:', err);
+        setHistoryError(err.message || 'Failed to load trust score history');
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
     fetchBreakdown();
+    fetchHistory();
   }, [agentId]);
 
   const getScoreColor = (score: number): string => {
@@ -232,7 +264,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
               Individual components contributing to the overall trust score
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4">
             {Object.entries(breakdown.factors).map(([key, value]) => {
               const metadata = factorMetadata[key as keyof typeof factorMetadata];
               const Icon = metadata.icon;
@@ -240,42 +272,201 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
               const contribution = breakdown.contributions[key as keyof typeof breakdown.contributions];
 
               return (
-                <div key={key} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-2 rounded-lg ${metadata.bgColor}`}>
-                        <Icon className={`h-4 w-4 ${metadata.color}`} />
+                <div key={key} className="group p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className={`p-2.5 rounded-lg ${metadata.bgColor} transition-transform group-hover:scale-110`}>
+                        <Icon className={`h-5 w-5 ${metadata.color}`} />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{metadata.label}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-base">{metadata.label}</span>
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="h-3 w-3 text-muted-foreground" />
+                              <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-600 transition-colors" />
                             </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">{metadata.description}</p>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>{metadata.description}</p>
                             </TooltipContent>
                           </Tooltip>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Weight: {(weight * 100).toFixed(0)}% • Contribution: {(contribution * 100).toFixed(1)}%
-                        </p>
+
+                        {/* Visual weight and contribution indicators */}
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Weight</div>
+                            <div className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                              {(weight * 100).toFixed(0)}%
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Impact</div>
+                            <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                              +{(contribution * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className={`text-lg font-semibold ${getScoreColor(value)}`}>
-                      {(value * 100).toFixed(1)}%
+
+                    {/* Score badge */}
+                    <div className="flex flex-col items-end ml-4">
+                      <div className={`text-2xl font-bold ${getScoreColor(value)}`}>
+                        {(value * 100).toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        score
+                      </div>
                     </div>
                   </div>
+
+                  {/* Progress bar with gradient */}
                   <div className="relative">
-                    <Progress
-                      value={value * 100}
-                      className="h-2"
-                    />
+                    <div className="h-2.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          value >= 0.95 ? 'bg-gradient-to-r from-green-500 to-green-600' :
+                          value >= 0.75 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' :
+                          'bg-gradient-to-r from-red-500 to-red-600'
+                        }`}
+                        style={{ width: `${value * 100}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+
+        {/* Trust Score History */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Trust Score History
+            </CardTitle>
+            <CardDescription>
+              Historical changes in trust score over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {historyLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-64 w-full" />
+              </div>
+            ) : historyError || !history || history.history.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>{historyError || 'No historical data available yet'}</p>
+                <p className="text-xs mt-2">Trust score changes will appear here over time</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Line Chart */}
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={history.history.map(entry => ({
+                        timestamp: new Date(entry.timestamp).toLocaleDateString(),
+                        score: (entry.trust_score * 100).toFixed(1),
+                        fullTimestamp: new Date(entry.timestamp).toLocaleString(),
+                        reason: entry.reason,
+                        changedBy: entry.changed_by,
+                      }))}
+                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                      <XAxis
+                        dataKey="timestamp"
+                        className="text-xs text-muted-foreground"
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        className="text-xs text-muted-foreground"
+                        label={{ value: 'Trust Score (%)', angle: -90, position: 'insideLeft' }}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                                <p className="font-semibold">{data.fullTimestamp}</p>
+                                <p className="text-sm mt-1">
+                                  Score: <span className="font-semibold">{data.score}%</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Reason: {data.reason}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  By: {data.changedBy}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                        name="Trust Score (%)"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* History Table */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <div className="max-h-96 overflow-y-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Date & Time
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Trust Score
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Reason
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Changed By
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        {history.history.map((entry, index) => (
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                              {new Date(entry.timestamp).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`text-sm font-semibold ${getScoreColor(entry.trust_score)}`}>
+                                {(entry.trust_score * 100).toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                              {entry.reason}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                              {entry.changed_by}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
