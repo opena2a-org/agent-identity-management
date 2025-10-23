@@ -36,32 +36,15 @@ print(f"   ID: {WEATHER_AGENT_ID}")
 # Register the weather MCP server
 print("\n🔌 Registering weather MCP server...")
 
+# First create the MCP server (capabilities are string array, not objects)
 mcp_data = {
     "name": "weather-mcp-server",
     "description": "Open-Meteo Weather API MCP Server - provides real-time weather data",
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/weather",
     "version": "1.0.0",
     "public_key": "weather-mcp-public-key-placeholder",  # Would be actual public key
-    "capabilities": [
-        {
-            "name": "get_forecast",
-            "description": "Get weather forecast for a location",
-            "parameters": {
-                "latitude": "number",
-                "longitude": "number",
-                "days": "number (optional, default 7)"
-            }
-        },
-        {
-            "name": "get_current_weather",
-            "description": "Get current weather conditions",
-            "parameters": {
-                "latitude": "number",
-                "longitude": "number"
-            }
-        }
-    ],
-    "registered_by_agent": WEATHER_AGENT_ID
+    "capabilities": ["tools", "resources"],  # MCP capabilities: tools = functions, resources = data
+    "verification_url": "https://github.com/modelcontextprotocol/servers"
 }
 
 try:
@@ -75,15 +58,41 @@ try:
 
     if response.status_code == 201 or response.status_code == 200:
         mcp = response.json()
-        print(f"✅ MCP server registered successfully!")
-        print(f"   MCP ID: {mcp.get('id')}")
+        mcp_server_id = mcp.get('id')
+        print(f"✅ MCP server created successfully!")
+        print(f"   MCP ID: {mcp_server_id}")
         print(f"   Name: {mcp.get('name')}")
         print(f"   URL: {mcp.get('url')}")
         print(f"   Status: {mcp.get('status')}")
-        print(f"   Capabilities: {len(mcp.get('capabilities', []))}")
-        print(f"   Registered by agent: {mcp.get('registeredByAgent')}")
+        print(f"   Capabilities: {mcp.get('capabilities')}")
+
+        # Step 2: Link MCP server to weather agent
+        print(f"\n🔗 Linking MCP server to weather agent...")
+        link_data = {
+            "mcp_server_ids": [mcp_server_id],
+            "detected_method": "manual",
+            "confidence": 100.0,
+            "metadata": {
+                "registration_source": "admin_script",
+                "purpose": "weather_data_retrieval"
+            }
+        }
+
+        link_response = requests.put(
+            f"{aim_url}/api/v1/agents/{WEATHER_AGENT_ID}/mcp-servers",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json=link_data,
+            timeout=10
+        )
+
+        if link_response.status_code == 200:
+            print(f"✅ MCP server linked to agent successfully!")
+        else:
+            print(f"⚠️  Failed to link MCP server: {link_response.status_code}")
+            print(f"   Error: {link_response.text}")
+
     else:
-        print(f"❌ Failed to register MCP: {response.status_code}")
+        print(f"❌ Failed to create MCP server: {response.status_code}")
         print(f"   Error: {response.text}")
         sys.exit(1)
 
