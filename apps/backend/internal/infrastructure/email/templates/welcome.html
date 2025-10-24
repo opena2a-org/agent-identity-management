@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to AIM</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #18181b;
+            background-color: #fafafa;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 560px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e4e4e7;
+        }
+        .header {
+            background: #6366f1;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+        }
+        .content {
+            padding: 32px 24px;
+        }
+        .content h2 {
+            color: #18181b;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            letter-spacing: -0.01em;
+        }
+        .content p {
+            color: #52525b;
+            font-size: 15px;
+            line-height: 1.7;
+            margin: 0 0 20px 0;
+        }
+        .content ol {
+            color: #52525b;
+            font-size: 15px;
+            line-height: 1.7;
+            margin: 0 0 20px 0;
+            padding-left: 20px;
+        }
+        .content ol li {
+            margin: 8px 0;
+        }
+        .features {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 24px 0;
+            border: 1px solid #e4e4e7;
+        }
+        .features h3 {
+            color: #18181b;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 12px 0;
+            letter-spacing: -0.01em;
+        }
+        .features ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .features li {
+            padding: 6px 0;
+            color: #52525b;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .features li:before {
+            content: "✓";
+            color: #6366f1;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        .footer {
+            background: #fafafa;
+            padding: 24px;
+            text-align: center;
+            border-top: 1px solid #e4e4e7;
+        }
+        .footer p {
+            color: #71717a;
+            font-size: 13px;
+            margin: 4px 0;
+        }
+        .divider {
+            border: 0;
+            border-top: 1px solid #e4e4e7;
+            margin: 24px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>Agent Identity Management</h1>
+        </div>
+
+        <div class="content">
+            <h2>Welcome to AIM</h2>
+
+            <p>Hi {{.UserName}},</p>
+
+            <p>Thank you for registering with Agent Identity Management! We've received your registration request and it's currently pending admin approval.</p>
+
+            <p><strong>What happens next:</strong></p>
+            <ol>
+                <li>An administrator will review your registration request</li>
+                <li>You'll receive an email notification once your account is approved</li>
+                <li>After approval, you can login and start managing AI agents</li>
+            </ol>
+
+            <div class="features">
+                <h3>Once approved, you'll be able to:</h3>
+                <ul>
+                    <li>Register and manage AI agents with cryptographic verification</li>
+                    <li>Monitor agent trust scores and security metrics</li>
+                    <li>Configure MCP servers with public key authentication</li>
+                    <li>Generate and manage API keys for programmatic access</li>
+                    <li>Get real-time security alerts and compliance reports</li>
+                </ul>
+            </div>
+
+            <hr class="divider">
+
+            <p style="font-size: 14px; color: #71717a;">If you didn't request this registration, please disregard this email.</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 OpenA2A</p>
+        </div>
+    </div>
+</body>
+</html>

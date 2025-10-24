@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode */
+    --background: 0 0% 98%; /* gray-50 */
+    --foreground: 222 47% 11%; /* gray-900 */
+    --card: 0 0% 100%; /* white */
+    --card-foreground: 222 47% 11%; /* gray-900 */
+    --popover: 0 0% 100%; /* white */
+    --popover-foreground: 222 47% 11%; /* gray-900 */
+    --primary: 221 83% 53%; /* blue-600 */
+    --primary-foreground: 0 0% 100%; /* white */
+    --secondary: 210 40% 96%; /* gray-100 */
+    --secondary-foreground: 222 47% 11%; /* gray-900 */
+    --muted: 210 40% 96%; /* gray-100 */
+    --muted-foreground: 215 16% 47%; /* gray-500 */
+    --accent: 210 40% 96%; /* gray-100 */
+    --accent-foreground: 222 47% 11%; /* gray-900 */
+    --destructive: 0 84% 60%; /* red-500 */
+    --destructive-foreground: 0 0% 100%; /* white */
+    --border: 214 32% 91%; /* gray-200 */
+    --input: 214 32% 91%; /* gray-200 */
+    --ring: 221 83% 53%; /* blue-600 */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Dark mode */
+    --background: 222 47% 11%; /* gray-900 */
+    --foreground: 210 20% 98%; /* gray-100 */
+    --card: 217 33% 17%; /* gray-800 */
+    --card-foreground: 210 20% 98%; /* gray-100 */
+    --popover: 217 33% 17%; /* gray-800 */
+    --popover-foreground: 210 20% 98%; /* gray-100 */
+    --primary: 221 83% 53%; /* blue-600 */
+    --primary-foreground: 0 0% 100%; /* white */
+    --secondary: 217 33% 17%; /* gray-800 */
+    --secondary-foreground: 210 20% 98%; /* gray-100 */
+    --muted: 223 47% 11%; /* gray-900/darker */
+    --muted-foreground: 215 20% 65%; /* gray-400 */
+    --accent: 217 33% 17%; /* gray-800 */
+    --accent-foreground: 210 20% 98%; /* gray-100 */
+    --destructive: 0 63% 31%; /* red-800 */
+    --destructive-foreground: 0 0% 100%; /* white */
+    --border: 217 33% 23%; /* gray-700 */
+    --input: 217 33% 23%; /* gray-700 */
+    --ring: 221 83% 53%; /* blue-600 */
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    margin: 0;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

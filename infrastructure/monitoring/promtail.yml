@@ -1,0 +1,54 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Backend application logs
+  - job_name: backend
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: backend
+          service: agent-identity-management
+          component: api
+          __path__: /var/log/backend/*.log
+
+  # Frontend application logs
+  - job_name: frontend
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: frontend
+          service: agent-identity-management
+          component: web
+          __path__: /var/log/frontend/*.log
+
+  # System logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          service: agent-identity-management
+          component: infrastructure
+          __path__: /var/log/syslog
+
+  # Docker container logs (if available)
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          service: agent-identity-management
+          component: container
+          __path__: /var/lib/docker/containers/*/*.log
