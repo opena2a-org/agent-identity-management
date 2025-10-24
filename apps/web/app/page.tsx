@@ -117,7 +117,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">Complete Audit Trail</h3>
               <p className="text-blue-200 leading-relaxed">
-                TimescaleDB-powered audit logging with compliance reporting. Track every action for SOC 2, HIPAA, and GDPR compliance.
+                TimescaleDB-powered immutable audit logging. Track every agent action with full context and compliance-ready reporting.
               </p>
             </div>
 
