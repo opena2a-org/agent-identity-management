@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**The Stripe for AI Agents** — Production-grade identity, verification, and security management for autonomous AI agents and MCP servers.
+Production-grade identity, verification, and security management for autonomous AI agents and MCP servers.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
