@@ -128,8 +128,18 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse
 // @Router /api/v1/admin/capability-requests [get]
 func (h *CapabilityRequestHandlers) ListCapabilityRequests(c fiber.Ctx) error {
+	// Get organization ID from context (for multi-tenancy)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized - organization context not found",
+		})
+	}
+
 	// Build filter from query params
-	filter := domain.CapabilityRequestFilter{}
+	filter := domain.CapabilityRequestFilter{
+		OrganizationID: &orgID, // Filter by organization for data isolation
+	}
 
 	if statusStr := c.Query("status"); statusStr != "" {
 		status := domain.CapabilityRequestStatus(statusStr)

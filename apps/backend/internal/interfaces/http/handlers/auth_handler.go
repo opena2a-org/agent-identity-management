@@ -4,21 +4,25 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
+	"github.com/opena2a/identity/backend/internal/domain"
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 )
 
 type AuthHandler struct {
 	authService  *application.AuthService
 	jwtService   *auth.JWTService
+	orgRepo      domain.OrganizationRepository
 }
 
 func NewAuthHandler(
 	authService *application.AuthService,
 	jwtService *auth.JWTService,
+	orgRepo domain.OrganizationRepository,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:  authService,
 		jwtService:   jwtService,
+		orgRepo:      orgRepo,
 	}
 }
 
@@ -177,6 +181,43 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Password changed successfully",
+	})
+}
+
+// GetCurrentOrganization returns the current user's organization
+func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
+	// Get organization_id from context (set by auth middleware)
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized - no organization context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized - invalid organization context",
+		})
+	}
+
+	// Get organization from repository
+	org, err := h.orgRepo.GetByID(orgID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Organization not found",
+		})
+	}
+
+	// Return organization info
+	return c.JSON(fiber.Map{
+		"id":         org.ID,
+		"name":       org.Name,
+		"plan":       org.PlanType,
+		"max_agents": org.MaxAgents,
+		"is_active":  org.IsActive,
+		"created_at": org.CreatedAt,
+		"updated_at": org.UpdatedAt,
 	})
 }
 
