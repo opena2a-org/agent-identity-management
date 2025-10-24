@@ -1,0 +1,868 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/opena2a/identity/backend/internal/crypto"
+	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+// ============================================================================
+// Mocks specific to MCP Server Service testing
+// ============================================================================
+
+// MockMCPServerRepo is a mock implementation for MCP Server Repository
+type MockMCPServerRepo struct {
+	mock.Mock
+}
+
+func (m *MockMCPServerRepo) Create(server *domain.MCPServer) error {
+	args := m.Called(server)
+	return args.Error(0)
+}
+
+func (m *MockMCPServerRepo) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServer), args.Error(1)
+}
+
+func (m *MockMCPServerRepo) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPServer, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MCPServer), args.Error(1)
+}
+
+func (m *MockMCPServerRepo) GetByURL(url string) (*domain.MCPServer, error) {
+	args := m.Called(url)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServer), args.Error(1)
+}
+
+func (m *MockMCPServerRepo) Update(server *domain.MCPServer) error {
+	args := m.Called(server)
+	return args.Error(0)
+}
+
+func (m *MockMCPServerRepo) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockMCPServerRepo) List(limit, offset int) ([]*domain.MCPServer, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MCPServer), args.Error(1)
+}
+
+func (m *MockMCPServerRepo) GetVerificationStatus(id uuid.UUID) (*domain.MCPServerVerificationStatus, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServerVerificationStatus), args.Error(1)
+}
+
+func (m *MockMCPServerRepo) AddPublicKey(ctx context.Context, serverID uuid.UUID, publicKey string, keyType string) error {
+	args := m.Called(ctx, serverID, publicKey, keyType)
+	return args.Error(0)
+}
+
+func (m *MockMCPServerRepo) VerifyServer(ctx context.Context, serverID uuid.UUID) error {
+	args := m.Called(ctx, serverID)
+	return args.Error(0)
+}
+
+// MockMCPVerificationEventRepo is a mock for Verification Event Repository (MCP-specific)
+type MockMCPVerificationEventRepo struct {
+	mock.Mock
+}
+
+func (m *MockMCPVerificationEventRepo) Create(event *domain.VerificationEvent) error {
+	args := m.Called(event)
+	return args.Error(0)
+}
+
+func (m *MockMCPVerificationEventRepo) GetByID(id uuid.UUID) (*domain.VerificationEvent, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.VerificationEvent), args.Error(1)
+}
+
+func (m *MockMCPVerificationEventRepo) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error) {
+	args := m.Called(orgID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), args.Error(2)
+}
+
+func (m *MockMCPVerificationEventRepo) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error) {
+	args := m.Called(agentID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), args.Error(2)
+}
+
+func (m *MockMCPVerificationEventRepo) GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error) {
+	args := m.Called(mcpServerID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), args.Error(2)
+}
+
+func (m *MockMCPVerificationEventRepo) GetRecentEvents(orgID uuid.UUID, minutes int) ([]*domain.VerificationEvent, error) {
+	args := m.Called(orgID, minutes)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Error(1)
+}
+
+func (m *MockMCPVerificationEventRepo) GetStatistics(orgID uuid.UUID, startTime, endTime time.Time) (*domain.VerificationStatistics, error) {
+	args := m.Called(orgID, startTime, endTime)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.VerificationStatistics), args.Error(1)
+}
+
+func (m *MockMCPVerificationEventRepo) UpdateResult(id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+	args := m.Called(id, result, reason, metadata)
+	return args.Error(0)
+}
+
+func (m *MockMCPVerificationEventRepo) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+// MockMCPUserRepo is a mock for User Repository (MCP-specific)
+type MockMCPUserRepo struct {
+	mock.Mock
+}
+
+func (m *MockMCPUserRepo) GetByID(id uuid.UUID) (*domain.User, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.User), args.Error(1)
+}
+
+func (m *MockMCPUserRepo) GetByEmail(email string) (*domain.User, error) {
+	args := m.Called(email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.User), args.Error(1)
+}
+
+func (m *MockMCPUserRepo) Create(user *domain.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+func (m *MockMCPUserRepo) Update(user *domain.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+func (m *MockMCPUserRepo) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockMCPUserRepo) List(limit, offset int) ([]*domain.User, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.User), args.Error(1)
+}
+
+func (m *MockMCPUserRepo) GetByOrganization(orgID uuid.UUID) ([]*domain.User, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.User), args.Error(1)
+}
+
+// MockMCPKeyVault is a mock for Key Vault (MCP-specific)
+type MockMCPKeyVault struct {
+	mock.Mock
+}
+
+func (m *MockMCPKeyVault) StorePrivateKey(agentID uuid.UUID, privateKey string) error {
+	args := m.Called(agentID, privateKey)
+	return args.Error(0)
+}
+
+func (m *MockMCPKeyVault) GetPrivateKey(agentID uuid.UUID) (string, error) {
+	args := m.Called(agentID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockMCPKeyVault) DeletePrivateKey(agentID uuid.UUID) error {
+	args := m.Called(agentID)
+	return args.Error(0)
+}
+
+// MockMCPCapabilityService is a mock for MCP Capability Service
+type MockMCPCapabilityService struct {
+	mock.Mock
+}
+
+func (m *MockMCPCapabilityService) DetectCapabilities(ctx context.Context, serverID uuid.UUID) error {
+	args := m.Called(ctx, serverID)
+	return args.Error(0)
+}
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+func createMCPTestService() (*MCPService, *MockMCPServerRepo, *MockMCPVerificationEventRepo, *MockMCPUserRepo, *MockMCPKeyVault, *MockMCPCapabilityService) {
+	mockRepo := new(MockMCPServerRepo)
+	mockEventRepo := new(MockMCPVerificationEventRepo)
+	mockUserRepo := new(MockMCPUserRepo)
+	mockKeyVault := new(MockMCPKeyVault)
+	mockCapability := new(MockMCPCapabilityService)
+
+	service := NewMCPService(mockRepo, mockEventRepo, mockUserRepo, mockKeyVault, mockCapability)
+	return service, mockRepo, mockEventRepo, mockUserRepo, mockKeyVault, mockCapability
+}
+
+// ============================================================================
+// MCP Server Creation Tests
+// ============================================================================
+
+func TestMCPService_CreateMCPServer_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	req := &CreateMCPServerRequest{
+		Name:        "Test MCP Server",
+		Description: "Test Description",
+		URL:         "https://example.com/mcp",
+		Version:     "1.0.0",
+		PublicKey:   "test-public-key",
+	}
+
+	mockRepo.On("GetByURL", req.URL).Return(nil, errors.New("not found"))
+	mockRepo.On("Create", mock.MatchedBy(func(s *domain.MCPServer) bool {
+		return s.Name == req.Name && s.URL == req.URL && s.PublicKey == req.PublicKey
+	})).Return(nil)
+
+	server, err := service.CreateMCPServer(context.Background(), req, orgID, userID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, server)
+	assert.Equal(t, req.Name, server.Name)
+	assert.Equal(t, req.URL, server.URL)
+	assert.Equal(t, req.PublicKey, server.PublicKey)
+	assert.Equal(t, domain.MCPServerStatusPending, server.Status)
+	assert.False(t, server.IsVerified)
+	assert.Equal(t, 0.0, server.TrustScore)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_CreateMCPServer_DuplicateURL(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	req := &CreateMCPServerRequest{
+		Name:        "Test MCP Server",
+		Description: "Test Description",
+		URL:         "https://example.com/mcp",
+		Version:     "1.0.0",
+		PublicKey:   "test-public-key",
+	}
+
+	existingServer := &domain.MCPServer{
+		ID:  uuid.New(),
+		URL: req.URL,
+	}
+
+	mockRepo.On("GetByURL", req.URL).Return(existingServer, nil)
+
+	server, err := service.CreateMCPServer(context.Background(), req, orgID, userID)
+
+	assert.Error(t, err)
+	assert.Nil(t, server)
+	assert.Contains(t, err.Error(), "mcp server with this URL already exists")
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_CreateMCPServer_GeneratesKeysIfMissing(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	req := &CreateMCPServerRequest{
+		Name:        "Test MCP Server",
+		Description: "Test Description",
+		URL:         "https://example.com/mcp",
+		Version:     "1.0.0",
+		// No PublicKey - should auto-generate
+	}
+
+	mockRepo.On("GetByURL", req.URL).Return(nil, errors.New("not found"))
+	mockRepo.On("Create", mock.MatchedBy(func(s *domain.MCPServer) bool {
+		return s.Name == req.Name && s.URL == req.URL && s.PublicKey != ""
+	})).Return(nil)
+
+	server, err := service.CreateMCPServer(context.Background(), req, orgID, userID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, server)
+	assert.NotEmpty(t, server.PublicKey, "Public key should be auto-generated")
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// MCP Server Retrieval Tests
+// ============================================================================
+
+func TestMCPService_GetMCPServer_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	expectedServer := &domain.MCPServer{
+		ID:   serverID,
+		Name: "Test Server",
+		URL:  "https://example.com/mcp",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(expectedServer, nil)
+
+	server, err := service.GetMCPServer(context.Background(), serverID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, server)
+	assert.Equal(t, serverID, server.ID)
+	assert.Equal(t, expectedServer.Name, server.Name)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_GetMCPServer_NotFound(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	mockRepo.On("GetByID", serverID).Return(nil, errors.New("mcp server not found"))
+
+	server, err := service.GetMCPServer(context.Background(), serverID)
+
+	assert.Error(t, err)
+	assert.Nil(t, server)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_ListMCPServers_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	orgID := uuid.New()
+	expectedServers := []*domain.MCPServer{
+		{ID: uuid.New(), Name: "Server 1", VerificationCount: 5},
+		{ID: uuid.New(), Name: "Server 2", VerificationCount: 3},
+	}
+
+	mockRepo.On("GetByOrganization", orgID).Return(expectedServers, nil)
+
+	servers, err := service.ListMCPServers(context.Background(), orgID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, servers)
+	assert.Len(t, servers, 2)
+	assert.Equal(t, 5, servers[0].VerificationCount)
+	assert.Equal(t, 3, servers[1].VerificationCount)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_ListMCPServers_EmptyList(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	orgID := uuid.New()
+
+	mockRepo.On("GetByOrganization", orgID).Return([]*domain.MCPServer{}, nil)
+
+	servers, err := service.ListMCPServers(context.Background(), orgID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, servers)
+	assert.Len(t, servers, 0)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// MCP Server Update Tests
+// ============================================================================
+
+func TestMCPService_UpdateMCPServer_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	existingServer := &domain.MCPServer{
+		ID:          serverID,
+		Name:        "Old Name",
+		Description: "Old Description",
+		URL:         "https://old.example.com",
+	}
+
+	req := &UpdateMCPServerRequest{
+		Name:        "New Name",
+		Description: "New Description",
+		Version:     "2.0.0",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(existingServer, nil)
+	mockRepo.On("Update", mock.MatchedBy(func(s *domain.MCPServer) bool {
+		return s.ID == serverID && s.Name == req.Name && s.Description == req.Description
+	})).Return(nil)
+
+	server, err := service.UpdateMCPServer(context.Background(), serverID, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, server)
+	assert.Equal(t, req.Name, server.Name)
+	assert.Equal(t, req.Description, server.Description)
+	assert.Equal(t, req.Version, server.Version)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_UpdateMCPServer_NotFound(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	req := &UpdateMCPServerRequest{
+		Name: "New Name",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(nil, errors.New("mcp server not found"))
+
+	server, err := service.UpdateMCPServer(context.Background(), serverID, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, server)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// MCP Server Deletion Tests
+// ============================================================================
+
+func TestMCPService_DeleteMCPServer_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	mockRepo.On("Delete", serverID).Return(nil)
+
+	err := service.DeleteMCPServer(context.Background(), serverID)
+
+	assert.NoError(t, err)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_DeleteMCPServer_NotFound(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	mockRepo.On("Delete", serverID).Return(errors.New("mcp server not found"))
+
+	err := service.DeleteMCPServer(context.Background(), serverID)
+
+	assert.Error(t, err)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// MCP Server Verification Tests
+// ============================================================================
+
+func TestMCPService_VerifyMCPServer_Success(t *testing.T) {
+	service, mockRepo, mockEventRepo, mockUserRepo, _, mockCapability := createMCPTestService()
+
+	serverID := uuid.New()
+	userID := uuid.New()
+	server := &domain.MCPServer{
+		ID:             serverID,
+		OrganizationID: uuid.New(),
+		Name:           "Test Server",
+		PublicKey:      "test-public-key",
+		Status:         domain.MCPServerStatusPending,
+		IsVerified:     false,
+	}
+
+	user := &domain.User{
+		ID:    userID,
+		Email: "test@example.com",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+	mockUserRepo.On("GetByID", userID).Return(user, nil)
+	mockRepo.On("VerifyServer", mock.Anything, serverID).Return(nil)
+	mockRepo.On("Update", mock.MatchedBy(func(s *domain.MCPServer) bool {
+		return s.ID == serverID && s.IsVerified && s.Status == domain.MCPServerStatusVerified
+	})).Return(nil)
+	mockEventRepo.On("Create", mock.MatchedBy(func(e *domain.VerificationEvent) bool {
+		return e.OrganizationID == server.OrganizationID &&
+			*e.MCPServerID == serverID &&
+			e.Status == domain.VerificationEventStatusSuccess
+	})).Return(nil)
+	mockCapability.On("DetectCapabilities", mock.Anything, serverID).Return(nil)
+
+	err := service.VerifyMCPServer(context.Background(), serverID, userID, "192.168.1.1")
+
+	assert.NoError(t, err)
+
+	mockRepo.AssertExpectations(t)
+	mockEventRepo.AssertExpectations(t)
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestMCPService_VerifyMCPServer_NoPublicKey(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	userID := uuid.New()
+	server := &domain.MCPServer{
+		ID:             serverID,
+		OrganizationID: uuid.New(),
+		Name:           "Test Server",
+		PublicKey:      "", // No public key
+		Status:         domain.MCPServerStatusPending,
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+
+	err := service.VerifyMCPServer(context.Background(), serverID, userID, "192.168.1.1")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "server must have a public key for verification")
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// Challenge Generation Tests
+// ============================================================================
+
+func TestMCPService_GenerateChallenge_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	server := &domain.MCPServer{
+		ID:        serverID,
+		Name:      "Test Server",
+		PublicKey: "test-public-key",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+
+	challenge, err := service.GenerateVerificationChallenge(context.Background(), serverID)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, challenge)
+
+	// Verify challenge was stored
+	challengeData, exists := service.challenges[serverID.String()]
+	assert.True(t, exists)
+	assert.Equal(t, challenge, challengeData.Challenge)
+	assert.Equal(t, serverID, challengeData.ServerID)
+	assert.True(t, time.Now().Before(challengeData.ExpiresAt))
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_GenerateChallenge_NoPublicKey(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	server := &domain.MCPServer{
+		ID:        serverID,
+		Name:      "Test Server",
+		PublicKey: "",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+
+	challenge, err := service.GenerateVerificationChallenge(context.Background(), serverID)
+
+	assert.Error(t, err)
+	assert.Empty(t, challenge)
+	assert.Contains(t, err.Error(), "server must have a public key before verification")
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_VerifyChallenge_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	// Generate real Ed25519 key pair
+	keyPair, err := crypto.GenerateEd25519KeyPair()
+	assert.NoError(t, err)
+
+	encodedKeys := crypto.EncodeKeyPair(keyPair)
+
+	server := &domain.MCPServer{
+		ID:        serverID,
+		Name:      "Test Server",
+		PublicKey: encodedKeys.PublicKeyBase64,
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+	challenge, err := service.GenerateVerificationChallenge(context.Background(), serverID)
+	assert.NoError(t, err)
+
+	// Sign the challenge
+	signedChallenge, err := service.cryptoService.Sign(encodedKeys.PrivateKeyBase64, []byte(challenge))
+	assert.NoError(t, err)
+
+	// Verify the signed challenge
+	err = service.VerifyChallengeResponse(context.Background(), serverID, signedChallenge)
+
+	assert.NoError(t, err)
+
+	// Verify challenge was cleaned up
+	_, exists := service.challenges[serverID.String()]
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_VerifyChallenge_NoChallenge(t *testing.T) {
+	service, _, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	err := service.VerifyChallengeResponse(context.Background(), serverID, "signed-challenge")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no challenge found for server")
+}
+
+func TestMCPService_VerifyChallenge_Expired(t *testing.T) {
+	service, _, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+
+	// Store expired challenge
+	service.challenges[serverID.String()] = ChallengeData{
+		Challenge: "test-challenge",
+		ServerID:  serverID,
+		CreatedAt: time.Now().Add(-10 * time.Minute),
+		ExpiresAt: time.Now().Add(-5 * time.Minute),
+	}
+
+	err := service.VerifyChallengeResponse(context.Background(), serverID, "signed-challenge")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "challenge has expired")
+
+	// Verify cleanup
+	_, exists := service.challenges[serverID.String()]
+	assert.False(t, exists)
+}
+
+// ============================================================================
+// Public Key Management Tests
+// ============================================================================
+
+func TestMCPService_AddPublicKey_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	server := &domain.MCPServer{
+		ID:   serverID,
+		Name: "Test Server",
+	}
+
+	req := &AddPublicKeyRequest{
+		PublicKey: "new-public-key",
+		KeyType:   "ed25519",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(server, nil)
+	mockRepo.On("AddPublicKey", mock.Anything, serverID, req.PublicKey, req.KeyType).Return(nil)
+
+	err := service.AddPublicKey(context.Background(), serverID, req)
+
+	assert.NoError(t, err)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_AddPublicKey_ServerNotFound(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	req := &AddPublicKeyRequest{
+		PublicKey: "new-public-key",
+		KeyType:   "ed25519",
+	}
+
+	mockRepo.On("GetByID", serverID).Return(nil, errors.New("mcp server not found"))
+
+	err := service.AddPublicKey(context.Background(), serverID, req)
+
+	assert.Error(t, err)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// Verification Status Tests
+// ============================================================================
+
+func TestMCPService_GetVerificationStatus_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	serverID := uuid.New()
+	now := time.Now()
+	expectedStatus := &domain.MCPServerVerificationStatus{
+		ServerID:       serverID,
+		IsVerified:     true,
+		LastVerifiedAt: &now,
+		TrustScore:     75.0,
+		PublicKeyCount: 2,
+		Status:         domain.MCPServerStatusVerified,
+	}
+
+	mockRepo.On("GetVerificationStatus", serverID).Return(expectedStatus, nil)
+
+	status, err := service.GetVerificationStatus(context.Background(), serverID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, status)
+	assert.Equal(t, serverID, status.ServerID)
+	assert.True(t, status.IsVerified)
+	assert.Equal(t, 75.0, status.TrustScore)
+	assert.Equal(t, 2, status.PublicKeyCount)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// MCP Action Verification Tests
+// ============================================================================
+
+func TestMCPService_VerifyAction_Success(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	mcpID := uuid.New()
+	server := &domain.MCPServer{
+		ID:         mcpID,
+		Name:       "Test Server",
+		Status:     domain.MCPServerStatusVerified,
+		IsVerified: true,
+	}
+
+	mockRepo.On("GetByID", mcpID).Return(server, nil)
+
+	allowed, reason, auditID, err := service.VerifyMCPAction(
+		context.Background(),
+		mcpID,
+		"execute",
+		"/api/resource",
+		"target-service",
+		map[string]interface{}{"key": "value"},
+	)
+
+	assert.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Contains(t, reason, "verified and authorized")
+	assert.NotEqual(t, uuid.Nil, auditID)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_VerifyAction_NotVerified(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	mcpID := uuid.New()
+	server := &domain.MCPServer{
+		ID:         mcpID,
+		Name:       "Test Server",
+		Status:     domain.MCPServerStatusPending,
+		IsVerified: false,
+	}
+
+	mockRepo.On("GetByID", mcpID).Return(server, nil)
+
+	allowed, reason, auditID, err := service.VerifyMCPAction(
+		context.Background(),
+		mcpID,
+		"execute",
+		"/api/resource",
+		"target-service",
+		nil,
+	)
+
+	assert.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Contains(t, reason, "not verified")
+	assert.NotEqual(t, uuid.Nil, auditID)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMCPService_VerifyAction_ServerNotFound(t *testing.T) {
+	service, mockRepo, _, _, _, _ := createMCPTestService()
+
+	mcpID := uuid.New()
+
+	mockRepo.On("GetByID", mcpID).Return(nil, errors.New("mcp server not found"))
+
+	allowed, reason, auditID, err := service.VerifyMCPAction(
+		context.Background(),
+		mcpID,
+		"execute",
+		"/api/resource",
+		"target-service",
+		nil,
+	)
+
+	assert.Error(t, err)
+	assert.False(t, allowed)
+	assert.Contains(t, reason, "MCP server not found")
+	assert.Equal(t, uuid.Nil, auditID)
+
+	mockRepo.AssertExpectations(t)
+}

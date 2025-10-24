@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield background -->
+  <path d="M16 2 L28 8 L28 16 C28 24 22 29 16 30 C10 29 4 24 4 16 L4 8 Z" fill="#4F46E5"/>
+  
+  <!-- Shield outline -->
+  <path d="M16 2 L28 8 L28 16 C28 24 22 29 16 30 C10 29 4 24 4 16 L4 8 Z" fill="none" stroke="#312E81" stroke-width="1"/>
+  
+  <!-- Letter "A" for AIM -->
+  <path d="M16 10 L20 22 L18 22 L17.2 19.5 L14.8 19.5 L14 22 L12 22 Z M15.3 17.5 L16.7 17.5 L16 14 Z" fill="white"/>
+</svg>

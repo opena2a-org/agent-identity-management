@@ -1,0 +1,33 @@
+{
+  "name": "agent-identity-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise-grade identity verification and security platform for AI agents and MCP servers",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opena2a/identity.git"
+  },
+  "license": "AGPL-3.0",
+  "author": "OpenA2A Team"
+}
