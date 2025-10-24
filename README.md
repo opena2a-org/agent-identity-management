@@ -11,6 +11,11 @@ Production-grade identity, verification, and security management for autonomous 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 [![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-api-overview)
 
+[![GitHub Stars](https://img.shields.io/github/stars/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/network/members)
+[![GitHub Issues](https://img.shields.io/github/issues/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/pulls)
+
 [Documentation](https://opena2a.org/docs) • [Python SDK](sdks/python/README.md) • [Quick Start](docs/quick-start.md)
 
 </div>
