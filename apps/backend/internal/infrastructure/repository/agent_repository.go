@@ -259,8 +259,8 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		SET display_name = $1, description = $2, agent_type = $3, status = $4, version = $5,
 		    public_key = $6, encrypted_private_key = $7, key_algorithm = $8, certificate_url = $9, repository_url = $10,
 		    documentation_url = $11, trust_score = $12, verified_at = $13,
-		    talks_to = $14, updated_at = $15
-		WHERE id = $16
+		    talks_to = $14, capabilities = $15, updated_at = $16
+		WHERE id = $17
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -269,6 +269,12 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 	talksToJSON, err := json.Marshal(agent.TalksTo)
 	if err != nil {
 		return fmt.Errorf("failed to marshal talks_to: %w", err)
+	}
+
+	// Marshal capabilities to JSONB
+	capabilitiesJSON, err := json.Marshal(agent.Capabilities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal capabilities: %w", err)
 	}
 
 	_, err = r.db.Exec(query,
@@ -286,6 +292,7 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.TrustScore,
 		agent.VerifiedAt,
 		talksToJSON,
+		capabilitiesJSON,
 		agent.UpdatedAt,
 		agent.ID,
 	)
