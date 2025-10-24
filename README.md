@@ -11,9 +11,13 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 [![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-api-overview)
 
-[Documentation](https://opena2a.org) • [Python SDK](sdks/python/README.md) • [Quick Start](docs/quick-start.md)
+[Documentation](https://opena2a.org/docs) • [Python SDK](sdks/python/README.md) • [Quick Start](docs/quick-start.md)
 
 </div>
+
+---
+
+> **📚 Looking for detailed guides?** Check out our [comprehensive documentation](https://opena2a.org/docs) with step-by-step tutorials, integration guides, and complete API reference.
 
 ---
 
@@ -362,7 +366,7 @@ POST   /api/v1/sdk/detect/mcps          # Auto-detect MCPs
 GET    /api/v1/sdk/tokens/:id           # SDK token info
 ```
 
-📖 **Full API Documentation**: Available at `http://localhost:8080/swagger` (when running locally)
+📖 **Full API Documentation**: [opena2a.org/docs](https://opena2a.org/docs) or `http://localhost:8080/swagger` (when running locally)
 
 ---
 
@@ -657,7 +661,7 @@ Free and open source for all use cases. If you modify this software and make it 
 
 ## 📞 Support & Resources
 
-- **📖 Documentation**: [opena2a.org](https://opena2a.org)
+- **📖 Comprehensive Documentation**: [opena2a.org/docs](https://opena2a.org/docs) — Complete guides, tutorials, and API reference
 - **🐛 Issues**: [GitHub Issues](https://github.com/opena2a-org/agent-identity-management/issues)
 - **💬 Discussions**: [GitHub Discussions](https://github.com/opena2a-org/agent-identity-management/discussions)
 - **📧 Email**: [info@opena2a.org](mailto:info@opena2a.org)
