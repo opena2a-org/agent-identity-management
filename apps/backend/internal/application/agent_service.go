@@ -271,6 +271,10 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.TalksTo != nil {
 		agent.TalksTo = req.TalksTo
 	}
+	// Update capabilities
+	if req.Capabilities != nil {
+		agent.Capabilities = req.Capabilities
+	}
 
 	if err := s.agentRepo.Update(agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)

@@ -181,6 +181,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
+		// Determine severity based on action type and context
+		severity := h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+		
 		alertTitle := fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 		alertDescription := fmt.Sprintf(
 			"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
@@ -194,7 +197,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			ID:             uuid.New(),
 			OrganizationID: agent.OrganizationID,
 			AlertType:      domain.AlertSecurityBreach,
-			Severity:       domain.AlertSeverityHigh,
+			Severity:       severity, // ← Dynamic severity based on operation
 			Title:          alertTitle,
 			Description:    alertDescription,
 			ResourceType:   "agent",
@@ -207,7 +210,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		if err := h.agentService.CreateSecurityAlert(c.Context(), alert); err != nil {
 			fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
 		} else {
-			fmt.Printf("✅ Security alert created: %s\n", alert.ID.String())
+			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
 		}
 	}
 
@@ -604,4 +607,83 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 		"status": "result_recorded",
 		"result": req.Result,
 	})
+}
+
+// determineAlertSeverity determines the alert severity based on action type and context
+func (h *VerificationHandler) determineAlertSeverity(actionType string, context map[string]interface{}, riskLevel string) domain.AlertSeverity {
+	// 1. Check explicit risk_level from context or request
+	if riskLevel != "" {
+		switch strings.ToLower(riskLevel) {
+		case "critical":
+			return domain.AlertSeverityCritical
+		case "high":
+			return domain.AlertSeverityHigh
+		case "medium", "warning":
+			return domain.AlertSeverityWarning
+		case "low", "info":
+			return domain.AlertSeverityInfo
+		}
+	}
+	
+	// Check context for risk_level
+	if context != nil {
+		if contextRiskLevel, ok := context["risk_level"].(string); ok {
+			switch strings.ToLower(contextRiskLevel) {
+			case "critical":
+				return domain.AlertSeverityCritical
+			case "high":
+				return domain.AlertSeverityHigh
+			case "medium", "warning":
+				return domain.AlertSeverityWarning
+			case "low", "info":
+				return domain.AlertSeverityInfo
+			}
+		}
+	}
+
+	// 2. Determine severity based on action type patterns
+	actionLower := strings.ToLower(actionType)
+
+	// CRITICAL: Destructive operations, system access, credential operations
+	criticalPatterns := []string{
+		"delete", "drop", "truncate", "destroy", "remove",
+		"admin", "root", "sudo", "execute", "exec", "run",
+		"credential", "password", "secret", "key", "token",
+		"privilege", "permission", "grant", "revoke",
+		"system", "kernel", "process",
+	}
+	for _, pattern := range criticalPatterns {
+		if strings.Contains(actionLower, pattern) {
+			return domain.AlertSeverityCritical
+		}
+	}
+
+	// HIGH: Write operations, modifications, sensitive data access
+	highPatterns := []string{
+		"write", "update", "modify", "edit", "change", "alter",
+		"create", "insert", "add", "post", "put", "patch",
+		"payment", "transaction", "financial", "billing",
+		"user", "account", "profile",
+		"config", "setting", "configuration",
+	}
+	for _, pattern := range highPatterns {
+		if strings.Contains(actionLower, pattern) {
+			return domain.AlertSeverityHigh
+		}
+	}
+
+	// WARNING: Read operations on sensitive data
+	warningPatterns := []string{
+		"read", "get", "fetch", "retrieve", "query", "search",
+		"list", "view", "show", "display",
+		"download", "export",
+	}
+	for _, pattern := range warningPatterns {
+		if strings.Contains(actionLower, pattern) {
+			return domain.AlertSeverityWarning
+		}
+	}
+
+	// INFO: Everything else (monitoring, logging, etc.)
+	return domain.AlertSeverityInfo
 }
