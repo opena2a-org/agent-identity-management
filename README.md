@@ -9,7 +9,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
-[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-111-brightgreen.svg)](#-api-overview)
+[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-api-overview)
 
 [Documentation](https://opena2a.org) • [Python SDK](sdks/python/README.md) • [Quick Start](docs/quick-start.md)
 
@@ -230,8 +230,8 @@ AIM is built on a modern, scalable tech stack optimized for enterprise deploymen
 ┌────────▼────────┐
 │   API Layer     │
 ├─────────────────┤
-│ Go Fiber v3     │ ← 111 Production Endpoints
-│ JWT + OAuth 2.0 │ ← SSO (Google, Microsoft, Okta)
+│ Go Fiber v3     │ ← 136 Production Endpoints
+│ JWT Auth        │ ← Token-based Authentication
 └────────┬────────┘
          │
 ┌────────▼────────────────────────────────┐
@@ -253,12 +253,12 @@ AIM is built on a modern, scalable tech stack optimized for enterprise deploymen
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Backend** | Go 1.23+ with Fiber v3 | High-performance API (sub-100ms p95 latency) |
+| **Backend** | Go 1.23+ with Fiber v3 (beta) | High-performance API (sub-100ms p95 latency) |
 | **Frontend** | Next.js 15 + TypeScript 5.5 | Admin dashboard with real-time updates |
 | **Database** | PostgreSQL 16 | Multi-tenant data with ACID compliance |
 | **Cache** | Redis 7 | Session management and performance optimization |
 | **Crypto** | Ed25519 (PyNaCl) | Asymmetric signing for agent authentication |
-| **Auth** | JWT + OAuth 2.0 / OIDC | SSO with Google, Microsoft, Okta |
+| **Auth** | JWT | Token-based authentication with refresh tokens |
 | **Deployment** | Docker + Kubernetes | Container orchestration for scalability |
 | **Monitoring** | Prometheus + Grafana | Real-time metrics and alerting |
 
@@ -266,7 +266,7 @@ AIM is built on a modern, scalable tech stack optimized for enterprise deploymen
 
 ## 📡 API Overview
 
-AIM provides **111 production-ready API endpoints** across 9 categories:
+AIM provides **136 production-ready API endpoints** across 9 categories:
 
 ### Authentication & Authorization (12 endpoints)
 ```bash
@@ -275,8 +275,8 @@ POST   /api/v1/public/register       # Self-service registration
 POST   /api/v1/auth/validate         # Validate JWT token
 POST   /api/v1/auth/refresh          # Refresh access token
 POST   /api/v1/auth/change-password  # Change password
-POST   /api/v1/auth/sso/google       # Google SSO
-POST   /api/v1/auth/sso/microsoft    # Microsoft SSO
+POST   /api/v1/public/forgot-password # Password reset request
+POST   /api/v1/public/reset-password  # Password reset with token
 # ... and 5 more
 ```
 
@@ -491,12 +491,6 @@ JWT_SECRET=your-256-bit-secret-key
 JWT_EXPIRY=24h
 REFRESH_TOKEN_EXPIRY=168h  # 7 days
 
-# OAuth/SSO (Optional)
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-MICROSOFT_CLIENT_ID=your-application-id
-MICROSOFT_TENANT_ID=your-tenant-id
-
 # Email (Optional - for notifications)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -515,10 +509,6 @@ ENABLE_CAPABILITY_REQUESTS=true
 ```bash
 # API Configuration
 NEXT_PUBLIC_API_URL=https://api.aim.yourcompany.com
-
-# OAuth (if SSO enabled)
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id
-NEXT_PUBLIC_MICROSOFT_CLIENT_ID=your-application-id
 
 # Analytics (Optional)
 NEXT_PUBLIC_ANALYTICS_ID=your-google-analytics-id
@@ -678,7 +668,7 @@ Free and open source for all use cases. If you modify this software and make it 
 ## 🗺️ Roadmap
 
 ### Q4 2025 ✅ (Completed)
-- [x] Core platform with 111 API endpoints
+- [x] Core platform with 136 API endpoints
 - [x] MCP attestation and verification
 - [x] 8-factor trust scoring
 - [x] Capability request workflow
