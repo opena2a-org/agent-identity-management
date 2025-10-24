@@ -29,7 +29,7 @@ As AI agents become critical infrastructure in enterprises, **managing their ide
 - **🛡️ MCP Server Attestation** — Cryptographically verify every MCP server your agents connect to
 - **⚡ One-Line Security** — `secure("my-agent")` protects agents instantly with zero config
 - **📊 8-Factor Trust Scoring** — ML-powered risk assessment for every agent and action
-- **👮 Automated Compliance** — SOC 2, HIPAA, GDPR-ready audit trails and access controls
+- **👮 Automated Compliance** — Audit trails and access controls
 - **🚨 Real-Time Threat Detection** — Behavioral anomaly detection and automatic policy enforcement
 - **🔐 Zero-Trust Architecture** — Every action verified, every MCP attested, every risk scored
 
@@ -60,7 +60,7 @@ agent = secure("customer-support-agent")
 # ✅ Registered with unique cryptographic identity (Ed25519 keypair)
 # ✅ Auto-protected with behavioral monitoring
 # ✅ Trust-scored using 8-factor ML algorithm
-# ✅ Audit-logged for compliance (SOC 2, HIPAA, GDPR)
+# ✅ Audit-logged for compliance
 # ✅ Ready for action verification
 
 print(f"Agent registered: {agent.agent_id}")
@@ -133,7 +133,6 @@ print(f"Total Attestations: {mcp_server.attestation_count}")
 **Comprehensive Audit Logging**
 - Every action logged with context
 - Immutable audit trail
-- SOC 2 / HIPAA / GDPR compliant
 - Retention policies and archival
 
 **Real-Time Threat Detection**
