@@ -182,31 +182,81 @@ class AIMClient:
         # Prepare additional headers (merge with session headers)
         additional_headers = {}
 
-        # Add API key authentication if available
-        if self.api_key:
+        # Add Ed25519 signature authentication if signing key is available (highest priority)
+        if self.signing_key and self.public_key and self.agent_id:
+            try:
+                import time
+                import json
+
+                # Create timestamp
+                timestamp = str(int(time.time()))
+
+                # Create message to sign: method + endpoint + timestamp + body
+                message_parts = [method.upper(), endpoint, timestamp]
+                json_body_str = None
+                if data:
+                    json_body_str = json.dumps(data, sort_keys=True)
+                    message_parts.append(json_body_str)
+                    print(f"🔍 SDK signing JSON body: {json_body_str[:200]}...")
+                message = '\n'.join(message_parts)
+                print(f"🔍 SDK signing full message:\n{message[:500]}...")
+
+                # Sign the message
+                signature = self.signing_key.sign(message.encode('utf-8')).signature
+                signature_b64 = Base64Encoder.encode(signature).decode('utf-8')
+
+                # Add Ed25519 signature headers
+                additional_headers['X-Agent-ID'] = self.agent_id
+                additional_headers['X-Signature'] = signature_b64
+                additional_headers['X-Timestamp'] = timestamp
+                additional_headers['X-Public-Key'] = self.public_key
+
+                # CRITICAL: Use pre-serialized JSON to ensure exact same format as signed
+                if json_body_str:
+                    additional_headers['Content-Type'] = 'application/json'
+
+            except Exception as e:
+                # If Ed25519 signing fails, fall back to other methods
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Ed25519 signing failed: {e}")
+
+        # Add API key authentication if available (fallback)
+        elif self.api_key:
             additional_headers['X-API-Key'] = self.api_key
 
-        # Add OAuth authorization if token manager is available (takes precedence over API key)
-        if self.oauth_token_manager:
+        # Add OAuth authorization if token manager is available (fallback)
+        elif self.oauth_token_manager:
             try:
                 access_token = self.oauth_token_manager.get_access_token()
                 if access_token:
                     additional_headers['Authorization'] = f'Bearer {access_token}'
             except Exception:
-                # If OAuth token fails, fall back to API key if available
+                # If OAuth token fails, no authentication will be added
                 pass
 
-        # Merge session headers with additional headers
+        # Merge session headers with additional headers (additional_headers take precedence)
         merged_headers = {**self.session.headers, **additional_headers}
 
         try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                json=data,
-                headers=merged_headers,
-                timeout=self.timeout
-            )
+            # CRITICAL: If we have pre-serialized JSON (for Ed25519 signing), use it directly
+            # Otherwise use json=data to let requests serialize it
+            if 'json_body_str' in locals() and json_body_str is not None:
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    data=json_body_str,
+                    headers=merged_headers,
+                    timeout=self.timeout
+                )
+            else:
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    json=data,
+                    headers=merged_headers,
+                    timeout=self.timeout
+                )
 
             # Handle authentication errors
             if response.status_code == 401:
