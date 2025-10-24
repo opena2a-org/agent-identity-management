@@ -526,6 +526,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	registrationService := application.NewRegistrationService(
 		oauthRepo, // Still uses oauth_repository for now (will be renamed in later step)
 		repos.User,
+		repos.Organization, // ✅ NEW: Organization repository for auto-creating orgs
 		auditService,
 		emailService, // ✅ NEW: Email service for password reset and admin notifications
 	)
@@ -617,6 +618,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Auth: handlers.NewAuthHandler(
 			services.Auth,
 			jwtService,
+			repos.Organization,
 		),
 		Agent: handlers.NewAgentHandler(
 			services.Agent,
@@ -783,6 +785,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	authProtected.Use(middleware.AuthMiddleware(jwtService)) // Apply middleware using Use() instead of inline
 	authProtected.Get("/me", h.Auth.Me)
 	authProtected.Post("/change-password", h.Auth.ChangePassword)
+
+	// Organization routes (authentication required)
+	organizations := v1.Group("/organizations")
+	organizations.Use(middleware.AuthMiddleware(jwtService))
+	organizations.Get("/current", h.Auth.GetCurrentOrganization)
 
 	// SDK routes (authentication required) - Download pre-configured SDK
 	sdk := v1.Group("/sdk")

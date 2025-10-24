@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Lock, User, Loader2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { ChevronDown, LogOut, Lock, User, Loader2, Building2 } from "lucide-react";
+import { api, type Organization } from "@/lib/api";
 import { type UserRole } from "@/lib/permissions";
+import { Badge } from "@/components/ui/badge";
 
 export function DashboardHeader() {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [user, setUser] = useState<{
     email: string;
     display_name?: string;
@@ -62,7 +64,18 @@ export function DashboardHeader() {
         }
       }
     };
+
+    const fetchOrganization = async () => {
+      try {
+        const orgData = await api.getCurrentOrganization();
+        setOrganization(orgData);
+      } catch (error) {
+        console.log("Failed to fetch organization:", error);
+      }
+    };
+
     fetchUser();
+    fetchOrganization();
   }, [router]);
 
   const handleLogout = async () => {
@@ -111,6 +124,24 @@ export function DashboardHeader() {
 
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
+      {/* Organization Context Bar */}
+      {organization && (
+        <div className="flex items-center gap-2 px-4 sm:px-6 lg:px-8 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800/30">
+          <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+            {organization.name}
+          </span>
+          <Badge variant="outline" className="text-xs capitalize">
+            {organization.plan}
+          </Badge>
+          {organization.max_agents && (
+            <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+              Max Agents: {organization.max_agents}
+            </span>
+          )}
+        </div>
+      )}
+      
       <div className="flex items-center justify-end h-16 px-4 sm:px-6 lg:px-8">
         {/* User Profile Dropdown */}
         <div className="relative">

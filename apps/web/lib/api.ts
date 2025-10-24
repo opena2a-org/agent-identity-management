@@ -61,9 +61,20 @@ export interface Agent {
   updated_at: string;
 }
 
+export interface Organization {
+  id: string;
+  name: string;
+  plan: "community" | "pro" | "enterprise";
+  max_agents: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface User {
   id: string;
   organization_id?: string;
+  organization_name?: string;
   email: string;
   name: string;
   avatar_url?: string;
@@ -425,6 +436,10 @@ class APIClient {
 
   async getCurrentUser(): Promise<User> {
     return this.request("/api/v1/auth/me");
+  }
+
+  async getCurrentOrganization(): Promise<Organization> {
+    return this.request("/api/v1/organizations/current");
   }
 
   async logout(): Promise<void> {

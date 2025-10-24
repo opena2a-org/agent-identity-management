@@ -58,8 +58,9 @@ type CapabilityRequestRepository interface {
 
 // CapabilityRequestFilter defines filtering options for capability request queries
 type CapabilityRequestFilter struct {
-	Status   *CapabilityRequestStatus
-	AgentID  *uuid.UUID
-	Limit    int
-	Offset   int
+	Status         *CapabilityRequestStatus
+	AgentID        *uuid.UUID
+	OrganizationID *uuid.UUID // Filter by organization for multi-tenancy
+	Limit          int
+	Offset         int
 }

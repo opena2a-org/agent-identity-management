@@ -35,6 +35,7 @@ type RegistrationRepository interface {
 type RegistrationService struct {
 	registrationRepo RegistrationRepository
 	userRepo         domain.UserRepository
+	orgRepo          domain.OrganizationRepository
 	auditService     *AuditService
 	emailService     domain.EmailService
 }
@@ -42,12 +43,14 @@ type RegistrationService struct {
 func NewRegistrationService(
 	registrationRepo RegistrationRepository,
 	userRepo domain.UserRepository,
+	orgRepo domain.OrganizationRepository,
 	auditService *AuditService,
 	emailService domain.EmailService,
 ) *RegistrationService {
 	return &RegistrationService{
 		registrationRepo: registrationRepo,
 		userRepo:         userRepo,
+		orgRepo:          orgRepo,
 		auditService:     auditService,
 		emailService:     emailService,
 	}
@@ -81,6 +84,10 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	// Check if this is the first user from this email domain (auto-approve if yes)
+	emailDomain := extractEmailDomain(email)
+	shouldAutoApprove := s.shouldAutoApproveFirstUser(ctx, emailDomain)
+
 	// Create new manual registration request
 	req := domain.NewUserRegistrationRequestManual(
 		email,
@@ -89,9 +96,62 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		hashedPassword,
 	)
 
+	// Auto-approve if first user from this domain
+	if shouldAutoApprove {
+		req.Status = domain.RegistrationStatusApproved
+		now := time.Now()
+		req.ReviewedAt = &now
+		req.ReviewedBy = nil // System auto-approval (no reviewer)
+		fmt.Printf("✅ Auto-approving first user from domain: %s\n", emailDomain)
+	}
+
 	// Save registration request
 	if err := s.registrationRepo.CreateRegistrationRequest(ctx, req); err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
+	}
+
+	// If auto-approved, create the user account immediately
+	if shouldAutoApprove {
+		// Find or create organization
+		targetOrgID, err := s.findOrCreateOrganization(ctx, emailDomain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find or create organization: %w", err)
+		}
+
+		// Create user account
+		fullName := firstName
+		if lastName != "" {
+			if fullName != "" {
+				fullName += " "
+			}
+			fullName += lastName
+		}
+		if fullName == "" {
+			fullName = email
+		}
+
+		now := time.Now()
+		user := &domain.User{
+			ID:                  uuid.New(),
+			OrganizationID:      targetOrgID,
+			Email:               email,
+			Name:                fullName,
+			Role:                domain.RoleAdmin, // First user becomes admin
+			Provider:            "local",
+			ProviderID:          email,
+			PasswordHash:        &hashedPassword,
+			ApprovedBy:          nil, // System auto-approval (no reviewer)
+			ApprovedAt:          &now,
+			Status:              domain.UserStatusActive,
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}
+
+		if err := s.userRepo.Create(user); err != nil {
+			return nil, fmt.Errorf("failed to create auto-approved user: %w", err)
+		}
+
+		fmt.Printf("✅ Auto-created admin user %s for new organization %s\n", email, emailDomain)
 	}
 
 	// Send registration confirmation email
@@ -232,6 +292,15 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		return nil, ErrRegistrationNotPending
 	}
 
+	// Extract email domain from the user's email
+	emailDomain := extractEmailDomain(req.Email)
+	
+	// Find or create organization based on email domain
+	targetOrgID, err := s.findOrCreateOrganization(ctx, emailDomain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find or create organization: %w", err)
+	}
+
 	// Approve request
 	req.Approve(reviewerID)
 	if err := s.registrationRepo.UpdateRegistrationRequest(ctx, req); err != nil {
@@ -263,12 +332,24 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		}
 	}
 
+	// Check if this is the first user in the organization (make them admin)
+	existingUsers, err := s.userRepo.GetByOrganization(targetOrgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing users: %w", err)
+	}
+	
+	userRole := domain.RoleViewer // Default to viewer
+	if len(existingUsers) == 0 {
+		userRole = domain.RoleAdmin // First user becomes admin
+		fmt.Printf("✅ Making user %s admin (first user in organization %s)\n", req.Email, emailDomain)
+	}
+
 	user := &domain.User{
 		ID:             uuid.New(),
-		OrganizationID: orgID,
+		OrganizationID: targetOrgID, // Use the organization based on email domain
 		Email:          req.Email,
 		Name:           fullName,
-		Role:           domain.RoleViewer, // Default to viewer role for new users
+		Role:           userRole, // Admin if first user, otherwise viewer
 		Provider:       provider,
 		ProviderID:     providerID,
 		PasswordHash:   req.PasswordHash,  // Will be set for email/password registrations
@@ -523,4 +604,69 @@ func (s *RegistrationService) ResetPassword(
 	)
 
 	return nil
+}
+
+// extractEmailDomain extracts the domain from an email address
+func extractEmailDomain(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return email // Return original if invalid format
+	}
+	return parts[1]
+}
+
+// findOrCreateOrganization finds an existing organization by domain or creates a new one
+func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, domainName string) (uuid.UUID, error) {
+	// Try to find existing organization by domain
+	org, err := s.orgRepo.GetByDomain(domainName)
+	if err == nil && org != nil {
+		// Organization exists
+		fmt.Printf("✅ Found existing organization for domain: %s\n", domainName)
+		return org.ID, nil
+	}
+
+	// Organization doesn't exist, create new one
+	fmt.Printf("📝 Creating new organization for domain: %s\n", domainName)
+	
+	newOrg := &domain.Organization{
+		ID:        uuid.New(),
+		Name:      domainName, // Use domain as organization name
+		Domain:    domainName,
+		PlanType:  "free",
+		MaxAgents: 100,
+		MaxUsers:  10,
+		IsActive:  true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := s.orgRepo.Create(newOrg); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create organization: %w", err)
+	}
+
+	fmt.Printf("✅ Created new organization: %s (ID: %s)\n", domainName, newOrg.ID)
+	return newOrg.ID, nil
+}
+
+// shouldAutoApproveFirstUser checks if this is the first user from a domain
+// Returns true if:
+// 1. No organization exists for this domain, OR
+// 2. Organization exists but has zero users
+func (s *RegistrationService) shouldAutoApproveFirstUser(ctx context.Context, emailDomain string) bool {
+	// Check if organization exists
+	org, err := s.orgRepo.GetByDomain(emailDomain)
+	if err != nil || org == nil {
+		// Organization doesn't exist - this is the first user from this domain
+		return true
+	}
+
+	// Organization exists - check if it has any users
+	existingUsers, err := s.userRepo.GetByOrganization(org.ID)
+	if err != nil {
+		// Can't determine, be conservative and require approval
+		return false
+	}
+
+	// Auto-approve if no existing users in the organization
+	return len(existingUsers) == 0
 }

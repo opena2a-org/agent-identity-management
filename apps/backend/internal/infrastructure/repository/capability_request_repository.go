@@ -118,6 +118,12 @@ func (r *capabilityRequestRepository) List(filter domain.CapabilityRequestFilter
 	argPos := 1
 
 	// Apply filters
+	if filter.OrganizationID != nil {
+		query += fmt.Sprintf(" AND a.organization_id = $%d", argPos)
+		args = append(args, *filter.OrganizationID)
+		argPos++
+	}
+
 	if filter.Status != nil {
 		query += fmt.Sprintf(" AND cr.status = $%d", argPos)
 		args = append(args, *filter.Status)
