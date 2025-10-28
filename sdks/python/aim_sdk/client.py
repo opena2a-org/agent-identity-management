@@ -259,8 +259,7 @@ class AIMClient:
                     headers=merged_headers,
                     timeout=self.timeout
                 )
-            print(f"method: {method}, endpoint: {endpoint}, data: {data}, response: {response.text}")
-            print(f"merged_headers: {merged_headers}")
+           
             # Handle authentication errors
             if response.status_code == 401:
                 raise AuthenticationError("Authentication failed - invalid agent credentials")
