@@ -210,8 +210,6 @@ class AIMClient:
                 additional_headers['X-Signature'] = signature_b64
                 additional_headers['X-Timestamp'] = timestamp
                 additional_headers['X-Public-Key'] = self.public_key
-                additional_headers['X-API-KEY'] = self.api_key
-                additional_headers['X-API-URL'] = self.aim_url
 
                 # CRITICAL: Use pre-serialized JSON to ensure exact same format as signed
                 if json_body_str:
@@ -259,7 +257,7 @@ class AIMClient:
                     headers=merged_headers,
                     timeout=self.timeout
                 )
-           
+
             # Handle authentication errors
             if response.status_code == 401:
                 raise AuthenticationError("Authentication failed - invalid agent credentials")
@@ -331,7 +329,6 @@ class AIMClient:
         """
         # Create verification request payload
         timestamp = datetime.utcnow().isoformat() + 'Z'  # Match backend expected format
-        unix_timestamp = int(time.time())
 
         # Create signature for Ed25519 verification
         # The backend verifies the signature by reconstructing the JSON payload
@@ -363,18 +360,48 @@ class AIMClient:
         # SDK API endpoint
         endpoint = "/api/v1/sdk-api/verifications"
 
-        # Debug logging (disabled in production)
-        # print(f"[DEBUG] Sending verification request:")
-        # print(f"[DEBUG]   Endpoint: POST {endpoint}")
-        # print(f"[DEBUG]   Agent ID: {self.agent_id}")
-
-        # Send verification request (API key is already in default headers)
+        # Send verification request using direct HTTP call to avoid double-signing
         try:
-            result = self._make_request(
+            url = f"{self.aim_url}{endpoint}"
+            
+            # Prepare headers - use API key if available, otherwise OAuth
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': f'AIM-Python-SDK/1.0.0'
+            }
+            
+            if self.api_key:
+                headers['X-API-Key'] = self.api_key
+            elif self.oauth_token_manager:
+                try:
+                    access_token = self.oauth_token_manager.get_access_token()
+                    if access_token:
+                        headers['Authorization'] = f'Bearer {access_token}'
+                except Exception:
+                    pass  # Continue without OAuth if it fails
+            
+            # Add SDK token header if available
+            if self.sdk_token_id:
+                headers['X-SDK-Token'] = self.sdk_token_id
+            
+            response = self.session.request(
                 method="POST",
-                endpoint=endpoint,
-                data=request_payload
+                url=url,
+                json=request_payload,
+                headers=headers,
+                timeout=self.timeout
             )
+            
+            # Handle authentication errors
+            if response.status_code == 401:
+                raise AuthenticationError("Authentication failed - invalid agent credentials")
+
+            # Handle forbidden errors
+            if response.status_code == 403:
+                raise AuthenticationError("Forbidden - insufficient permissions")
+
+            response.raise_for_status()
+            result = response.json()
 
             verification_id = result.get("id")
             status = result.get("status")
@@ -424,10 +451,46 @@ class AIMClient:
 
         while time.time() - start_time < timeout_seconds:
             try:
-                result = self._make_request(
+                # Use direct HTTP call to avoid signature issues
+                url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}"
+                
+                # Prepare headers - use API key if available, otherwise OAuth
+                headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': f'AIM-Python-SDK/1.0.0'
+                }
+                
+                if self.api_key:
+                    headers['X-API-Key'] = self.api_key
+                elif self.oauth_token_manager:
+                    try:
+                        access_token = self.oauth_token_manager.get_access_token()
+                        if access_token:
+                            headers['Authorization'] = f'Bearer {access_token}'
+                    except Exception:
+                        pass  # Continue without OAuth if it fails
+                
+                # Add SDK token header if available
+                if self.sdk_token_id:
+                    headers['X-SDK-Token'] = self.sdk_token_id
+                
+                response = self.session.request(
                     method="GET",
-                    endpoint=f"/api/v1/sdk-api/verifications/{verification_id}"
+                    url=url,
+                    headers=headers,
+                    timeout=self.timeout
                 )
+                
+                # Handle authentication errors
+                if response.status_code == 401:
+                    raise AuthenticationError("Authentication failed - invalid agent credentials")
+
+                # Handle forbidden errors
+                if response.status_code == 403:
+                    raise AuthenticationError("Forbidden - insufficient permissions")
+
+                response.raise_for_status()
+                result = response.json()
 
                 status = result.get("status")
 
@@ -474,16 +537,44 @@ class AIMClient:
             error_message: Error message if action failed
         """
         try:
-            self._make_request(
+            # Use direct HTTP call to avoid signature issues
+            url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/result"
+            
+            # Prepare headers - use API key if available, otherwise OAuth
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': f'AIM-Python-SDK/1.0.0'
+            }
+            
+            if self.api_key:
+                headers['X-API-Key'] = self.api_key
+            elif self.oauth_token_manager:
+                try:
+                    access_token = self.oauth_token_manager.get_access_token()
+                    if access_token:
+                        headers['Authorization'] = f'Bearer {access_token}'
+                except Exception:
+                    pass  # Continue without OAuth if it fails
+            
+            # Add SDK token header if available
+            if self.sdk_token_id:
+                headers['X-SDK-Token'] = self.sdk_token_id
+            
+            response = self.session.request(
                 method="POST",
-                endpoint=f"/api/v1/sdk-api/verifications/{verification_id}/result",
-                data={
+                url=url,
+                json={
                     "result": "success" if success else "failure",
                     "result_summary": result_summary,
                     "error_message": error_message,
                     "timestamp": datetime.now(timezone.utc).isoformat()
-                }
+                },
+                headers=headers,
+                timeout=self.timeout
             )
+            
+            # Don't raise on errors for logging - just continue
+            response.raise_for_status()
         except Exception:
             # Don't fail the action if logging fails
             pass
@@ -1085,7 +1176,14 @@ def register_agent(
     # 2. Detect authentication mode (SDK vs Manual)
     sdk_creds = load_sdk_credentials()
 
-    if sdk_creds:
+    # Force API key mode if sdk_token_id is explicitly set to None
+    if sdk_token_id is None and api_key:
+        # FORCE API KEY MODE: Skip SDK credentials check
+        auth_mode = "api_key"
+        if not aim_url:
+            raise ConfigurationError("aim_url is required when using API key mode")
+        print(f"🔑 API Key Mode: Using API key authentication")
+    elif sdk_creds and sdk_token_id is not None:
         # SDK MODE: Use embedded OAuth credentials
         auth_mode = "oauth"
         aim_url = aim_url or sdk_creds.get("aim_url")
