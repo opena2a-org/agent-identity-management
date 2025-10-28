@@ -1,0 +1,11 @@
+requests>=2.32.3
+PyNaCl>=1.6.0
+flask>=2.3.2
+python-dotenv>=1.0.1
+dotenv>=1.2.1
+langchain>=0.3.1
+langchain-google-genai>=0.3.1
+langchain-core>=0.3.1       
+
+
+# pip install -e <path_to_your_package> to install aim sdk from local path
