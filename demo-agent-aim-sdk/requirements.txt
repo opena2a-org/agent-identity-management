@@ -6,3 +6,6 @@ dotenv>=1.2.1
 langchain>=0.3.1
 langchain-google-genai>=0.3.1
 langchain-core>=0.3.1       
+
+
+# pip install -e <path_to_your_package> to install aim sdk from local path
