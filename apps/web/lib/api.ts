@@ -809,7 +809,10 @@ class APIClient {
       const requests = await this.getCapabilityRequests({ status: "pending" });
       return requests.length;
     } catch (error) {
-      console.error("Failed to fetch pending capability requests count:", error);
+      console.error(
+        "Failed to fetch pending capability requests count:",
+        error
+      );
       return 0;
     }
   }
@@ -1949,6 +1952,222 @@ class APIClient {
     total: number;
   }> {
     return this.request(`/api/v1/agents/${agentId}/audit-logs?limit=${limit}`);
+  }
+
+  // ========================================
+  // Chat System API Methods
+  // ========================================
+
+  // Generic GET method for direct API calls
+  async get(endpoint: string): Promise<any> {
+    return this.request(endpoint);
+  }
+
+  // Generic POST method for direct API calls
+  async post(endpoint: string, data?: any): Promise<any> {
+    return this.request(endpoint, {
+      method: "POST",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  // Generic PUT method for direct API calls
+  async put(endpoint: string, data?: any): Promise<any> {
+    return this.request(endpoint, {
+      method: "PUT",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  // Generic DELETE method for direct API calls
+  async delete(endpoint: string): Promise<any> {
+    return this.request(endpoint, {
+      method: "DELETE",
+    });
+  }
+
+  // Chat Conversations
+  async getChatConversations(): Promise<{
+    conversations: Array<{
+      id: string;
+      title: string;
+      agent_id: string;
+      agent_name?: string;
+      created_at: string;
+      updated_at: string;
+      last_message_at?: string;
+      message_count: number;
+    }>;
+  }> {
+    return this.request("/api/v1/chat/conversations");
+  }
+
+  async createChatConversation(data: {
+    agent_id: string;
+    title: string;
+  }): Promise<{
+    conversation: {
+      id: string;
+      title: string;
+      agent_id: string;
+      created_at: string;
+    };
+  }> {
+    return this.request("/api/v1/chat/conversations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getChatConversation(id: string): Promise<{
+    conversation: {
+      id: string;
+      title: string;
+      agent_id: string;
+      agent_name?: string;
+      created_at: string;
+      updated_at: string;
+    };
+  }> {
+    return this.request(`/api/v1/chat/conversations/${id}`);
+  }
+
+  async updateChatConversation(
+    id: string,
+    data: { title?: string }
+  ): Promise<{
+    conversation: {
+      id: string;
+      title: string;
+      updated_at: string;
+    };
+  }> {
+    return this.request(`/api/v1/chat/conversations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteChatConversation(id: string): Promise<void> {
+    return this.request(`/api/v1/chat/conversations/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Chat Messages
+  async getChatMessages(conversationId: string): Promise<{
+    messages: Array<{
+      id: string;
+      conversation_id: string;
+      user_id: string;
+      agent_id: string;
+      content: string;
+      role: "user" | "agent" | "system";
+      message_type: "text" | "image" | "file";
+      created_at: string;
+      is_edited: boolean;
+    }>;
+  }> {
+    return this.request(
+      `/api/v1/chat/conversations/${conversationId}/messages`
+    );
+  }
+
+  async sendChatMessage(data: {
+    conversation_id: string;
+    content: string;
+    message_type?: "text" | "image" | "file";
+  }): Promise<{
+    message: {
+      id: string;
+      conversation_id: string;
+      user_id: string;
+      agent_id: string;
+      content: string;
+      role: "user" | "agent" | "system";
+      message_type: "text" | "image" | "file";
+      created_at: string;
+      is_edited: boolean;
+    };
+  }> {
+    return this.request("/api/v1/chat/messages", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateChatMessage(
+    id: string,
+    data: { content: string }
+  ): Promise<{
+    message: {
+      id: string;
+      content: string;
+      is_edited: boolean;
+      updated_at: string;
+    };
+  }> {
+    return this.request(`/api/v1/chat/messages/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteChatMessage(id: string): Promise<void> {
+    return this.request(`/api/v1/chat/messages/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Chat Daily Limits
+  async getChatDailyLimits(): Promise<{
+    daily_limit: number;
+    message_count: number;
+    is_limit_exceeded: boolean;
+    remaining_messages: number;
+    reset_at: string;
+  }> {
+    return this.request("/api/v1/chat/limits/daily");
+  }
+
+  // Chat Activity
+  async getChatAgentActivity(agentId: string): Promise<{
+    activities: Array<{
+      id: string;
+      agent_id: string;
+      user_id: string;
+      conversation_id: string;
+      activity_type: string;
+      activity_data: Record<string, any>;
+      created_at: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/chat/activity/agent/${agentId}`);
+  }
+
+  async getChatUserActivity(userId: string): Promise<{
+    activities: Array<{
+      id: string;
+      agent_id: string;
+      user_id: string;
+      conversation_id: string;
+      activity_type: string;
+      activity_data: Record<string, any>;
+      created_at: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/chat/activity/user/${userId}`);
+  }
+
+  // Chat Statistics
+  async getChatStats(): Promise<{
+    total_conversations: number;
+    total_messages: number;
+    active_conversations: number;
+    messages_today: number;
+    avg_messages_per_conversation: number;
+  }> {
+    return this.request("/api/v1/chat/stats");
   }
 }
 

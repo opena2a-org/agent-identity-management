@@ -356,6 +356,11 @@ type Repositories struct {
 	SDKToken          domain.SDKTokenRepository
 	Capability        domain.CapabilityRepository
 	CapabilityRequest domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
+	ChatConversation  *repository.ChatConversationRepository
+	ChatMessage       *repository.ChatMessageRepository
+	UserDailyLimit    *repository.UserDailyLimitRepository
+	AgentActivityLog  *repository.AgentActivityLogRepository
+	ChatSystemConfig  *repository.ChatSystemConfigRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -384,6 +389,11 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		SDKToken:          repository.NewSDKTokenRepository(db),
 		Capability:        repository.NewCapabilityRepository(dbx),
 		CapabilityRequest: repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
+		ChatConversation:  repository.NewChatConversationRepository(dbx),
+		ChatMessage:       repository.NewChatMessageRepository(dbx),
+		UserDailyLimit:    repository.NewUserDailyLimitRepository(dbx),
+		AgentActivityLog:  repository.NewAgentActivityLogRepository(dbx),
+		ChatSystemConfig:  repository.NewChatSystemConfigRepository(dbx),
 	}, oauthRepo
 }
 
@@ -409,6 +419,7 @@ type Services struct {
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
+	Chat              *application.ChatService              // ✅ For chat system
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -561,6 +572,16 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
+	// Initialize chat service
+	chatService := application.NewChatService(
+		repos.ChatConversation,
+		repos.ChatMessage,
+		repos.UserDailyLimit,
+		repos.AgentActivityLog,
+		repos.ChatSystemConfig,
+		auditService,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -583,6 +604,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
+		Chat:              chatService,              // ✅ For chat system
 	}, keyVault
 }
 
@@ -611,6 +633,7 @@ type Handlers struct {
 	Capability         *handlers.CapabilityHandler
 	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
 	CapabilityRequest  *handlers.CapabilityRequestHandlers // ✅ For capability request approval
+	Chat               *handlers.ChatHandler               // ✅ For chat system
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -729,6 +752,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		CapabilityRequest: handlers.NewCapabilityRequestHandlers(
 			services.CapabilityRequest,
+		),
+		Chat: handlers.NewChatHandler(
+			services.Chat,
 		),
 	}
 }
@@ -1058,6 +1084,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToMCPServer)
 	mcpServers.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromMCPServer)
 	mcpServers.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForMCPServer)
+
+	// Chat routes (authentication required) - Available to all roles
+	h.Chat.RegisterRoutes(v1, middleware.AuthMiddleware(jwtService))
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {

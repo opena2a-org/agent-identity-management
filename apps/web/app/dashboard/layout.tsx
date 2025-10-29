@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { useDeactivationCheck } from "@/hooks/use-deactivation-check";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function DashboardLayout({
   children,
@@ -25,6 +26,7 @@ export default function DashboardLayout({
           <div className="w-full px-4 sm:px-6 lg:px-8 py-8">{children}</div>
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

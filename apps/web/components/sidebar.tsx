@@ -26,6 +26,7 @@ import {
   Webhook,
   Code,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -60,6 +61,18 @@ const navigationBase: NavSection[] = [
         href: "/dashboard/mcp",
         icon: Server,
         roles: ["admin", "manager", "member"],
+      },
+      {
+        name: "Chat",
+        href: "/dashboard/chat",
+        icon: MessageCircle,
+        roles: ["admin", "manager", "member", "viewer"],
+      },
+      {
+        name: "Agent Activity",
+        href: "/dashboard/agent-activity",
+        icon: Activity,
+        roles: ["admin", "manager", "member", "viewer"],
       },
     ],
   },
