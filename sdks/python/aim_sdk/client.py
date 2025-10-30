@@ -90,6 +90,10 @@ class AIMClient:
         # Initialize Ed25519 signing key (only if using cryptographic mode)
         self.signing_key = None
         self.public_key = public_key
+        
+        # Track agent capabilities for local checking
+        self._agent_capabilities = set()
+        self._capabilities_loaded = False
 
         if private_key and public_key:
             try:
@@ -259,9 +263,11 @@ class AIMClient:
                     headers=merged_headers,
                     timeout=self.timeout
                 )
-           
             # Handle authentication errors
             if response.status_code == 401:
+                print(f"🔍 DEBUG: 401 Response body: {response.text}")
+                print(f"🔍 DEBUG: Request headers: {merged_headers}")
+                print(f"🔍 DEBUG: Request URL: {url}")
                 raise AuthenticationError("Authentication failed - invalid agent credentials")
 
             # Handle forbidden errors
@@ -818,27 +824,101 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"SDK integration report failed: {e}")
 
+    def _load_capabilities(self) -> None:
+        """
+        Load agent capabilities from agent info.
+        
+        This method gets the capabilities from the agent data when the agent is loaded.
+        """
+        if self._capabilities_loaded:
+            return
+            
+        try:
+            # Get agent info which contains capabilities
+            agent_info = self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}"
+            )
+            
+            # Extract capabilities from agent info (nested structure)
+            agent_data = agent_info.get("agent", {})
+            capabilities = agent_data.get("capabilities", [])
+            
+            if capabilities:
+                self._agent_capabilities = set(capabilities)
+                print(f"📋 Loaded {len(self._agent_capabilities)} capabilities: {self._agent_capabilities}")
+            else:
+                print("Warning: No capabilities found in agent info")
+                self._agent_capabilities = set()
+                
+        except Exception as e:
+            print(f"Warning: Could not get agent info: {e}")
+            # If we can't get agent info, disable capability checking
+            print("⚠️  Disabling capability checking - actions will be verified server-side")
+            self._agent_capabilities = None  # Special value to indicate no capability checking
+        
+        self._capabilities_loaded = True
+
+    def _has_capability(self, capability_type: str) -> bool:
+        """
+        Check if the agent has a specific capability.
+        
+        Args:
+            capability_type: The capability to check for
+            
+        Returns:
+            True if the agent has the capability, False otherwise
+        """
+        # Load capabilities if not already loaded
+        if not self._capabilities_loaded:
+            self._load_capabilities()
+        
+        # If capability checking is disabled (None), allow all actions
+        if self._agent_capabilities is None:
+            return True
+        
+        return capability_type in self._agent_capabilities
+
+    def get_capabilities(self) -> set:
+        """
+        Get the current capabilities for this agent.
+        
+        Returns:
+            Set of capability types that this agent has
+        """
+        if not self._capabilities_loaded:
+            self._load_capabilities()
+        
+        # If capability checking is disabled, return empty set
+        if self._agent_capabilities is None:
+            return set()
+        
+        return self._agent_capabilities.copy()
+
     def perform_action(
         self,
         action_type: str,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        timeout_seconds: int = 300
+        timeout_seconds: int = 300,
+        check_capability: bool = True
     ):
         """
         Decorator for automatic action verification.
 
         This decorator wraps a function to automatically:
-        1. Request verification from AIM before execution
-        2. Wait for approval
-        3. Execute the function if approved
-        4. Log the result back to AIM
+        1. Check if agent has required capability (if check_capability=True)
+        2. Request verification from AIM before execution
+        3. Wait for approval
+        4. Execute the function if approved
+        5. Log the result back to AIM
 
         Args:
             action_type: Type of action being performed
             resource: Resource being accessed
             context: Additional context
             timeout_seconds: Max time to wait for approval
+            check_capability: Whether to check agent capabilities before verification
 
         Example:
             @client.perform_action("read_database", resource="users_table")
@@ -846,49 +926,69 @@ class AIMClient:
                 return database.query("SELECT * FROM users")
 
             # When called, this will:
-            # 1. Request verification from AIM
-            # 2. Wait for approval
-            # 3. Execute the query if approved
-            # 4. Log the result to AIM
+            # 1. Check if agent has "read_database" capability
+            # 2. Request verification from AIM
+            # 3. Wait for approval
+            # 4. Execute the query if approved
+            # 5. Log the result to AIM
             users = get_users()
 
         Raises:
-            ActionDeniedError: If AIM denies the action
+            ActionDeniedError: If AIM denies the action or agent lacks capability
             VerificationError: If verification fails
         """
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
-                # Request verification
-                verification_result = self.verify_action(
-                    action_type=action_type,
-                    resource=resource,
-                    context=context,
-                    timeout_seconds=timeout_seconds
-                )
-
-                verification_id = verification_result["verification_id"]
+                # Check capability first if enabled
+                verification_id = None
+                
+                if check_capability:
+                    if not self._has_capability(action_type):
+                        # Capability mismatch - create verification request (which creates alert)
+                        print(f"⚠️  Capability mismatch: Agent lacks '{action_type}' capability - creating alert")
+                        verification_result = self.verify_action(
+                            action_type=action_type,
+                            resource=resource,
+                            context=context,
+                            timeout_seconds=timeout_seconds
+                        )
+                        verification_id = verification_result["verification_id"]
+                    else:
+                        # Capability matches - skip verification request (no alert)
+                        print(f"✅ Capability match: Agent has '{action_type}' capability - proceeding without alert")
+                else:
+                    # Capability checking disabled - always create verification request
+                    verification_result = self.verify_action(
+                        action_type=action_type,
+                        resource=resource,
+                        context=context,
+                        timeout_seconds=timeout_seconds
+                    )
+                    verification_id = verification_result["verification_id"]
 
                 # Execute the function
                 try:
                     result = func(*args, **kwargs)
 
-                    # Log success
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=True,
-                        result_summary=f"Action '{action_type}' completed successfully"
-                    )
+                    # Log success (only if verification was requested)
+                    if verification_id:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=True,
+                            result_summary=f"Action '{action_type}' completed successfully"
+                        )
 
                     return result
 
                 except Exception as e:
-                    # Log failure
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=False,
-                        error_message=str(e)
-                    )
+                    # Log failure (only if verification was requested)
+                    if verification_id:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=False,
+                            error_message=str(e)
+                        )
                     raise
 
             return wrapper
