@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flight Agent - AIM Secured</title>
+    <style>
+      /* --- Reset & Base --- */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+      }
+
+      body {
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: linear-gradient(135deg, #e9edf3, #d1d8e3);
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* --- Header --- */
+      .header {
+        background: linear-gradient(135deg, #2f3e46, #354f52);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        flex-shrink: 0;
+      }
+
+      .header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+      }
+
+      .header p {
+        font-size: 1rem;
+        opacity: 0.8;
+      }
+
+      /* --- Chat Layout --- */
+      .chat-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        background: #f7f9fc;
+        height: calc(100vh - 100px);
+      }
+
+      .chat-messages {
+        flex: 1;
+        background: #ffffff;
+        border: 1px solid #d8dee9;
+        border-radius: 10px;
+        padding: 20px;
+        overflow-y: auto;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      }
+
+      /* --- Messages --- */
+      .message {
+        margin-bottom: 15px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        max-width: 80%;
+        line-height: 1.4;
+        transition: all 0.25s ease;
+      }
+
+      .message.user {
+        background: #3f72af;
+        color: white;
+        margin-left: auto;
+        animation: slideInRight 0.3s ease;
+      }
+
+      .message.agent {
+        background: #e9eef6;
+        color: #1b263b;
+        border: 1px solid #d5dcea;
+        animation: slideInLeft 0.3s ease;
+      }
+
+      .message.system {
+        background: #edf2fb;
+        color: #3a506b;
+        border-left: 4px solid #3f72af;
+        text-align: center;
+        font-style: italic;
+        font-size: 0.95em;
+      }
+
+      @keyframes slideInRight {
+        from {
+          transform: translateX(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slideInLeft {
+        from {
+          transform: translateX(-20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      /* --- Typing Indicator --- */
+      #typing-indicator {
+        display: none;
+        color: #5a6c7a;
+        font-style: italic;
+        text-align: center;
+        font-size: 0.9em;
+        margin: 10px 0;
+      }
+
+      /* --- Input Section --- */
+      .chat-input {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+        flex-shrink: 0;
+      }
+
+      .chat-input input {
+        flex: 1;
+        padding: 12px 18px;
+        border-radius: 25px;
+        border: 1px solid #ccd4e0;
+        font-size: 16px;
+        outline: none;
+        transition: border 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .chat-input input:focus {
+        border-color: #3f72af;
+        box-shadow: 0 0 0 3px rgba(63, 114, 175, 0.15);
+      }
+
+      .btn {
+        padding: 12px 25px;
+        border: none;
+        border-radius: 25px;
+        background: #3f72af;
+        color: white;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .btn:hover {
+        background: #2e5c8a;
+        transform: translateY(-1px);
+      }
+
+      /* --- Scrollbar --- */
+      .chat-messages::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .chat-messages::-webkit-scrollbar-thumb {
+        background: #c1c8d6;
+        border-radius: 10px;
+      }
+
+      .chat-messages::-webkit-scrollbar-thumb:hover {
+        background: #a8b3c2;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="header">
+      <h1>Flight Agent</h1>
+      <p>AIM-Secured Communication Console</p>
+    </div>
+
+    <div class="chat-container">
+      <div id="chat-messages" class="chat-messages">
+        <div class="message system">
+          Welcome to AIM Secured. You can communicate with your flight agent
+          here. Please type your request below to begin.
+        </div>
+      </div>
+
+      <div id="typing-indicator">Agent is typing...</div>
+
+      <div class="chat-input">
+        <input
+          type="text"
+          id="chat-input"
+          placeholder="Type your message..."
+          onkeypress="handleChatKeyPress(event)"
+        />
+        <button class="btn" onclick="sendChatMessage()">Send</button>
+      </div>
+    </div>
+
+    <script>
+      function handleChatKeyPress(event) {
+        if (event.key === "Enter") sendChatMessage();
+      }
+
+      function showTypingIndicator(show = true) {
+        document.getElementById("typing-indicator").style.display = show
+          ? "block"
+          : "none";
+      }
+
+      function sendChatMessage() {
+        const input = document.getElementById("chat-input");
+        const message = input.value.trim();
+        if (!message) return;
+
+        addChatMessage("user", message);
+        input.value = "";
+        showTypingIndicator(true);
+
+        // Simulate backend call (replace with real endpoint)
+        fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            showTypingIndicator(false);
+            if (data.error) addChatMessage("system", "Error: " + data.error);
+            else addChatMessage("agent", data.reply);
+          })
+          .catch((err) => {
+            showTypingIndicator(false);
+            addChatMessage("system", "Error: " + err.message);
+          });
+      }
+
+      function addChatMessage(sender, message) {
+        const messages = document.getElementById("chat-messages");
+        const div = document.createElement("div");
+        div.className = `message ${sender}`;
+        div.textContent = message;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+      }
+    </script>
+  </body>
+</html>
