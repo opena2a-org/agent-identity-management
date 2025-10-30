@@ -707,3 +707,81 @@ func (r *AgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUI
 
 	return nil
 }
+
+// GetByTag retrieves all agents with a specific tag
+func (r *AgentRepository) GetByTag(tagID uuid.UUID, orgID uuid.UUID) ([]*domain.Agent, error) {
+	query := `
+		SELECT DISTINCT a.id, a.organization_id, a.name, a.display_name, a.description, a.agent_type, 
+		       a.status, a.version, a.public_key, a.certificate_url, a.repository_url, 
+		       a.documentation_url, a.trust_score, a.verified_at, a.talks_to, a.created_at, 
+		       a.updated_at, a.created_by
+		FROM agents a
+		INNER JOIN agent_tags at ON a.id = at.agent_id
+		WHERE at.tag_id = $1 AND a.organization_id = $2
+		ORDER BY a.created_at DESC
+	`
+
+	rows, err := r.db.Query(query, tagID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*domain.Agent
+	for rows.Next() {
+		agent := &domain.Agent{}
+		var publicKey sql.NullString
+		var certificateURL sql.NullString
+		var repositoryURL sql.NullString
+		var documentationURL sql.NullString
+		var talksToJSON []byte
+		err := rows.Scan(
+			&agent.ID,
+			&agent.OrganizationID,
+			&agent.Name,
+			&agent.DisplayName,
+			&agent.Description,
+			&agent.AgentType,
+			&agent.Status,
+			&agent.Version,
+			&publicKey,
+			&certificateURL,
+			&repositoryURL,
+			&documentationURL,
+			&agent.TrustScore,
+			&agent.VerifiedAt,
+			&talksToJSON,
+			&agent.CreatedAt,
+			&agent.UpdatedAt,
+			&agent.CreatedBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert nullable fields
+		if publicKey.Valid {
+			agent.PublicKey = &publicKey.String
+		}
+		if certificateURL.Valid {
+			agent.CertificateURL = certificateURL.String
+		}
+		if repositoryURL.Valid {
+			agent.RepositoryURL = repositoryURL.String
+		}
+		if documentationURL.Valid {
+			agent.DocumentationURL = documentationURL.String
+		}
+
+		// Unmarshal talks_to from JSONB
+		if len(talksToJSON) > 0 {
+			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+			}
+		}
+
+		agents = append(agents, agent)
+	}
+
+	return agents, nil
+}

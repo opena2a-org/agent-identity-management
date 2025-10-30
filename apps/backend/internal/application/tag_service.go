@@ -292,6 +292,26 @@ func (s *TagService) SearchTags(ctx context.Context, orgID uuid.UUID, query stri
 	return tags, nil
 }
 
+// GetAgentsByTag retrieves all agents with a specific tag
+func (s *TagService) GetAgentsByTag(ctx context.Context, tagID uuid.UUID, orgID uuid.UUID) ([]*domain.Agent, error) {
+	// Verify tag exists and belongs to organization
+	tag, err := s.tagRepo.GetByID(ctx, tagID)
+	if err != nil {
+		return nil, fmt.Errorf("tag not found: %w", err)
+	}
+	if tag.OrganizationID != orgID {
+		return nil, fmt.Errorf("tag does not belong to organization")
+	}
+
+	// Get agents with this tag
+	agents, err := s.agentRepo.GetByTag(tagID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agents by tag: %w", err)
+	}
+
+	return agents, nil
+}
+
 // validateTagInput validates tag creation input
 func (s *TagService) validateTagInput(input CreateTagInput) error {
 	if input.Key == "" {

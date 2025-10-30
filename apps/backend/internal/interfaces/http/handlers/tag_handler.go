@@ -659,6 +659,49 @@ func (h *TagHandler) SearchTags(c fiber.Ctx) error {
 	return c.JSON(tags)
 }
 
+// GetAgentsByTag retrieves all agents with a specific tag
+// @Summary Get agents by tag
+// @Description Retrieve all agents that have a specific tag
+// @Tags tags
+// @Produce json
+// @Param id path string true "Tag ID"
+// @Success 200 {object} map[string]interface{} "agents: array of agents, total: count"
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/tags/{id}/agents [get]
+func (h *TagHandler) GetAgentsByTag(c fiber.Ctx) error {
+	// Parse tag ID
+	tagID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid tag ID",
+		})
+	}
+
+	// Get authenticated user's organization
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found",
+		})
+	}
+
+	// Get agents with this tag
+	agents, err := h.tagService.GetAgentsByTag(c.Context(), tagID, orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agents": agents,
+		"total":  len(agents),
+	})
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))

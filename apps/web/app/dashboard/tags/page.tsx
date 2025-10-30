@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Tag as TagIcon } from "lucide-react";
+import { Plus, Search, Filter, Tag as TagIcon, X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,11 +18,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { api, Tag, TagCategory } from "@/lib/api";
+import { api, Tag, TagCategory, Agent } from "@/lib/api";
 import { toast } from "sonner";
 import { TagList } from "@/components/tags/tag-list";
 import { TagCreateModal } from "@/components/tags/tag-create-modal";
 import { TagEditModal } from "@/components/tags/tag-edit-modal";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 export default function TagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
@@ -34,6 +36,9 @@ export default function TagsPage() {
   );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
+  const [tagAgents, setTagAgents] = useState<Agent[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
 
   // Load tags
   const loadTags = async () => {
@@ -118,6 +123,27 @@ export default function TagsPage() {
         description: error.message || "Could not update tag",
       });
     }
+  };
+
+  const handleViewAgents = async (tag: Tag) => {
+    setSelectedTag(tag);
+    setIsLoadingAgents(true);
+    try {
+      const response = await api.getAgentsByTag(tag.id);
+      setTagAgents(response.agents);
+    } catch (error: any) {
+      toast.error("Failed to load agents", {
+        description: error.message || "Could not fetch agents for this tag",
+      });
+      setTagAgents([]);
+    } finally {
+      setIsLoadingAgents(false);
+    }
+  };
+
+  const handleCloseAgentsView = () => {
+    setSelectedTag(null);
+    setTagAgents([]);
   };
 
   const categoryOptions: { value: TagCategory | "all"; label: string }[] = [
@@ -285,9 +311,103 @@ export default function TagsPage() {
             isLoading={isLoading}
             onEdit={handleEditTag}
             onDelete={handleDeleteTag}
+            onViewAgents={handleViewAgents}
           />
         </CardContent>
       </Card>
+
+      {/* Agents with Selected Tag */}
+      {selectedTag && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Agents with Tag: {selectedTag.key}:{selectedTag.value}
+                </CardTitle>
+                <CardDescription>
+                  Agents that have been tagged with this classification
+                </CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleCloseAgentsView}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoadingAgents ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+              </div>
+            ) : !tagAgents || tagAgents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Users className="h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-muted-foreground mb-2">No agents found</p>
+                <p className="text-sm text-muted-foreground">
+                  No agents have been tagged with "{selectedTag.key}:
+                  {selectedTag.value}" yet
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {tagAgents.map((agent) => (
+                    <Link
+                      key={agent.id}
+                      href={`/dashboard/agents/${agent.id}`}
+                      className="block"
+                    >
+                      <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-base">
+                                {agent.display_name || agent.name}
+                              </CardTitle>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {agent.name}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={
+                                agent.status === "verified"
+                                  ? "default"
+                                  : agent.status === "pending"
+                                    ? "secondary"
+                                    : "destructive"
+                              }
+                            >
+                              {agent.status}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pb-3">
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {agent.description || "No description"}
+                          </p>
+                          <div className="flex items-center justify-between mt-3">
+                            <span className="text-xs text-muted-foreground">
+                              Trust Score
+                            </span>
+                            <span className="text-sm font-medium">
+                              {Math.round(agent.trust_score * 100)}%
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+                <div className="text-sm text-muted-foreground text-center pt-4 border-t">
+                  Showing {tagAgents?.length || 0} agent
+                  {tagAgents?.length !== 1 ? "s" : ""} with this tag
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Modals */}
       <TagCreateModal

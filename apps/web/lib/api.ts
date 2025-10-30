@@ -809,7 +809,10 @@ class APIClient {
       const requests = await this.getCapabilityRequests({ status: "pending" });
       return requests.length;
     } catch (error) {
-      console.error("Failed to fetch pending capability requests count:", error);
+      console.error(
+        "Failed to fetch pending capability requests count:",
+        error
+      );
       return 0;
     }
   }
@@ -1491,6 +1494,12 @@ class APIClient {
 
   async deleteTag(id: string): Promise<void> {
     return this.request(`/api/v1/tags/${id}`, { method: "DELETE" });
+  }
+
+  async getAgentsByTag(
+    tagId: string
+  ): Promise<{ agents: Agent[]; total: number }> {
+    return this.request(`/api/v1/tags/${tagId}/agents`);
   }
 
   // Agent Tags

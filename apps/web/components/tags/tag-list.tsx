@@ -1,5 +1,5 @@
 import { Tag } from "@/lib/api";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -27,9 +27,16 @@ interface TagListProps {
   isLoading: boolean;
   onEdit: (tag: Tag) => void;
   onDelete: (tagId: string) => void;
+  onViewAgents?: (tag: Tag) => void;
 }
 
-export function TagList({ tags, isLoading, onEdit, onDelete }: TagListProps) {
+export function TagList({
+  tags,
+  isLoading,
+  onEdit,
+  onDelete,
+  onViewAgents,
+}: TagListProps) {
   if (isLoading) {
     return (
       <div className="animate-pulse">
@@ -120,6 +127,16 @@ export function TagList({ tags, isLoading, onEdit, onDelete }: TagListProps) {
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">
+                {onViewAgents && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onViewAgents(tag)}
+                    title="View agents with this tag"
+                  >
+                    <Users className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => onEdit(tag)}>
                   <Edit className="h-4 w-4" />
                 </Button>

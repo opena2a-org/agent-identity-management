@@ -1027,6 +1027,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	tags.Put("/:id", middleware.MemberMiddleware(), h.Tag.UpdateTag)
 	tags.Get("/popular", h.Tag.GetPopularTags)
 	tags.Get("/search", h.Tag.SearchTags)
+	tags.Get("/:id/agents", h.Tag.GetAgentsByTag) // Get agents by tag
 	tags.Delete("/:id", middleware.ManagerMiddleware(), h.Tag.DeleteTag)
 
 	// Agent tag routes (under /agents/:id/tags)
