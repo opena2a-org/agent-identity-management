@@ -11,20 +11,16 @@ Real-time threat detection • Zero-trust architecture • HIPAA & SOC 2 ready �
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
-[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-api-overview)
+[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-technical-reference)
 
 [![GitHub Stars](https://img.shields.io/github/stars/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/network/members)
 [![GitHub Issues](https://img.shields.io/github/issues/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/pulls)
 
-[Documentation](https://opena2a.org/docs) • [Python SDK](sdks/python/README.md) • [Quick Start](docs/quick-start.md)
+[Documentation](https://opena2a.org/docs) • [Python SDK](sdk/python/README.md) • [Quick Start](#-quick-start)
 
 </div>
-
----
-
-> **📚 Looking for detailed guides?** Check out our [comprehensive documentation](https://opena2a.org/docs) with step-by-step tutorials, integration guides, and complete API reference.
 
 ---
 
@@ -57,47 +53,33 @@ AIM provides the security infrastructure AI agents need to operate safely in pro
 
 ---
 
-## 💼 Use Cases & Applications
+## ⚡ Quick Start
 
-### AI Governance & Security
-- **AI Agent Fleet Management** — Centralized identity management for hundreds of AI agents
-- **LLM Security & Compliance** — Audit trails and access controls for LangChain, CrewAI agents
-- **Autonomous Agent Authentication** — Cryptographic verification for self-operating agents
-- **AI Risk Management** — Real-time trust scoring and behavioral anomaly detection
+### 1. Deploy AIM (One Command)
 
-### Industry Applications
-- **Healthcare AI (HIPAA Compliance)** — Secure patient data access for medical AI agents
-- **Financial Services (SOC 2)** — Compliance-ready AI for trading and advisory agents
-- **Legal AI (Confidentiality)** — Audit trails for document-processing agents
-- **Customer Service Automation** — Identity management for chatbot and support agents
+```bash
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
+docker-compose up -d
+```
 
-### Developer Workflows
-- **GitHub Copilot Security** — Track and verify AI coding assistant actions
-- **VS Code Extensions** — Secure AI-powered development tools
-- **CI/CD Automation** — Identity management for build and deployment agents
-- **DevOps AI Agents** — Authentication for infrastructure automation agents
+**Services**:
+- Frontend: http://localhost:3000 (Login and download SDK)
+- Backend API: http://localhost:8080
+- PostgreSQL: localhost:5432
+- Redis: localhost:6379
 
-### Security Operations
-- **Threat Detection** — Real-time anomaly detection for AI agent behavior
-- **Incident Response** — Automated security policy enforcement
-- **Compliance Automation** — SOC 2, HIPAA, GDPR audit trail generation
-- **Zero-Trust AI** — Every action verified, every MCP attested, every risk scored
-
----
-
-## ⚡ Quick Start: Secure Your First Agent
-
-### 1. Download SDK from Dashboard
+### 2. Download SDK from Dashboard
 ```bash
 # 1. Log in to AIM at http://localhost:3000
 # 2. Go to Settings → SDK Download
 # 3. Download SDK with pre-configured credentials
-# 4. Extract and run your agent
+# 4. Extract and you're ready to go!
 ```
 
 **Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials.
 
-### 2. Register and Secure an Agent (One Line!)
+### 3. Secure Your First Agent (One Line!)
 ```python
 from aim_sdk import secure
 
@@ -118,7 +100,7 @@ client = secure(
 # ✅ Ready for production
 ```
 
-### 3. Verify Actions Before Execution
+### 4. Verify Actions Before Execution
 ```python
 # Before performing sensitive operations
 verification = client.verify_action(
@@ -141,42 +123,11 @@ if verification.approved:
     )
 ```
 
+**That's it!** Your agent now has enterprise-grade security with complete audit trails.
+
 ---
 
-## 🏗️ Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         AIM Platform                            │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   Backend    │  │   Frontend   │  │   Database   │         │
-│  │   (Go 1.23)  │  │  (Next.js)   │  │ (PostgreSQL) │         │
-│  │   Fiber v3   │  │  React 19    │  │      16      │         │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘         │
-│         │                                                        │
-│         │  REST API (136 endpoints)                             │
-│         │                                                        │
-└─────────┼────────────────────────────────────────────────────────┘
-          │
-          │  HTTPS + Ed25519 Signing
-          │
-┌─────────▼────────────────────────────────────────────────────────┐
-│                      Your AI Agents                              │
-│                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
-│  │  LangChain  │  │   CrewAI    │  │    Custom   │            │
-│  │   Agents    │  │   Agents    │  │   Agents    │            │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘            │
-│         │                 │                 │                   │
-│         └─────────────────┴─────────────────┘                   │
-│                           │                                      │
-│                    AIM SDK (Python)                              │
-│                   secure("agent-name")                           │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Key Features
+## 🎯 Key Features
 
 **Agent Identity Management**
 - Ed25519 cryptographic signing for all agent communications
@@ -214,137 +165,72 @@ if verification.approved:
 
 ---
 
-## 📊 API Overview
+## 💼 Use Cases
 
-AIM provides **136 REST endpoints** across 24 feature categories:
+### AI Governance & Security
+- **AI Agent Fleet Management** — Centralized identity management for hundreds of AI agents
+- **LLM Security & Compliance** — Audit trails and access controls for LangChain, CrewAI agents
+- **Autonomous Agent Authentication** — Cryptographic verification for self-operating agents
+- **AI Risk Management** — Real-time trust scoring and behavioral anomaly detection
 
-### Agent Management (12 endpoints)
-```
-POST   /api/v1/agents/register          # Register new agent
-GET    /api/v1/agents/:id                # Get agent details
-PATCH  /api/v1/agents/:id                # Update agent
-DELETE /api/v1/agents/:id                # Delete agent
-POST   /api/v1/agents/:id/verify         # Verify agent signature
-GET    /api/v1/agents/:id/credentials    # Get API credentials
-POST   /api/v1/agents/:id/rotate-key     # Rotate agent keys
-GET    /api/v1/agents/:id/trust-score    # Get trust score
-GET    /api/v1/agents/:id/activity       # Get activity logs
-GET    /api/v1/agents/:id/violations     # Get violations
-GET    /api/v1/agents/:id/key-vault      # Get key vault info
-GET    /api/v1/agents/:id/mcp-servers    # MCP connections
-```
+### Industry Applications
+- **Healthcare AI (HIPAA Compliance)** — Secure patient data access for medical AI agents
+- **Financial Services (SOC 2)** — Compliance-ready AI for trading and advisory agents
+- **Legal AI (Confidentiality)** — Audit trails for document-processing agents
+- **Customer Service Automation** — Identity management for chatbot and support agents
 
-### MCP Server Management (15 endpoints)
-```
-POST   /api/v1/mcp-servers/register      # Register MCP server
-GET    /api/v1/mcp-servers/:id           # Get MCP details
-PATCH  /api/v1/mcp-servers/:id           # Update MCP
-DELETE /api/v1/mcp-servers/:id           # Delete MCP
-POST   /api/v1/mcp-servers/:id/attest    # Attest MCP server
-GET    /api/v1/mcp-servers/:id/agents    # Connected agents
-POST   /api/v1/mcp-servers/:id/verify    # Verify attestation
-GET    /api/v1/mcp-servers/:id/capabilities  # Get capabilities
-POST   /api/v1/mcp-servers/:id/revoke    # Revoke attestation
-...
-```
-
-### Trust Scoring (6 endpoints)
-```
-GET    /api/v1/trust-scores/:agent_id     # Current score
-GET    /api/v1/trust-scores/:agent_id/history  # Score history
-POST   /api/v1/trust-scores/:agent_id/calculate  # Recalculate
-GET    /api/v1/trust-scores/:agent_id/factors    # Score breakdown
-GET    /api/v1/trust-scores/aggregate      # Aggregate scores
-POST   /api/v1/trust-scores/:agent_id/override   # Manual override
-```
-
-### Security Monitoring (7 endpoints)
-```
-GET    /api/v1/security/threats            # List threats
-GET    /api/v1/security/anomalies          # Detected anomalies
-GET    /api/v1/security/alerts             # Active alerts
-POST   /api/v1/security/alerts/:id/acknowledge  # Acknowledge alert
-GET    /api/v1/security/metrics            # Security metrics
-GET    /api/v1/security/policies           # Security policies
-POST   /api/v1/security/policies           # Create policy
-```
-
-### Capability Management (8 endpoints)
-```
-POST   /api/v1/capabilities/grant          # Grant capability
-POST   /api/v1/capabilities/revoke         # Revoke capability
-GET    /api/v1/capabilities/:agent_id      # List capabilities
-POST   /api/v1/capabilities/request        # Request capability
-GET    /api/v1/capabilities/requests       # List requests
-POST   /api/v1/capabilities/approve/:id    # Approve request
-POST   /api/v1/capabilities/reject/:id     # Reject request
-GET    /api/v1/capabilities/violations     # List violations
-```
-
-**Total**: 136 endpoints across 24 categories
-
-See [API Documentation](https://opena2a.org/docs/api/rest) for complete reference.
+### Developer Workflows
+- **GitHub Copilot Security** — Track and verify AI coding assistant actions
+- **VS Code Extensions** — Secure AI-powered development tools
+- **CI/CD Automation** — Identity management for build and deployment agents
+- **DevOps AI Agents** — Authentication for infrastructure automation agents
 
 ---
 
-## 🗄️ Database Schema
+## 🏗️ Architecture
 
-### Core Tables
-
-**agents** — Agent registry
-- `id`, `name`, `agent_type`, `owner_id`
-- `public_key`, `key_algorithm`, `key_created_at`
-- `trust_score`, `status`, `last_seen_at`
-
-**mcp_servers** — MCP server registry
-- `id`, `server_id`, `name`, `url`
-- `public_key`, `attestation_signature`
-- `capabilities`, `status`, `verified_at`
-
-**agent_mcp_connections** — Agent-MCP relationships
-- `agent_id`, `mcp_server_id`, `connected_at`
-- `detection_method`, `confidence_score`
-
-**verification_events** — Action verification log
-- `id`, `agent_id`, `action_type`, `resource_type`
-- `approved`, `risk_level`, `trust_score_at_time`
-
-**trust_scores** — Trust score history
-- `agent_id`, `score`, `factors`, `calculated_at`
-
-**capabilities** — Agent capabilities
-- `agent_id`, `capability_name`, `granted_by`
-- `granted_at`, `expires_at`, `metadata`
-
-**security_anomalies** — Behavioral anomaly detection
-- `agent_id`, `anomaly_type`, `severity`
-- `detected_at`, `resolved_at`, `metadata`
-
-### Capability Management
-- **capability_requests** — Pending capability requests
-- **capability_violations** — Unauthorized action attempts
-
-### MCP Attestation
-- **mcp_attestations** — Cryptographic attestation records
-- **mcp_capabilities** — MCP server capabilities
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         AIM Platform                            │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
+│  │   Backend    │  │   Frontend   │  │   Database   │         │
+│  │   (Go 1.23)  │  │  (Next.js)   │  │ (PostgreSQL) │         │
+│  │   Fiber v3   │  │  React 19    │  │      16      │         │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘         │
+│         │                                                        │
+│         │  REST API (136 endpoints)                             │
+│         │                                                        │
+└─────────┼────────────────────────────────────────────────────────┘
+          │
+          │  HTTPS + Ed25519 Signing
+          │
+┌─────────▼────────────────────────────────────────────────────────┐
+│                      Your AI Agents                              │
+│                                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│  │  LangChain  │  │   CrewAI    │  │    Custom   │            │
+│  │   Agents    │  │   Agents    │  │   Agents    │            │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘            │
+│         │                 │                 │                   │
+│         └─────────────────┴─────────────────┘                   │
+│                           │                                      │
+│                    AIM SDK (Python)                              │
+│                   secure("agent-name")                           │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 🚀 Deployment
 
-### Docker Compose (Quickest)
+### Docker Compose (Recommended)
 
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 docker-compose up -d
 ```
-
-**Services**:
-- Backend: http://localhost:8080
-- Frontend: http://localhost:3000
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
 
 ### Kubernetes
 
@@ -356,9 +242,19 @@ kubectl apply -f k8s/backend.yaml
 kubectl apply -f k8s/frontend.yaml
 ```
 
+### Cloud Deployment
+
+See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for:
+- AWS deployment with ECS
+- Azure deployment with Container Apps
+- GCP deployment with Cloud Run
+- Production best practices
+
 ### Environment Variables
 
-#### Backend (Go)
+<details>
+<summary>Backend (Go)</summary>
+
 ```env
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/aim
@@ -376,8 +272,11 @@ ENABLE_TRUST_SCORING=true
 ENABLE_MCP_ATTESTATION=true
 ENABLE_ANOMALY_DETECTION=true
 ```
+</details>
 
-#### Frontend (Next.js)
+<details>
+<summary>Frontend (Next.js)</summary>
+
 ```env
 # API
 NEXT_PUBLIC_API_URL=http://localhost:8080
@@ -386,6 +285,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 NEXT_PUBLIC_ENABLE_ANALYTICS=true
 NEXT_PUBLIC_ENVIRONMENT=production
 ```
+</details>
 
 ---
 
@@ -561,6 +461,126 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 - [ ] CLI tool for automation
 - [ ] Terraform provider
 - [ ] JavaScript/TypeScript SDK
+
+---
+
+## 📚 Technical Reference
+
+<details>
+<summary><h3>📊 API Overview (136 Endpoints)</h3></summary>
+
+### Agent Management (12 endpoints)
+```
+POST   /api/v1/agents/register          # Register new agent
+GET    /api/v1/agents/:id                # Get agent details
+PATCH  /api/v1/agents/:id                # Update agent
+DELETE /api/v1/agents/:id                # Delete agent
+POST   /api/v1/agents/:id/verify         # Verify agent signature
+GET    /api/v1/agents/:id/credentials    # Get API credentials
+POST   /api/v1/agents/:id/rotate-key     # Rotate agent keys
+GET    /api/v1/agents/:id/trust-score    # Get trust score
+GET    /api/v1/agents/:id/activity       # Get activity logs
+GET    /api/v1/agents/:id/violations     # Get violations
+GET    /api/v1/agents/:id/key-vault      # Get key vault info
+GET    /api/v1/agents/:id/mcp-servers    # MCP connections
+```
+
+### MCP Server Management (15 endpoints)
+```
+POST   /api/v1/mcp-servers/register      # Register MCP server
+GET    /api/v1/mcp-servers/:id           # Get MCP details
+PATCH  /api/v1/mcp-servers/:id           # Update MCP
+DELETE /api/v1/mcp-servers/:id           # Delete MCP
+POST   /api/v1/mcp-servers/:id/attest    # Attest MCP server
+GET    /api/v1/mcp-servers/:id/agents    # Connected agents
+POST   /api/v1/mcp-servers/:id/verify    # Verify attestation
+GET    /api/v1/mcp-servers/:id/capabilities  # Get capabilities
+POST   /api/v1/mcp-servers/:id/revoke    # Revoke attestation
+...
+```
+
+### Trust Scoring (6 endpoints)
+```
+GET    /api/v1/trust-scores/:agent_id     # Current score
+GET    /api/v1/trust-scores/:agent_id/history  # Score history
+POST   /api/v1/trust-scores/:agent_id/calculate  # Recalculate
+GET    /api/v1/trust-scores/:agent_id/factors    # Score breakdown
+GET    /api/v1/trust-scores/aggregate      # Aggregate scores
+POST   /api/v1/trust-scores/:agent_id/override   # Manual override
+```
+
+### Security Monitoring (7 endpoints)
+```
+GET    /api/v1/security/threats            # List threats
+GET    /api/v1/security/anomalies          # Detected anomalies
+GET    /api/v1/security/alerts             # Active alerts
+POST   /api/v1/security/alerts/:id/acknowledge  # Acknowledge alert
+GET    /api/v1/security/metrics            # Security metrics
+GET    /api/v1/security/policies           # Security policies
+POST   /api/v1/security/policies           # Create policy
+```
+
+### Capability Management (8 endpoints)
+```
+POST   /api/v1/capabilities/grant          # Grant capability
+POST   /api/v1/capabilities/revoke         # Revoke capability
+GET    /api/v1/capabilities/:agent_id      # List capabilities
+POST   /api/v1/capabilities/request        # Request capability
+GET    /api/v1/capabilities/requests       # List requests
+POST   /api/v1/capabilities/approve/:id    # Approve request
+POST   /api/v1/capabilities/reject/:id     # Reject request
+GET    /api/v1/capabilities/violations     # List violations
+```
+
+**Total**: 136 endpoints across 24 categories
+
+See [API Documentation](https://opena2a.org/docs/api/rest) for complete reference.
+
+</details>
+
+<details>
+<summary><h3>🗄️ Database Schema</h3></summary>
+
+### Core Tables
+
+**agents** — Agent registry
+- `id`, `name`, `agent_type`, `owner_id`
+- `public_key`, `key_algorithm`, `key_created_at`
+- `trust_score`, `status`, `last_seen_at`
+
+**mcp_servers** — MCP server registry
+- `id`, `server_id`, `name`, `url`
+- `public_key`, `attestation_signature`
+- `capabilities`, `status`, `verified_at`
+
+**agent_mcp_connections** — Agent-MCP relationships
+- `agent_id`, `mcp_server_id`, `connected_at`
+- `detection_method`, `confidence_score`
+
+**verification_events** — Action verification log
+- `id`, `agent_id`, `action_type`, `resource_type`
+- `approved`, `risk_level`, `trust_score_at_time`
+
+**trust_scores** — Trust score history
+- `agent_id`, `score`, `factors`, `calculated_at`
+
+**capabilities** — Agent capabilities
+- `agent_id`, `capability_name`, `granted_by`
+- `granted_at`, `expires_at`, `metadata`
+
+**security_anomalies** — Behavioral anomaly detection
+- `agent_id`, `anomaly_type`, `severity`
+- `detected_at`, `resolved_at`, `metadata`
+
+### Capability Management
+- **capability_requests** — Pending capability requests
+- **capability_violations** — Unauthorized action attempts
+
+### MCP Attestation
+- **mcp_attestations** — Cryptographic attestation records
+- **mcp_capabilities** — MCP server capabilities
+
+</details>
 
 ---
 
