@@ -221,9 +221,9 @@ After running an example successfully, you should see:
 
 ## 📞 Support
 
-- **GitHub Issues**: [Report bugs](https://github.com/opena2a-org/agent-identity-management/issues)
-- **Discussions**: [Ask questions](https://github.com/opena2a-org/agent-identity-management/discussions)
-- **Documentation**: [View full docs](../docs/)
+- **Documentation**: [View full docs](https://opena2a.org/docs)
+- **Discord**: [Ask questions](https://discord.gg/uRZa3KXgEn)
+- **Email**: [info@opena2a.org](mailto:info@opena2a.org)
 
 ---
 

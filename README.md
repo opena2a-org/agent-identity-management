@@ -438,9 +438,8 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 ## 📞 Support & Resources
 
 - **📖 Comprehensive Documentation**: [opena2a.org/docs](https://opena2a.org/docs) — Complete guides, tutorials, and API reference
-- **🐛 Issues**: [GitHub Issues](https://github.com/opena2a-org/agent-identity-management/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/opena2a-org/agent-identity-management/discussions)
 - **📧 Email**: [info@opena2a.org](mailto:info@opena2a.org)
+- **💬 Discord**: [Join our community](https://discord.gg/uRZa3KXgEn)
 - **🔗 Website**: [opena2a.org](https://opena2a.org)
 
 ---
