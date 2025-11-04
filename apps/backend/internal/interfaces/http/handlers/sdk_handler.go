@@ -194,8 +194,12 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	// Use environment variable if set, otherwise use relative path from project root
 	sdkBaseDir := os.Getenv("SDK_BASE_DIR")
 	if sdkBaseDir == "" {
-		// Default: relative to project root (../../sdks from apps/backend)
-		sdkBaseDir = filepath.Join("..", "..", "sdks")
+		// Default: relative to binary location (./sdk from /root/ in container, ../../sdk in dev)
+		sdkBaseDir = filepath.Join(".", "sdk")
+		// Check if SDK exists at ./sdk (production/container), otherwise try ../../sdk (development)
+		if _, err := os.Stat(filepath.Join(sdkBaseDir, sdkType)); os.IsNotExist(err) {
+			sdkBaseDir = filepath.Join("..", "..", "sdk")
+		}
 	}
 	sdkRoot := filepath.Join(sdkBaseDir, sdkType)
 	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)
