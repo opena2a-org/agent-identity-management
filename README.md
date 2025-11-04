@@ -64,10 +64,16 @@ docker compose up -d
 ```
 
 **Services**:
-- Frontend: http://localhost:3000 (Login and download SDK)
+- Frontend: http://localhost:3000
 - Backend API: http://localhost:8080
 - PostgreSQL: localhost:5432
 - Redis: localhost:6379
+
+**Default Credentials**:
+- Email: `admin@opena2a.org`
+- Password: `AIM2025!Secure`
+
+> ⚠️ **Security**: Change the default password immediately after first login in production deployments!
 
 ### 2. Download SDK from Dashboard
 ```bash
