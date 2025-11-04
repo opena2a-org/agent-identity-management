@@ -192,7 +192,7 @@ services:
       - POSTGRES_SSL_MODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production-now}
       - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-}
       - SMTP_HOST=${SMTP_HOST:-}

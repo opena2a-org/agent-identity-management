@@ -32,8 +32,8 @@ COPY --from=builder /bin/aim-server .
 # Copy migrations
 COPY apps/backend/migrations ./migrations
 
-# Copy SDKs directory
-COPY sdks ./sdks
+# Copy SDK directory
+COPY sdk ./sdk
 
 # Expose port
 EXPOSE 8080

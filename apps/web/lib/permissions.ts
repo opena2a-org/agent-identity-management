@@ -107,6 +107,14 @@ export function getDashboardPermissions(userRole: UserRole | undefined) {
     // Table visibility
     canViewRecentActivity: false,
     canViewDetailedMetrics: false,
+
+    // Route-level permissions
+    canViewAdmin: false,
+    canViewAudit: false,
+    canViewCapabilityRequests: false,
+    canViewSecurity: false,
+    canViewMonitoring: false,
+    canViewAnalytics: false,
   };
 
   if (!userRole) return permissions;
@@ -124,6 +132,12 @@ export function getDashboardPermissions(userRole: UserRole | undefined) {
       canViewActivityChart: true,
       canViewRecentActivity: true,
       canViewDetailedMetrics: false,
+      canViewAdmin: false,
+      canViewAudit: false,
+      canViewCapabilityRequests: false,
+      canViewSecurity: false,
+      canViewMonitoring: false,
+      canViewAnalytics: false,
     };
   }
 
@@ -140,6 +154,12 @@ export function getDashboardPermissions(userRole: UserRole | undefined) {
       canViewActivityChart: true,
       canViewRecentActivity: true,
       canViewDetailedMetrics: true,
+      canViewAdmin: false,
+      canViewAudit: false,
+      canViewCapabilityRequests: false,
+      canViewSecurity: false,
+      canViewMonitoring: false,
+      canViewAnalytics: false,
     };
   }
 
@@ -156,6 +176,12 @@ export function getDashboardPermissions(userRole: UserRole | undefined) {
       canViewActivityChart: true,
       canViewRecentActivity: true,
       canViewDetailedMetrics: true,
+      canViewAdmin: false,
+      canViewAudit: true,
+      canViewCapabilityRequests: true,
+      canViewSecurity: true,
+      canViewMonitoring: true,
+      canViewAnalytics: true,
     };
   }
 
@@ -172,6 +198,12 @@ export function getDashboardPermissions(userRole: UserRole | undefined) {
       canViewActivityChart: true,
       canViewRecentActivity: true,
       canViewDetailedMetrics: true,
+      canViewAdmin: true,
+      canViewAudit: true,
+      canViewCapabilityRequests: true,
+      canViewSecurity: true,
+      canViewMonitoring: true,
+      canViewAnalytics: true,
     };
   }
 
