@@ -60,7 +60,7 @@ AIM provides the security infrastructure AI agents need to operate safely in pro
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
-docker-compose up -d
+docker compose up -d
 ```
 
 **Services**:
@@ -228,7 +228,7 @@ if verification.approved:
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Kubernetes
@@ -394,7 +394,7 @@ git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # Start development environment
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 # Run tests
 ./scripts/run-tests.sh
