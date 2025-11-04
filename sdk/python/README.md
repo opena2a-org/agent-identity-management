@@ -175,25 +175,58 @@ agent = secure("my-agent", capabilities=["custom_capability"])
 agent = secure("my-agent", auto_detect=False, capabilities=["read", "write"])
 ```
 
+## 📁 SDK Structure
+
+```
+sdk/python/
+├── aim_sdk/              # Core SDK package
+├── docs/                 # Integration guides and documentation
+│   ├── CREWAI_INTEGRATION.md
+│   ├── LANGCHAIN_INTEGRATION.md
+│   ├── MCP_INTEGRATION.md
+│   ├── MICROSOFT_COPILOT_INTEGRATION.md
+│   └── ENV_CONFIG.md
+├── examples/             # Working code examples
+│   ├── example.py
+│   ├── example_auto_detection.py
+│   └── example_stripe_moment.py
+├── tests/                # Comprehensive test suite
+├── demos/                # Demo projects
+├── README.md             # This file
+├── requirements.txt      # Dependencies
+└── setup.py              # Package setup
+```
+
 ## Examples
 
 ### Quick Auto-Detection Demo (No Backend Required)
 ```bash
-python example_auto_detection.py
+python examples/example_auto_detection.py
 ```
 Demonstrates automatic capability and MCP server detection.
 
 ### Full Zero-Config Demo
 ```bash
-python example_zero_config.py
+python examples/example_stripe_moment.py
 ```
 Shows zero-config registration and verified actions (requires backend running).
 
 ### Classic Example
 ```bash
-python example.py
+python examples/example.py
 ```
 Traditional example with decorator-based verification.
+
+**See [examples/README.md](./examples/README.md) for detailed documentation of all examples.**
+
+## Framework Integration Guides
+
+- **[LangChain](./docs/LANGCHAIN_INTEGRATION.md)** - Complete LangChain integration guide
+- **[CrewAI](./docs/CREWAI_INTEGRATION.md)** - CrewAI agent integration
+- **[MCP Servers](./docs/MCP_INTEGRATION.md)** - Model Context Protocol integration
+- **[Microsoft Copilot](./docs/MICROSOFT_COPILOT_INTEGRATION.md)** - Copilot Studio integration
+
+**See [docs/README.md](./docs/README.md) for all integration guides.**
 
 ## Requirements
 
