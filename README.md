@@ -4,7 +4,7 @@
 
 **Production-grade identity, verification, and security management for autonomous AI agents and MCP servers**
 
-Real-time threat detection • Zero-trust architecture • HIPAA & SOC 2 ready • Self-hosted & cloud-native
+Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-native
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
@@ -45,7 +45,7 @@ AIM provides the security infrastructure AI agents need to operate safely in pro
 - **🛡️ MCP Server Attestation** — Cryptographically verify every MCP server your agents connect to
 - **⚡ One-Line Security** — `secure("my-agent")` protects agents instantly with zero config
 - **📊 8-Factor Trust Scoring** — ML-powered risk assessment for every agent and action
-- **👮 Automated Compliance** — Complete audit trails for SOC 2, HIPAA, GDPR
+- **👮 Automated Compliance** — Complete audit trails
 - **🚨 Real-Time Threat Detection** — Behavioral anomaly detection and automatic policy enforcement
 - **🔐 Zero-Trust Architecture** — Every action verified, every MCP attested, every risk scored
 
@@ -153,7 +153,6 @@ if verification.approved:
 
 **Compliance & Audit**
 - Complete audit trail for every agent action
-- SOC 2, HIPAA, GDPR compliance features
 - Automated security policy enforcement
 - Real-time compliance reporting
 
