@@ -440,7 +440,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 
 ---
 
-## 📞 Support & Resources
+## Support & Resources
 
 - **📖 Comprehensive Documentation**: [opena2a.org/docs](https://opena2a.org/docs) — Complete guides, tutorials, and API reference
 - **📧 Email**: [info@opena2a.org](mailto:info@opena2a.org)
@@ -449,7 +449,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 ### Q4 2025 ✅ (Completed)
 - [x] Core platform with 136 API endpoints
@@ -468,7 +468,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 
 ---
 
-## 📚 Technical Reference
+## Technical Reference
 
 <details>
 <summary><h3>📊 API Overview (136 Endpoints)</h3></summary>
@@ -590,7 +590,7 @@ See [API Documentation](https://opena2a.org/docs/api/rest) for complete referenc
 
 <div align="center">
 
-**Built with ❤️ by the [OpenA2A](https://opena2a.org) team**
+**Built by the [OpenA2A](https://opena2a.org) team**
 
 ⭐ **Star us on GitHub** if AIM helps secure your AI agents!
 
