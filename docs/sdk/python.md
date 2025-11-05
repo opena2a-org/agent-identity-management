@@ -4,20 +4,52 @@ The complete guide to the AIM Python SDK.
 
 ## Installation
 
-```bash
-# Install from PyPI
-pip install aim-sdk
+<div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+  <h3 className="text-lg font-semibold text-red-900 mb-2">⚠️ NO pip install Available</h3>
+  <p className="text-sm text-red-800 mb-2">
+    <strong>There is NO pip package for the AIM SDK.</strong> You must download it from your AIM dashboard with pre-configured credentials.
+  </p>
+</div>
 
-# Or install from source
-git clone https://github.com/opena2a/agent-identity-management.git
-cd agent-identity-management/sdk/python
-pip install -e .
+### Download Pre-Configured SDK (ONLY Option)
+
+The AIM SDK comes with your embedded credentials - zero configuration required.
+
+**Steps to Download**:
+1. **Login** to AIM Dashboard (http://localhost:3000)
+   - Email: `admin@opena2a.org`
+   - Password: `AIM2025!Secure`
+2. **Navigate** to Settings → SDK Download
+3. **Click** "Download Python SDK" button
+4. **Extract** the downloaded ZIP file to your project directory
+
+### Install Dependencies
+
+After downloading the SDK, install the required dependencies:
+
+```bash
+# Install dependencies
+pip install keyring PyNaCl requests cryptography
+
+# Or with Poetry
+poetry add keyring PyNaCl requests cryptography
+
+# Or with pipenv
+pipenv install keyring PyNaCl requests cryptography
 ```
 
 **Requirements**:
 - Python 3.8+
-- `cryptography` (Ed25519 support)
+- `keyring` (secure key storage)
+- `PyNaCl` (Ed25519 cryptography)
 - `requests` (HTTP client)
+- `cryptography` (additional crypto support)
+
+### Verify Installation
+
+```bash
+python -c "from aim_sdk import secure; print('✅ AIM SDK installed!')"
+```
 
 ---
 

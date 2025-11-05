@@ -38,7 +38,9 @@ An MCP server registration that:
 
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
 2. ✅ MCP server installed (e.g., Claude Desktop)
-3. ✅ `aim-sdk` installed (`pip install aim-sdk`)
+3. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
+   - **NO pip install available** - must download from dashboard
+   - Dependencies: `pip install keyring PyNaCl requests cryptography`
 4. ✅ Python 3.8+ for custom MCP servers
 
 ---

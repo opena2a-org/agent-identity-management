@@ -23,7 +23,9 @@ A real-world AI agent that:
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
 2. ✅ FlightAware API key ([Get API access](https://www.flightaware.com/commercial/aeroapi/))
 3. ✅ Python 3.8+ installed
-4. ✅ `aim-sdk` installed (`pip install aim-sdk`)
+4. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
+   - **NO pip install available** - must download from dashboard
+   - Dependencies: `pip install keyring PyNaCl requests cryptography`
 
 **Note**: FlightAware offers a free tier (10 queries/month). For production, upgrade to paid tier.
 

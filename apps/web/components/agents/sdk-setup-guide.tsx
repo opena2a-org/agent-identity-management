@@ -40,7 +40,8 @@ export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuidePr
   };
 
   const examples = {
-    javascript: `npm install @aim/sdk
+    javascript: `// NO npm package available - Download SDK from AIM Dashboard
+// Go to Settings → SDK Download → Download JavaScript SDK
 
 import { AIMClient } from '@aim/sdk';
 
@@ -69,7 +70,9 @@ const verification = await client.verifyAction({
   context: { reason: 'Reading user data' }
 });`,
 
-    python: `pip install aim-sdk
+    python: `# NO pip package available - Download SDK from AIM Dashboard
+# Go to Settings → SDK Download → Download Python SDK
+# Install dependencies: pip install keyring PyNaCl requests cryptography
 
 from aim_sdk import AIMClient
 import os

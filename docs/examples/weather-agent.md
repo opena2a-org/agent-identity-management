@@ -22,7 +22,9 @@ A simple AI agent that:
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
 2. ✅ OpenWeatherMap API key ([Get free key](https://openweathermap.org/api))
 3. ✅ Python 3.8+ installed
-4. ✅ `aim-sdk` installed (`pip install aim-sdk`)
+4. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
+   - **NO pip install available** - must download from dashboard
+   - Dependencies: `pip install keyring PyNaCl requests cryptography`
 
 ---
 

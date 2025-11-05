@@ -133,8 +133,11 @@ delete_user_data("user123")
 # Dockerfile
 FROM python:3.11-slim
 
-# Install dependencies
-RUN pip install aim-sdk
+# Copy downloaded SDK from dashboard into container
+COPY aim_sdk /app/aim_sdk
+
+# Install SDK dependencies
+RUN pip install keyring PyNaCl requests cryptography
 
 # Set AIM configuration
 ENV AIM_AGENT_NAME=container-agent
@@ -223,8 +226,14 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Download AIM SDK
+        run: |
+          # SDK should be committed to repo or downloaded from secure storage
+          # DO NOT pip install - SDK must be downloaded from AIM dashboard
+          echo "Using SDK from repository"
+
       - name: Install dependencies
-        run: pip install aim-sdk
+        run: pip install keyring PyNaCl requests cryptography
 
       - name: Configure AIM
         env:

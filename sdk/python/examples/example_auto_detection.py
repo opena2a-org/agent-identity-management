@@ -159,7 +159,7 @@ print()
 print("# That's it! No API key, no URL, nothing!")
 print()
 
-print("Option 2: Manual Mode (pip install aim-sdk)")
+print("Option 2: Manual Mode (download SDK from dashboard)")
 print("-" * 70)
 print()
 print("from aim_sdk import register_agent")
