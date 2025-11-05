@@ -26,7 +26,7 @@ Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-n
 
 ## 🎯 Why AIM?
 
-### The Problem: AI Agents Are Under Attack
+### AI Agents Are Under Attack
 
 In 2024-2025, AI security incidents hit unprecedented levels:
 
@@ -37,7 +37,7 @@ In 2024-2025, AI security incidents hit unprecedented levels:
 
 **The hard truth**: Every AI agent deployed without identity management is a potential attack vector. One compromised agent can expose your entire infrastructure, customer data, and compliance standing.
 
-### The Solution: AIM
+### Our Approach
 
 AIM provides the security infrastructure AI agents need to operate safely in production:
 
