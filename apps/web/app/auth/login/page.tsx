@@ -244,41 +244,6 @@ function LoginPageContent() {
           </div>
         </div>
 
-        {/* Features */}
-        <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-blue-600" />
-            </div>
-            <p className="text-xs text-gray-600">Secure Login</p>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center">
-              <Users className="w-5 h-5 text-purple-600" />
-            </div>
-            <p className="text-xs text-gray-600">RBAC</p>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            </div>
-            <p className="text-xs text-gray-600">Compliant</p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>
-            By signing in, you agree to our{" "}
-            <Link href="/terms" className="text-blue-600 hover:underline">
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link href="/privacy" className="text-blue-600 hover:underline">
-              Privacy Policy
-            </Link>
-          </p>
-        </div>
       </div>
     </div>
   );
