@@ -430,7 +430,7 @@ users = get_users()`}</code>
           View All Agents
         </Button>
         <Button
-          onClick={() => window.open('https://docs.opena2a.org/aim', '_blank')}
+          onClick={() => window.open('https://opena2a.org/docs/aim', '_blank')}
         >
           <Book className="h-4 w-4 mr-2" />
           View Documentation

@@ -51,6 +51,6 @@ setup(
     project_urls={
         "Bug Reports": "https://github.com/opena2a-org/agent-identity-management/issues",
         "Source": "https://github.com/opena2a-org/agent-identity-management",
-        "Documentation": "https://docs.opena2a.org/aim",
+        "Documentation": "https://opena2a.org/docs/aim",
     },
 )

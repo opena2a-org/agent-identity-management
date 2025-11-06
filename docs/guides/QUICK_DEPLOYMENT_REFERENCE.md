@@ -281,7 +281,7 @@ lsof -i :3000
 ### Database connection issues
 ```bash
 # Restart Docker containers
-docker-compose restart postgres redis
+docker compose restart postgres redis
 
 # Check connection
 psql -h 127.0.0.1 -p 5432 -U postgres -d identity

@@ -778,7 +778,7 @@ print(f"Trust Score: {score}")
 
 ## API Reference
 
-Complete SDK API documentation: [https://docs.opena2a.org/sdk/api](https://docs.opena2a.org/sdk/api)
+Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena2a.org/docs/sdk/api)
 
 ---
 

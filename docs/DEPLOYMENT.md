@@ -875,7 +875,7 @@ rm .env
 
 ## 📞 Support
 
-- **Documentation**: https://docs.opena2a.org
+- **Documentation**: https://opena2a.org/docs
 - **GitHub Issues**: https://github.com/opena2a/agent-identity-management/issues
 - **Discord**: https://discord.gg/opena2a
 - **Email**: info@opena2a.org

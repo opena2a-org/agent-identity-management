@@ -27,7 +27,7 @@ git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
 # Start with Docker Compose
-docker-compose up -d
+docker compose up -d
 
 # Wait ~60 seconds for services to start
 ```
@@ -350,10 +350,10 @@ def delete_user(user_id: int):
 docker ps | grep aim-backend
 
 # If not running, restart:
-docker-compose restart aim-backend
+docker compose restart aim-backend
 
 # Check logs:
-docker-compose logs aim-backend
+docker compose logs aim-backend
 ```
 
 ### Issue: "Invalid private key"

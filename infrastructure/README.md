@@ -31,7 +31,7 @@ infrastructure/
 
 ```bash
 # From project root
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Cloud Deployment
@@ -77,7 +77,7 @@ docker run -p 3000:3000 \
 
 ```bash
 # From project root
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose -f docker-compose.monitoring.yml up -d
 ```
 
 **Services**:
@@ -134,7 +134,7 @@ Verify database migrations before deployment:
 ### Development
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Staging

@@ -536,7 +536,7 @@ while True:
 docker ps | grep aim-backend
 
 # Restart if needed
-docker-compose restart aim-backend
+docker compose restart aim-backend
 ```
 
 ### Issue: "City not found"

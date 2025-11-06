@@ -127,14 +127,14 @@ go run cmd/bootstrap/main.go \
 
 ```bash
 # 1. Run bootstrap inside Docker container
-docker-compose exec backend go run cmd/bootstrap/main.go \
+docker compose exec backend go run cmd/bootstrap/main.go \
   --admin-email=admin@company.com \
   --admin-password="SecurePassword123!" \
   --org-name="My Company" \
   --yes
 
 # 2. Alternative: Run before starting services
-docker-compose run --rm backend go run cmd/bootstrap/main.go \
+docker compose run --rm backend go run cmd/bootstrap/main.go \
   --admin-email=admin@company.com \
   --admin-password="SecurePassword123!" \
   --org-name="My Company" \

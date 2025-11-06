@@ -61,7 +61,7 @@ We pledge to make participation in our project a harassment-free experience for 
 
 ```bash
 # Start infrastructure
-docker-compose up -d
+docker compose up -d
 
 # Install dependencies
 cd apps/backend && go mod download

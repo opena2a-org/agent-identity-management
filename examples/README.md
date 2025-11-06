@@ -56,7 +56,7 @@ Model Context Protocol (MCP) server registration example:
 1. **AIM Platform Running**
    ```bash
    # Start AIM backend and frontend
-   docker-compose up -d
+   docker compose up -d
    ```
 
 2. **Download SDK**

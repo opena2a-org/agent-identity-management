@@ -103,7 +103,7 @@ AIM_API_KEY=your-key python examples/example_auto_detection.py
 ### Common Issues
 
 **"Connection refused" error**:
-- Ensure AIM server is running (`docker-compose up` or `go run main.go`)
+- Ensure AIM server is running (`docker compose up` or `go run main.go`)
 - Check `AIM_API_URL` environment variable is set correctly
 
 **"Unauthorized" error**:

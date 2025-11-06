@@ -70,10 +70,10 @@ POSTGRES_PASSWORD=postgres  # Change for production!
 
 ```bash
 # Start all infrastructure services
-docker-compose up -d
+docker compose up -d
 
 # Verify all services are running
-docker-compose ps
+docker compose ps
 ```
 
 Expected output:
@@ -225,13 +225,13 @@ go run cmd/migrate/main.go status
 
 ```bash
 # Build images
-docker-compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml build
 
 # Start services
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 # View logs
-docker-compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 ### Kubernetes
@@ -380,10 +380,10 @@ docker run -d -p 3001:3000 \
 
 ```bash
 # Check if PostgreSQL is running
-docker-compose ps postgres
+docker compose ps postgres
 
 # View PostgreSQL logs
-docker-compose logs postgres
+docker compose logs postgres
 
 # Test connection
 psql -h localhost -U postgres -d identity
@@ -393,7 +393,7 @@ psql -h localhost -U postgres -d identity
 
 ```bash
 # Check if Redis is running
-docker-compose ps redis
+docker compose ps redis
 
 # Test connection
 redis-cli ping
@@ -524,7 +524,7 @@ After installation:
 
 ## Getting Help
 
-- **Documentation**: https://docs.opena2a.org
+- **Documentation**: https://opena2a.org/docs
 - **GitHub Issues**: https://github.com/opena2a/identity/issues
 - **Discord**: https://discord.gg/opena2a
 - **Email**: info@opena2a.org
