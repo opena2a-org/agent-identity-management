@@ -999,7 +999,7 @@ class AIMClient:
 
 
 # ============================================================================
-# ONE-LINE AGENT REGISTRATION - "AIM is Stripe for AI Agent Identity"
+# ONE-LINE AGENT REGISTRATION - Enterprise security simplified
 # ============================================================================
 
 import os
@@ -1090,9 +1090,9 @@ def register_agent(
     sdk_token_id: Optional[str] = None
 ) -> AIMClient:
     """
-    ONE-LINE agent registration with AIM - "The Stripe Moment"
+    ONE-LINE agent registration with AIM - Radical simplicity meets enterprise security
 
-    This is the magic function that makes AIM "Stripe for AI Agent Identity".
+    This is the magic function that makes AIM effortless to use while maintaining enterprise-grade protection.
     Call this once and your agent is registered, verified, and ready to use.
 
     **ZERO CONFIG MODE** (SDK Download):

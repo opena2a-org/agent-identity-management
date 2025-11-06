@@ -189,6 +189,6 @@ print(")")
 print()
 
 print("=" * 70)
-print("✨ That's the 'Stripe Moment' for AI Agent Identity!")
+print("✨ Enterprise security simplified to one line of code!")
 print("=" * 70)
 print()

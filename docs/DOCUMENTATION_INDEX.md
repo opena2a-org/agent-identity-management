@@ -17,7 +17,7 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
 
 ### Main README
 - **[README.md](../README.md)** - Main project overview
-  - "The Stripe for AI Agent Identity"
+  - "Enterprise-grade security in one line of code"
   - One-line setup: `agent = secure("my-agent")`
   - Real-world examples
   - Production-ready (100%)

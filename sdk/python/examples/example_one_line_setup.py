@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-🚀 The "Stripe Moment" for AI Agent Identity
+🚀 One-Line Setup for AI Agent Identity
 
-This example demonstrates how AIM achieves the same simplicity as Stripe
-for payment processing, but for AI agent identity and verification.
+This example demonstrates how AIM achieves radical simplicity:
+enterprise-grade security with just one line of code.
 
 ONE LINE OF CODE. ZERO CONFIGURATION. AUTOMATIC EVERYTHING.
 """
@@ -11,18 +11,18 @@ ONE LINE OF CODE. ZERO CONFIGURATION. AUTOMATIC EVERYTHING.
 import sys
 
 # ============================================================================
-# PART 1: THE "STRIPE MOMENT" - ONE LINE REGISTRATION
+# PART 1: ONE LINE REGISTRATION - RADICAL SIMPLICITY
 # ============================================================================
 
 print("=" * 70)
-print("🎉 THE 'STRIPE MOMENT' FOR AI AGENT IDENTITY")
+print("🎉 ONE LINE OF CODE FOR ENTERPRISE SECURITY")
 print("=" * 70)
 print()
-print("Just like Stripe made payments simple with one line:")
-print('  Stripe.Charge.create(amount=1000, currency="usd")')
-print()
-print("AIM makes agent identity simple with one line:")
+print("Complex security infrastructure, simplified to one line:")
 print('  agent = register_agent("my-agent")')
+print()
+print("Behind the scenes: cryptographic verification, trust scoring,")
+print("MCP attestation, audit logging, and real-time threat detection.")
 print()
 print("=" * 70)
 print()

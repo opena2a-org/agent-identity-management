@@ -1,12 +1,12 @@
 # AIM Python SDK
 
-**The Stripe for AI Agent Identity - One line of code. Complete security.**
+**Enterprise-Grade AI Agent Security - One line of code. Complete protection.**
 
 Enterprise-grade cryptographic verification with zero configuration.
 
 ## Quick Start - Zero Configuration 🚀
 
-### The "Stripe Moment" for AI Security
+### Radical Simplicity Meets Enterprise Security
 
 ```python
 from aim_sdk import secure
@@ -189,7 +189,7 @@ sdk/python/
 ├── examples/             # Working code examples
 │   ├── example.py
 │   ├── example_auto_detection.py
-│   └── example_stripe_moment.py
+│   └── example_one_line_setup.py
 ├── tests/                # Comprehensive test suite
 ├── demos/                # Demo projects
 ├── README.md             # This file
@@ -207,7 +207,7 @@ Demonstrates automatic capability and MCP server detection.
 
 ### Full Zero-Config Demo
 ```bash
-python examples/example_stripe_moment.py
+python examples/example_one_line_setup.py
 ```
 Shows zero-config registration and verified actions (requires backend running).
 

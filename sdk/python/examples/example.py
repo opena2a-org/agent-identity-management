@@ -1,7 +1,7 @@
 """
 Example: One-line agent registration with AIM
 
-This demonstrates the simplicity of AIM: "Stripe for AI Agent Identity"
+This demonstrates the simplicity of AIM: enterprise security in one line
 """
 
 from aim_sdk import register_agent

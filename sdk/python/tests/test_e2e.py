@@ -2,7 +2,7 @@
 """
 End-to-End Integration Test for AIM SDK
 
-This script tests the complete "Stripe Moment" workflow:
+This script tests the complete one-line setup workflow:
 1. Auto-detection of capabilities
 2. Auto-detection of MCPs
 3. Zero-config registration (mocked backend)
@@ -192,7 +192,7 @@ def main():
     """Run all E2E tests"""
     print("\n" + "=" * 60)
     print("🧪 AIM SDK End-to-End Integration Tests")
-    print("   Testing 'The Stripe Moment' for AI Agent Identity")
+    print("   Testing One-Line Setup for AI Agent Identity")
     print("=" * 60)
 
     tests = [
@@ -227,7 +227,7 @@ def main():
 
     if failed == 0:
         print("\n🎉 ALL TESTS PASSED! SDK is production-ready!")
-        print("   The 'Stripe Moment' is HERE! 🚀\n")
+        print("   One-line enterprise security is HERE! 🚀\n")
         return 0
     else:
         print(f"\n⚠️  {failed} test(s) failed. Please review.\n")
