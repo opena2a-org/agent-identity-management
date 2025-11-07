@@ -436,7 +436,7 @@ export function Sidebar() {
                     AIM
                   </span>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Agent Identity
+                    Agent Identity Management
                   </span>
                 </div>
               )}
