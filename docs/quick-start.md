@@ -121,7 +121,7 @@ python -c "from aim_sdk import secure; print('✅ AIM SDK installed!')"
 
 ---
 
-## Step 4: Secure Your Agent (1 line of code!)
+## Step 4: Secure Your Agent (3 lines of code!)
 
 ### Create a Simple Weather Agent
 
@@ -132,15 +132,14 @@ from aim_sdk import secure
 import requests
 import os
 
-# 🔐 ONE LINE - Secure your agent!
-agent = secure(
-    name="weather-agent",
-    aim_url="http://localhost:8080",  # Or your Azure URL
-    private_key=os.getenv("AIM_PRIVATE_KEY")
-)
+# LINE 1: Register your agent (zero config!)
+agent = secure("weather-agent")
 
+# LINE 2: Add @agent.track_action to verify every call
+@agent.track_action(risk_level="low")
 def get_weather(city: str):
     """Fetch weather data for a city"""
+    # LINE 3: Your normal code - AIM verifies BEFORE this runs
     response = requests.get(
         f"https://api.openweathermap.org/data/2.5/weather",
         params={
@@ -153,7 +152,9 @@ def get_weather(city: str):
 
 # Use your agent
 if __name__ == "__main__":
-    # AIM automatically verifies this action
+    # This action is verified BEFORE execution
+    # Logged to audit trail AUTOMATICALLY
+    # Trust score updated AUTOMATICALLY
     weather = get_weather("San Francisco")
 
     print(f"🌤️  Weather in San Francisco:")
@@ -244,16 +245,24 @@ You've just secured your first AI agent in **5 minutes**!
 
 ### What Just Happened?
 
-Behind that one line of code (`secure("weather-agent")`), AIM:
+Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 
-1. ✅ **Registered** your agent with Ed25519 cryptographic identity
-2. ✅ **Verified** every action using challenge-response authentication
-3. ✅ **Calculated** real-time trust score based on 8 factors
-4. ✅ **Logged** complete audit trail for compliance
-5. ✅ **Monitored** for security threats and anomalies
-6. ✅ **Detected** MCP servers from Claude Desktop (if present)
+1. ✅ **Line 1** (`secure("weather-agent")`) - Cryptographic identity created
+2. ✅ **Line 2** (`@agent.track_action`) - **Verification BEFORE execution** (prevents malicious actions!)
+3. ✅ **Line 3** (your code) - Runs ONLY if verification passes
 
-**All automatically. Zero configuration required.**
+**Every time `get_weather()` is called**, AIM automatically:
+
+- 🛡️ **Verifies** the action BEFORE it executes (prevents unauthorized API calls!)
+- 📝 **Logs** to immutable audit trail (who, what, when, why)
+- 📊 **Updates** real-time trust score (8-factor algorithm)
+- 🚨 **Monitors** for anomalies (unusual patterns trigger alerts)
+- 🔐 **Signs** with Ed25519 cryptography (tamper-proof verification)
+
+**Without `@agent.track_action`?** Your agent can do ANYTHING without oversight. ❌
+**With `@agent.track_action`?** Every action verified, logged, monitored. ✅
+
+This is **the difference between a rogue agent and a trusted agent**.
 
 ---
 
@@ -284,6 +293,157 @@ Behind that one line of code (`secure("weather-agent")`), AIM:
 - [Azure Deployment](./deployment/azure.md) - Production-ready Azure setup
 - [Kubernetes](./deployment/kubernetes.md) - Enterprise scale
 - [Security Best Practices](./security/best-practices.md) - Harden your deployment
+
+---
+
+## 🎓 Understanding Decorators (The Secret Sauce)
+
+###  What's a Decorator?
+
+**Think of it like airport security**: Your function is a passenger, and `@agent.track_action` is the security checkpoint.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    WITHOUT @agent.track_action                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  User Request  →  Agent  →  External API  →  Done                  │
+│                     ▲                                               │
+│                     │                                               │
+│                 NO CHECKS                                           │
+│                 NO LOGS                                             │
+│                 NO ALERTS                                           │
+│                                                                     │
+│  ❌ Agent can call ANY API                                          │
+│  ❌ Agent can exfiltrate data                                       │
+│  ❌ No audit trail                                                  │
+│  ❌ No anomaly detection                                            │
+│  ❌ Attacker has free reign                                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                     WITH @agent.track_action                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  User Request  →  Agent  →  🛡️  AIM VERIFICATION  →  External API  │
+│                              │                                      │
+│                              ├──> ✅ Cryptographic signature         │
+│                              ├──> ✅ Trust score check               │
+│                              ├──> ✅ Anomaly detection               │
+│                              ├──> ✅ Rate limiting                   │
+│                              ├──> ✅ Audit logging                   │
+│                              │                                      │
+│                              └──> ⛔ BLOCK if suspicious             │
+│                                                                     │
+│  ✅ Every action verified BEFORE execution                          │
+│  ✅ Complete audit trail (who, what, when, why)                     │
+│  ✅ Anomaly detection catches attacks                               │
+│  ✅ Trust score drops trigger alerts                                │
+│  ✅ Admin notified immediately                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+```python
+# WITHOUT decorator = No security checkpoint
+def get_weather(city):
+    return call_api(city)  # ❌ Anyone can board the plane
+
+# WITH decorator = Security checkpoint BEFORE boarding
+@agent.track_action(risk_level="low")
+def get_weather(city):
+    return call_api(city)  # ✅ Verified passenger only
+```
+
+### How Does It Work?
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+# The @ symbol means "wrap this function with verification"
+@agent.track_action(risk_level="low")
+def send_email(to, subject, body):
+    # AIM does this AUTOMATICALLY:
+    # 1. Verify: "Is this agent allowed to send email?"
+    # 2. Log: "Agent 'my-agent' wants to send email to {to}"
+    # 3. Check: "Any suspicious patterns?"
+    # 4. Execute: Only if all checks pass
+    # 5. Record: "Email sent successfully at {timestamp}"
+    email_service.send(to, subject, body)
+```
+
+### Why This Prevents Rogue Agents
+
+**Scenario: Agent Gets Compromised**
+
+```python
+# WITHOUT decorator - Attacker can do anything:
+def delete_database():
+    db.drop_all_tables()  # ❌ No verification, no audit trail, no alerts
+
+# WITH decorator - Attacker is caught:
+@agent.track_action(risk_level="critical")
+def delete_database():
+    # AIM catches this:
+    # 🚨 Alert: "Critical action attempted"
+    # 🚨 Alert: "No recent history of this action"
+    # 🚨 Alert: "Trust score: 0.95 → 0.12 (SUSPICIOUS!)"
+    # 🚨 Action BLOCKED automatically
+    # 📧 Admin notified immediately
+    db.drop_all_tables()  # ← Never executes
+```
+
+### Risk Levels Explained
+
+```python
+# LOW RISK - Read operations, safe actions
+@agent.track_action(risk_level="low")
+def get_weather(city):
+    return weather_api.get(city)
+
+# MEDIUM RISK - Writes, data modification
+@agent.track_action(risk_level="medium")
+def update_user_profile(user_id, data):
+    return db.update(user_id, data)
+
+# HIGH RISK - Sensitive operations
+@agent.track_action(risk_level="high")
+def transfer_money(from_account, to_account, amount):
+    return bank_api.transfer(from_account, to_account, amount)
+
+# CRITICAL RISK - Destructive operations (requires human approval)
+@agent.require_approval(risk_level="critical")
+def delete_all_users():
+    # Execution PAUSES here
+    # Admin gets notification: "Agent wants to delete all users - Approve?"
+    # Agent waits for human decision
+    # Only proceeds if approved
+    return db.delete_all("users")
+```
+
+### The Golden Rule
+
+**If your agent calls an API, database, or external service → Use a decorator!**
+
+```python
+# ✅ GOOD - All actions verified
+@agent.track_action(risk_level="low")
+def search_products(query):
+    return api.search(query)
+
+@agent.track_action(risk_level="medium")
+def add_to_cart(product_id):
+    return cart.add(product_id)
+
+@agent.require_approval(risk_level="high")
+def place_order(cart_id, payment_method):
+    return orders.create(cart_id, payment_method)
+
+# ❌ BAD - No verification = Agent can run wild
+def charge_credit_card(amount):
+    return stripe.charge(amount)  # Disaster waiting to happen!
+```
 
 ---
 
