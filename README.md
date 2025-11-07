@@ -55,7 +55,7 @@ AIM provides the security infrastructure AI agents need to operate safely in pro
 
 ## ⚡ Quick Start
 
-### 1. Deploy AIM (One Command)
+### 1. Deploy AIM
 
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git
