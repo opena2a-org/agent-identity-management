@@ -1183,7 +1183,7 @@ def register_agent(
         if not aim_url:
             raise ConfigurationError("aim_url is required when using API key mode")
         print(f"🔑 API Key Mode: Using API key authentication")
-    elif sdk_creds and sdk_token_id is not None:
+    elif sdk_creds:
         # SDK MODE: Use embedded OAuth credentials
         auth_mode = "oauth"
         aim_url = aim_url or sdk_creds.get("aim_url")
