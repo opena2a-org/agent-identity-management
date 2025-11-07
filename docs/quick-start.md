@@ -289,31 +289,28 @@ Behind that one line of code (`secure("weather-agent")`), AIM:
 
 ## 💡 Pro Tips
 
-### Tip 1: Use Environment Variables
+### Tip 1: Zero Configuration is the Default
 
-**Never hardcode secrets**:
+**Downloaded SDK = Ready to Go**:
 ```python
-# ❌ BAD
-agent = secure("my-agent", private_key="abc123...")
+# ✅ RECOMMENDED - Zero config (OAuth credentials embedded in SDK)
+agent = secure("my-agent")
 
-# ✅ GOOD
-agent = secure("my-agent", private_key=os.getenv("AIM_PRIVATE_KEY"))
+# 🔧 ADVANCED - Manual mode with API key (if needed)
+agent = secure("my-agent", api_key="aim_abc123")
 ```
 
-### Tip 2: Enable Auto-Detection
+### Tip 2: Auto-Detection Works Out of the Box
 
-**Let AIM discover your MCP servers automatically**:
+**MCP servers and capabilities are auto-detected by default**:
 ```python
-agent = secure(
-    name="my-agent",
-    private_key=os.getenv("AIM_PRIVATE_KEY"),
-    auto_detect={
-        "enabled": True,
-        "config_path": "~/.claude/claude_desktop_config.json"
-    }
-)
+# Auto-detection is enabled by default!
+agent = secure("my-agent")
+# ✅ Auto-detects capabilities from your code
+# ✅ Auto-detects MCP servers from ~/.claude/claude_desktop_config.json
 
-# AIM will auto-detect and register MCP servers
+# Want to disable it? (rare)
+agent = secure("my-agent", auto_detect=False)
 ```
 
 ### Tip 3: Use Decorators for Actions
