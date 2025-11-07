@@ -89,21 +89,27 @@ docker compose up -d
 ```python
 from aim_sdk import secure
 
-# Secure your agent with one line
-client = secure(
-    "my-agent-name",
-    agent_type="ai_agent",
-    auto_detect_capabilities=True,  # ✨ Auto-detects what your agent can do
-    auto_detect_mcps=True           # ✨ Auto-detects MCP servers from config
-)
+# ONE LINE - Complete enterprise security with zero configuration
+agent = secure("my-agent")
 
-# Your agent is now:
-# ✅ Registered with AIM
-# ✅ Cryptographically signed (Ed25519)
-# ✅ Trust score calculated
-# ✅ Capabilities detected
-# ✅ MCPs verified
-# ✅ Ready for production
+# That's it! Your agent now has:
+# ✅ Ed25519 cryptographic signatures (automatic)
+# ✅ Real-time trust scoring (automatic)
+# ✅ Capability detection (automatic)
+# ✅ MCP server detection (automatic)
+# ✅ Complete audit trail (automatic)
+# ✅ Zero configuration required
+```
+
+**Advanced Usage** (optional parameters):
+```python
+# Customize if needed - but defaults work for 95% of use cases
+agent = secure(
+    "my-agent",
+    api_key="aim_abc123",           # Manual mode: override OAuth credentials
+    capabilities=["read_db"],       # Manual: override auto-detection
+    auto_detect=False               # Disable auto-detection entirely
+)
 ```
 
 ### 4. Verify Actions Before Execution
