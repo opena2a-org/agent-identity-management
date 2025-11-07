@@ -169,6 +169,19 @@ def call_external_api(data):
 **Without the decorator?** Your agent can do anything without oversight. ❌
 **With the decorator?** Every action verified, logged, and monitored. ✅
 
+**Two Decorator Types**:
+```python
+# For monitoring and logging (executes immediately)
+@agent.track_action(risk_level="low")
+def safe_operation():
+    return api.get("/data")
+
+# For critical actions (requires admin approval first)
+@agent.require_approval(risk_level="critical")
+def dangerous_operation():
+    return db.execute("DROP TABLE users")  # ⏸️ PAUSES until admin approves!
+```
+
 **Advanced Usage** (optional parameters):
 ```python
 # Customize if needed - but defaults work for 95% of use cases

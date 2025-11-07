@@ -38,6 +38,13 @@ This directory contains comprehensive integration guides and configuration docum
   - Logging and debugging
   - Security options
 
+- **[VERSIONING.md](./VERSIONING.md)** - SDK versioning strategy and release process
+  - Semantic versioning explained
+  - VERSION file usage
+  - Compatibility guarantees
+  - Upgrade guides
+  - Support policy
+
 ## 🚀 Quick Start
 
 For basic usage and getting started, see the main [README.md](../README.md) in the SDK root directory.

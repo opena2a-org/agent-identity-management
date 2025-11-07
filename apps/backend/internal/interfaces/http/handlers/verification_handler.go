@@ -320,6 +320,46 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	return c.Status(statusCode).JSON(response)
 }
 
+// customJSONFormat adds spaces after colons and commas to match Python's json.dumps format
+// This only adds spaces outside of string values to avoid changing string content
+func customJSONFormat(jsonStr string) string {
+	var result strings.Builder
+	inString := false
+	escape := false
+
+	for i, char := range jsonStr {
+		result.WriteRune(char)
+
+		if escape {
+			escape = false
+			continue
+		}
+
+		if char == '\\' {
+			escape = true
+			continue
+		}
+
+		if char == '"' {
+			inString = !inString
+			continue
+		}
+
+		if !inString {
+			// Add space after : if not already there
+			if char == ':' && i+1 < len(jsonStr) && jsonStr[i+1] != ' ' {
+				result.WriteRune(' ')
+			}
+			// Add space after , if not already there
+			if char == ',' && i+1 < len(jsonStr) && jsonStr[i+1] != ' ' {
+				result.WriteRune(' ')
+			}
+		}
+	}
+
+	return result.String()
+}
+
 // verifySignature verifies the Ed25519 signature
 func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 	// Recreate the signature message (same as SDK)
@@ -337,36 +377,52 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 		signaturePayload["context"] = make(map[string]interface{})
 	}
 
-	signaturePayload["resource"] = req.Resource
+	// Handle resource carefully - Python SDK uses null, not empty string
+	if req.Resource == "" {
+		signaturePayload["resource"] = nil  // Match Python's null
+	} else {
+		signaturePayload["resource"] = req.Resource
+	}
 	signaturePayload["timestamp"] = req.Timestamp
 
-	// Include risk_level if provided (must match SDK signature)
-	if req.RiskLevel != "" {
-		signaturePayload["risk_level"] = req.RiskLevel
-	}
+	// DEBUG: risk_level is NEVER sent as separate field by SDK - it's inside context
+	// Don't include it in signature payload unless SDK changes
+	// if req.RiskLevel != "" {
+	// 	signaturePayload["risk_level"] = req.RiskLevel
+	// }
 
-	// Create deterministic JSON matching Python's json.dumps(sort_keys=True)
-	// Python adds spaces after colons and commas, Go doesn't by default
-	// We need to use MarshalIndent with empty prefix and indent to get spaces
-	buffer := new(bytes.Buffer)
-	encoder := json.NewEncoder(buffer)
-	encoder.SetIndent("", "")  // No indentation, but spaces after colons/commas
-	encoder.SetEscapeHTML(false)  // Don't escape HTML characters
+	// Create deterministic JSON matching Python's json.dumps(sort_keys=True, separators=(', ', ': '))
+	// Python's separators=(', ', ': ') adds space after comma and colon
+	// Use json.MarshalIndent with SetIndent("", " ") BUT that doesn't work for spaces
+	// Instead, use json.Marshal and then use a proper JSON formatter
 
-	if err := encoder.Encode(signaturePayload); err != nil {
+	jsonBytes, err := json.Marshal(signaturePayload)
+	if err != nil {
 		return fmt.Errorf("failed to marshal signature payload: %w", err)
 	}
 
-	// Remove the trailing newline that Encode() adds
+	// Parse back and re-encode with proper spacing
+	var parsed interface{}
+	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
+		return fmt.Errorf("failed to unmarshal for formatting: %w", err)
+	}
+
+	// Use custom encoder to match Python's format exactly
+	buffer := new(bytes.Buffer)
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "")
+
+	if err := encoder.Encode(parsed); err != nil {
+		return fmt.Errorf("failed to encode with formatting: %w", err)
+	}
+
+	// Remove trailing newline
 	messageBytes := bytes.TrimRight(buffer.Bytes(), "\n")
 
-	// Still doesn't match - Python uses "key": "value" (space after colon)
-	// Go uses "key":"value" (no space)
-	// Let's manually add spaces after colons
-	messageStr := string(messageBytes)
-	// Replace ": with ": " (add space after colon before value)
-	messageStr = strings.ReplaceAll(messageStr, "\":", "\": ")
-	messageStr = strings.ReplaceAll(messageStr, ",", ", ")
+	// Manually add spaces to match Python's separators=(', ', ': ')
+	// This is the ONLY reliable way to match Python's exact format
+	messageStr := customJSONFormat(string(messageBytes))
 	messageBytes = []byte(messageStr)
 
 	// Decode public key

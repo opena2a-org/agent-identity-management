@@ -85,33 +85,76 @@ agent = secure(
 
 ### Performing Verified Actions
 
+AIM provides two decorators for action verification:
+
+#### 1. `@agent.track_action()` - Track and Log Actions
+Best for: Monitoring, logging, and audit trails (doesn't require approval)
+
 ```python
-# Simple action verification
-@agent.perform_action("read_database", resource="users_table")
-def get_user_data(user_id):
-    return database.query(f"SELECT * FROM users WHERE id = {user_id}")
+# Low-risk action - just track and log
+@agent.track_action(risk_level="low")
+def get_weather(city):
+    """Fetch weather data - safe operation"""
+    return weather_api.get(city)
 
-# Action with additional context
-@agent.perform_action(
-    "modify_user", 
-    resource="user:12345",
-    metadata={"reason": "Account update requested by user"}
-)
-def update_user_email(user_id, new_email):
-    return database.execute(
-        "UPDATE users SET email = ? WHERE id = ?",
-        new_email, user_id
-    )
+# Medium-risk action - track with context
+@agent.track_action(risk_level="medium", resource="database:users")
+def query_database(query):
+    """Query database - monitored for anomalies"""
+    return db.execute(query)
 
-# High-risk action (requires higher trust score)
-@agent.perform_action(
-    "delete_data",
-    resource="user:12345",
-    risk_level="high"
-)
-def delete_user_account(user_id):
-    return database.execute("DELETE FROM users WHERE id = ?", user_id)
+# High-risk action - tracked and flagged
+@agent.track_action(risk_level="high", resource="payments:charge")
+def charge_credit_card(amount, card_token):
+    """Charge credit card - high-risk, closely monitored"""
+    return stripe.charge(amount, card_token)
 ```
+
+#### 2. `@agent.require_approval()` - Require Admin Approval
+Best for: Dangerous actions that need human oversight
+
+```python
+# Delete user account - requires admin approval
+@agent.require_approval(risk_level="critical", resource="user:account")
+def delete_user_account(user_id):
+    """Delete user - REQUIRES admin approval before execution"""
+    return db.execute("DELETE FROM users WHERE id = ?", user_id)
+
+# Transfer money - requires approval
+@agent.require_approval(risk_level="critical", resource="financial:transfer")
+def transfer_money(from_account, to_account, amount):
+    """Transfer funds - BLOCKED until admin approves"""
+    return banking_api.transfer(from_account, to_account, amount)
+
+# Deploy to production - requires approval
+@agent.require_approval(risk_level="high", resource="infrastructure:deploy")
+def deploy_to_production(service_name, version):
+    """Deploy to prod - admin must approve first"""
+    return k8s.deploy(service_name, version)
+```
+
+#### Key Differences
+
+| Decorator | Requires Approval? | When to Use |
+|-----------|-------------------|-------------|
+| `@track_action()` | ❌ No - executes immediately | Monitoring, logging, low-medium risk actions |
+| `@require_approval()` | ✅ Yes - blocks until admin approves | Critical actions, destructive operations, high-risk |
+
+#### What Happens During Verification
+
+**Both decorators**:
+1. ✅ Verify agent identity with Ed25519 signature
+2. ✅ Check trust score (must be above threshold)
+3. ✅ Log action to immutable audit trail
+4. ✅ Monitor for behavioral anomalies
+5. ✅ Update trust score based on result
+
+**`@require_approval()` additionally**:
+- ⏸️ Pauses execution and creates approval request
+- 📧 Notifies admin with action details
+- ⏳ Waits for admin decision (approve/reject)
+- ✅ Executes only if approved
+- ❌ Raises `ActionDeniedError` if rejected
 
 ## Capability Management
 
@@ -185,7 +228,8 @@ sdk/python/
 │   ├── LANGCHAIN_INTEGRATION.md
 │   ├── MCP_INTEGRATION.md
 │   ├── MICROSOFT_COPILOT_INTEGRATION.md
-│   └── ENV_CONFIG.md
+│   ├── ENV_CONFIG.md
+│   └── VERSIONING.md    # Versioning strategy
 ├── examples/             # Working code examples
 │   ├── example.py
 │   ├── example_auto_detection.py
@@ -193,6 +237,8 @@ sdk/python/
 ├── tests/                # Comprehensive test suite
 ├── demos/                # Demo projects
 ├── README.md             # This file
+├── CHANGELOG.md          # Version history
+├── VERSION               # Current SDK version (1.0.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -239,6 +285,34 @@ All dependencies auto-install with pip:
 - keyring (system keyring integration)
 
 All dependencies are included in the downloaded SDK's `requirements.txt`.
+
+## Versioning
+
+The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
+
+```
+1.0.0
+│ │ │
+│ │ └─── PATCH: Bug fixes
+│ └───── MINOR: New features (backward-compatible)
+└─────── MAJOR: Breaking changes
+```
+
+**Current Version**: 1.0.0
+
+**Version Compatibility**:
+- SDK 1.x.x works with Backend 1.x.x ✅
+- SDK 1.x.x does NOT work with Backend 2.x.x ❌
+
+**Check Your Version**:
+```python
+import aim_sdk
+print(aim_sdk.__version__)  # "1.0.0"
+```
+
+**See Also**:
+- [CHANGELOG.md](./CHANGELOG.md) - Complete version history
+- [docs/VERSIONING.md](./docs/VERSIONING.md) - Versioning strategy and support policy
 
 ## License
 

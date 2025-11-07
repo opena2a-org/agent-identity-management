@@ -330,6 +330,7 @@ class AIMClient:
         # Create verification request payload
         timestamp = datetime.utcnow().isoformat() + 'Z'  # Match backend expected format
 
+
         # Create signature for Ed25519 verification
         # The backend verifies the signature by reconstructing the JSON payload
         # We need to create a signature of the JSON payload itself
@@ -343,7 +344,7 @@ class AIMClient:
         
         # Create deterministic JSON (sorted keys, spaces after colons and commas)
         signature_message = json.dumps(signature_payload, sort_keys=True, separators=(', ', ': '))
-        
+
         # Sign with Ed25519
         signature = self._sign_message(signature_message)
 
@@ -363,24 +364,15 @@ class AIMClient:
         # Send verification request using direct HTTP call to avoid double-signing
         try:
             url = f"{self.aim_url}{endpoint}"
-            
-            # Prepare headers - use API key if available, otherwise OAuth
+
+            # Prepare headers - NO AUTH TOKENS for verification endpoint!
+            # Verification uses cryptographic signature authentication (Ed25519)
             headers = {
                 'Content-Type': 'application/json',
                 'User-Agent': f'AIM-Python-SDK/1.0.0'
             }
-            
-            if self.api_key:
-                headers['X-API-Key'] = self.api_key
-            elif self.oauth_token_manager:
-                try:
-                    access_token = self.oauth_token_manager.get_access_token()
-                    if access_token:
-                        headers['Authorization'] = f'Bearer {access_token}'
-                except Exception:
-                    pass  # Continue without OAuth if it fails
-            
-            # Add SDK token header if available
+
+            # Add SDK token header if available (for usage tracking only, not auth)
             if self.sdk_token_id:
                 headers['X-SDK-Token'] = self.sdk_token_id
             
@@ -391,10 +383,14 @@ class AIMClient:
                 headers=headers,
                 timeout=self.timeout
             )
-            
+
             # Handle authentication errors
             if response.status_code == 401:
-                raise AuthenticationError("Authentication failed - invalid agent credentials")
+                try:
+                    error_detail = response.json().get("error", "unknown error")
+                except:
+                    error_detail = response.text
+                raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
             # Handle forbidden errors
             if response.status_code == 403:
@@ -985,6 +981,203 @@ class AIMClient:
             return wrapper
         return decorator
 
+    def track_action(
+        self,
+        risk_level: str = "low",
+        action_name: Optional[str] = None,
+        resource: Optional[str] = None
+    ):
+        """
+        Decorator for automatic action tracking and verification.
+
+        This is a user-friendly wrapper around perform_action() that uses
+        risk levels instead of requiring explicit action types.
+
+        Args:
+            risk_level: Risk level of the action ("low", "medium", "high", "critical")
+            action_name: Custom action name (default: function name)
+            resource: Resource being accessed (optional)
+
+        Example:
+            @agent.track_action(risk_level="low")
+            def get_weather(city):
+                return api.get(f"/weather?city={city}")
+
+            # Automatically verified, logged, and monitored!
+            weather = get_weather("San Francisco")
+
+        Risk Levels:
+            - "low": Read operations, safe actions (auto-approved)
+            - "medium": Write operations, data modification
+            - "high": Sensitive operations (may require approval)
+            - "critical": Destructive operations (requires approval)
+        """
+        def decorator(func: Callable) -> Callable:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                # Use function name if action_name not provided
+                action = action_name or func.__name__
+
+                # Build context with risk level
+                context = {
+                    "risk_level": risk_level,
+                    "function_name": func.__name__,
+                    "module": func.__module__
+                }
+
+                # Add args/kwargs to context (for audit trail)
+                if args:
+                    context["args"] = str(args)
+                if kwargs:
+                    context["kwargs"] = str(kwargs)
+
+                # Request verification
+                verification_result = self.verify_action(
+                    action_type=action,
+                    resource=resource,
+                    context=context,
+                    timeout_seconds=300
+                )
+
+                if not verification_result.get("verified", False):
+                    raise ActionDeniedError(
+                        f"Action '{action}' denied: {verification_result.get('reason', 'Unknown reason')}"
+                    )
+
+                verification_id = verification_result.get("verification_id")
+
+                try:
+                    # Execute the function
+                    result = func(*args, **kwargs)
+
+                    # Log success
+                    self.log_action_result(
+                        verification_id=verification_id,
+                        success=True,
+                        result_summary=f"Action '{action}' completed successfully"
+                    )
+
+                    return result
+
+                except Exception as e:
+                    # Log failure
+                    self.log_action_result(
+                        verification_id=verification_id,
+                        success=False,
+                        error_message=str(e)
+                    )
+                    raise
+
+            return wrapper
+        return decorator
+
+    def require_approval(
+        self,
+        risk_level: str = "high",
+        action_name: Optional[str] = None,
+        resource: Optional[str] = None,
+        timeout_seconds: int = 3600
+    ):
+        """
+        Decorator for actions requiring human approval before execution.
+
+        This decorator pauses execution until an admin approves the action
+        in the AIM dashboard. Use for high-risk or destructive operations.
+
+        Args:
+            risk_level: Risk level ("high" or "critical")
+            action_name: Custom action name (default: function name)
+            resource: Resource being accessed (optional)
+            timeout_seconds: Max time to wait for approval (default: 1 hour)
+
+        Example:
+            @agent.require_approval(risk_level="critical")
+            def delete_all_users():
+                database.execute("DELETE FROM users")
+
+            # Execution PAUSES here
+            # Admin receives alert: "Agent wants to delete all users"
+            # Function only executes if admin approves
+            delete_all_users()
+
+        Risk Levels:
+            - "high": Sensitive operations requiring review
+            - "critical": Destructive operations requiring urgent approval
+        """
+        # Validate risk level
+        if risk_level not in ["high", "critical"]:
+            raise ValueError(
+                f"require_approval() only supports 'high' or 'critical' risk levels, "
+                f"got: {risk_level}. Use track_action() for lower risk levels."
+            )
+
+        def decorator(func: Callable) -> Callable:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                # Use function name if action_name not provided
+                action = action_name or func.__name__
+
+                # Build context with risk level and approval requirement
+                context = {
+                    "risk_level": risk_level,
+                    "requires_approval": True,
+                    "function_name": func.__name__,
+                    "module": func.__module__,
+                    "warning": f"⚠️  CRITICAL: This action requires human approval!"
+                }
+
+                # Add args/kwargs to context
+                if args:
+                    context["args"] = str(args)
+                if kwargs:
+                    context["kwargs"] = str(kwargs)
+
+                print(f"\n⏸️  Waiting for approval: {action}...")
+                print(f"   Risk Level: {risk_level.upper()}")
+                print(f"   Check AIM dashboard to approve/deny this action")
+                print(f"   Timeout: {timeout_seconds} seconds")
+
+                # Request verification with extended timeout
+                verification_result = self.verify_action(
+                    action_type=action,
+                    resource=resource,
+                    context=context,
+                    timeout_seconds=timeout_seconds
+                )
+
+                if not verification_result.get("verified", False):
+                    raise ActionDeniedError(
+                        f"❌ Action '{action}' DENIED by admin: {verification_result.get('reason', 'Unknown reason')}"
+                    )
+
+                print(f"✅ Action '{action}' APPROVED by admin")
+                verification_id = verification_result.get("verification_id")
+
+                try:
+                    # Execute the function
+                    result = func(*args, **kwargs)
+
+                    # Log success
+                    self.log_action_result(
+                        verification_id=verification_id,
+                        success=True,
+                        result_summary=f"Action '{action}' completed successfully"
+                    )
+
+                    return result
+
+                except Exception as e:
+                    # Log failure
+                    self.log_action_result(
+                        verification_id=verification_id,
+                        success=False,
+                        error_message=str(e)
+                    )
+                    raise
+
+            return wrapper
+        return decorator
+
     def close(self):
         """Close the HTTP session."""
         self.session.close()
@@ -1295,10 +1488,6 @@ def _register_via_oauth(
     talks_to: Optional[List[str]]
 ) -> AIMClient:
     """Register agent using OAuth token from SDK credentials"""
-    print(f"[DEBUG] _register_via_oauth() called")
-    print(f"[DEBUG] sdk_creds type: {type(sdk_creds)}")
-    print(f"[DEBUG] sdk_creds keys: {sdk_creds.keys() if sdk_creds else 'None'}")
-
     # Generate Ed25519 keypair client-side (for OAuth mode)
     print(f"🔐 Generating Ed25519 keypair...")
     signing_key = SigningKey.generate()
@@ -1317,26 +1506,18 @@ def _register_via_oauth(
     # Check for .aim directory (not plaintext file - it might be encrypted!)
     from pathlib import Path
     sdk_dir = Path.cwd() / ".aim"
-    print(f"[DEBUG] Checking SDK dir: {sdk_dir}")
-    print(f"[DEBUG] Dir exists: {sdk_dir.exists()}")
 
     if not sdk_dir.exists():
         # Fall back to home directory
         sdk_dir = Path.home() / ".aim"
-        print(f"[DEBUG] Fallback to home dir: {sdk_dir}")
-        print(f"[DEBUG] Home dir exists: {sdk_dir.exists()}")
 
     # OAuthTokenManager will handle finding encrypted or plaintext credentials
     sdk_creds_path = sdk_dir / "credentials.json"
 
-    print(f"[DEBUG] Creating OAuthTokenManager with path: {sdk_creds_path}")
     token_manager = OAuthTokenManager(str(sdk_creds_path))
-    print(f"[DEBUG] OAuthTokenManager created, calling get_access_token()...")
     access_token = token_manager.get_access_token()
-    print(f"[DEBUG] get_access_token() returned: {access_token[:80] if access_token else 'None'}...")
 
     if not access_token:
-        print(f"[DEBUG] No access token obtained, raising error")
         raise ConfigurationError("Failed to obtain OAuth access token")
 
     # Call authenticated endpoint
@@ -1369,7 +1550,7 @@ def _register_via_oauth(
 
     # Add client-side generated private key to credentials (backend doesn't send it back)
     credentials["private_key"] = private_key_b64
-    credentials["public_key"] = public_key_b64  # Ensure public key is in response
+    credentials["public_key"] = public_key_b64  # Ensure public key matches what we sent
     credentials["aim_url"] = aim_url  # Ensure URL is in response
 
     # Add OAuth tokens to credentials so they can be used for future API calls

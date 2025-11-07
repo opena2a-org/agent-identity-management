@@ -15,7 +15,17 @@ import (
 // Used for SDK authentication and direct API calls
 func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		println("DEBUG: APIKeyMiddleware running for path:", c.Path())
+		path := c.Path()
+		println("DEBUG: APIKeyMiddleware checking path:", path)
+
+		// Skip API key middleware for verification endpoints (use signature auth instead)
+		if path == "/api/v1/sdk-api/verifications" ||
+			strings.HasPrefix(path, "/api/v1/sdk-api/verifications/") {
+			println("DEBUG: Skipping API key check for verification endpoint")
+			return c.Next()
+		}
+
+		println("DEBUG: API key middleware running for path:", path)
 		var apiKey string
 
 		// Try Authorization header first (Bearer token format)

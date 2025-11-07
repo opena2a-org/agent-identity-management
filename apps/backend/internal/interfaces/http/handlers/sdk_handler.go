@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -168,15 +169,15 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Generate SDK zip with embedded credentials
-	zipData, err := h.createSDKZip(credentials, sdkType)
+	zipData, version, err := h.createSDKZip(credentials, sdkType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create SDK package: %v", err),
 		})
 	}
 
-	// Set response headers for file download
-	filename := fmt.Sprintf("aim-sdk-%s.zip", sdkType)
+	// Set response headers for file download with version
+	filename := fmt.Sprintf("aim-sdk-%s-v%s.zip", sdkType, version)
 	c.Set("Content-Type", "application/zip")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Set("Content-Length", fmt.Sprintf("%d", len(zipData)))
@@ -185,7 +186,8 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 }
 
 // createSDKZip creates a zip file with SDK and embedded credentials
-func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([]byte, error) {
+// Returns: (zipData []byte, version string, error)
+func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([]byte, string, error) {
 	// Create in-memory zip buffer
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
@@ -202,6 +204,14 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 		}
 	}
 	sdkRoot := filepath.Join(sdkBaseDir, sdkType)
+
+	// Read VERSION file to get SDK version
+	version := "1.0.0" // Default version
+	versionPath := filepath.Join(sdkRoot, "VERSION")
+	if versionData, err := os.ReadFile(versionPath); err == nil {
+		version = strings.TrimSpace(string(versionData))
+	}
+
 	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)
 
 	// Add SDK files to zip
@@ -262,25 +272,25 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to add SDK files: %w", err)
+		return nil, "", fmt.Errorf("failed to add SDK files: %w", err)
 	}
 
 	// Create credentials file in .aim directory
 	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal credentials: %w", err)
+		return nil, "", fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
 	// Add credentials file to zip (in .aim directory)
 	credPath := filepath.Join(zipPrefix, ".aim", "credentials.json")
 	credFile, err := zipWriter.Create(credPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create credentials file: %w", err)
+		return nil, "", fmt.Errorf("failed to create credentials file: %w", err)
 	}
 
 	_, err = credFile.Write(credentialsJSON)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write credentials: %w", err)
+		return nil, "", fmt.Errorf("failed to write credentials: %w", err)
 	}
 
 	// Add README with SDK-specific setup instructions
@@ -289,21 +299,21 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	readmePath := filepath.Join(zipPrefix, "QUICKSTART.md")
 	readmeFile, err := zipWriter.Create(readmePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create README: %w", err)
+		return nil, "", fmt.Errorf("failed to create README: %w", err)
 	}
 
 	_, err = readmeFile.Write([]byte(setupInstructions))
 	if err != nil {
-		return nil, fmt.Errorf("failed to write README: %w", err)
+		return nil, "", fmt.Errorf("failed to write README: %w", err)
 	}
 
 	// Close zip writer
 	err = zipWriter.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to close zip: %w", err)
+		return nil, "", fmt.Errorf("failed to close zip: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes(), version, nil
 }
 
 // parseDeviceName extracts a friendly device name from User-Agent string

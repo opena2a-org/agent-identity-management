@@ -56,4 +56,14 @@ logs/
 *.log
 
 apps/backend/aim-backend
+apps/backend/backend
 .pytest_cache/
+
+# SDK credentials and sensitive data
+sdk/python/.aim/
+**/credentials.json
+**/credentials.encrypted
+*.encrypted
+
+# Temporary files
+sdk-page

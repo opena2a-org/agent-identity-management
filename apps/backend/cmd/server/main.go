@@ -238,6 +238,13 @@ func main() {
 		})
 	})
 
+	// ✅ Action verification for SDK (signature-based auth, NO API key required)
+	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
+	// These endpoints verify Ed25519 signatures instead of requiring API keys
+	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
+	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerification)
+	app.Post("/api/v1/sdk-api/verifications/:id/result", middleware.RateLimitMiddleware(), h.Verification.SubmitVerificationResult)
+
 	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
 	// These routes use API key authentication for SDK/programmatic access
 	sdkAPI := app.Group("/api/v1/sdk-api")
@@ -248,11 +255,6 @@ func main() {
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
 	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)                  // SDK MCP registration
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)              // SDK MCP detection and integration reporting
-	
-	// ✅ Action verification for SDK (API key auth)
-	sdkAPI.Post("/verifications", h.Verification.CreateVerification)                 // Request verification for agent action (SDK)
-	sdkAPI.Get("/verifications/:id", h.Verification.GetVerification)                 // Get verification status by ID (SDK)
-	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult) // Submit verification result (SDK)
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")

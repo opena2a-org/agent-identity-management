@@ -54,7 +54,7 @@ type CreateAgentRequest struct {
 	Description      string           `json:"description"`
 	AgentType        domain.AgentType `json:"agent_type"`
 	Version          string           `json:"version"`
-	// ✅ REMOVED: PublicKey - AIM generates this automatically
+	PublicKey        string           `json:"public_key,omitempty"`  // ✅ OPTIONAL: SDK can provide its own public key
 	CertificateURL   string   `json:"certificate_url"`
 	RepositoryURL    string   `json:"repository_url"`
 	DocumentationURL string   `json:"documentation_url"`
@@ -73,23 +73,40 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		return nil, fmt.Errorf("invalid agent_type")
 	}
 
-	// ✅ AUTOMATIC KEY GENERATION - Zero effort for developers
-	// Generate Ed25519 key pair automatically
-	keyPair, err := crypto.GenerateEd25519KeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate cryptographic keys: %w", err)
+	// ✅ KEY MANAGEMENT - Support both SDK-provided and auto-generated keys
+	var publicKeyBase64 string
+	var encryptedPrivateKey string
+	var keyAlgorithm string
+
+	if req.PublicKey != "" {
+		// SDK provided its own public key (client-side keypair generation)
+		// This is more secure as the private key never leaves the client
+		publicKeyBase64 = req.PublicKey
+		keyAlgorithm = "Ed25519"
+		// No private key to store - SDK keeps it client-side
+		encryptedPrivateKey = ""
+	} else {
+		// No public key provided - generate keypair server-side (legacy mode)
+		// This maintains backward compatibility with older workflows
+		keyPair, err := crypto.GenerateEd25519KeyPair()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate cryptographic keys: %w", err)
+		}
+
+		// Encode keys to base64 for storage
+		encodedKeys := crypto.EncodeKeyPair(keyPair)
+		publicKeyBase64 = encodedKeys.PublicKeyBase64
+		keyAlgorithm = encodedKeys.Algorithm
+
+		// Encrypt private key before storing (NEVER stored in plaintext)
+		encPrivKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
+		}
+		encryptedPrivateKey = encPrivKey
 	}
 
-	// Encode keys to base64 for storage
-	encodedKeys := crypto.EncodeKeyPair(keyPair)
-
-	// Encrypt private key before storing (NEVER stored in plaintext)
-	encryptedPrivateKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt private key: %w", err)
-	}
-
-	// Create agent with auto-generated keys
+	// Create agent with keys (SDK-provided or auto-generated)
 	agent := &domain.Agent{
 		OrganizationID:      orgID,
 		Name:                req.Name,
@@ -97,16 +114,20 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		Description:         req.Description,
 		AgentType:           req.AgentType,
 		Version:             req.Version,
-		PublicKey:           &encodedKeys.PublicKeyBase64, // ✅ Stored for verification
-		EncryptedPrivateKey: &encryptedPrivateKey,         // ✅ Encrypted storage (never exposed in API)
-		KeyAlgorithm:        encodedKeys.Algorithm,        // ✅ "Ed25519"
+		PublicKey:           &publicKeyBase64,      // ✅ Stored for verification (SDK-provided or generated)
+		KeyAlgorithm:        keyAlgorithm,          // ✅ "Ed25519"
 		CertificateURL:      req.CertificateURL,
 		RepositoryURL:       req.RepositoryURL,
 		DocumentationURL:    req.DocumentationURL,
-		TalksTo:             req.TalksTo,       // MCP servers this agent communicates with
-		Capabilities:        req.Capabilities,  // ✅ Store detected capabilities from SDK
+		TalksTo:             req.TalksTo,           // MCP servers this agent communicates with
+		Capabilities:        req.Capabilities,      // ✅ Store detected capabilities from SDK
 		Status:              domain.AgentStatusPending,
 		CreatedBy:           userID,
+	}
+
+	// Only set encrypted private key if we generated it server-side
+	if encryptedPrivateKey != "" {
+		agent.EncryptedPrivateKey = &encryptedPrivateKey // ✅ Encrypted storage (never exposed in API)
 	}
 
 	if err := s.agentRepo.Create(agent); err != nil {
