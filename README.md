@@ -53,7 +53,7 @@ AIM provides the security infrastructure AI agents need to operate safely in pro
 
 ---
 
-## 🛡️ Prevent Rogue Agents (The Core Problem We Solve)
+## 🛡️ Prevent Rogue Agents (The Core Problem AIM Solves)
 
 **The Threat**: AI agents can be compromised through prompt injection, credential theft, or malicious code injection. Without AIM, a rogue agent can:
 
