@@ -528,6 +528,30 @@ func (s *AgentService) VerifyAction(
 			}
 		}
 
+		// 📝 CREATE VIOLATION RECORD for dashboard tracking
+		// This ensures the Violations tab shows all capability violations
+		violation := &domain.CapabilityViolation{
+			AgentID:             agentID,
+			AttemptedCapability: actionType,
+			RegisteredCapabilities: map[string]interface{}{
+				"allowed_capabilities": capabilityTypes,
+				"attempted_action":     actionType,
+				"resource":             resource,
+			},
+			Severity:         s.calculateViolationSeverity(agent, shouldBlock),
+			TrustScoreImpact: s.calculateTrustScoreImpact(shouldBlock),
+			IsBlocked:        shouldBlock,
+			SourceIP:         nil, // Could be passed from context if available
+			RequestMetadata:  metadata,
+		}
+
+		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+		} else {
+			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s (blocked: %v)\n",
+				agent.Name, actionType, shouldBlock)
+		}
+
 		// Return enforcement decision from policy
 		if shouldBlock {
 			return false, fmt.Sprintf(
@@ -1108,4 +1132,117 @@ func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UU
 // UpdateLastActive updates the last_active timestamp for an agent
 func (s *AgentService) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
 	return s.agentRepo.UpdateLastActive(ctx, agentID)
+}
+
+// calculateViolationSeverity determines the severity level for a capability violation
+func (s *AgentService) calculateViolationSeverity(agent *domain.Agent, isBlocked bool) string {
+	// Base severity on trust score and whether action was blocked
+	if agent.TrustScore < 30 || agent.IsCompromised {
+		return "critical"
+	}
+
+	if isBlocked {
+		// Blocked violations are more severe
+		if agent.TrustScore < 50 {
+			return "high"
+		}
+		return "medium"
+	}
+
+	// Alert-only violations (not blocked) are lower severity
+	if agent.TrustScore < 50 {
+		return "medium"
+	}
+	return "low"
+}
+
+// calculateTrustScoreImpact calculates the trust score penalty for a violation
+func (s *AgentService) calculateTrustScoreImpact(isBlocked bool) int {
+	if isBlocked {
+		// Blocked violations have higher impact
+		return -10
+	}
+	// Alert-only violations have lower impact
+	return -5
+}
+
+// CreateCapabilityViolation creates a capability violation record for dashboard tracking
+func (s *AgentService) CreateCapabilityViolation(
+	ctx context.Context,
+	agentID uuid.UUID,
+	actionType string,
+	resource string,
+	severity string,
+	metadata map[string]interface{},
+) error {
+	// Get agent to determine trust score impact
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent: %w", err)
+	}
+
+	// Get agent's current capabilities for tracking
+	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get capabilities: %w", err)
+	}
+
+	capabilityTypes := []string{}
+	for _, cap := range capabilities {
+		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
+	}
+
+	// Map alert severity to violation severity (frontend expects: low, medium, high, critical)
+	violationSeverity := "low" // Default
+	trustImpact := -5         // Default for low severity
+
+	switch severity {
+	case "critical":
+		violationSeverity = "critical"
+		trustImpact = -15
+	case "high":
+		violationSeverity = "high"
+		trustImpact = -10
+	case "warning":
+		violationSeverity = "medium"
+		trustImpact = -7
+	case "info":
+		violationSeverity = "low"
+		trustImpact = -5
+	default:
+		// If severity doesn't match known values, treat as low
+		violationSeverity = "low"
+		trustImpact = -5
+	}
+
+	// Create violation record
+	violation := &domain.CapabilityViolation{
+		AgentID:             agentID,
+		AttemptedCapability: actionType,
+		RegisteredCapabilities: map[string]interface{}{
+			"allowed_capabilities": capabilityTypes,
+			"attempted_action":     actionType,
+			"resource":             resource,
+		},
+		Severity:         violationSeverity, // Use mapped severity
+		TrustScoreImpact: trustImpact,
+		IsBlocked:        false, // SDK violations are logged but allowed
+		SourceIP:         nil,
+		RequestMetadata:  metadata,
+	}
+
+	if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+		return fmt.Errorf("failed to create violation: %w", err)
+	}
+
+	// Update agent's trust score
+	newTrustScore := agent.TrustScore + float64(trustImpact)
+	if newTrustScore < 0 {
+		newTrustScore = 0
+	}
+	if err := s.agentRepo.UpdateTrustScore(agentID, newTrustScore); err != nil {
+		fmt.Printf("⚠️  Warning: failed to update trust score: %v\n", err)
+	}
+
+	return nil
 }

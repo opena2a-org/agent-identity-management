@@ -212,6 +212,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		} else {
 			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
 		}
+
+		// 📝 CREATE VIOLATION RECORD for dashboard tracking
+		// This ensures the Violations tab shows all capability violations from SDK actions
+		if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
+			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+		} else {
+			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
+		}
 	}
 
 	// ✅ Create verification event for dashboard visibility

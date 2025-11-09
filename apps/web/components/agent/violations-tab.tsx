@@ -13,7 +13,7 @@ import { formatDistanceToNow } from 'date-fns';
 interface Violation {
   id: string;
   attempted_capability: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'warning' | 'info'; // Support legacy values
   trust_score_impact: number;
   is_blocked: boolean;
   source_ip?: string;
