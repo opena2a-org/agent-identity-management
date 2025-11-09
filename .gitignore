@@ -67,3 +67,14 @@ sdk/python/.aim/
 
 # Temporary files
 sdk-page
+
+# Screenshots and test output files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*-page
+*-tab
+*-state
+*-final
