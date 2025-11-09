@@ -256,6 +256,7 @@ func main() {
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
 	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                         // SDK MCP registration (create new MCP server)
 	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                           // SDK list MCP servers for agent's org
+	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)      // SDK record agent-MCP connection (use_mcp_tool)
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)              // SDK MCP detection and integration reporting
 
 	// API v1 routes (JWT authenticated)
@@ -519,6 +520,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,
 		repos.MCPServer,
 		repos.User,
+		repos.AgentMCPConnection,
 	)
 
 	securityService := application.NewSecurityService(

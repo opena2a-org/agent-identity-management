@@ -896,7 +896,7 @@ func (s *AgentService) DetectMCPServersFromConfig(
 				URL:         fmt.Sprintf("mcp://%s", detected.Name), // Placeholder URL for local MCP servers
 			}
 
-			_, err := mcpService.CreateMCPServer(ctx, registerReq, orgID, userID)
+			_, err := mcpService.CreateMCPServer(ctx, registerReq, orgID, userID, nil)
 			if err != nil {
 				// If already exists, that's fine - we'll use existing
 				errorsEncountered = append(errorsEncountered,

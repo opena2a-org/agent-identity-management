@@ -230,3 +230,191 @@ def delete_mcp_server(
         raise requests.exceptions.RequestException(
             f"Failed to delete MCP server: {response.status_code} - {response.text}"
         )
+
+
+def use_mcp_tool(
+    aim_client: AIMClient,
+    server_id: str,
+    tool_name: str,
+    mcp_url: str = "",
+    mcp_name: str = ""
+) -> Dict[str, Any]:
+    """
+    Record that this agent is using an MCP server tool.
+
+    This function creates or updates the agent-MCP connection record, tracking
+    that this agent is actively using the MCP server. This helps build the
+    "Connected Agents" relationship and updates the dashboard display.
+
+    Args:
+        aim_client: AIMClient instance for authentication
+        server_id: UUID of the MCP server being used
+        tool_name: Name of the tool being used (e.g., "read_file", "search")
+        mcp_url: URL of the MCP server (optional, for first connection)
+        mcp_name: Name of the MCP server (optional, for first connection)
+
+    Returns:
+        Dictionary containing connection response:
+        {
+            "success": True,
+            "connection_id": "connection-uuid",
+            "agent_id": "agent-uuid",
+            "mcp_server_id": "server-uuid",
+            "connection_type": "attested",
+            ...
+        }
+
+    Raises:
+        requests.exceptions.RequestException: If connection recording fails
+        ValueError: If server_id is invalid
+
+    Example:
+        from aim_sdk import AIMClient
+        from aim_sdk.integrations.mcp import use_mcp_tool
+
+        aim_client = AIMClient.auto_register_or_load("my-agent", "http://localhost:8080")
+
+        # Record MCP tool usage
+        response = use_mcp_tool(
+            aim_client=aim_client,
+            server_id="04531081-dd02-43aa-9067-a4e656de5591",
+            tool_name="read_file",
+            mcp_url="http://localhost:3000",
+            mcp_name="filesystem-mcp"
+        )
+
+        print(f"Connection recorded: {response['connection_id']}")
+    """
+    if not server_id:
+        raise ValueError("server_id cannot be empty")
+
+    if not tool_name:
+        raise ValueError("tool_name cannot be empty")
+
+    # Prepare connection payload
+    payload = {
+        "mcp_server_id": server_id,
+        "tool_name": tool_name,
+        "mcp_url": mcp_url,
+        "mcp_name": mcp_name,
+        "connection_type": "attested"
+    }
+
+    # Submit connection via AIM client's authenticated request method
+    # This uses the agent's Ed25519 authentication automatically
+    response = aim_client._make_request(
+        method="POST",
+        endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-connections",
+        data=payload
+    )
+
+    return response
+
+
+def attest_mcp_server(
+    aim_client: AIMClient,
+    server_id: str,
+    mcp_url: str,
+    mcp_name: str,
+    capabilities_found: List[str],
+    connection_successful: bool = True,
+    health_check_passed: bool = True,
+    connection_latency_ms: float = 0.0
+) -> Dict[str, Any]:
+    """
+    Submit cryptographically signed attestation for an MCP server.
+
+    This function allows an agent to attest to the authenticity and functionality
+    of an MCP server by cryptographically signing attestation data. Attestations
+    increase the confidence score of the MCP server and help other agents trust it.
+
+    Args:
+        aim_client: AIMClient instance for authentication and signing
+        server_id: UUID of the MCP server to attest
+        mcp_url: URL of the MCP server
+        mcp_name: Name of the MCP server
+        capabilities_found: List of capabilities detected on the MCP server
+        connection_successful: Whether connection to MCP was successful (default: True)
+        health_check_passed: Whether health check passed (default: True)
+        connection_latency_ms: Connection latency in milliseconds (default: 0.0)
+
+    Returns:
+        Dictionary containing attestation response:
+        {
+            "success": True,
+            "attestation_id": "attestation-uuid",
+            "mcp_confidence_score": 85.5,
+            "attestation_count": 3,
+            ...
+        }
+
+    Raises:
+        requests.exceptions.RequestException: If attestation fails
+        ValueError: If server_id is invalid or attestation is rejected
+
+    Example:
+        from aim_sdk import AIMClient
+        from aim_sdk.integrations.mcp import attest_mcp_server
+
+        aim_client = AIMClient.auto_register_or_load("my-agent", "http://localhost:8080")
+
+        response = attest_mcp_server(
+            aim_client=aim_client,
+            server_id="04531081-dd02-43aa-9067-a4e656de5591",
+            mcp_url="http://localhost:3000",
+            mcp_name="research-mcp",
+            capabilities_found=["read_file", "write_file", "search"],
+            connection_successful=True,
+            health_check_passed=True,
+            connection_latency_ms=45.2
+        )
+
+        print(f"Attestation successful! New confidence score: {response['mcp_confidence_score']}%")
+    """
+    import time
+    from datetime import datetime, timezone
+
+    if not server_id:
+        raise ValueError("server_id cannot be empty")
+
+    # Build attestation payload
+    attestation_data = {
+        "agent_id": str(aim_client.agent_id),
+        "mcp_url": mcp_url,
+        "mcp_name": mcp_name,
+        "capabilities_found": capabilities_found,
+        "connection_successful": connection_successful,
+        "health_check_passed": health_check_passed,
+        "connection_latency_ms": connection_latency_ms,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "sdk_version": "1.0.0"
+    }
+
+    # Sign the attestation data using the agent's Ed25519 private key
+    # The signature is computed over the canonical JSON representation
+    import json
+    import base64
+    canonical_json = json.dumps(attestation_data, sort_keys=True, separators=(',', ':'))
+
+    # Use AIM client's signing key (PyNaCl SigningKey)
+    if not hasattr(aim_client, 'signing_key') or aim_client.signing_key is None:
+        raise ValueError("AIMClient must have Ed25519 signing key for attestations")
+
+    # Sign the canonical JSON using PyNaCl SigningKey
+    signature_bytes = aim_client.signing_key.sign(canonical_json.encode('utf-8')).signature
+    signature_b64 = base64.b64encode(signature_bytes).decode('utf-8')
+
+    # Prepare API request payload
+    payload = {
+        "attestation": attestation_data,
+        "signature": signature_b64
+    }
+
+    # Submit attestation via AIM client's authenticated request method
+    response = aim_client._make_request(
+        method="POST",
+        endpoint=f"/api/v1/mcp-servers/{server_id}/attest",
+        data=payload
+    )
+
+    return response

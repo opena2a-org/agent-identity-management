@@ -24,6 +24,8 @@ type MCPService struct {
 	cryptoService         *infracrypto.ED25519Service
 	keyVault              *crypto.KeyVault       // ✅ For secure private key storage
 	capabilityService     *MCPCapabilityService  // ✅ For automatic capability detection
+	capabilityRepo        *repository.MCPServerCapabilityRepository // ✅ For creating SDK capabilities
+	connectionRepo        *repository.AgentMCPConnectionRepository  // ✅ For tracking agent-MCP connections
 	httpClient            *http.Client           // ✅ For real MCP server communication
 	agentRepo             *repository.AgentRepository // ✅ For querying connected agents
 	// In-memory challenge storage (in production, use Redis)
@@ -38,7 +40,7 @@ type ChallengeData struct {
 	ExpiresAt time.Time
 }
 
-func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, agentRepo *repository.AgentRepository) *MCPService {
+func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, capabilityRepo *repository.MCPServerCapabilityRepository, connectionRepo *repository.AgentMCPConnectionRepository, agentRepo *repository.AgentRepository) *MCPService {
 	return &MCPService{
 		mcpRepo:               mcpRepo,
 		verificationEventRepo: verificationEventRepo,
@@ -46,6 +48,8 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 		cryptoService:         infracrypto.NewED25519Service(),
 		keyVault:              keyVault,
 		capabilityService:     capabilityService,
+		capabilityRepo:        capabilityRepo,
+		connectionRepo:        connectionRepo,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second, // 30 second timeout for MCP server communication
 		},
@@ -83,7 +87,8 @@ type AddPublicKeyRequest struct {
 }
 
 // CreateMCPServer creates a new MCP server
-func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID) (*domain.MCPServer, error) {
+// agentID is optional - if provided (SDK registration), creates agent-MCP connection automatically
+func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID) (*domain.MCPServer, error) {
 	// Check if MCP server with this URL already exists
 	existing, _ := s.mcpRepo.GetByURL(req.URL)
 	if existing != nil {
@@ -128,6 +133,61 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 
 	if err := s.mcpRepo.Create(server); err != nil {
 		return nil, err
+	}
+
+	// ✅ Parse capabilities array and store in mcp_server_capabilities table
+	// SDK sends capabilities as string array like ["read_file", "write_file", "list_directory"]
+	// We need to convert these to proper capability entries for the UI to display
+	if len(req.Capabilities) > 0 && s.capabilityRepo != nil {
+		for _, capName := range req.Capabilities {
+			// For now, treat all as "tool" type since SDK doesn't specify
+			// In future, SDK could send structured capabilities with types
+			// Create capability schema as empty JSON for PostgreSQL
+			emptySchema := []byte("{}")
+
+			capability := &domain.MCPServerCapability{
+				ID:               uuid.New(),
+				MCPServerID:      server.ID,
+				Name:             capName,
+				CapabilityType:   "tool", // Default to "tool" for SDK-registered capabilities
+				Description:      fmt.Sprintf("SDK-registered capability: %s", capName),
+				CapabilitySchema: emptySchema, // Empty JSON object for SDK-registered capabilities
+				IsActive:         true,
+			}
+
+			if err := s.capabilityRepo.Create(capability); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to create capability %s for MCP server %s: %v\n", capName, server.Name, err)
+				// Don't fail the entire operation if capability creation fails
+			} else {
+				fmt.Printf("✅ Created capability %s for MCP server %s\n", capName, server.Name)
+			}
+		}
+	}
+
+	// ✅ Create agent-MCP connection when agent registers MCP server via SDK
+	// This tracks which agents are using which MCP servers for security monitoring
+	if agentID != nil && s.connectionRepo != nil {
+		now := time.Now().UTC()
+		connection := &domain.AgentMCPConnection{
+			ID:               uuid.New(),
+			AgentID:          *agentID,
+			MCPServerID:      server.ID,
+			DetectionID:      nil,
+			ConnectionType:   domain.ConnectionTypeUserRegistered,
+			FirstConnectedAt: now,
+			LastAttestedAt:   nil,
+			AttestationCount: 0,
+			IsActive:         true,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+
+		if err := s.connectionRepo.Create(ctx, connection); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to create agent-MCP connection for agent %s and MCP %s: %v\n", agentID, server.Name, err)
+			// Don't fail the entire operation if connection creation fails
+		} else {
+			fmt.Printf("✅ Created agent-MCP connection for agent %s → MCP server %s\n", agentID, server.Name)
+		}
 	}
 
 	// if server.PublicKey != "" {

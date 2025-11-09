@@ -321,3 +321,109 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }
+
+// RecordMCPConnection handles agent recording MCP tool usage
+// @Summary Record MCP connection
+// @Description Record that an agent is using an MCP server tool (creates/updates agent-MCP connection)
+// @Tags sdk-api
+// @Accept json
+// @Produce json
+// @Param agent_id path string true "Agent ID"
+// @Param request body map[string]interface{} true "Connection data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/sdk-api/agents/{agent_id}/mcp-connections [post]
+func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
+	// Get agent ID from URL path (already authenticated by SDK middleware)
+	agentID, err := uuid.Parse(c.Params("agent_id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Invalid agent ID",
+			"message": err.Error(),
+		})
+	}
+
+	// Parse request body
+	type RecordConnectionRequest struct {
+		MCPServerID    string `json:"mcp_server_id"`
+		ToolName       string `json:"tool_name"`
+		MCPURL         string `json:"mcp_url"`
+		MCPName        string `json:"mcp_name"`
+		ConnectionType string `json:"connection_type"`
+	}
+
+	var req RecordConnectionRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Invalid request body",
+			"message": err.Error(),
+		})
+	}
+
+	// Validate required fields
+	if req.MCPServerID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "mcp_server_id is required",
+		})
+	}
+
+	if req.ToolName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "tool_name is required",
+		})
+	}
+
+	mcpServerID, err := uuid.Parse(req.MCPServerID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Invalid MCP server ID",
+			"message": err.Error(),
+		})
+	}
+
+	// Record the connection
+	connection, err := h.attestationService.RecordAgentMCPConnection(
+		c.Context(),
+		agentID,
+		mcpServerID,
+		req.ToolName,
+	)
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to record MCP connection",
+			"message": err.Error(),
+		})
+	}
+
+	// Audit log
+	h.auditService.LogAction(
+		c.Context(),
+		uuid.Nil, // No organization context for SDK endpoints
+		agentID,
+		domain.AuditActionCreate,
+		"agent_mcp_connection",
+		connection.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		fiber.Map{
+			"connection_id":      connection.ID,
+			"mcp_server_id":      mcpServerID,
+			"tool_name":          req.ToolName,
+			"connection_type":    connection.ConnectionType,
+			"attestation_count":  connection.AttestationCount,
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":           true,
+		"connection_id":     connection.ID,
+		"agent_id":          connection.AgentID,
+		"mcp_server_id":     connection.MCPServerID,
+		"connection_type":   connection.ConnectionType,
+		"attestation_count": connection.AttestationCount,
+		"last_attested_at":  connection.LastAttestedAt,
+		"message":           "MCP connection recorded successfully",
+	})
+}

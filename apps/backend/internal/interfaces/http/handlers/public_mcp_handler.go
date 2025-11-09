@@ -164,7 +164,7 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 		Capabilities: req.Capabilities,
 	}
 
-	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID)
+	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID, &agentID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

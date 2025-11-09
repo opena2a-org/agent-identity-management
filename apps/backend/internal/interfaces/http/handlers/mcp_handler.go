@@ -51,14 +51,19 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 
 	// Support both JWT auth (user_id) and Ed25519 agent auth (agent_id)
 	var userID uuid.UUID
+	var agentID *uuid.UUID // Track agent ID for SDK registrations
+
 	if userIDLocal := c.Locals("user_id"); userIDLocal != nil {
 		// JWT authentication - user creating MCP server
 		userID = userIDLocal.(uuid.UUID)
+		agentID = nil // No agent involved
 	} else if agentIDLocal := c.Locals("agent_id"); agentIDLocal != nil {
-		// Ed25519 agent authentication - agent registering itself as MCP server
+		// Ed25519 agent authentication - agent registering MCP server via SDK
 		// Use agent's creator as the user_id for audit logging
-		agentID := agentIDLocal.(uuid.UUID)
-		agent, err := h.agentRepository.GetByID(agentID)
+		agentIDVal := agentIDLocal.(uuid.UUID)
+		agentID = &agentIDVal // Store agent ID for connection tracking
+
+		agent, err := h.agentRepository.GetByID(agentIDVal)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Agent not found",
@@ -78,7 +83,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		})
 	}
 
-	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID)
+	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID)
 	if err != nil {
 		// Log the actual error for debugging
 		fmt.Printf("❌ Error creating MCP server: %v\n", err)

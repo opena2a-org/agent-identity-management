@@ -18,6 +18,7 @@ type MCPAttestationService struct {
 	agentRepo       *repository.AgentRepository
 	mcpRepo         *repository.MCPServerRepository
 	userRepo        *repository.UserRepository
+	connectionRepo  *repository.AgentMCPConnectionRepository
 	cryptoService   *infracrypto.ED25519Service
 }
 
@@ -26,12 +27,14 @@ func NewMCPAttestationService(
 	agentRepo *repository.AgentRepository,
 	mcpRepo *repository.MCPServerRepository,
 	userRepo *repository.UserRepository,
+	connectionRepo *repository.AgentMCPConnectionRepository,
 ) *MCPAttestationService {
 	return &MCPAttestationService{
 		attestationRepo: attestationRepo,
 		agentRepo:       agentRepo,
 		mcpRepo:         mcpRepo,
 		userRepo:        userRepo,
+		connectionRepo:  connectionRepo,
 		cryptoService:   infracrypto.NewED25519Service(),
 	}
 }
@@ -574,4 +577,54 @@ func (s *MCPAttestationService) RecordManualAttestation(
 		AttestationCount:   attestationCount,
 		Message:            fmt.Sprintf("Manual attestation recorded successfully. MCP confidence score: %.2f%%", confidenceScore),
 	}, nil
+}
+
+// RecordAgentMCPConnection creates or updates an agent-MCP connection when agent uses MCP tools
+func (s *MCPAttestationService) RecordAgentMCPConnection(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerID uuid.UUID,
+	toolName string,
+) (*domain.AgentMCPConnection, error) {
+	// 1. Check if connection already exists
+	existingConnection, err := s.connectionRepo.GetByAgentAndMCPServer(ctx, agentID, mcpServerID)
+	if err == nil && existingConnection != nil {
+		// Update existing connection
+		if err := s.connectionRepo.UpdateAttestation(ctx, agentID, mcpServerID); err != nil {
+			return nil, fmt.Errorf("failed to update connection: %w", err)
+		}
+
+		// Fetch updated connection
+		updatedConnection, err := s.connectionRepo.GetByAgentAndMCPServer(ctx, agentID, mcpServerID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch updated connection: %w", err)
+		}
+
+		return updatedConnection, nil
+	}
+
+	// 2. Create new connection
+	now := time.Now().UTC()
+	connection := &domain.AgentMCPConnection{
+		ID:               uuid.New(),
+		AgentID:          agentID,
+		MCPServerID:      mcpServerID,
+		DetectionID:      nil,
+		ConnectionType:   domain.ConnectionTypeAttested,
+		FirstConnectedAt: now,
+		LastAttestedAt:   &now,
+		AttestationCount: 1,
+		IsActive:         true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	if err := s.connectionRepo.Create(ctx, connection); err != nil {
+		return nil, fmt.Errorf("failed to create connection: %w", err)
+	}
+
+	fmt.Printf("✅ Created agent-MCP connection: agent=%s, mcp=%s, tool=%s\n",
+		agentID, mcpServerID, toolName)
+
+	return connection, nil
 }
