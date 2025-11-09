@@ -160,8 +160,12 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
           console.log('Latest capability report:', report)
           setCapabilityReport(report)
         } catch (reportErr: any) {
-          // If no report exists yet (404), that's fine - just show basic view
-          if (reportErr.message?.includes('404') || reportErr.message?.includes('not found')) {
+          // If no report exists yet (404 or "no capability reports found"), that's fine - just show basic view
+          if (
+            reportErr.message?.includes('404') ||
+            reportErr.message?.includes('not found') ||
+            reportErr.message?.includes('no capability reports')
+          ) {
             console.log('No capability report found yet')
             setCapabilityReport(null)
           } else {
