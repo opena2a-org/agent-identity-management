@@ -112,18 +112,21 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 
 	// Verify public key matches
-	if agent.PublicKey == nil || *agent.PublicKey != req.PublicKey {
+	publicKeyMatched := agent.PublicKey != nil && *agent.PublicKey == req.PublicKey
+	if !publicKeyMatched {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Public key mismatch",
 		})
 	}
 
 	// Verify signature
+	signatureVerified := false
 	if err := h.verifySignature(req); err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": fmt.Sprintf("Signature verification failed: %v", err),
 		})
 	}
+	signatureVerified = true
 
 	// Calculate trust score for this action
 	trustScore := h.calculateActionTrustScore(agent, req.ActionType, req.Resource)
@@ -274,6 +277,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		errorReasonPtr = &denialReason
 	}
 
+	// Calculate confidence score based on verification factors
+	confidence := h.calculateVerificationConfidence(agent, status, signatureVerified, publicKeyMatched)
+
 	completedAt := startTime
 	verificationEventReq := &application.CreateVerificationEventRequest{
 		OrganizationID:   agent.OrganizationID,
@@ -284,6 +290,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		Result:           result,
 		Signature:        &req.Signature,
 		PublicKey:        &req.PublicKey,
+		Confidence:       confidence,
 		DurationMs:       verificationDurationMs,
 		ErrorReason:      errorReasonPtr,
 		InitiatorType:    domain.InitiatorTypeAgent,
@@ -750,4 +757,48 @@ func (h *VerificationHandler) determineAlertSeverity(actionType string, context 
 
 	// INFO: Everything else (monitoring, logging, etc.)
 	return domain.AlertSeverityInfo
+}
+
+// calculateVerificationConfidence calculates confidence score for verification events
+// Returns a value between 0.0 and 1.0 based on multiple factors
+func (h *VerificationHandler) calculateVerificationConfidence(agent *domain.Agent, status string, signatureVerified bool, publicKeyMatched bool) float64 {
+	confidence := 0.0
+
+	// Base confidence from successful verification steps (60% of total)
+	if signatureVerified {
+		confidence += 0.30 // Cryptographic signature verified
+	}
+	if publicKeyMatched {
+		confidence += 0.30 // Public key matches registered key
+	}
+
+	// Agent status contributes to confidence (20% of total)
+	switch agent.Status {
+	case domain.AgentStatusVerified:
+		confidence += 0.20 // Fully verified agent
+	case domain.AgentStatusPending:
+		confidence += 0.10 // Pending verification
+	default:
+		confidence += 0.0 // Suspended/revoked agents get no confidence bonus
+	}
+
+	// Trust score contributes to confidence (20% of total)
+	// Trust score ranges from 0-100, normalize to 0-0.20
+	trustScoreContribution := (agent.TrustScore / 100.0) * 0.20
+	confidence += trustScoreContribution
+
+	// Final verification status can reduce confidence
+	if status == "denied" {
+		confidence *= 0.5 // Reduce confidence by half for denied requests
+	}
+
+	// Ensure confidence is between 0.0 and 1.0
+	if confidence < 0.0 {
+		confidence = 0.0
+	}
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+
+	return confidence
 }
