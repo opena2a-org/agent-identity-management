@@ -498,8 +498,8 @@ export default function MCPServerDetailsPage({
                     {(server.confidence_score ?? 0).toFixed(1)}%
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {server.attestation_count === 0
-                      ? "No attestations"
+                    {(server.attestation_count ?? 0) === 0
+                      ? "No attestations yet"
                       : (server.confidence_score ?? 0) >= 80
                         ? "High confidence"
                         : (server.confidence_score ?? 0) >= 60
