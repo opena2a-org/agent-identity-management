@@ -138,17 +138,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	verificationID := uuid.New()
 
 	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert if agent doesn't have permission
+	// This check should run REGARDLESS of approval status - we want to track ALL unauthorized attempts
 	shouldCreateAlert := false
-	if status == "approved" {
-		// Check if agent has the capability for this action
-		hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
-		if err != nil {
-			fmt.Printf("⚠️  Error checking capability: %v\n", err)
-		} else if !hasCapability {
-			// Agent is attempting an action without proper capability - CREATE ALERT
-			shouldCreateAlert = true
-			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting unauthorized action: %s\n", agent.Name, req.ActionType)
-		}
+	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
+	if err != nil {
+		fmt.Printf("⚠️  Error checking capability: %v\n", err)
+	} else if !hasCapability {
+		// Agent is attempting an action without proper capability - CREATE ALERT
+		shouldCreateAlert = true
+		fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting unauthorized action: %s\n", agent.Name, req.ActionType)
 	}
 
 	// Create audit log entry

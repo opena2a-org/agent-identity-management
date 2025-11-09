@@ -1235,13 +1235,22 @@ func (s *AgentService) CreateCapabilityViolation(
 		return fmt.Errorf("failed to create violation: %w", err)
 	}
 
-	// Update agent's trust score
-	newTrustScore := agent.TrustScore + float64(trustImpact)
-	if newTrustScore < 0 {
-		newTrustScore = 0
-	}
-	if err := s.agentRepo.UpdateTrustScore(agentID, newTrustScore); err != nil {
-		fmt.Printf("⚠️  Warning: failed to update trust score: %v\n", err)
+	// Recalculate trust score breakdown after violation
+	// This ensures the trust_scores table stays in sync with agents.trust_score
+	updatedScore, err := s.trustCalc.Calculate(agent)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: failed to recalculate trust score: %v\n", err)
+	} else {
+		// Store the new score breakdown
+		if err := s.trustScoreRepo.Create(updatedScore); err != nil {
+			fmt.Printf("⚠️  Warning: failed to store trust score breakdown: %v\n", err)
+		}
+		// Update agent's trust_score field to keep it in sync
+		if err := s.agentRepo.UpdateTrustScore(agentID, updatedScore.Score); err != nil {
+			fmt.Printf("⚠️  Warning: failed to update agent trust score: %v\n", err)
+		} else {
+			fmt.Printf("✅ Trust score recalculated after violation: %.2f%% for agent %s\n", updatedScore.Score*100, agent.Name)
+		}
 	}
 
 	return nil
