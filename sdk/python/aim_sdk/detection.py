@@ -207,17 +207,26 @@ class MCPDetector:
 
     def _is_mcp_module(self, module_name: str) -> bool:
         """Check if a module name is MCP-related."""
+        module_lower = module_name.lower()
+
+        # Exclude AIM SDK itself from being detected as an MCP server
+        if "aim_sdk" in module_lower or "aimsdk" in module_lower:
+            return False
+
         mcp_indicators = [
             "mcp",
             "model_context_protocol",
             "modelcontextprotocol"
         ]
-        module_lower = module_name.lower()
         return any(indicator in module_lower for indicator in mcp_indicators)
 
     def _is_mcp_package(self, package_name: str) -> bool:
         """Check if a package name is MCP-related."""
         package_lower = package_name.lower()
+
+        # Exclude AIM SDK itself from being detected as an MCP server
+        if "aim_sdk" in package_lower or "aim-sdk" in package_lower or "aimsdk" in package_lower:
+            return False
 
         # Check against known MCP packages
         for known_package in self._mcp_packages:
