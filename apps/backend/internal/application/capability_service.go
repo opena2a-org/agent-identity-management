@@ -107,7 +107,10 @@ func (s *CapabilityService) VerifyAction(
 		}
 
 		// 5. Decrease trust score
-		newTrustScore := agent.TrustScore - 10
+		// IMPORTANT: trust_score is stored as 0.0-1.0 (representing 0-100%), not 0-100
+		// Subtract 10% as a decimal (0.10), not as integer 10
+		trustScoreDecrease := 0.10 // 10% penalty
+		newTrustScore := agent.TrustScore - trustScoreDecrease
 		if newTrustScore < 0 {
 			newTrustScore = 0
 		}
@@ -119,7 +122,8 @@ func (s *CapabilityService) VerifyAction(
 		}
 
 		// Check if agent should be marked as compromised
-		if newViolationCount >= 3 || newTrustScore < 30 {
+		// IMPORTANT: trust_score is 0.0-1.0 scale, so 30% = 0.30
+		if newViolationCount >= 3 || newTrustScore < 0.30 {
 			if err := s.agentRepo.MarkAsCompromised(agentID); err != nil {
 				return nil, err
 			}

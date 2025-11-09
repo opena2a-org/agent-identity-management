@@ -17,6 +17,8 @@ type MCPAttestationService struct {
 	attestationRepo *repository.MCPAttestationRepository
 	agentRepo       *repository.AgentRepository
 	mcpRepo         *repository.MCPServerRepository
+	userRepo        *repository.UserRepository
+	connectionRepo  *repository.AgentMCPConnectionRepository
 	cryptoService   *infracrypto.ED25519Service
 }
 
@@ -24,11 +26,15 @@ func NewMCPAttestationService(
 	attestationRepo *repository.MCPAttestationRepository,
 	agentRepo *repository.AgentRepository,
 	mcpRepo *repository.MCPServerRepository,
+	userRepo *repository.UserRepository,
+	connectionRepo *repository.AgentMCPConnectionRepository,
 ) *MCPAttestationService {
 	return &MCPAttestationService{
 		attestationRepo: attestationRepo,
 		agentRepo:       agentRepo,
 		mcpRepo:         mcpRepo,
+		userRepo:        userRepo,
+		connectionRepo:  connectionRepo,
 		cryptoService:   infracrypto.NewED25519Service(),
 	}
 }
@@ -66,9 +72,14 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
 
+	fmt.Printf("🔍 Agent fetched from DB: ID=%s, Status=%s, VerifiedAt=%v\n", agent.ID, agent.Status, agent.VerifiedAt)
+
 	if agent.Status != domain.AgentStatusVerified {
+		fmt.Printf("❌ Agent status check failed: expected %s, got %s\n", domain.AgentStatusVerified, agent.Status)
 		return nil, fmt.Errorf("only verified agents can attest MCPs (agent status: %s)", agent.Status)
 	}
+
+	fmt.Printf("✅ Agent status check passed: %s\n", agent.Status)
 
 	if agent.PublicKey == nil || *agent.PublicKey == "" {
 		return nil, fmt.Errorf("agent has no public key registered")
@@ -80,14 +91,24 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		return nil, fmt.Errorf("failed to serialize attestation: %w", err)
 	}
 
+	// Debug: Print what we're verifying
+	fmt.Printf("🔍 Backend attestation verification:\n")
+	fmt.Printf("   Canonical JSON (first 200): %s\n", string(attestationJSON)[:min(200, len(attestationJSON))])
+	fmt.Printf("   Signature (first 40): %s\n", req.Signature[:min(40, len(req.Signature))])
+	fmt.Printf("   Agent public key (first 20): %s\n", (*agent.PublicKey)[:min(20, len(*agent.PublicKey))])
+
 	valid, err := s.cryptoService.Verify(*agent.PublicKey, attestationJSON, req.Signature)
 	if err != nil {
+		fmt.Printf("❌ Crypto verification error: %v\n", err)
 		return nil, fmt.Errorf("signature verification failed: %w", err)
 	}
 
 	if !valid {
+		fmt.Printf("❌ Signature verification returned FALSE\n")
 		return nil, fmt.Errorf("invalid attestation signature")
 	}
+
+	fmt.Printf("✅ Attestation signature verification PASSED\n")
 
 	// 4. Check attestation is recent (< 5 minutes old)
 	attestationTime, err := time.Parse(time.RFC3339, req.Attestation.Timestamp)
@@ -109,7 +130,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	attestation := &domain.MCPAttestation{
 		ID:                uuid.New(),
 		MCPServerID:       mcpServerID,
-		AgentID:           agentID,
+		AgentID:           &agentID, // Pointer for nullable support
 		AttestationData:   req.Attestation,
 		Signature:         req.Signature,
 		SignatureVerified: true,
@@ -169,8 +190,11 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	var mostRecentAttestation time.Time
 
 	for _, att := range attestations {
-		uniqueAgents[att.AgentID] = true
-		totalTrust += att.AgentTrustScore
+		// Only count SDK attestations (with agent_id) for confidence score
+		if att.AgentID != nil {
+			uniqueAgents[*att.AgentID] = true
+			totalTrust += att.AgentTrustScore
+		}
 
 		if att.VerifiedAt != nil && att.VerifiedAt.After(mostRecentAttestation) {
 			mostRecentAttestation = *att.VerifiedAt
@@ -275,7 +299,7 @@ func (s *MCPAttestationService) GetMCPAttestations(
 		return nil, 0, time.Time{}, err
 	}
 
-	// Convert to response format
+	// Convert to response format with enriched metadata
 	var result []*domain.AttestationWithAgentDetails
 	var lastAttestedAt time.Time
 
@@ -290,9 +314,92 @@ func (s *MCPAttestationService) GetMCPAttestations(
 		}
 		expiresAtStr = att.ExpiresAt.Format(time.RFC3339)
 
+		// Determine attestation type and who performed it
+		var attestationType, attestedBy, attesterType string
+
+		// Check if this is a manual attestation (signature == "manual-attestation")
+		if att.Signature == "manual-attestation" {
+			attestationType = "manual"
+			attesterType = "user"
+
+			// Parse user ID from AttestationData.AgentID (for manual attestations, this holds the userID)
+			if userID, err := uuid.Parse(att.AttestationData.AgentID); err == nil {
+				// Fetch user details
+				if user, err := s.userRepo.GetByID(userID); err == nil && user != nil {
+					attestedBy = user.Name
+				} else {
+					attestedBy = "Unknown User"
+				}
+			} else {
+				attestedBy = "Unknown User"
+			}
+		} else {
+			// SDK/Agent attestation
+			attestationType = "sdk"
+			attesterType = "agent"
+
+			var agentOwnerName string
+			var agentOwnerID uuid.UUID
+
+			if att.AgentName != "" {
+				attestedBy = att.AgentName
+			} else if att.AgentID != nil {
+				// Fallback: fetch agent name if not already populated
+				if agent, err := s.agentRepo.GetByID(*att.AgentID); err == nil && agent != nil {
+					attestedBy = agent.Name
+				} else {
+					attestedBy = "Unknown Agent"
+				}
+			} else {
+				attestedBy = "Unknown Agent"
+			}
+
+			// Fetch agent owner information for SDK attestations
+			if att.AgentID != nil {
+				if agent, err := s.agentRepo.GetByID(*att.AgentID); err == nil && agent != nil {
+					agentOwnerID = agent.CreatedBy
+					// Fetch the user who created/owns this agent
+					if owner, err := s.userRepo.GetByID(agentOwnerID); err == nil && owner != nil {
+						agentOwnerName = owner.Name
+					}
+				}
+			}
+
+			// For SDK attestations, dereference the AgentID pointer
+			agentIDValue := uuid.Nil
+			if att.AgentID != nil {
+				agentIDValue = *att.AgentID
+			}
+
+			result = append(result, &domain.AttestationWithAgentDetails{
+				ID:                    att.ID,
+				AgentID:               agentIDValue,
+				AgentName:             att.AgentName,
+				AgentTrustScore:       att.AgentTrustScore,
+				VerifiedAt:            verifiedAtStr,
+				ExpiresAt:             expiresAtStr,
+				CapabilitiesConfirmed: att.AttestationData.CapabilitiesFound,
+				ConnectionLatencyMs:   att.AttestationData.ConnectionLatencyMs,
+				HealthCheckPassed:     att.AttestationData.HealthCheckPassed,
+				IsValid:               att.IsValid,
+
+				// New metadata fields
+				AttestationType:      attestationType,
+				AttestedBy:           attestedBy,
+				AttesterType:         attesterType,
+				SignatureVerified:    att.SignatureVerified,
+				SDKVersion:           att.AttestationData.SDKVersion,
+				ConnectionSuccessful: att.AttestationData.ConnectionSuccessful,
+				AgentOwnerName:       agentOwnerName,
+				AgentOwnerID:         agentOwnerID,
+			})
+			continue
+		}
+
+		// For manual attestations, use uuid.Nil since there's no agent
 		result = append(result, &domain.AttestationWithAgentDetails{
 			ID:                    att.ID,
-			AgentID:               att.AgentID,
+			AgentID:               uuid.Nil,
 			AgentName:             att.AgentName,
 			AgentTrustScore:       att.AgentTrustScore,
 			VerifiedAt:            verifiedAtStr,
@@ -301,6 +408,14 @@ func (s *MCPAttestationService) GetMCPAttestations(
 			ConnectionLatencyMs:   att.AttestationData.ConnectionLatencyMs,
 			HealthCheckPassed:     att.AttestationData.HealthCheckPassed,
 			IsValid:               att.IsValid,
+
+			// New metadata fields
+			AttestationType:      attestationType,
+			AttestedBy:           attestedBy,
+			AttesterType:         attesterType,
+			SignatureVerified:    att.SignatureVerified,
+			SDKVersion:           att.AttestationData.SDKVersion,
+			ConnectionSuccessful: att.AttestationData.ConnectionSuccessful,
 		})
 	}
 
@@ -393,4 +508,123 @@ func (s *MCPAttestationService) RecalculateAllConfidenceScores(ctx context.Conte
 // ToCanonicalJSON is a helper to ensure consistent JSON serialization
 func toCanonicalJSON(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
+}
+
+// RecordManualAttestation records a manual attestation from a user (no cryptographic signature required)
+// This allows users without SDK integration to manually attest MCP servers they've verified
+func (s *MCPAttestationService) RecordManualAttestation(
+	ctx context.Context,
+	mcpServerID uuid.UUID,
+	userID uuid.UUID,
+	organizationID uuid.UUID,
+	capabilitiesVerified []string,
+	connectionTested bool,
+	healthCheckPassed bool,
+	notes string,
+) (*AttestMCPResponse, error) {
+	// 1. Verify MCP server exists
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("mcp server not found: %w", err)
+	}
+
+	// 2. Create attestation record (manual type, no cryptographic signature)
+	now := time.Now().UTC()
+	attestation := &domain.MCPAttestation{
+		ID:            uuid.New(),
+		MCPServerID:   mcpServerID,
+		AgentID:       nil, // No agent involved in manual attestations
+		AttestationData: domain.AttestationPayload{
+			AgentID:              userID.String(), // Use user ID as the "agent" for tracking
+			MCPURL:               mcpServer.URL,
+			MCPName:              mcpServer.Name,
+			CapabilitiesFound:    capabilitiesVerified,
+			ConnectionSuccessful: connectionTested,
+			HealthCheckPassed:    healthCheckPassed,
+			ConnectionLatencyMs:  0, // Not measured for manual attestations
+			Timestamp:            now.Format(time.RFC3339),
+			SDKVersion:           "manual-v1.0.0",
+		},
+		Signature:         "manual-attestation", // No cryptographic signature for manual attestations
+		SignatureVerified: true,                 // Manual attestations are pre-verified by user login
+		VerifiedAt:        &now,
+		ExpiresAt:         now.Add(90 * 24 * time.Hour), // Manual attestations expire after 90 days
+		IsValid:           true,
+		CreatedAt:         now,
+	}
+
+	// 3. Store attestation
+	if err := s.attestationRepo.CreateAttestation(attestation); err != nil {
+		return nil, fmt.Errorf("failed to store manual attestation: %w", err)
+	}
+
+	fmt.Printf("✅ Manual attestation created: %s for MCP %s by user %s\n", attestation.ID, mcpServerID, userID)
+
+	// 4. Update MCP server confidence score and attestation count
+	// Use the updateMCPConfidenceScore helper which recalculates from all attestations
+	confidenceScore, attestationCount, err := s.updateMCPConfidenceScore(ctx, mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update confidence score: %w", err)
+	}
+
+	fmt.Printf("✅ Updated MCP server %s: confidence_score=%.2f%%, attestation_count=%d\n",
+		mcpServerID, confidenceScore, attestationCount)
+
+	return &AttestMCPResponse{
+		Success:            true,
+		AttestationID:      attestation.ID.String(),
+		MCPConfidenceScore: confidenceScore,
+		AttestationCount:   attestationCount,
+		Message:            fmt.Sprintf("Manual attestation recorded successfully. MCP confidence score: %.2f%%", confidenceScore),
+	}, nil
+}
+
+// RecordAgentMCPConnection creates or updates an agent-MCP connection when agent uses MCP tools
+func (s *MCPAttestationService) RecordAgentMCPConnection(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerID uuid.UUID,
+	toolName string,
+) (*domain.AgentMCPConnection, error) {
+	// 1. Check if connection already exists
+	existingConnection, err := s.connectionRepo.GetByAgentAndMCPServer(ctx, agentID, mcpServerID)
+	if err == nil && existingConnection != nil {
+		// Update existing connection
+		if err := s.connectionRepo.UpdateAttestation(ctx, agentID, mcpServerID); err != nil {
+			return nil, fmt.Errorf("failed to update connection: %w", err)
+		}
+
+		// Fetch updated connection
+		updatedConnection, err := s.connectionRepo.GetByAgentAndMCPServer(ctx, agentID, mcpServerID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch updated connection: %w", err)
+		}
+
+		return updatedConnection, nil
+	}
+
+	// 2. Create new connection
+	now := time.Now().UTC()
+	connection := &domain.AgentMCPConnection{
+		ID:               uuid.New(),
+		AgentID:          agentID,
+		MCPServerID:      mcpServerID,
+		DetectionID:      nil,
+		ConnectionType:   domain.ConnectionTypeAttested,
+		FirstConnectedAt: now,
+		LastAttestedAt:   &now,
+		AttestationCount: 1,
+		IsActive:         true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	if err := s.connectionRepo.Create(ctx, connection); err != nil {
+		return nil, fmt.Errorf("failed to create connection: %w", err)
+	}
+
+	fmt.Printf("✅ Created agent-MCP connection: agent=%s, mcp=%s, tool=%s\n",
+		agentID, mcpServerID, toolName)
+
+	return connection, nil
 }

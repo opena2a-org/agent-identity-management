@@ -22,16 +22,16 @@ type AgentCapability struct {
 // CapabilityViolation represents an attempt to perform an action outside capability scope
 type CapabilityViolation struct {
 	ID                     uuid.UUID              `json:"id"`
-	AgentID                uuid.UUID              `json:"agentId"`
-	AgentName              *string                `json:"agentName,omitempty"`
-	AttemptedCapability    string                 `json:"attemptedCapability"`
-	RegisteredCapabilities map[string]interface{} `json:"registeredCapabilities,omitempty"`
+	AgentID                uuid.UUID              `json:"agent_id"`
+	AgentName              *string                `json:"agent_name,omitempty"`
+	AttemptedCapability    string                 `json:"attempted_capability"`
+	RegisteredCapabilities map[string]interface{} `json:"registered_capabilities,omitempty"`
 	Severity               string                 `json:"severity"`
-	TrustScoreImpact       int                    `json:"trustScoreImpact"`
-	IsBlocked              bool                   `json:"isBlocked"`
-	SourceIP               *string                `json:"sourceIp,omitempty"`
-	RequestMetadata        map[string]interface{} `json:"requestMetadata,omitempty"`
-	CreatedAt              time.Time              `json:"createdAt"`
+	TrustScoreImpact       int                    `json:"trust_score_impact"`
+	IsBlocked              bool                   `json:"is_blocked"`
+	SourceIP               *string                `json:"source_ip,omitempty"`
+	RequestMetadata        map[string]interface{} `json:"request_metadata,omitempty"`
+	CreatedAt              time.Time              `json:"created_at"`
 }
 
 // CapabilityRepository defines the interface for capability data access

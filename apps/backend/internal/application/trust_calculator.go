@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -310,9 +311,15 @@ func (c *TrustCalculator) CalculateTrustScore(ctx context.Context, agentID uuid.
 		return nil, err
 	}
 
-	// Store the score
+	// Store the score breakdown in trust_scores table
 	if err := c.trustScoreRepo.Create(score); err != nil {
 		return nil, err
+	}
+
+	// Update the agent's trust_score field to keep it in sync
+	// This ensures agents.trust_score matches the calculated score from trust_scores table
+	if err := c.agentRepo.UpdateTrustScore(agentID, score.Score); err != nil {
+		return nil, fmt.Errorf("failed to update agent trust score: %w", err)
 	}
 
 	return score, nil

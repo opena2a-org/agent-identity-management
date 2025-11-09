@@ -14,6 +14,9 @@ import {
   CheckCircle,
   Loader2,
   Tag,
+  Activity,
+  Bot,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +83,28 @@ interface Capability {
   updated_at: string;
 }
 
+// Attestation information
+interface Attestation {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_trust_score: number;
+  verified_at: string;
+  expires_at: string;
+  capabilities_confirmed: string[];
+  connection_latency_ms: number;
+  health_check_passed: boolean;
+  is_valid: boolean;
+  attestation_type: string; // "sdk" or "manual"
+  attested_by: string; // Agent name or User name
+  attester_type: string; // "agent" or "user"
+  signature_verified: boolean;
+  sdk_version?: string;
+  connection_successful: boolean;
+  agent_owner_name?: string;
+  agent_owner_id?: string;
+}
+
 interface Agent {
   id: string;
   name: string;
@@ -97,6 +122,7 @@ export default function MCPServerDetailsPage({
   const [server, setServer] = useState<MCPServer | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [connectedAgents, setConnectedAgents] = useState<Agent[]>([]);
+  const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -208,6 +234,26 @@ export default function MCPServerDetailsPage({
           setConnectedAgents(agents);
         } catch (err) {
           console.error("Failed to fetch connected agents:", err);
+        }
+
+        // Fetch attestations
+        try {
+          const token = api.getToken?.();
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/mcp-servers/${serverId}/attestations`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            setAttestations(data.attestations || []);
+          }
+        } catch (err) {
+          console.error("Failed to fetch attestations:", err);
         }
       } catch (err: any) {
         console.error("Failed to fetch MCP server data:", err);
@@ -452,13 +498,15 @@ export default function MCPServerDetailsPage({
                     {(server.confidence_score ?? 0).toFixed(1)}%
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {(server.confidence_score ?? 0) >= 80
-                      ? "High confidence"
-                      : (server.confidence_score ?? 0) >= 60
-                        ? "Medium confidence"
-                        : (server.confidence_score ?? 0) >= 40
-                          ? "Low confidence"
-                          : "No attestations"}
+                    {(server.attestation_count ?? 0) === 0
+                      ? "No attestations yet"
+                      : (server.confidence_score ?? 0) >= 80
+                        ? "High confidence"
+                        : (server.confidence_score ?? 0) >= 60
+                          ? "Medium confidence"
+                          : (server.confidence_score ?? 0) >= 40
+                            ? "Low confidence"
+                            : "Needs more attestations"}
                   </p>
                 </div>
               </div>
@@ -599,6 +647,10 @@ export default function MCPServerDetailsPage({
               Capabilities
             </TabsTrigger>
             <TabsTrigger value="agents">Connected Agents</TabsTrigger>
+            <TabsTrigger value="activity">
+              <Activity className="h-4 w-4 mr-2" />
+              Attestations
+            </TabsTrigger>
             <TabsTrigger value="tags">
               <Tag className="h-4 w-4 mr-2" />
               Tags
@@ -709,6 +761,124 @@ export default function MCPServerDetailsPage({
                           </p>
                         </div>
                         <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="activity" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Attestations</CardTitle>
+                <CardDescription>
+                  All attestations for this MCP server from agents and users
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {attestations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">
+                      No attestations yet
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {attestations.map((attestation) => (
+                      <div
+                        key={attestation.id}
+                        className="border rounded-lg p-4 space-y-3"
+                      >
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            {attestation.attester_type === "agent" ? (
+                              <Bot className="h-5 w-5 text-blue-600" />
+                            ) : (
+                              <User className="h-5 w-5 text-purple-600" />
+                            )}
+                            <div>
+                              <p className="font-medium">
+                                {attestation.attested_by}
+                                {attestation.attester_type === "agent" && attestation.agent_owner_name && (
+                                  <span className="ml-1 font-normal text-sm text-muted-foreground">
+                                    (owned by {attestation.agent_owner_name})
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {attestation.attester_type === "agent" ? "Agent" : "User"} • {attestation.attestation_type === "sdk" ? "SDK" : "Manual"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {attestation.is_valid ? (
+                              <Badge variant="default" className="bg-green-600">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Valid
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">Expired</Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Details */}
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Verified:</span>
+                            <span className="ml-2">
+                              {new Date(attestation.verified_at).toLocaleString()}
+                            </span>
+                          </div>
+                          {attestation.attestation_type === "sdk" && attestation.sdk_version && (
+                            <div>
+                              <span className="text-muted-foreground">SDK:</span>
+                              <span className="ml-2">{attestation.sdk_version}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status Badges */}
+                        <div className="flex flex-wrap gap-2">
+                          {attestation.signature_verified && (
+                            <Badge variant="outline" className="text-xs">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Signature Verified
+                            </Badge>
+                          )}
+                          {attestation.connection_successful && (
+                            <Badge variant="outline" className="text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Connection OK
+                            </Badge>
+                          )}
+                          {attestation.health_check_passed && (
+                            <Badge variant="outline" className="text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Health Check Passed
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Capabilities */}
+                        {attestation.capabilities_confirmed && attestation.capabilities_confirmed.length > 0 && (
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-2">
+                              Capabilities Verified ({attestation.capabilities_confirmed.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {attestation.capabilities_confirmed.map((cap, idx) => (
+                                <Badge key={idx} variant="secondary" className="text-xs">
+                                  {cap}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

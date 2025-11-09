@@ -22,11 +22,13 @@ Usage:
     )
 """
 
-from aim_sdk.integrations.mcp.registration import register_mcp_server, list_mcp_servers
+from aim_sdk.integrations.mcp.registration import register_mcp_server, list_mcp_servers, attest_mcp_server, use_mcp_tool
 from aim_sdk.integrations.mcp.verification import verify_mcp_action
 
 __all__ = [
     "register_mcp_server",
     "list_mcp_servers",
+    "attest_mcp_server",
+    "use_mcp_tool",
     "verify_mcp_action",
 ]

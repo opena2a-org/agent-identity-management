@@ -114,6 +114,7 @@ func (s *VerificationEventService) CreateVerificationEvent(
 		MessageHash:      req.MessageHash,
 		Nonce:            req.Nonce,
 		PublicKey:        req.PublicKey,
+		Confidence:       req.Confidence,
 		TrustScore:       agent.TrustScore,
 		DurationMs:       req.DurationMs,
 		ErrorCode:        req.ErrorCode,
@@ -244,6 +245,7 @@ type CreateVerificationEventRequest struct {
 	MessageHash      *string
 	Nonce            *string
 	PublicKey        *string
+	Confidence       float64
 	DurationMs       int
 	ErrorCode        *string
 	ErrorReason      *string
