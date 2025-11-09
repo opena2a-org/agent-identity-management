@@ -10,7 +10,7 @@ A real-world AI agent that:
 - ✅ Sends proactive alerts for flight updates
 - ✅ Automatically secured with AIM (1 line of code)
 - ✅ Complete audit trail of all API calls
-- ✅ Enterprise-grade security and compliance
+- ✅ production-ready security and compliance
 
 **Difficulty**: Intermediate
 **Time**: 10 minutes

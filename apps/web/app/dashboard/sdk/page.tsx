@@ -47,7 +47,7 @@ export default function SDKDownloadPage() {
       <div className="container mx-auto py-8 px-4 max-w-4xl">
         <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Enterprise-Grade Agent Security
+          production-ready Agent Security
         </h1>
         <p className="text-gray-600 dark:text-gray-400 text-lg">
           Secure your agents with 1 line of code. Zero configuration required.
@@ -159,7 +159,7 @@ export default function SDKDownloadPage() {
       <div className="bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/20 rounded-lg p-6 mb-8 flex items-start gap-3">
         <Shield className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
         <div className="flex-1">
-          <p className="font-semibold text-gray-900 dark:text-white text-lg">Enterprise-Grade Security, Developer-Friendly UX</p>
+          <p className="font-semibold text-gray-900 dark:text-white text-lg">production-ready Security, Developer-Friendly UX</p>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
             AIM SDK uses Ed25519 cryptographic signing for authentication - more secure than API keys.
             Each agent gets a unique private key, and you can monitor and revoke access anytime.
@@ -219,7 +219,7 @@ export default function SDKDownloadPage() {
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>That&apos;s it! One line. Zero configuration. Enterprise-grade security.</span>
+                <span>That&apos;s it! One line. Zero configuration. production-ready security.</span>
               </p>
             </div>
 

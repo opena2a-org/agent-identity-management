@@ -1,7 +1,7 @@
 """
 AIM Python SDK - One-line agent registration and automatic identity verification
 
-Enterprise-grade identity and capability management for AI agents.
+production-ready identity and capability management for AI agents.
 
 This SDK provides seamless identity verification for AI agents registered with AIM.
 All cryptographic signing and verification is handled automatically.

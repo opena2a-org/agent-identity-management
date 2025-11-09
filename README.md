@@ -216,7 +216,7 @@ if verification.approved:
     )
 ```
 
-**That's it!** Your agent now has enterprise-grade security with complete audit trails.
+**That's it!** Your agent now has production-ready security with complete audit trails.
 
 ---
 

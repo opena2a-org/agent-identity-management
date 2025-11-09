@@ -2,7 +2,7 @@
 
 ## Overview
 
-AIM uses **token rotation** to protect your organization from token theft and unauthorized access. This is an enterprise-grade security feature that is **required for SOC 2, HIPAA, and GDPR compliance**.
+AIM uses **token rotation** to protect your organization from token theft and unauthorized access. This is an production-ready security feature that is **required for SOC 2, HIPAA, and GDPR compliance**.
 
 ## What is Token Rotation?
 

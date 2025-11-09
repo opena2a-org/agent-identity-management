@@ -2,7 +2,7 @@
 
 ## Overview
 
-AIM implements **enterprise-grade security** for AI agent identity management with multiple layers of protection against credential theft, unauthorized access, and token compromise.
+AIM implements **production-ready security** for AI agent identity management with multiple layers of protection against credential theft, unauthorized access, and token compromise.
 
 ## Priority 1 Security Features (Implemented)
 

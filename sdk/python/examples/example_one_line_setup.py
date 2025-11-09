@@ -3,7 +3,7 @@
 🚀 One-Line Setup for AI Agent Identity
 
 This example demonstrates how AIM achieves radical simplicity:
-enterprise-grade security with just one line of code.
+production-ready security with just one line of code.
 
 ONE LINE OF CODE. ZERO CONFIGURATION. AUTOMATIC EVERYTHING.
 """

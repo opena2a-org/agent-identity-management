@@ -1,6 +1,6 @@
 # Microsoft Copilot + AIM Integration Guide
 
-This guide shows how to integrate **Microsoft Copilot** (GitHub Copilot, Microsoft 365 Copilot, Azure OpenAI) with **AIM (Agent Identity Management)** for enterprise-grade identity verification and trust scoring.
+This guide shows how to integrate **Microsoft Copilot** (GitHub Copilot, Microsoft 365 Copilot, Azure OpenAI) with **AIM (Agent Identity Management)** for production-ready identity verification and trust scoring.
 
 ## 🎯 Why Integrate AIM with Microsoft Copilot?
 

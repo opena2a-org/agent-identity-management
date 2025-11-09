@@ -2,7 +2,7 @@
   "name": "agent-identity-management",
   "version": "0.1.0",
   "private": true,
-  "description": "Enterprise-grade identity verification and security platform for AI agents and MCP servers",
+  "description": "production-ready identity verification and security platform for AI agents and MCP servers",
   "workspaces": [
     "apps/*",
     "packages/*"

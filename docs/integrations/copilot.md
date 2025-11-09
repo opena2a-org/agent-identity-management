@@ -1,6 +1,6 @@
 # 🤖 Microsoft Copilot Integration - Enterprise AI Security
 
-Secure your Microsoft Copilot agents with **enterprise-grade identity management**.
+Secure your Microsoft Copilot agents with **production-ready identity management**.
 
 ## What You'll Build
 

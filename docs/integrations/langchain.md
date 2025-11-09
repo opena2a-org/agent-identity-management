@@ -317,7 +317,7 @@ aim_agent = secure("rag-agent")
 
 # Create vector store
 documents = [
-    Document(page_content="AIM provides enterprise-grade agent security."),
+    Document(page_content="AIM provides production-ready agent security."),
     Document(page_content="AIM uses Ed25519 cryptographic signatures."),
     Document(page_content="AIM supports LangChain, CrewAI, and MCP integrations."),
 ]

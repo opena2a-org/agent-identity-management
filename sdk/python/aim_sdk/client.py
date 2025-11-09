@@ -1285,7 +1285,7 @@ def register_agent(
     """
     ONE-LINE agent registration with AIM - Radical simplicity meets enterprise security
 
-    This is the magic function that makes AIM effortless to use while maintaining enterprise-grade protection.
+    This is the magic function that makes AIM effortless to use while maintaining production-ready protection.
     Call this once and your agent is registered, verified, and ready to use.
 
     **ZERO CONFIG MODE** (SDK Download):

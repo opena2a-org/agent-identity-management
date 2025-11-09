@@ -1,7 +1,7 @@
 /**
  * Complete AIM API Documentation
  *
- * This file contains the complete documentation for all 148+ API endpoints.
+ * This file contains the complete documentation for all 162 API endpoints.
  * Organized by functional category with full request/response schemas.
  *
  * Silicon Valley Standard: Complete, accurate, executable API docs.
@@ -196,6 +196,55 @@ export const apiDocumentation: EndpointCategory[] = [
               type: "boolean",
               description: "User approval status",
             },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/auth/sdk/recover",
+        description:
+          "Recover revoked SDK tokens. Allows zero-downtime token rotation by recovering previously revoked tokens.",
+        summary: "Recover revoked SDK token",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["auth", "sdk", "recovery"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            token: {
+              type: "string",
+              description: "Revoked token to recover",
+              required: true,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Recovery success status" },
+            token: { type: "string", description: "Recovered token" },
+          },
+        },
+        example: `{
+  "token": "aim_sdk_xxxxxxxxxxxxx"
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/organizations/current",
+        description:
+          "Get current user's organization details. Returns organization name, settings, and metadata.",
+        summary: "Get current organization",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["auth", "organization"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Organization ID" },
+            name: { type: "string", description: "Organization name" },
+            settings: { type: "object", description: "Organization settings" },
           },
         },
         example: "No request body required",
@@ -640,6 +689,37 @@ export const apiDocumentation: EndpointCategory[] = [
           },
         },
         example: "{}",
+      },
+      {
+        method: "PUT",
+        path: "/api/v1/agents/:id/keys",
+        description:
+          "Register agent's Ed25519 public key from SDK. Allows SDK-generated keys to be registered with AIM backend.",
+        summary: "Register SDK key",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "member",
+        tags: ["agents", "sdk", "credentials"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            publicKey: {
+              type: "string",
+              description: "Ed25519 public key (base64)",
+              required: true,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Registration success" },
+            publicKey: { type: "string", description: "Registered public key" },
+          },
+        },
+        example: `{
+  "publicKey": "base64_encoded_public_key"
+}`,
       },
       {
         method: "GET",
@@ -1190,6 +1270,138 @@ export const apiDocumentation: EndpointCategory[] = [
         tags: ["mcp", "credentials"],
         example: "No request body required",
       },
+      {
+        method: "POST",
+        path: "/api/v1/mcp-servers/:id/attest",
+        description:
+          "Submit cryptographic attestation that agent has verified MCP server capabilities. Zero-effort verification using Ed25519 signatures.",
+        summary: "Attest MCP server",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["mcp", "attestation", "security", "verification"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            capabilities_verified: {
+              type: "array",
+              description: "List of MCP capabilities agent verified",
+              required: true,
+              example: ["read_file", "write_file", "execute_command"],
+            },
+            attestation_method: {
+              type: "string",
+              description: "How attestation was performed",
+              example: "runtime_detection",
+            },
+            metadata: {
+              type: "object",
+              description: "Additional attestation metadata",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            attestationId: {
+              type: "string",
+              description: "Attestation record ID",
+            },
+            status: {
+              type: "string",
+              description: "Attestation status (verified)",
+            },
+            timestamp: {
+              type: "string",
+              description: "Attestation timestamp",
+            },
+          },
+        },
+        example: `{
+  "capabilities_verified": ["read_file", "write_file"],
+  "attestation_method": "runtime_detection",
+  "metadata": {
+    "sdk_version": "1.0.0"
+  }
+}`,
+      },
+      {
+        method: "POST",
+        path: "/api/v1/mcp-servers/:id/manual-attest",
+        description:
+          "Manually attest MCP server capabilities. For non-SDK users or manual verification workflows.",
+        summary: "Manual MCP attestation",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "member",
+        tags: ["mcp", "attestation", "manual"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            capabilities_verified: {
+              type: "array",
+              description: "List of capabilities verified",
+              required: true,
+            },
+            notes: {
+              type: "string",
+              description: "Attestation notes",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            attestationId: { type: "string", description: "Attestation ID" },
+            status: { type: "string", description: "Attestation status" },
+          },
+        },
+        example: `{
+  "capabilities_verified": ["read_file", "write_file"],
+  "notes": "Manually verified capabilities via testing"
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/mcp-servers/:id/attestations",
+        description:
+          "Get all agent attestations for this MCP server. Shows which agents have verified this MCP.",
+        summary: "Get MCP attestations",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["mcp", "attestation"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            attestations: {
+              type: "array",
+              description: "List of attestation records",
+            },
+            count: { type: "number", description: "Total attestations" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/mcp-servers/:id/agents",
+        description:
+          "Get all agents connected to this MCP server (via attestation). Shows agent-MCP relationships.",
+        summary: "Get connected agents",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["mcp", "relationships", "agents"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            agents: {
+              type: "array",
+              description: "List of connected agents",
+            },
+            count: { type: "number", description: "Total connected agents" },
+          },
+        },
+        example: "No request body required",
+      },
     ],
   },
 
@@ -1248,6 +1460,25 @@ export const apiDocumentation: EndpointCategory[] = [
   "expiresAt": "2025-12-31T23:59:59Z",
   "scopes": ["agents:read", "agents:write"]
 }`,
+      },
+      {
+        method: "PATCH",
+        path: "/api/v1/api-keys/:id/disable",
+        description:
+          "Disable API key without deleting. Allows temporary suspension of API key access.",
+        summary: "Disable API key",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "member",
+        tags: ["api-keys", "security"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Disable success" },
+            keyId: { type: "string", description: "Disabled key ID" },
+          },
+        },
+        example: "No request body required",
       },
       {
         method: "DELETE",
@@ -1406,6 +1637,77 @@ export const apiDocumentation: EndpointCategory[] = [
         requiresAuth: true,
         roleRequired: "manager",
         tags: ["verification"],
+        example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/verification-events/stats",
+        description:
+          "Get aggregated verification statistics. Returns overall verification metrics and trends.",
+        summary: "Verification stats",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "manager",
+        tags: ["verification", "analytics"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            total_verifications: {
+              type: "number",
+              description: "Total verification count",
+            },
+            success_rate: {
+              type: "number",
+              description: "Success rate percentage",
+            },
+            avg_response_time: {
+              type: "number",
+              description: "Average response time (ms)",
+            },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/verification-events/agent/:id",
+        description:
+          "Get all verification events for specific agent. Shows agent's verification history.",
+        summary: "Agent verification events",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["verification", "agents"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            events: {
+              type: "array",
+              description: "Verification events for agent",
+            },
+            count: { type: "number", description: "Total events" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/verification-events/mcp/:id",
+        description:
+          "Get all verification events for specific MCP server. Shows MCP's verification history.",
+        summary: "MCP verification events",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["verification", "mcp"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            events: {
+              type: "array",
+              description: "Verification events for MCP",
+            },
+            count: { type: "number", description: "Total events" },
+          },
+        },
         example: "No request body required",
       },
     ],
@@ -1627,6 +1929,143 @@ export const apiDocumentation: EndpointCategory[] = [
         tags: ["detection"],
         example: "No request body required",
       },
+      {
+        method: "POST",
+        path: "/api/v1/detection/agents/:id/report",
+        description:
+          "Report MCP detection from SDK agent. Allows agents to report detected MCP servers and integration status.",
+        summary: "SDK: Report MCP detection",
+        auth: "Ed25519 (Agent Signature) or Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["detection", "sdk", "mcp"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            mcp_servers: {
+              type: "array",
+              description: "Detected MCP servers",
+              required: true,
+            },
+            detection_method: {
+              type: "string",
+              description: "How MCPs were detected",
+              example: "config_file_scan",
+            },
+            metadata: {
+              type: "object",
+              description: "Detection metadata",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            reportId: { type: "string", description: "Detection report ID" },
+            detected_count: { type: "number", description: "Number of MCPs detected" },
+          },
+        },
+        example: `{
+  "mcp_servers": [
+    {"name": "filesystem", "url": "http://localhost:3000"},
+    {"name": "database", "url": "http://localhost:3001"}
+  ],
+  "detection_method": "config_file_scan"
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/detection/agents/:id/status",
+        description:
+          "Get MCP detection status for agent. Shows which MCPs agent has detected and integration status.",
+        summary: "Get agent detection status",
+        auth: "Ed25519 (Agent Signature) or Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["detection", "agents"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            detection_count: {
+              type: "number",
+              description: "Total MCPs detected",
+            },
+            last_detection: {
+              type: "string",
+              description: "Last detection timestamp",
+            },
+            detected_mcps: {
+              type: "array",
+              description: "List of detected MCP servers",
+            },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/detection/agents/:id/capabilities/report",
+        description:
+          "Report agent's detected capabilities. Allows agents to self-report their detected capabilities.",
+        summary: "Report agent capabilities",
+        auth: "Ed25519 (Agent Signature) or Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["detection", "capabilities"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            capabilities: {
+              type: "array",
+              description: "Detected capabilities",
+              required: true,
+            },
+            detection_method: {
+              type: "string",
+              description: "How capabilities were detected",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            reportId: { type: "string", description: "Capability report ID" },
+            capabilities_count: {
+              type: "number",
+              description: "Number of capabilities detected",
+            },
+          },
+        },
+        example: `{
+  "capabilities": ["read_file", "write_file", "execute_command"],
+  "detection_method": "runtime_analysis"
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/detection/agents/:id/capabilities/latest",
+        description:
+          "Get latest capability detection report for agent. Shows most recent capability detection results.",
+        summary: "Get latest capability report",
+        auth: "Ed25519 (Agent Signature) or Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["detection", "capabilities"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            capabilities: {
+              type: "array",
+              description: "Detected capabilities",
+            },
+            detected_at: {
+              type: "string",
+              description: "Detection timestamp",
+            },
+            detection_method: {
+              type: "string",
+              description: "Detection method used",
+            },
+          },
+        },
+        example: "No request body required",
+      },
     ],
   },
 
@@ -1697,6 +2136,87 @@ export const apiDocumentation: EndpointCategory[] = [
         tags: ["sdk"],
         example: "No request body required",
       },
+      {
+        method: "GET",
+        path: "/api/v1/users/me/sdk-tokens",
+        description:
+          "List all SDK tokens for current user. Shows active and revoked tokens with usage statistics.",
+        summary: "List user SDK tokens",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["sdk", "tokens"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            tokens: {
+              type: "array",
+              description: "SDK tokens list",
+            },
+            total: { type: "number", description: "Total token count" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/users/me/sdk-tokens/count",
+        description:
+          "Get count of active SDK tokens for current user. Quick check for token management.",
+        summary: "Get active token count",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["sdk", "tokens"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            active_count: {
+              type: "number",
+              description: "Number of active tokens",
+            },
+            total_count: { type: "number", description: "Total tokens (including revoked)" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/users/me/sdk-tokens/:id/revoke",
+        description:
+          "Revoke specific SDK token. Immediately invalidates token for security.",
+        summary: "Revoke SDK token",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["sdk", "tokens", "security"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Revocation success" },
+            tokenId: { type: "string", description: "Revoked token ID" },
+          },
+        },
+        example: "{}",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/users/me/sdk-tokens/revoke-all",
+        description:
+          "Revoke all SDK tokens for current user. Emergency security action for compromised credentials.",
+        summary: "Revoke all SDK tokens",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["sdk", "tokens", "security"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Revocation success" },
+            revoked_count: {
+              type: "number",
+              description: "Number of tokens revoked",
+            },
+          },
+        },
+        example: "{}",
+      },
     ],
   },
 
@@ -1754,6 +2274,29 @@ export const apiDocumentation: EndpointCategory[] = [
         roleRequired: "manager",
         tags: ["alerts"],
         example: "{}",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/admin/alerts/:id/resolve",
+        description:
+          "Resolve acknowledged alert. Marks alert as resolved after remediation.",
+        summary: "Resolve alert",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "manager",
+        tags: ["alerts"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            resolution_notes: {
+              type: "string",
+              description: "Notes about how alert was resolved",
+            },
+          },
+        },
+        example: `{
+  "resolution_notes": "Updated security policy to prevent this issue"
+}`,
       },
       {
         method: "DELETE",
@@ -1911,6 +2454,28 @@ export const apiDocumentation: EndpointCategory[] = [
         example: "No request body required",
       },
       {
+        method: "PATCH",
+        path: "/api/v1/admin/security-policies/:id/toggle",
+        description:
+          "Toggle security policy enabled/disabled state. Quick enable/disable without full update.",
+        summary: "Toggle policy",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "admin",
+        tags: ["policies"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Policy ID" },
+            enabled: {
+              type: "boolean",
+              description: "New enabled state",
+            },
+          },
+        },
+        example: "No request body required",
+      },
+      {
         method: "GET",
         path: "/api/v1/admin/security-policies/:id/violations",
         description: "Get policy violations.",
@@ -2016,7 +2581,7 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "POST",
         path: "/api/v1/admin/users/:id/deactivate",
-        description: "Deactivate user account.",
+        description: "Deactivate user account (soft delete).",
         summary: "Deactivate user",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
@@ -2026,9 +2591,10 @@ export const apiDocumentation: EndpointCategory[] = [
       },
       {
         method: "POST",
-        path: "/api/v1/admin/users/:id/reactivate",
-        description: "Reactivate user account.",
-        summary: "Reactivate user",
+        path: "/api/v1/admin/users/:id/activate",
+        description:
+          "Activate previously deactivated user account. Restores user access.",
+        summary: "Activate user",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         roleRequired: "admin",
@@ -2038,7 +2604,7 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "DELETE",
         path: "/api/v1/admin/users/:id",
-        description: "Delete user permanently.",
+        description: "Delete user permanently (hard delete).",
         summary: "Delete user",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
@@ -2049,23 +2615,46 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "GET",
         path: "/api/v1/admin/users/:id",
-        description: "Get user details.",
-        summary: "Get user",
+        description:
+          "Get detailed user information. Shows user profile, role, organization, and activity.",
+        summary: "Get user details",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         roleRequired: "admin",
         tags: ["admin", "users"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "User ID" },
+            email: { type: "string", description: "User email" },
+            role: { type: "string", description: "User role" },
+            organizationId: { type: "string", description: "Organization ID" },
+            isApproved: { type: "boolean", description: "Approval status" },
+            createdAt: { type: "string", description: "Account creation date" },
+          },
+        },
         example: "No request body required",
       },
       {
         method: "POST",
         path: "/api/v1/admin/users/:id/reset-password",
-        description: "Reset user password (sends email).",
+        description:
+          "Reset user password and send reset email. Admin-initiated password reset for user support.",
         summary: "Reset user password",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         roleRequired: "admin",
-        tags: ["admin", "users"],
+        tags: ["admin", "users", "security"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", description: "Reset success" },
+            message: {
+              type: "string",
+              description: "Confirmation message",
+            },
+          },
+        },
         example: "{}",
       },
     ],
@@ -2465,6 +3054,130 @@ export const apiDocumentation: EndpointCategory[] = [
     "file_size": 1024
   }
 }`,
+      },
+      {
+        method: "POST",
+        path: "/api/v1/sdk-api/agents/:id/mcp-connections",
+        description:
+          "Record agent-MCP connection when agent uses MCP tool. Automatically tracks which MCP servers agent communicates with.",
+        summary: "SDK: Record MCP connection",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "mcp", "connections"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            mcp_server_id: {
+              type: "string",
+              description: "MCP server ID",
+              required: true,
+            },
+            connection_method: {
+              type: "string",
+              description: "How connection was established",
+              example: "use_mcp_tool",
+            },
+            metadata: {
+              type: "object",
+              description: "Connection metadata",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            connectionId: { type: "string", description: "Connection record ID" },
+            status: { type: "string", description: "Connection status" },
+          },
+        },
+        example: `{
+  "mcp_server_id": "uuid-mcp-123",
+  "connection_method": "use_mcp_tool",
+  "metadata": {
+    "tool_name": "read_file"
+  }
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/sdk-api/agents/:id/mcp-servers",
+        description:
+          "List all MCP servers available to agent's organization. SDK agents use this to discover available MCPs.",
+        summary: "SDK: List available MCP servers",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "mcp"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            mcpServers: {
+              type: "array",
+              description: "Available MCP servers",
+            },
+            count: { type: "number", description: "Total count" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/sdk-api/agents/:id/mcp-servers",
+        description:
+          "Create new MCP server via SDK. Allows agents to register new MCP servers they discover.",
+        summary: "SDK: Create MCP server",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "mcp"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "MCP server name",
+              required: true,
+            },
+            url: {
+              type: "string",
+              description: "MCP server URL",
+              required: true,
+            },
+            capabilities: {
+              type: "array",
+              description: "Detected capabilities",
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            mcpServerId: { type: "string", description: "Created MCP server ID" },
+            name: { type: "string", description: "MCP server name" },
+          },
+        },
+        example: `{
+  "name": "filesystem-mcp",
+  "url": "http://localhost:3000",
+  "capabilities": ["read_file", "write_file"]
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/sdk-api/agents/:identifier",
+        description:
+          "Get agent by ID or name (SDK). Allows SDK to fetch agent details using either ID or name.",
+        summary: "SDK: Get agent by identifier",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "agents"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Agent ID" },
+            name: { type: "string", description: "Agent name" },
+            trustScore: { type: "number", description: "Current trust score" },
+          },
+        },
+        example: "No request body required",
       },
     ],
   },

@@ -34,7 +34,7 @@ import (
 
 // @title Agent Identity Management API
 // @version 1.0
-// @description Enterprise-grade identity verification and security platform for AI agents and MCP servers
+// @description production-ready identity verification and security platform for AI agents and MCP servers
 // @contact.name OpenA2A Team
 // @contact.url https://opena2a.org
 // @contact.email info@opena2a.org

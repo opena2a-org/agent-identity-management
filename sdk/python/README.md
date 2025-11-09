@@ -1,8 +1,8 @@
 # AIM Python SDK
 
-**Enterprise-Grade AI Agent Security - One line of code. Complete protection.**
+**production-ready AI Agent Security - One line of code. Complete protection.**
 
-Enterprise-grade cryptographic verification with zero configuration.
+production-ready cryptographic verification with zero configuration.
 
 ## Quick Start - Zero Configuration 🚀
 

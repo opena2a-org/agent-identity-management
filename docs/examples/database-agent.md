@@ -4,7 +4,7 @@ Build a secure database agent with automatic risk assessment and approval workfl
 
 ## What You'll Build
 
-An enterprise-grade AI agent that:
+A production-ready AI agent that:
 - ✅ Securely queries PostgreSQL databases
 - ✅ Auto-approves safe read operations
 - ✅ Requires human approval for high-risk actions (DELETE, UPDATE)
@@ -127,7 +127,7 @@ Create `database_agent.py`:
 ```python
 """
 Database Agent - Secured with AIM
-Enterprise-grade database access with risk assessment
+production-ready database access with risk assessment
 """
 
 from aim_sdk import secure
