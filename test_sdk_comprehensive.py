@@ -58,6 +58,10 @@ def test_2_mcp_registration(agent):
         return None
 
     try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+
         # Register multiple MCP servers
         servers = [
             {
@@ -84,11 +88,19 @@ def test_2_mcp_registration(agent):
         for server_config in servers:
             print(f"\nRegistering: {server_config['name']}")
 
+            # Generate a valid Ed25519 public key for this MCP server
+            private_key = Ed25519PrivateKey.generate()
+            public_key_bytes = private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw
+            )
+            public_key_b64 = base64.b64encode(public_key_bytes).decode()
+
             server_info = register_mcp_server(
                 aim_client=agent,
                 server_name=server_config["name"],
                 server_url=server_config["url"],
-                public_key=f"ed25519_{server_config['name'].replace(' ', '_')}_key",
+                public_key=public_key_b64,
                 capabilities=server_config["capabilities"],
                 description=server_config["description"],
                 version="1.0.0"
@@ -121,31 +133,47 @@ def test_3_verification_requests(agent):
     try:
         # Test different types of actions
         actions = [
-            {"action": "read_database", "resource": "users_table", "expected": "approved"},
+            {"action": "read_file", "resource": "users.txt", "expected": "approved"},
             {"action": "delete_database", "resource": "users_table", "expected": "denied"},
-            {"action": "send_email", "resource": "user@example.com", "expected": "approved"},
+            {"action": "write_file", "resource": "output.txt", "expected": "approved"},
         ]
 
+        results = []
         for action_config in actions:
-            print(f"\nTesting: {action_config['action']}")
+            print(f"\nTesting: {action_config['action']} on {action_config['resource']}")
 
-            result = agent.verify_action(
-                action_type=action_config["action"],
-                resource=action_config["resource"]
-            )
+            try:
+                result = agent.verify_action(
+                    action_type=action_config["action"],
+                    resource=action_config["resource"],
+                    context={"test": True}
+                )
 
-            print(f"   Status: {result.get('status', 'N/A')}")
-            print(f"   Trust Score: {result.get('trust_score', 0):.2f}")
+                status = result.get('status', 'N/A')
+                trust_score = result.get('trust_score', 0)
 
-            if result.get('status') != action_config['expected']:
-                print(f"   ⚠️  Expected {action_config['expected']}, got {result.get('status')}")
+                print(f"   Status: {status}")
+                print(f"   Trust Score: {trust_score:.2f}%")
 
-        print(f"\n✅ Verification requests completed")
+                if status != action_config['expected']:
+                    print(f"   ⚠️  Expected {action_config['expected']}, got {status}")
+                else:
+                    print(f"   ✅ Result matches expected")
+
+                results.append(result)
+
+            except Exception as e:
+                print(f"   ❌ Request failed: {e}")
+                # Continue with other tests
+
+        print(f"\n✅ Completed {len(results)}/{len(actions)} verification requests")
+        return results
 
     except Exception as e:
-        print(f"❌ Verification failed: {e}")
+        print(f"❌ Verification test failed: {e}")
         import traceback
         traceback.print_exc()
+        return []
 
 
 def main():

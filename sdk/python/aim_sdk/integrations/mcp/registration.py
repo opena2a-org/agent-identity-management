@@ -92,36 +92,16 @@ def register_mcp_server(
 
     # Make API request with AIM client's built-in request method
     # AIM client handles cryptographic signing automatically
-    try:
-        response = aim_client._make_request(
-            method="POST",
-            endpoint="/api/v1/mcp-servers",
-            data=payload
-        )
-    except AttributeError:
-        # Fallback: Make request manually if _make_request doesn't exist
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(
-            f"{aim_client.aim_url}/api/v1/mcp-servers",
-            json=payload,
-            headers=headers,
-            timeout=10
-        )
+    # Use SDK-specific endpoint that accepts Ed25519 agent authentication
+    # _make_request returns the parsed JSON response directly on success
+    response = aim_client._make_request(
+        method="POST",
+        endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-servers",
+        data=payload
+    )
 
-    if response.status_code == 201:
-        server_data = response.json()
-        return server_data
-    elif response.status_code == 400:
-        error_msg = response.json().get("error", "Bad request")
-        raise ValueError(f"Invalid MCP server data: {error_msg}")
-    elif response.status_code == 401:
-        raise PermissionError("Authentication failed. Check your AIM credentials.")
-    elif response.status_code == 409:
-        raise ValueError(f"MCP server with name '{server_name}' already exists")
-    else:
-        raise requests.exceptions.RequestException(
-            f"Failed to register MCP server: {response.status_code} - {response.text}"
-        )
+    # _make_request already handles errors and returns parsed JSON on success
+    return response
 
 
 def list_mcp_servers(
@@ -147,24 +127,34 @@ def list_mcp_servers(
         for server in servers:
             print(f"{server['name']}: {server['status']} (trust: {server['trust_score']})")
     """
-    headers = {"Content-Type": "application/json"}
-    params = {"limit": limit, "offset": offset}
-
-    response = requests.get(
-        f"{aim_client.aim_url}/api/v1/mcp-servers",
-        headers=headers,
-        params=params,
-        timeout=10
-    )
-
-    if response.status_code == 200:
-        return response.json()
-    elif response.status_code == 401:
-        raise PermissionError("Authentication failed. Check your AIM credentials.")
-    else:
-        raise requests.exceptions.RequestException(
-            f"Failed to list MCP servers: {response.status_code} - {response.text}"
+    # Use SDK-specific endpoint that lists MCPs for this agent's organization
+    # This uses the agent's Ed25519 authentication automatically
+    try:
+        response = aim_client._make_request(
+            method="GET",
+            endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-servers?limit={limit}&offset={offset}"
         )
+        return response if isinstance(response, list) else response.get("servers", [])
+    except AttributeError:
+        # Fallback: Make request manually if _make_request doesn't exist
+        headers = {"Content-Type": "application/json"}
+        params = {"limit": limit, "offset": offset}
+
+        response = requests.get(
+            f"{aim_client.aim_url}/api/v1/mcp-servers",
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise PermissionError("Authentication failed. Check your AIM credentials.")
+        else:
+            raise requests.exceptions.RequestException(
+                f"Failed to list MCP servers: {response.status_code} - {response.text}"
+            )
 
 
 def get_mcp_server(

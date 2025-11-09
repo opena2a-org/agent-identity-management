@@ -246,14 +246,16 @@ func main() {
 	app.Post("/api/v1/sdk-api/verifications/:id/result", middleware.RateLimitMiddleware(), h.Verification.SubmitVerificationResult)
 
 	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
-	// These routes use API key authentication for SDK/programmatic access
+	// These routes use Ed25519 agent authentication for SDK/programmatic access
+	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
 	sdkAPI := app.Group("/api/v1/sdk-api")
-	sdkAPI.Use(middleware.APIKeyMiddleware(db))
+	sdkAPI.Use(middleware.Ed25519AgentMiddleware(services.Agent))  // Validates agent signatures, passes through JWT
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                       // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                 // SDK capability reporting
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
-	sdkAPI.Post("/agents/:id/mcp-servers", h.Agent.AddMCPServersToAgent)                  // SDK MCP registration
+	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                         // SDK MCP registration (create new MCP server)
+	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                           // SDK list MCP servers for agent's org
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)              // SDK MCP detection and integration reporting
 
 	// API v1 routes (JWT authenticated)
