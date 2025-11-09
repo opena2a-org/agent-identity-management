@@ -32,21 +32,29 @@ type AgentMCPConnection struct {
 }
 
 // AttestationPayload represents the data that an agent attests to about an MCP server
+// IMPORTANT: Fields MUST be in alphabetical order by JSON key name to match SDK canonical JSON
+// SDK uses Python's json.dumps(sort_keys=True) which produces alphabetically sorted keys
 type AttestationPayload struct {
-	AgentID              string   `json:"agent_id"`
-	MCPURL               string   `json:"mcp_url"`
-	MCPName              string   `json:"mcp_name"`
-	CapabilitiesFound    []string `json:"capabilities_found"`
-	ConnectionSuccessful bool     `json:"connection_successful"`
-	HealthCheckPassed    bool     `json:"health_check_passed"`
-	ConnectionLatencyMs  float64  `json:"connection_latency_ms"`
-	Timestamp            string   `json:"timestamp"`
-	SDKVersion           string   `json:"sdk_version"`
+	AgentID              string   `json:"agent_id"`                // 1. agent_id
+	CapabilitiesFound    []string `json:"capabilities_found"`      // 2. capabilities_found
+	ConnectionLatencyMs  float64  `json:"connection_latency_ms"`   // 3. connection_latency_ms
+	ConnectionSuccessful bool     `json:"connection_successful"`   // 4. connection_successful
+	HealthCheckPassed    bool     `json:"health_check_passed"`     // 5. health_check_passed
+	MCPName              string   `json:"mcp_name"`                // 6. mcp_name
+	MCPURL               string   `json:"mcp_url"`                 // 7. mcp_url
+	SDKVersion           string   `json:"sdk_version"`             // 8. sdk_version
+	Timestamp            string   `json:"timestamp"`               // 9. timestamp
 }
 
 // ToCanonicalJSON converts attestation payload to canonical JSON for signature verification
+// CRITICAL: Must match SDK's canonical JSON format exactly:
+// - Sorted keys (Go's json.Marshal does this by default for structs)
+// - No whitespace (compact JSON)
+// - Consistent field ordering
 func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
-	// Use json.Marshal with sorted keys for consistent signature
+	// Go's json.Marshal already produces canonical JSON with sorted keys for struct fields
+	// The struct field order in Go determines the JSON key order
+	// Since our struct fields match the SDK's alphabetically sorted keys, this works correctly
 	return json.Marshal(ap)
 }
 
@@ -54,7 +62,7 @@ func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
 type MCPAttestation struct {
 	ID                uuid.UUID          `json:"id"`
 	MCPServerID       uuid.UUID          `json:"mcp_server_id"`
-	AgentID           uuid.UUID          `json:"agent_id"`
+	AgentID           *uuid.UUID         `json:"agent_id"`           // Nullable for manual attestations
 	AttestationData   AttestationPayload `json:"attestation_data"`
 	Signature         string             `json:"signature"`
 	SignatureVerified bool               `json:"signature_verified"`
@@ -80,6 +88,16 @@ type AttestationWithAgentDetails struct {
 	ConnectionLatencyMs   float64   `json:"connection_latency_ms"`
 	HealthCheckPassed     bool      `json:"health_check_passed"`
 	IsValid               bool      `json:"is_valid"`
+
+	// Attestation metadata - who and how
+	AttestationType       string    `json:"attestation_type"`        // "sdk" or "manual"
+	AttestedBy            string    `json:"attested_by"`             // Agent name or User name
+	AttesterType          string    `json:"attester_type"`           // "agent" or "user"
+	SignatureVerified     bool      `json:"signature_verified"`      // Whether cryptographic signature was verified
+	SDKVersion            string    `json:"sdk_version,omitempty"`   // SDK version used (if SDK attestation)
+	ConnectionSuccessful  bool      `json:"connection_successful"`   // Whether connection test succeeded
+	AgentOwnerName        string    `json:"agent_owner_name,omitempty"` // Name of user who owns the agent (for SDK attestations)
+	AgentOwnerID          uuid.UUID `json:"agent_owner_id,omitempty"`   // ID of user who owns the agent (for SDK attestations)
 }
 
 // VerificationMethod represents how an MCP server was verified

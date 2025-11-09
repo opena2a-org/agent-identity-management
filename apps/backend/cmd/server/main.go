@@ -342,24 +342,25 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 }
 
 type Repositories struct {
-	User              *repository.UserRepository
-	Organization      *repository.OrganizationRepository
-	Agent             *repository.AgentRepository
-	APIKey            *repository.APIKeyRepository
-	TrustScore        *repository.TrustScoreRepository
-	AuditLog          *repository.AuditLogRepository
-	Alert             *repository.AlertRepository
-	MCPServer         *repository.MCPServerRepository
-	MCPCapability     *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
-	MCPAttestation    *repository.MCPAttestationRepository       // ✅ For agent attestation of MCPs
-	Security          *repository.SecurityRepository
-	SecurityPolicy    *repository.SecurityPolicyRepository // ✅ For configurable security policies
-	Webhook           *repository.WebhookRepository
-	VerificationEvent *repository.VerificationEventRepositorySimple
-	Tag               *repository.TagRepository
-	SDKToken          domain.SDKTokenRepository
-	Capability        domain.CapabilityRepository
-	CapabilityRequest domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
+	User               *repository.UserRepository
+	Organization       *repository.OrganizationRepository
+	Agent              *repository.AgentRepository
+	APIKey             *repository.APIKeyRepository
+	TrustScore         *repository.TrustScoreRepository
+	AuditLog           *repository.AuditLogRepository
+	Alert              *repository.AlertRepository
+	MCPServer          *repository.MCPServerRepository
+	MCPCapability      *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
+	MCPAttestation     *repository.MCPAttestationRepository       // ✅ For agent attestation of MCPs
+	AgentMCPConnection *repository.AgentMCPConnectionRepository   // ✅ For agent-MCP connections
+	Security           *repository.SecurityRepository
+	SecurityPolicy     *repository.SecurityPolicyRepository // ✅ For configurable security policies
+	Webhook            *repository.WebhookRepository
+	VerificationEvent  *repository.VerificationEventRepositorySimple
+	Tag                *repository.TagRepository
+	SDKToken           domain.SDKTokenRepository
+	Capability         domain.CapabilityRepository
+	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -370,24 +371,25 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 	oauthRepo := repository.NewOAuthRepositoryPostgres(dbx)
 
 	return &Repositories{
-		User:              repository.NewUserRepository(db),
-		Organization:      repository.NewOrganizationRepository(db),
-		Agent:             repository.NewAgentRepository(db),
-		APIKey:            repository.NewAPIKeyRepository(db),
-		TrustScore:        repository.NewTrustScoreRepository(db),
-		AuditLog:          repository.NewAuditLogRepository(db),
-		Alert:             repository.NewAlertRepository(db),
-		MCPServer:         repository.NewMCPServerRepository(db),
-		MCPCapability:     repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
-		MCPAttestation:    repository.NewMCPAttestationRepository(db),       // ✅ For agent attestation of MCPs
-		Security:          repository.NewSecurityRepository(db),
-		SecurityPolicy:    repository.NewSecurityPolicyRepository(db), // ✅ For configurable security policies
-		Webhook:           repository.NewWebhookRepository(db),
-		VerificationEvent: repository.NewVerificationEventRepository(db),
-		Tag:               repository.NewTagRepository(db),
-		SDKToken:          repository.NewSDKTokenRepository(db),
-		Capability:        repository.NewCapabilityRepository(dbx),
-		CapabilityRequest: repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
+		User:               repository.NewUserRepository(db),
+		Organization:       repository.NewOrganizationRepository(db),
+		Agent:              repository.NewAgentRepository(db),
+		APIKey:             repository.NewAPIKeyRepository(db),
+		TrustScore:         repository.NewTrustScoreRepository(db),
+		AuditLog:           repository.NewAuditLogRepository(db),
+		Alert:              repository.NewAlertRepository(db),
+		MCPServer:          repository.NewMCPServerRepository(db),
+		MCPCapability:      repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
+		MCPAttestation:     repository.NewMCPAttestationRepository(db),       // ✅ For agent attestation of MCPs
+		AgentMCPConnection: repository.NewAgentMCPConnectionRepository(dbx),  // ✅ For agent-MCP connections
+		Security:           repository.NewSecurityRepository(db),
+		SecurityPolicy:     repository.NewSecurityPolicyRepository(db), // ✅ For configurable security policies
+		Webhook:            repository.NewWebhookRepository(db),
+		VerificationEvent:  repository.NewVerificationEventRepository(db),
+		Tag:                repository.NewTagRepository(db),
+		SDKToken:           repository.NewSDKTokenRepository(db),
+		Capability:         repository.NewCapabilityRepository(dbx),
+		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 	}, oauthRepo
 }
 
@@ -504,9 +506,11 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPServer,
 		repos.VerificationEvent,
 		repos.User,
-		keyVault,             // ✅ For automatic key generation
-		mcpCapabilityService, // ✅ For automatic capability detection
-		repos.Agent,          // ✅ For connected agents tracking
+		keyVault,                // ✅ For automatic key generation
+		mcpCapabilityService,    // ✅ For automatic capability detection
+		repos.MCPCapability,     // ✅ For creating SDK capabilities
+		repos.AgentMCPConnection, // ✅ For tracking agent-MCP connections
+		repos.Agent,             // ✅ For connected agents tracking
 	)
 
 	// ✅ Initialize MCP Attestation Service for agent attestation of MCPs
@@ -514,6 +518,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPAttestation,
 		repos.Agent,
 		repos.MCPServer,
+		repos.User,
 	)
 
 	securityService := application.NewSecurityService(
@@ -967,6 +972,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Get("/:id/verification-status", h.MCP.GetVerificationStatus)
 	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities)        // ✅ Get detected capabilities
 	mcpServers.Get("/:id/verification-events", h.MCP.GetMCPVerificationEvents) // ✅ Get verification events for MCP server
+	mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP) // ✅ Manual attestation (non-SDK users)
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
 

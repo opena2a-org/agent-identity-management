@@ -119,6 +119,8 @@ func (r *MCPAttestationRepository) GetAttestationsByMCP(mcpServerID uuid.UUID) (
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
 		var attestationJSON []byte
+		var agentName sql.NullString
+		var agentTrustScore sql.NullFloat64
 
 		err := rows.Scan(
 			&attestation.ID,
@@ -131,11 +133,19 @@ func (r *MCPAttestationRepository) GetAttestationsByMCP(mcpServerID uuid.UUID) (
 			&attestation.ExpiresAt,
 			&attestation.IsValid,
 			&attestation.CreatedAt,
-			&attestation.AgentName,
-			&attestation.AgentTrustScore,
+			&agentName,
+			&agentTrustScore,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan attestation: %w", err)
+		}
+
+		// Convert nullable fields to regular types
+		if agentName.Valid {
+			attestation.AgentName = agentName.String
+		}
+		if agentTrustScore.Valid {
+			attestation.AgentTrustScore = agentTrustScore.Float64
 		}
 
 		// Unmarshal attestation data
@@ -174,6 +184,8 @@ func (r *MCPAttestationRepository) GetValidAttestationsByMCP(mcpServerID uuid.UU
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
 		var attestationJSON []byte
+		var agentName sql.NullString
+		var agentTrustScore sql.NullFloat64
 
 		err := rows.Scan(
 			&attestation.ID,
@@ -186,11 +198,19 @@ func (r *MCPAttestationRepository) GetValidAttestationsByMCP(mcpServerID uuid.UU
 			&attestation.ExpiresAt,
 			&attestation.IsValid,
 			&attestation.CreatedAt,
-			&attestation.AgentName,
-			&attestation.AgentTrustScore,
+			&agentName,
+			&agentTrustScore,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan attestation: %w", err)
+		}
+
+		// Convert nullable fields to regular types
+		if agentName.Valid {
+			attestation.AgentName = agentName.String
+		}
+		if agentTrustScore.Valid {
+			attestation.AgentTrustScore = agentTrustScore.Float64
 		}
 
 		// Unmarshal attestation data
