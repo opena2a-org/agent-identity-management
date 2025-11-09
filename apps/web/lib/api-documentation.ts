@@ -3271,4 +3271,133 @@ export const apiDocumentation: EndpointCategory[] = [
       },
     ],
   },
+  {
+    category: "Verifications",
+    description: "Agent action verification and approval workflows",
+    icon: "Shield",
+    endpoints: [
+      {
+        method: "POST",
+        path: "/api/v1/verifications",
+        description: "Request verification for an agent action before execution. Creates a verification request that must be approved/rejected by an authorized user.",
+        summary: "Request agent action verification",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["verifications", "security"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            agent_id: {
+              type: "string",
+              description: "Agent ID requesting verification",
+              required: true,
+            },
+            action_type: {
+              type: "string",
+              description: "Type of action (e.g., 'deploy', 'delete', 'modify')",
+              required: true,
+            },
+            action_details: {
+              type: "object",
+              description: "Details about the action to be verified",
+              required: true,
+            },
+            risk_level: {
+              type: "string",
+              description: "Risk level: low, medium, high, critical",
+              required: false,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            verification_id: { type: "string", description: "Unique verification ID" },
+            status: { type: "string", description: "Verification status (pending, approved, rejected)" },
+            expires_at: { type: "string", description: "Expiration timestamp" },
+          },
+        },
+        example: `{
+  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "action_type": "deploy",
+  "action_details": {
+    "resource": "production-database",
+    "changes": ["schema_migration", "index_creation"]
+  },
+  "risk_level": "high"
+}`,
+      },
+      {
+        method: "GET",
+        path: "/api/v1/verifications/:id",
+        description: "Get verification status and details by verification ID. Check if a verification request has been approved, rejected, or is still pending.",
+        summary: "Get verification status",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["verifications", "security"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Verification ID" },
+            agent_id: { type: "string", description: "Agent ID" },
+            status: { type: "string", description: "Current status (pending, approved, rejected, expired)" },
+            action_type: { type: "string", description: "Type of action" },
+            action_details: { type: "object", description: "Action details" },
+            requested_at: { type: "string", description: "Request timestamp" },
+            reviewed_at: { type: "string", description: "Review timestamp (if reviewed)" },
+            reviewed_by: { type: "string", description: "User who reviewed (if reviewed)" },
+            expires_at: { type: "string", description: "Expiration timestamp" },
+          },
+        },
+        example: "No request body required",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/verifications/:id/result",
+        description: "Submit verification result (approve or reject). Called by authorized users to approve/reject agent action verification requests.",
+        summary: "Submit verification result",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "manager",
+        tags: ["verifications", "security"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              description: "Verification result: 'approved' or 'rejected'",
+              required: true,
+            },
+            comments: {
+              type: "string",
+              description: "Optional comments about the decision",
+              required: false,
+            },
+            conditions: {
+              type: "array",
+              description: "Optional conditions for approval (e.g., time windows, monitoring requirements)",
+              required: false,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            verification_id: { type: "string", description: "Verification ID" },
+            status: { type: "string", description: "Updated status" },
+            reviewed_at: { type: "string", description: "Review timestamp" },
+            reviewed_by: { type: "string", description: "Reviewer user ID" },
+          },
+        },
+        example: `{
+  "status": "approved",
+  "comments": "Approved with monitoring",
+  "conditions": [
+    "rollback_plan_required",
+    "monitoring_enabled"
+  ]
+}`,
+      },
+    ],
+  },
 ];

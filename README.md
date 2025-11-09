@@ -11,7 +11,7 @@ Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-n
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
-[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-136-brightgreen.svg)](#-technical-reference)
+[![API Endpoints](https://img.shields.io/badge/API%20Endpoints-164-brightgreen.svg)](#-technical-reference)
 
 [![GitHub Stars](https://img.shields.io/github/stars/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/opena2a-org/agent-identity-management?style=social)](https://github.com/opena2a-org/agent-identity-management/network/members)
@@ -291,7 +291,7 @@ if verification.approved:
 │  │   Fiber v3   │  │  React 19    │  │      16      │         │
 │  └──────┬───────┘  └──────────────┘  └──────────────┘         │
 │         │                                                        │
-│         │  REST API (136 endpoints)                             │
+│         │  REST API (164 endpoints)                             │
 │         │                                                        │
 └─────────┼────────────────────────────────────────────────────────┘
           │
@@ -539,7 +539,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 ## Roadmap
 
 ### Q4 2025 ✅ (Completed)
-- [x] Core platform with 136 API endpoints
+- [x] Core platform with 164 API endpoints
 - [x] MCP attestation and verification
 - [x] 8-factor trust scoring
 - [x] Capability request workflow
@@ -558,7 +558,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 ## Technical Reference
 
 <details>
-<summary><h3>📊 API Overview (136 Endpoints)</h3></summary>
+<summary><h3>📊 API Overview (164 Endpoints)</h3></summary>
 
 ### Agent Management (12 endpoints)
 ```
@@ -623,7 +623,7 @@ POST   /api/v1/capabilities/reject/:id     # Reject request
 GET    /api/v1/capabilities/violations     # List violations
 ```
 
-**Total**: 136 endpoints across 24 categories
+**Total**: 164 endpoints across 26 categories
 
 See [API Documentation](https://opena2a.org/docs/api/rest) for complete reference.
 
