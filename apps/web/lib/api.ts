@@ -274,12 +274,27 @@ export interface GetConnectedAgentsResponse {
 
 export interface ConnectedMCPServer {
   id: string;
+  organization_id?: string;
   name: string;
+  description?: string;
   url: string;
-  confidence_score: number;
-  attestation_count: number;
-  last_attested_at?: string;
+  version?: string;
+  public_key?: string;
+  status?: string;
+  is_verified?: boolean;
+  last_verified_at?: string;
+  verification_url?: string;
+  capabilities?: string[];
+  trust_score?: number;
+  registered_by_agent?: string | null;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  tags?: string[] | null;
   verification_method: string;
+  attestation_count: number;
+  confidence_score: number;
+  last_attested_at?: string;
 }
 
 export interface GetAgentMCPServersResponse {

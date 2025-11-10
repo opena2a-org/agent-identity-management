@@ -153,6 +153,37 @@ export default function AgentDetailsPage({
         } catch (e) {
           // non-fatal
         }
+
+        // Fetch agent's connected MCP servers (via attestation)
+        // This gets the actual MCP servers the agent is connected to from agent_mcp_connections table
+        try {
+          const agentMCPsResponse = await api.getAgentMCPServers(agentId!);
+          if (agentMCPsResponse.mcp_servers && agentMCPsResponse.mcp_servers.length > 0) {
+            // Merge these servers into allMCPServers (they may not be in the org-wide list yet)
+            const mcpServerIds = agentMCPsResponse.mcp_servers.map(s => s.id);
+            setAllMCPServers(prev => {
+              const existingIds = new Set(prev.map(s => s.id));
+              // Convert ConnectedMCPServer to MCPServer format
+              const newServers = agentMCPsResponse.mcp_servers!
+                .filter(s => !existingIds.has(s.id))
+                .map(s => ({
+                  ...s,
+                  created_at: s.created_at || new Date().toISOString(), // Add created_at if missing
+                } as MCPServer));
+              return [...prev, ...newServers];
+            });
+
+            // Update agent's talks_to to include these server IDs
+            // This fixes the data consistency issue where talks_to is out of sync
+            if (agentData) {
+              agentData.talks_to = mcpServerIds;
+              setAgent({ ...agentData });
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch agent MCP servers:", e);
+          // non-fatal
+        }
       } catch (err: any) {
         console.error("Failed to fetch agent data:", err);
         setError(err.message || "Failed to load agent details");
