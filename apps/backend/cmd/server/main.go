@@ -676,6 +676,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Security: handlers.NewSecurityHandler(
 			services.Security,
 			services.Audit,
+			services.Alert,
+			services.Agent,
 		),
 		SecurityPolicy: handlers.NewSecurityPolicyHandler(
 			services.SecurityPolicy,
@@ -983,6 +985,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	security.Use(middleware.AuthMiddleware(jwtService))
 	security.Use(middleware.ManagerMiddleware())
 	security.Use(middleware.RateLimitMiddleware())
+	security.Get("/dashboard", h.Security.GetSecurityDashboard)
+	security.Get("/alerts", h.Security.ListSecurityAlerts)
 	security.Get("/threats", h.Security.GetThreats)
 	security.Get("/anomalies", h.Security.GetAnomalies)
 	security.Get("/metrics", h.Security.GetSecurityMetrics)
@@ -993,6 +997,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	analytics.Use(middleware.RateLimitMiddleware())
 	analytics.Get("/dashboard", h.Analytics.GetDashboardStats) // Viewer-accessible dashboard stats
 	analytics.Get("/usage", h.Analytics.GetUsageStatistics)
+	analytics.Get("/activity", h.Analytics.GetActivitySummary)
 	analytics.Get("/trends", h.Analytics.GetTrustScoreTrends)
 	analytics.Get("/verification-activity", h.Analytics.GetVerificationActivity) // New endpoint for chart
 	analytics.Get("/agents/activity", h.Analytics.GetAgentActivity)

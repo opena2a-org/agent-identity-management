@@ -1094,3 +1094,167 @@ func calculateAverageTrustScore(agents []*domain.Agent) float64 {
 	}
 	return total / float64(len(agents))
 }
+
+// GetActivitySummary retrieves comprehensive activity summary
+// @Summary Get activity summary
+// @Description Get comprehensive activity summary including verifications, attestations, and recent activity
+// @Tags analytics
+// @Produce json
+// @Param days query int false "Number of days to include" default(7)
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/analytics/activity [get]
+func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+
+	// Get days parameter (default 7 days)
+	daysStr := c.Query("days", "7")
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days <= 0 {
+		days = 7
+	}
+
+	startTime := time.Now().AddDate(0, 0, -days)
+
+	// Get verification events count for the period
+	var verificationCount int64
+	verificationQuery := `
+		SELECT COUNT(*)
+		FROM verification_events
+		WHERE organization_id = $1 AND created_at >= $2
+	`
+	err = h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount)
+	if err != nil {
+		log.Printf("❌ Error fetching verification count: %v", err)
+		verificationCount = 0
+	}
+
+	// Get attestation count for the period
+	var attestationCount int64
+	attestationQuery := `
+		SELECT COUNT(*)
+		FROM agent_mcp_attestations
+		WHERE organization_id = $1 AND attested_at >= $2
+	`
+	err = h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount)
+	if err != nil {
+		log.Printf("❌ Error fetching attestation count: %v", err)
+		attestationCount = 0
+	}
+
+	// Get activity by day with date grouping
+	type DailyActivity struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}
+	var activityByDay []DailyActivity
+
+	activityByDayQuery := `
+		SELECT
+			DATE(created_at) as date,
+			COUNT(*) as count
+		FROM verification_events
+		WHERE organization_id = $1 AND created_at >= $2
+		GROUP BY DATE(created_at)
+		ORDER BY date
+	`
+
+	rows, err := h.db.Query(activityByDayQuery, orgID, startTime)
+	if err != nil {
+		log.Printf("❌ Error fetching activity by day: %v", err)
+		activityByDay = []DailyActivity{}
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var activity DailyActivity
+			if err := rows.Scan(&activity.Date, &activity.Count); err != nil {
+				log.Printf("❌ Error scanning activity row: %v", err)
+				continue
+			}
+			activityByDay = append(activityByDay, activity)
+		}
+	}
+
+	// Get recent activity events (last 20)
+	type RecentActivity struct {
+		ID            string    `json:"id"`
+		AgentID       string    `json:"agent_id"`
+		AgentName     string    `json:"agent_name"`
+		ActionType    string    `json:"action_type"`
+		Status        string    `json:"status"`
+		CreatedAt     time.Time `json:"created_at"`
+		DurationMs    int       `json:"duration_ms,omitempty"`
+	}
+	var recentActivity []RecentActivity
+
+	recentActivityQuery := `
+		SELECT
+			ve.id,
+			ve.agent_id,
+			COALESCE(a.name, 'Unknown Agent') as agent_name,
+			ve.action_type,
+			ve.status,
+			ve.created_at,
+			COALESCE(ve.duration_ms, 0) as duration_ms
+		FROM verification_events ve
+		LEFT JOIN agents a ON ve.agent_id = a.id
+		WHERE ve.organization_id = $1 AND ve.created_at >= $2
+		ORDER BY ve.created_at DESC
+		LIMIT 20
+	`
+
+	activityRows, err := h.db.Query(recentActivityQuery, orgID, startTime)
+	if err != nil {
+		log.Printf("❌ Error fetching recent activity: %v", err)
+		recentActivity = []RecentActivity{}
+	} else {
+		defer activityRows.Close()
+		for activityRows.Next() {
+			var activity RecentActivity
+			if err := activityRows.Scan(
+				&activity.ID,
+				&activity.AgentID,
+				&activity.AgentName,
+				&activity.ActionType,
+				&activity.Status,
+				&activity.CreatedAt,
+				&activity.DurationMs,
+			); err != nil {
+				log.Printf("❌ Error scanning recent activity row: %v", err)
+				continue
+			}
+			recentActivity = append(recentActivity, activity)
+		}
+	}
+
+	// Get agent and MCP server counts
+	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	if err != nil {
+		log.Printf("❌ Error fetching agents: %v", err)
+		agents = []*domain.Agent{}
+	}
+
+	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	if err != nil {
+		log.Printf("❌ Error fetching MCP servers: %v", err)
+		mcpServers = []*domain.MCPServer{}
+	}
+
+	return c.JSON(fiber.Map{
+		"period": fiber.Map{
+			"start_date": startTime.Format("2006-01-02"),
+			"end_date":   time.Now().Format("2006-01-02"),
+			"days":       days,
+		},
+		"summary": fiber.Map{
+			"total_agents":           len(agents),
+			"total_mcp_servers":      len(mcpServers),
+			"verification_count":     verificationCount,
+			"attestation_count":      attestationCount,
+			"total_activity_events":  verificationCount + attestationCount,
+		},
+		"activity_by_day": activityByDay,
+		"recent_activity": recentActivity,
+		"generated_at":    time.Now().UTC(),
+	})
+}

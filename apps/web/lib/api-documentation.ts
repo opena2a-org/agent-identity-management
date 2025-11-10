@@ -1,7 +1,7 @@
 /**
  * Complete AIM API Documentation
  *
- * This file contains the complete documentation for all 162 API endpoints.
+ * This file contains the complete documentation for all 160 API endpoints.
  * Organized by functional category with full request/response schemas.
  *
  * Silicon Valley Standard: Complete, accurate, executable API docs.
@@ -1713,102 +1713,7 @@ export const apiDocumentation: EndpointCategory[] = [
     ],
   },
 
-  {
-    category: "Webhooks",
-    description:
-      "Event-driven integrations, webhook management, and delivery tracking",
-    icon: "Webhook",
-    endpoints: [
-      {
-        method: "GET",
-        path: "/api/v1/webhooks",
-        description: "List all webhooks in organization.",
-        summary: "List webhooks",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks"],
-        example: "No request body required",
-      },
-      {
-        method: "POST",
-        path: "/api/v1/webhooks",
-        description: "Create webhook subscription.",
-        summary: "Create webhook",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks"],
-        requestSchema: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "Webhook URL", required: true },
-            events: {
-              type: "array",
-              description: "Event types to subscribe to",
-              required: true,
-            },
-            secret: {
-              type: "string",
-              description: "Webhook secret for HMAC validation",
-            },
-          },
-        },
-        example: `{
-  "url": "https://myapp.com/webhooks/aim",
-  "events": ["agent.created", "agent.suspended", "trust_score.changed"],
-  "secret": "whsec_abc123"
-}`,
-      },
-      {
-        method: "GET",
-        path: "/api/v1/webhooks/:id",
-        description: "Get webhook details.",
-        summary: "Get webhook",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks"],
-        example: "No request body required",
-      },
-      {
-        method: "PUT",
-        path: "/api/v1/webhooks/:id",
-        description: "Update webhook configuration.",
-        summary: "Update webhook",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks"],
-        example: `{
-  "url": "https://new-url.com/webhook",
-  "events": ["agent.verified"]
-}`,
-      },
-      {
-        method: "DELETE",
-        path: "/api/v1/webhooks/:id",
-        description: "Delete webhook subscription.",
-        summary: "Delete webhook",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks"],
-        example: "No request body required",
-      },
-      {
-        method: "GET",
-        path: "/api/v1/webhooks/:id/deliveries",
-        description: "Get webhook delivery history.",
-        summary: "Webhook deliveries",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["webhooks", "monitoring"],
-        example: "No request body required",
-      },
-    ],
-  },
+  // Webhooks category hidden per user requirements
 
   {
     category: "Tags",
@@ -2319,6 +2224,36 @@ export const apiDocumentation: EndpointCategory[] = [
         roleRequired: "manager",
         tags: ["security", "analytics"],
         example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/security/alerts",
+        description:
+          "List security alerts with pagination support. Returns alerts with severity levels (critical, high, medium, low), status (unacknowledged, acknowledged, resolved), and detailed alert information.",
+        summary: "List Security Alerts",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "manager",
+        tags: ["security", "alerts"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            alerts: {
+              type: "array",
+              description: "Array of alert objects",
+            },
+            pagination: {
+              type: "object",
+              description: "Pagination metadata (total, limit, offset)",
+            },
+            summary: {
+              type: "object",
+              description: "Alert summary (total, unacknowledged count)",
+            },
+          },
+        },
+        example:
+          "?limit=20&offset=0 for paginated results (default limit is 20)",
       },
       {
         method: "GET",
@@ -3197,6 +3132,40 @@ export const apiDocumentation: EndpointCategory[] = [
         roleRequired: "manager",
         tags: ["analytics"],
         example: "No request body required",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/analytics/activity",
+        description:
+          "Get activity summary for agents and MCP servers over a specified time period (default 7 days). Includes verification counts, attestation counts, and recent activity events.",
+        summary: "Get Activity Summary",
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        roleRequired: "manager",
+        tags: ["analytics", "activity"],
+        responseSchema: {
+          type: "object",
+          properties: {
+            period: {
+              type: "object",
+              description: "Time period for the summary",
+            },
+            summary: {
+              type: "object",
+              description:
+                "Summary statistics (total_agents, total_mcp_servers, verification_count, etc.)",
+            },
+            activity_by_day: {
+              type: "array",
+              description: "Daily activity breakdown",
+            },
+            recent_activity: {
+              type: "array",
+              description: "Most recent activity events",
+            },
+          },
+        },
+        example: "?days=30 for 30-day summary (default is 7 days)",
       },
       {
         method: "GET",

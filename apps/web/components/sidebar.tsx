@@ -23,7 +23,6 @@ import {
   ClipboardCheck,
   Tag,
   BarChart3,
-  Webhook,
   Code,
   Loader2,
 } from "lucide-react";
@@ -127,12 +126,7 @@ const navigationBase: NavSection[] = [
         icon: Tag,
         roles: ["admin", "manager", "member"],
       },
-      {
-        name: "Webhooks",
-        href: "/dashboard/webhooks",
-        icon: Webhook,
-        roles: ["admin"],
-      },
+      // Webhooks hidden per user requirements
     ],
   },
   {
