@@ -24,6 +24,18 @@ Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-n
 
 ---
 
+## 🎬 Platform Walkthrough
+
+Watch a complete tour of AIM's features and capabilities:
+
+[![AIM Platform Walkthrough](https://img.youtube.com/vi/jji5XbxRHfk/maxresdefault.jpg)](https://youtu.be/jji5XbxRHfk)
+
+**📺 [Watch Full Walkthrough →](https://youtu.be/jji5XbxRHfk)**
+
+See the dashboard, agent management, MCP server registration, trust scoring, security monitoring, analytics, and admin features in action.
+
+---
+
 ## 🎯 Why AIM?
 
 ### AI Agents Are Under Attack
