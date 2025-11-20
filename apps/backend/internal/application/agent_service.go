@@ -292,15 +292,61 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.TalksTo != nil {
 		agent.TalksTo = req.TalksTo
 	}
-	// Update capabilities
-	if req.Capabilities != nil {
-		agent.Capabilities = req.Capabilities
-	}
-
+	
 	if err := s.agentRepo.Update(agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 
+	if req.Capabilities != nil && len(req.Capabilities) > 0 {
+        // Get current capabilities
+        currentCaps, err := s.capabilityRepo.GetCapabilitiesByAgentID(id)
+        if err != nil {
+            fmt.Printf("⚠️  Warning: failed to get current capabilities: %v\n", err)
+        }
+
+        // Build map of current capability types
+        currentCapTypes := make(map[string]*domain.AgentCapability)
+        for _, cap := range currentCaps {
+            if cap.RevokedAt == nil {
+                currentCapTypes[cap.CapabilityType] = cap
+            }
+        }
+
+        // Build map of requested capability types
+        requestedCapTypes := make(map[string]bool)
+        for _, capType := range req.Capabilities {
+            requestedCapTypes[capType] = true
+        }
+
+        // Add new capabilities that don't exist
+        for _, capType := range req.Capabilities {
+            if _, exists := currentCapTypes[capType]; !exists {
+                capabilityRecord := &domain.AgentCapability{
+                    AgentID:        id,
+                    CapabilityType: capType,
+                    GrantedBy:      &agent.CreatedBy, // Use agent creator as granter
+                    GrantedAt:      time.Now(),
+                }
+                if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
+                    fmt.Printf("⚠️  Warning: failed to add capability '%s': %v\n", capType, err)
+                } else {
+                    fmt.Printf("✅ Added capability '%s' to agent %s\n", capType, agent.Name)
+                }
+            }
+        }
+
+        // Revoke capabilities that are no longer in the request
+        for capType, cap := range currentCapTypes {
+            if !requestedCapTypes[capType] {
+                now := time.Now()
+                if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
+                    fmt.Printf("⚠️  Warning: failed to revoke capability '%s': %v\n", capType, err)
+                } else {
+                    fmt.Printf("🗑️  Revoked capability '%s' from agent %s\n", capType, agent.Name)
+                }
+            }
+        }
+    }
 	// Recalculate trust score
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {

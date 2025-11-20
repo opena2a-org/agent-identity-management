@@ -232,7 +232,7 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
   // No capability report state - but show basic capabilities if available
   if (!capabilityReport) {
     // Merge provided capabilities with fetched capabilities
-    const allCapabilities = [...(agentCapabilities || []), ...fetchedCapabilities]
+    const allCapabilities = [...(agentCapabilities || [])] // , ...fetchedCapabilities
     const uniqueCapabilities = Array.from(new Set(allCapabilities))
 
     return (

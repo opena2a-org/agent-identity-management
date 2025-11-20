@@ -16,7 +16,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	// "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jmoiron/sqlx"
@@ -639,6 +639,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			handlers.NewTrustScoreHandler(services.Trust, services.Agent, services.Audit),
 			services.Alert,             // ✅ For creating security alerts on capability violations
 			services.VerificationEvent, // ✅ For recording action verification attempts in Security Dashboard
+			services.Capability,
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
