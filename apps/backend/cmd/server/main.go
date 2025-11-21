@@ -438,6 +438,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	securityPolicyService := application.NewSecurityPolicyService(
 		repos.SecurityPolicy,
 		repos.Alert,
+		repos.AuditLog,
 	)
 
 	// Create services

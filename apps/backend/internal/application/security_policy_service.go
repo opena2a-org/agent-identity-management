@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/domain"
@@ -11,18 +12,21 @@ import (
 
 // SecurityPolicyService handles security policy evaluation and management
 type SecurityPolicyService struct {
-	policyRepo domain.SecurityPolicyRepository
-	alertRepo  domain.AlertRepository
+	policyRepo   domain.SecurityPolicyRepository
+	alertRepo    domain.AlertRepository
+	auditLogRepo domain.AuditLogRepository
 }
 
 // NewSecurityPolicyService creates a new security policy service
 func NewSecurityPolicyService(
 	policyRepo domain.SecurityPolicyRepository,
 	alertRepo domain.AlertRepository,
+	auditLogRepo domain.AuditLogRepository,
 ) *SecurityPolicyService {
 	return &SecurityPolicyService{
-		policyRepo: policyRepo,
-		alertRepo:  alertRepo,
+		policyRepo:   policyRepo,
+		alertRepo:    alertRepo,
+		auditLogRepo: auditLogRepo,
 	}
 }
 
@@ -314,12 +318,103 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 			continue
 		}
 
-		// Note: This policy type is available for future enhancement.
-		// Currently acts as a placeholder for custom anomaly detection.
-		// Admins can configure it but it won't trigger unless extended.
+		// Check for API rate spikes
+		if apiRateThreshold, ok := policy.Rules["api_rate_threshold"].(float64); ok {
+			timeWindowMinutes, _ := policy.Rules["time_window_minutes"].(float64)
+			if timeWindowMinutes == 0 {
+				timeWindowMinutes = 60 // Default to 1 hour window
+			}
 
-		fmt.Printf("✅ Unusual Activity Policy '%s' evaluated for agent %s (currently inactive)\n",
-			policy.Name, agent.Name)
+			// Count actions by this agent in the time window
+			actionCount, err := s.auditLogRepo.CountActionsByAgentInTimeWindow(
+				agent.ID,
+				domain.AuditAction(actionType),
+				int(timeWindowMinutes),
+			)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to count actions for agent %s: %v\n", agent.Name, err)
+				continue
+			}
+
+			if actionCount > int(apiRateThreshold) {
+				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: API rate spike detected (count: %d > threshold: %.0f)\n",
+					policy.Name, actionCount, apiRateThreshold)
+
+				switch policy.EnforcementAction {
+				case domain.EnforcementBlockAndAlert:
+					return true, true, policy.Name, nil
+				case domain.EnforcementAlertOnly:
+					return false, true, policy.Name, nil
+				case domain.EnforcementAllow:
+					return false, false, policy.Name, nil
+				}
+			}
+		}
+
+		// Check for off-hours access
+		if checkOffHours, ok := policy.Rules["check_off_hours"].(bool); ok && checkOffHours {
+			businessHoursStart, _ := policy.Rules["business_hours_start"].(float64)
+			businessHoursEnd, _ := policy.Rules["business_hours_end"].(float64)
+
+			// Default business hours: 8 AM to 6 PM
+			if businessHoursStart == 0 {
+				businessHoursStart = 8
+			}
+			if businessHoursEnd == 0 {
+				businessHoursEnd = 18
+			}
+
+			currentHour := time.Now().Hour()
+			if currentHour < int(businessHoursStart) || currentHour >= int(businessHoursEnd) {
+				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: Off-hours access detected (hour: %d, business hours: %.0f-%.0f)\n",
+					policy.Name, currentHour, businessHoursStart, businessHoursEnd)
+
+				switch policy.EnforcementAction {
+				case domain.EnforcementBlockAndAlert:
+					return true, true, policy.Name, nil
+				case domain.EnforcementAlertOnly:
+					return false, true, policy.Name, nil
+				case domain.EnforcementAllow:
+					return false, false, policy.Name, nil
+				}
+			}
+		}
+
+		// Check for unusual resource access patterns
+		if checkUnusualPatterns, ok := policy.Rules["check_unusual_patterns"].(bool); ok && checkUnusualPatterns {
+			// Get recent actions by this agent
+			recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, 100)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to get recent actions for agent %s: %v\n", agent.Name, err)
+				continue
+			}
+
+			// Count unique resource types accessed
+			resourceTypes := make(map[string]int)
+			for _, action := range recentActions {
+				resourceTypes[action.ResourceType]++
+			}
+
+			// If agent is accessing many different resource types in short time, flag as unusual
+			unusualPatternThreshold, _ := policy.Rules["unusual_pattern_threshold"].(float64)
+			if unusualPatternThreshold == 0 {
+				unusualPatternThreshold = 5 // Default: accessing 5+ different resource types is unusual
+			}
+
+			if len(resourceTypes) > int(unusualPatternThreshold) {
+				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: Unusual access pattern detected (resource types: %d > threshold: %.0f)\n",
+					policy.Name, len(resourceTypes), unusualPatternThreshold)
+
+				switch policy.EnforcementAction {
+				case domain.EnforcementBlockAndAlert:
+					return true, true, policy.Name, nil
+				case domain.EnforcementAlertOnly:
+					return false, true, policy.Name, nil
+				case domain.EnforcementAllow:
+					return false, false, policy.Name, nil
+				}
+			}
+		}
 	}
 
 	return false, false, "", nil
@@ -418,12 +513,142 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			continue
 		}
 
-		// Note: This policy type is available for future enhancement.
-		// Could be extended to detect capability changes, key rotations, etc.
-		// Admins can configure it but it won't trigger unless extended.
+		// Check for capability changes (compare current vs. baseline)
+		if checkCapabilityChanges, ok := policy.Rules["check_capability_changes"].(bool); ok && checkCapabilityChanges {
+			// Baseline capabilities are stored in policy rules
+			baselineCapabilities, ok := policy.Rules["baseline_capabilities"].([]interface{})
+			if ok && len(baselineCapabilities) > 0 {
+				// Convert to string slice
+				baseline := make(map[string]bool)
+				for _, cap := range baselineCapabilities {
+					if capStr, ok := cap.(string); ok {
+						baseline[capStr] = true
+					}
+				}
 
-		fmt.Printf("✅ Config Drift Policy '%s' evaluated for agent %s (currently inactive)\n",
-			policy.Name, agent.Name)
+				// Check for added or removed capabilities
+				currentCaps := make(map[string]bool)
+				for _, cap := range agent.Capabilities {
+					currentCaps[cap] = true
+				}
+
+				// Detect new capabilities (not in baseline)
+				var addedCaps []string
+				for cap := range currentCaps {
+					if !baseline[cap] {
+						addedCaps = append(addedCaps, cap)
+					}
+				}
+
+				// Detect removed capabilities (in baseline but not current)
+				var removedCaps []string
+				for cap := range baseline {
+					if !currentCaps[cap] {
+						removedCaps = append(removedCaps, cap)
+					}
+				}
+
+				if len(addedCaps) > 0 || len(removedCaps) > 0 {
+					fmt.Printf("✅ Config Drift Policy '%s' triggered: Capability changes detected (added: %v, removed: %v)\n",
+						policy.Name, addedCaps, removedCaps)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name, nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name, nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name, nil
+					}
+				}
+			}
+		}
+
+		// Check for public key rotations
+		if checkKeyRotations, ok := policy.Rules["check_key_rotations"].(bool); ok && checkKeyRotations {
+			// Get recent audit logs for this agent to detect key changes
+			recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, 50)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to get recent actions for agent %s: %v\n", agent.Name, err)
+				continue
+			}
+
+			// Check for key update actions in recent history
+			for _, action := range recentActions {
+				if action.Action == domain.AuditActionUpdate {
+					// Check metadata for public_key_changed flag
+					if metadata, ok := action.Metadata["public_key_changed"].(bool); ok && metadata {
+						// Check if this key rotation was approved
+						requireApproval, _ := policy.Rules["require_key_rotation_approval"].(bool)
+						if requireApproval {
+							// Check if approval metadata exists
+							if approved, ok := action.Metadata["key_rotation_approved"].(bool); !ok || !approved {
+								fmt.Printf("✅ Config Drift Policy '%s' triggered: Unapproved public key rotation detected\n",
+									policy.Name)
+
+								switch policy.EnforcementAction {
+								case domain.EnforcementBlockAndAlert:
+									return true, true, policy.Name, nil
+								case domain.EnforcementAlertOnly:
+									return false, true, policy.Name, nil
+								case domain.EnforcementAllow:
+									return false, false, policy.Name, nil
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Check for permission escalations
+		if checkPermissionEscalation, ok := policy.Rules["check_permission_escalation"].(bool); ok && checkPermissionEscalation {
+			// Compare current capabilities against high-privilege capability patterns
+			dangerousCapabilities, ok := policy.Rules["dangerous_capabilities"].([]interface{})
+			if !ok || len(dangerousCapabilities) == 0 {
+				// Default dangerous capabilities
+				dangerousCapabilities = []interface{}{
+					"admin:*",
+					"*:delete",
+					"system:*",
+					"security:*",
+				}
+			}
+
+			// Check if agent has any dangerous capabilities
+			var foundDangerousCaps []string
+			for _, cap := range agent.Capabilities {
+				for _, dangerousCap := range dangerousCapabilities {
+					if dangerousCapStr, ok := dangerousCap.(string); ok {
+						// Simple wildcard matching
+						if strings.HasSuffix(dangerousCapStr, "*") {
+							prefix := strings.TrimSuffix(dangerousCapStr, "*")
+							if strings.HasPrefix(cap, prefix) {
+								foundDangerousCaps = append(foundDangerousCaps, cap)
+								break
+							}
+						} else if cap == dangerousCapStr {
+							foundDangerousCaps = append(foundDangerousCaps, cap)
+							break
+						}
+					}
+				}
+			}
+
+			if len(foundDangerousCaps) > 0 {
+				fmt.Printf("✅ Config Drift Policy '%s' triggered: Dangerous capabilities detected: %v\n",
+					policy.Name, foundDangerousCaps)
+
+				switch policy.EnforcementAction {
+				case domain.EnforcementBlockAndAlert:
+					return true, true, policy.Name, nil
+				case domain.EnforcementAlertOnly:
+					return false, true, policy.Name, nil
+				case domain.EnforcementAllow:
+					return false, false, policy.Name, nil
+				}
+			}
+		}
 	}
 
 	return false, false, "", nil
@@ -449,6 +674,22 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 		return false, false, "", nil
 	}
 
+	// Get the current audit log to extract IP address
+	var currentIPAddress string
+
+	// Try to get the audit log that triggered this evaluation
+	if auditID != uuid.Nil {
+		recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, 10)
+		if err == nil {
+			for _, action := range recentActions {
+				if action.ID == auditID {
+					currentIPAddress = action.IPAddress
+					break
+				}
+			}
+		}
+	}
+
 	// Evaluate policies by priority (highest first)
 	for _, policy := range policies {
 		if !policy.IsEnabled {
@@ -460,12 +701,154 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 			continue
 		}
 
-		// Note: Most unauthorized access is handled by capability_violation policy.
-		// This policy type is available for future custom access control rules.
-		// Admins can configure it but it won't trigger unless extended.
+		// Check for IP-based restrictions
+		if checkIPRestrictions, ok := policy.Rules["check_ip_restrictions"].(bool); ok && checkIPRestrictions {
+			allowedIPs, ok := policy.Rules["allowed_ips"].([]interface{})
+			if ok && len(allowedIPs) > 0 && currentIPAddress != "" {
+				// Check if current IP is in allowed list
+				isAllowed := false
+				for _, allowedIP := range allowedIPs {
+					if allowedIPStr, ok := allowedIP.(string); ok {
+						// Simple exact match (could be extended to support CIDR ranges)
+						if currentIPAddress == allowedIPStr {
+							isAllowed = true
+							break
+						}
+						// Support wildcard matching (e.g., "192.168.*")
+						if strings.HasSuffix(allowedIPStr, "*") {
+							prefix := strings.TrimSuffix(allowedIPStr, "*")
+							if strings.HasPrefix(currentIPAddress, prefix) {
+								isAllowed = true
+								break
+							}
+						}
+					}
+				}
 
-		fmt.Printf("✅ Unauthorized Access Policy '%s' evaluated for agent %s (currently inactive)\n",
-			policy.Name, agent.Name)
+				if !isAllowed {
+					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: IP address %s not in allowed list\n",
+						policy.Name, currentIPAddress)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name, nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name, nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name, nil
+					}
+				}
+			}
+		}
+
+		// Check for time-based access restrictions
+		if checkTimeRestrictions, ok := policy.Rules["check_time_restrictions"].(bool); ok && checkTimeRestrictions {
+			allowedDays, _ := policy.Rules["allowed_days"].([]interface{})
+			allowedHoursStart, _ := policy.Rules["allowed_hours_start"].(float64)
+			allowedHoursEnd, _ := policy.Rules["allowed_hours_end"].(float64)
+
+			now := time.Now()
+			currentDay := now.Weekday().String()
+			currentHour := now.Hour()
+
+			// Check day restrictions
+			if len(allowedDays) > 0 {
+				isDayAllowed := false
+				for _, day := range allowedDays {
+					if dayStr, ok := day.(string); ok && strings.EqualFold(dayStr, currentDay) {
+						isDayAllowed = true
+						break
+					}
+				}
+
+				if !isDayAllowed {
+					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access not allowed on %s\n",
+						policy.Name, currentDay)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name, nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name, nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name, nil
+					}
+				}
+			}
+
+			// Check hour restrictions
+			if allowedHoursStart > 0 || allowedHoursEnd > 0 {
+				if allowedHoursEnd == 0 {
+					allowedHoursEnd = 24
+				}
+
+				if currentHour < int(allowedHoursStart) || currentHour >= int(allowedHoursEnd) {
+					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access not allowed at hour %d (allowed: %.0f-%.0f)\n",
+						policy.Name, currentHour, allowedHoursStart, allowedHoursEnd)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name, nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name, nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name, nil
+					}
+				}
+			}
+		}
+
+		// Check for resource-level access control
+		if checkResourceAccess, ok := policy.Rules["check_resource_access"].(bool); ok && checkResourceAccess {
+			restrictedResources, ok := policy.Rules["restricted_resources"].([]interface{})
+			if ok && len(restrictedResources) > 0 {
+				// Check if current resource is in restricted list
+				for _, restrictedResource := range restrictedResources {
+					if restrictedResourceStr, ok := restrictedResource.(string); ok {
+						// Simple pattern matching
+						if strings.Contains(resource, restrictedResourceStr) ||
+							strings.Contains(restrictedResourceStr, resource) {
+							fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access to restricted resource %s\n",
+								policy.Name, resource)
+
+							switch policy.EnforcementAction {
+							case domain.EnforcementBlockAndAlert:
+								return true, true, policy.Name, nil
+							case domain.EnforcementAlertOnly:
+								return false, true, policy.Name, nil
+							case domain.EnforcementAllow:
+								return false, false, policy.Name, nil
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Check for action-level restrictions
+		if checkActionRestrictions, ok := policy.Rules["check_action_restrictions"].(bool); ok && checkActionRestrictions {
+			restrictedActions, ok := policy.Rules["restricted_actions"].([]interface{})
+			if ok && len(restrictedActions) > 0 {
+				// Check if current action is in restricted list
+				for _, restrictedAction := range restrictedActions {
+					if restrictedActionStr, ok := restrictedAction.(string); ok {
+						if strings.EqualFold(actionType, restrictedActionStr) {
+							fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Restricted action %s attempted\n",
+								policy.Name, actionType)
+
+							switch policy.EnforcementAction {
+							case domain.EnforcementBlockAndAlert:
+								return true, true, policy.Name, nil
+							case domain.EnforcementAlertOnly:
+								return false, true, policy.Name, nil
+							case domain.EnforcementAllow:
+								return false, false, policy.Name, nil
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return false, false, "", nil

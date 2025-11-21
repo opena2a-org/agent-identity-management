@@ -73,4 +73,9 @@ type AuditLogRepository interface {
 	GetByUser(userID uuid.UUID, limit, offset int) ([]*AuditLog, error)
 	GetByResource(resourceType string, resourceID uuid.UUID) ([]*AuditLog, error)
 	Search(query string, limit, offset int) ([]*AuditLog, error)
+
+	// Security policy query methods
+	CountActionsByAgentInTimeWindow(agentID uuid.UUID, action AuditAction, windowMinutes int) (int, error)
+	GetRecentActionsByAgent(agentID uuid.UUID, limit int) ([]*AuditLog, error)
+	GetAgentActionsByIPAddress(agentID uuid.UUID, ipAddress string, limit int) ([]*AuditLog, error)
 }
