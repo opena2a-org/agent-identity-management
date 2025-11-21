@@ -47,6 +47,7 @@ interface SecurityPolicy {
   name: string;
   description: string;
   policy_type: string;
+  
   enforcement_action: "alert_only" | "block_and_alert" | "allow";
   severity_threshold: string;
   rules: Record<string, any>;
@@ -137,6 +138,7 @@ export default function SecurityPoliciesPage() {
       const data = await api.getSecurityPolicies();
       // ✅ MVP: Only show capability_violation policy (the only enforced policy)
       // Filter out non-enforced policies to avoid confusion
+
       const enforcedPolicies = data.filter(
         (p: SecurityPolicy) => p.policy_type === "capability_violation"
       );
@@ -215,7 +217,7 @@ export default function SecurityPoliciesPage() {
         is_enabled: policy.is_enabled,
         priority: policy.priority,
       });
-
+     
       // Update local state
       setPolicies(
         policies.map((p) =>
@@ -618,8 +620,8 @@ export default function SecurityPoliciesPage() {
               <AlertTriangle className="h-5 w-5" />
               Enable Blocking Mode?
             </DialogTitle>
-            <DialogDescription className="space-y-3 pt-4">
-              <p className="font-medium text-foreground">
+            <div className="text-sm text-muted-foreground space-y-3 pt-4">
+              <div className="font-medium text-foreground">
                 You are about to{" "}
                 {pendingEnforcementChange ? "switch" : "enable"}{" "}
                 <strong>
@@ -629,11 +631,11 @@ export default function SecurityPoliciesPage() {
                   "
                 </strong>{" "}
                 {pendingEnforcementChange ? "to" : "in"} blocking mode.
-              </p>
+              </div>
               <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4 rounded-md space-y-2">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                 <div className="text-sm font-semibold text-red-800 dark:text-red-200">
                   ⚠️ Warning: Production Impact
-                </p>
+                </div>
                 <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
                   <li>
                     This policy will{" "}
@@ -649,12 +651,12 @@ export default function SecurityPoliciesPage() {
                   <li>Consider testing in "Alert Only" mode first</li>
                 </ul>
               </div>
-              <p className="text-sm">
+              <div className="text-sm">
                 Are you sure you want to{" "}
                 {pendingEnforcementChange ? "switch to" : "enable"} blocking
                 mode for this policy?
-              </p>
-            </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={cancelBlockingMode}>
