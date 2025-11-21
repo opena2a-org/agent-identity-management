@@ -57,6 +57,7 @@ export interface Agent {
   version: string;
   trust_score: number;
   talks_to?: string[];
+  capabilities?: any[];
   created_at: string;
   updated_at: string;
 }
@@ -538,6 +539,7 @@ class APIClient {
     accessToken?: string;
     refreshToken?: string;
     isApproved: boolean;
+    requiresPasswordChange?: boolean;
   }> {
     const response = await this.request<{
       success: boolean;
@@ -546,6 +548,7 @@ class APIClient {
       accessToken?: string;
       refreshToken?: string;
       isApproved: boolean;
+      requiresPasswordChange?: boolean;
     }>("/api/v1/public/login", {
       method: "POST",
       body: JSON.stringify(data),

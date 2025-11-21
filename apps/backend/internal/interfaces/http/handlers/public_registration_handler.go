@@ -194,12 +194,13 @@ type LoginRequest struct {
 
 // LoginResponse represents the login response
 type LoginResponse struct {
-	Success      bool          `json:"success"`
-	Message      string        `json:"message"`
-	User         *domain.User  `json:"user"`
-	AccessToken  *string       `json:"accessToken,omitempty"`
-	RefreshToken *string       `json:"refreshToken,omitempty"`
-	IsApproved   bool          `json:"isApproved"`
+	Success                bool          `json:"success"`
+	Message                string        `json:"message"`
+	User                   *domain.User  `json:"user"`
+	AccessToken            *string       `json:"accessToken,omitempty"`
+	RefreshToken           *string       `json:"refreshToken,omitempty"`
+	IsApproved             bool          `json:"isApproved"`
+	RequiresPasswordChange bool          `json:"requiresPasswordChange,omitempty"`
 }
 
 // Login handles public user login with email and password
@@ -259,12 +260,9 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 				// Check if user must change password (e.g., default admin on first login)
 				fmt.Printf("✅ DEBUG: Password verification PASSED for %s\n", user.Email)
 				if user.ForcePasswordChange {
-					return c.JSON(&LoginResponse{
-						Success:      false,
-						User:         user,
-						IsApproved:   true,
-						Message:      "You must change your password before continuing",
-					})
+					// Generate tokens even for forced password change
+					// so user can access the change password page
+					return h.generatePasswordChangeRequiredResponse(c, user)
 				}
 
 				// User in users table = automatically approved, generate tokens
@@ -364,6 +362,50 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 		AccessToken:  &accessToken,
 		RefreshToken: &refreshToken,
 		Message:      "Login successful",
+	}
+
+	// Set cookies for web clients
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		HTTPOnly: true,
+		SameSite: "Lax",
+	})
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		HTTPOnly: true,
+		SameSite: "Lax",
+	})
+
+	return c.JSON(response)
+}
+
+// generatePasswordChangeRequiredResponse generates tokens for users who must change password
+func (h *PublicRegistrationHandler) generatePasswordChangeRequiredResponse(c fiber.Ctx, user *domain.User) error {
+	// Generate tokens so user can access the change password page
+	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
+		user.ID.String(),
+		user.OrganizationID.String(),
+		user.Email,
+		string(user.Role),
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"error":   "Failed to generate tokens",
+		})
+	}
+
+	response := &LoginResponse{
+		Success:              true,
+		User:                 user,
+		IsApproved:           true,
+		AccessToken:          &accessToken,
+		RefreshToken:         &refreshToken,
+		RequiresPasswordChange: true,
+		Message:              "You must change your password before continuing",
 	}
 
 	// Set cookies for web clients
