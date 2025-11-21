@@ -117,18 +117,37 @@ export default function AlertsPage() {
     }
   }, [router]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [allCount, setAllCount] = useState<number>(0);
+  const [acknowledgedCount, setAcknowledgedCount] = useState<number>(0);
+  const [unacknowledgedCount, setUnacknowledgedCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("unacknowledged");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [searchField, setSearchField] = useState<string>("title");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  useEffect(() => {
+    // Reset to page 1 when filters change
+    setPage(1);
+  }, [severityFilter, statusFilter]);
 
   useEffect(() => {
     fetchAlerts();
-  }, []);
+  }, [page, pageSize, severityFilter, statusFilter]);
 
   const fetchAlerts = async () => {
+    setLoading(true);
     try {
-      const data = await api.getAlerts(100, 0);
-      setAlerts(data);
+      const offset = (page - 1) * pageSize;
+      const data = await api.getAlerts(pageSize, offset);
+      setAlerts(data.alerts);
+      setTotal(data.total);
+      setAllCount(data.all_count || 0);
+      setAcknowledgedCount(data.acknowledged_count || 0);
+      setUnacknowledgedCount(data.unacknowledged_count || 0);
     } catch (error) {
       console.error("Failed to fetch alerts:", error);
     } finally {
@@ -211,12 +230,48 @@ export default function AlertsPage() {
       statusFilter === "all" ||
       (statusFilter === "acknowledged" && alert.is_acknowledged) ||
       (statusFilter === "unacknowledged" && !alert.is_acknowledged);
-
-    return matchesSeverity && matchesStatus;
+    let matchesSearch = true;
+    if (searchQuery.trim() !== "") {
+      const searchFields: { [key: string]: string } = {
+        title: alert.title,
+        description: alert.description,
+        resource_id: alert.resource_id,
+        alert_type: alert.alert_type,
+      };
+      const value = (searchFields[searchField] ?? "").toLowerCase();
+      matchesSearch = value.includes(searchQuery.toLowerCase());
+    }
+    return matchesSeverity && matchesStatus && matchesSearch;
   });
 
+  // Get the total count based on current status filter
+  const getTotalCountForFilter = () => {
+    if (statusFilter === "acknowledged") {
+      return acknowledgedCount;
+    } else if (statusFilter === "unacknowledged") {
+      return unacknowledgedCount;
+    }
+    return allCount;
+  };
+
+  // Calculate total pages based on filtered count
+  const totalFilteredCount = getTotalCountForFilter();
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+
+  useEffect(() => {
+    // If current page is beyond total pages, go to last page
+    if (page > totalPages && totalPages > 0) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  // Stats based on API counts and current filter
   const stats = {
-    total: alerts.length,
+    total: allCount,
+    acknowledged: acknowledgedCount,
+    unacknowledged: unacknowledgedCount,
+    // Severity counts are still calculated from loaded alerts (client-side)
+    // since API doesn't provide severity breakdown
     critical: alerts.filter(
       (a) => a.severity === "critical" && !a.is_acknowledged
     ).length,
@@ -231,7 +286,6 @@ export default function AlertsPage() {
       (a) =>
         (a.severity === "low" || a.severity === "info") && !a.is_acknowledged
     ).length,
-    unacknowledged: alerts.filter((a) => !a.is_acknowledged).length,
   };
 
   if (loading) {
@@ -365,23 +419,43 @@ export default function AlertsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Pagination */}
       <Card>
         <CardHeader>
           <CardTitle>Filter Alerts</CardTitle>
         </CardHeader>
-        <CardContent className="flex gap-4">
+        <CardContent className="flex gap-4 items-center">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[240px]">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Alerts</SelectItem>
-              <SelectItem value="unacknowledged">Unacknowledged</SelectItem>
-              <SelectItem value="acknowledged">Acknowledged</SelectItem>
+              <SelectItem value="all">
+                <div className="flex items-center justify-between w-full">
+                  <span>All Alerts</span>
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                    {allCount}
+                  </span>
+                </div>
+              </SelectItem>
+              <SelectItem value="unacknowledged">
+                <div className="flex items-center justify-between w-full">
+                  <span>Unacknowledged</span>
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                    {unacknowledgedCount}
+                  </span>
+                </div>
+              </SelectItem>
+              <SelectItem value="acknowledged">
+                <div className="flex items-center justify-between w-full">
+                  <span>Acknowledged</span>
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                    {acknowledgedCount}
+                  </span>
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
-
           <Select value={severityFilter} onValueChange={setSeverityFilter}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Filter by severity" />
@@ -392,27 +466,80 @@ export default function AlertsPage() {
               <SelectItem value="high">High</SelectItem>
               <SelectItem value="medium">Medium</SelectItem>
               <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
             </SelectContent>
           </Select>
+         
 
-          {(severityFilter !== "all" || statusFilter !== "unacknowledged") && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSeverityFilter("all");
-                setStatusFilter("unacknowledged");
-              }}
-            >
-              Clear filters
-            </Button>
-          )}
+          <div className="flex gap-2 items-center">
+            <Select value={searchField} onValueChange={setSearchField}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Search by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="title">Title</SelectItem>
+                <SelectItem value="description">Description</SelectItem>
+                <SelectItem value="resource_id">Resource ID</SelectItem>
+                <SelectItem value="alert_type">Alert Type</SelectItem>
+              </SelectContent>
+            </Select>
+            <input
+              type="text"
+              className="border rounded px-2 py-1 w-[220px] focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+              placeholder={`🔍 Search ${searchField.charAt(0).toUpperCase() + searchField.slice(1)}`}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoComplete="off"
+            />
+            {searchQuery && (
+              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>Clear</Button>
+            )}
+          </div>
+
+          <div className="flex gap-2 items-center">
+            <span>Rows per page:</span>
+            <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
+              <SelectTrigger className="w-[80px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+         
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      <div className="flex gap-2 items-center mt-4">
+        <Button
+          disabled={page === 1}
+          onClick={() => setPage(page - 1)}
+          variant="outline"
+        >
+          Previous
+        </Button>
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <Button
+          disabled={page >= totalPages}
+          onClick={() => setPage(page + 1)}
+          variant="outline"
+        >
+          Next
+        </Button>
+      </div>
 
       {/* Alerts List */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Alerts ({filteredAlerts.length})</CardTitle>
+         
           <CardDescription>
             Security and operational notifications requiring attention
           </CardDescription>

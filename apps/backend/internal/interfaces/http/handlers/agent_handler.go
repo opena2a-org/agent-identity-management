@@ -11,14 +11,14 @@ import (
 )
 
 type AgentHandler struct {
-	agentService             *application.AgentService
-	mcpService               *application.MCPService
-	auditService             *application.AuditService
-	apiKeyService            *application.APIKeyService
-	trustScoreHandler        *TrustScoreHandler
-	alertService             *application.AlertService
-	verificationEventService *application.VerificationEventService
-	capabilityService        *application.CapabilityService
+	agentService              *application.AgentService
+	mcpService                *application.MCPService
+	auditService              *application.AuditService
+	apiKeyService             *application.APIKeyService
+	trustScoreHandler         *TrustScoreHandler
+	alertService              *application.AlertService
+	verificationEventService  *application.VerificationEventService
+	capabilityService         *application.CapabilityService
 }
 
 func NewAgentHandler(
@@ -30,7 +30,6 @@ func NewAgentHandler(
 	alertService *application.AlertService,
 	verificationEventService *application.VerificationEventService,
 	capabilityService *application.CapabilityService,
-
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -45,49 +44,51 @@ func NewAgentHandler(
 }
 
 func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fiber.Map {
-	// Fetch capabilities from agent_capabilities table
-	capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
-	if err != nil {
-		// Log error but don't fail - return empty capabilities
-		capabilities = []*domain.AgentCapability{}
-	}
+    // Fetch capabilities from agent_capabilities table
+    capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
+    if err != nil {
+        // Log error but don't fail - return empty capabilities
+        capabilities = []*domain.AgentCapability{}
+    }
 
-	// Extract capability types as simple string array (frontend compatible)
-	capabilityTypes := make([]string, 0, len(capabilities))
-	for _, cap := range capabilities {
-		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
-	}
+    // Extract capability types as simple string array (frontend compatible)
+    capabilityTypes := make([]string, 0, len(capabilities))
+    for _, cap := range capabilities {
+        capabilityTypes = append(capabilityTypes, cap.CapabilityType)
+    }
 
-	// Return flat response with all agent fields + capabilities
-	return fiber.Map{
-		"id":                         agent.ID,
-		"organization_id":            agent.OrganizationID,
-		"name":                       agent.Name,
-		"display_name":               agent.DisplayName,
-		"description":                agent.Description,
-		"agent_type":                 agent.AgentType,
-		"status":                     agent.Status,
-		"version":                    agent.Version,
-		"public_key":                 agent.PublicKey,
-		"trust_score":                agent.TrustScore,
-		"verified_at":                agent.VerifiedAt,
-		"created_at":                 agent.CreatedAt,
-		"updated_at":                 agent.UpdatedAt,
-		"talks_to":                   agent.TalksTo,
-		"capabilities":               capabilityTypes,
-		"capability_violation_count": agent.CapabilityViolationCount,
-		"is_compromised":             agent.IsCompromised,
-		"certificate_url":            agent.CertificateURL,
-		"repository_url":             agent.RepositoryURL,
-		"documentation_url":          agent.DocumentationURL,
-		"key_algorithm":              agent.KeyAlgorithm,
-		"created_by":                 agent.CreatedBy,
-		"last_active":                agent.LastActive,
-		"key_created_at":             agent.KeyCreatedAt,
-		"key_expires_at":             agent.KeyExpiresAt,
-		"rotation_count":             agent.RotationCount,
-	}
+    // Return flat response with all agent fields + capabilities
+    return fiber.Map{
+        "id":                         agent.ID,
+        "organization_id":            agent.OrganizationID,
+        "name":                       agent.Name,
+        "display_name":               agent.DisplayName,
+        "description":                agent.Description,
+        "agent_type":                 agent.AgentType,
+        "status":                     agent.Status,
+        "version":                    agent.Version,
+        "public_key":                 agent.PublicKey,
+        "trust_score":                agent.TrustScore,
+        "verified_at":                agent.VerifiedAt,
+        "created_at":                 agent.CreatedAt,
+        "updated_at":                 agent.UpdatedAt,
+        "talks_to":                   agent.TalksTo,
+        "capabilities":               capabilityTypes, 
+        "capability_violation_count": agent.CapabilityViolationCount,
+        "is_compromised":             agent.IsCompromised,
+        "certificate_url":            agent.CertificateURL,
+        "repository_url":             agent.RepositoryURL,
+        "documentation_url":          agent.DocumentationURL,
+        "key_algorithm":              agent.KeyAlgorithm,
+        "created_by":                 agent.CreatedBy,
+        "last_active":                agent.LastActive,
+        "key_created_at":             agent.KeyCreatedAt,
+        "key_expires_at":             agent.KeyExpiresAt,
+        "rotation_count":             agent.RotationCount,
+    }
 }
+
+
 
 // ListAgents returns all agents for the organization
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {

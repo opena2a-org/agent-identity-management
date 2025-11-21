@@ -1,0 +1,304 @@
+package metrics
+
+import (
+	"bytes"
+	"strconv"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/expfmt"
+)
+
+var (
+	// HTTP metrics
+	httpRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	httpRequestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "aim_http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	// Security metrics
+	securityAlertsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_security_alerts_total",
+			Help: "Total number of security alerts",
+		},
+		[]string{"severity", "type"},
+	)
+
+	securityThreatsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_security_threats_total",
+			Help: "Total number of detected security threats",
+		},
+		[]string{"severity", "type"},
+	)
+
+	// Trust score metrics
+	trustScoreGauge = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "aim_trust_score",
+			Help: "Current trust score of agents",
+		},
+		[]string{"agent_id", "agent_name"},
+	)
+
+	trustScoreHistogram = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "aim_trust_score_distribution",
+			Help:    "Distribution of trust scores across all agents",
+			Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
+		},
+	)
+
+	// Agent metrics
+	agentOperationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_agent_operations_total",
+			Help: "Total number of agent operations",
+		},
+		[]string{"operation", "status"},
+	)
+
+	activeAgentsGauge = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aim_active_agents",
+			Help: "Number of currently active agents",
+		},
+	)
+
+	// MCP Server metrics
+	mcpServersTotal = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aim_mcp_servers_total",
+			Help: "Total number of registered MCP servers",
+		},
+	)
+
+	mcpAttestationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_mcp_attestations_total",
+			Help: "Total number of MCP attestations",
+		},
+		[]string{"agent_id", "mcp_id", "status"},
+	)
+
+	// Verification metrics
+	verificationEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_verification_events_total",
+			Help: "Total number of verification events",
+		},
+		[]string{"event_type", "status"},
+	)
+
+	verificationDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "aim_verification_duration_seconds",
+			Help:    "Duration of verification events in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"event_type"},
+	)
+
+	// Compliance metrics
+	complianceChecksTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_compliance_checks_total",
+			Help: "Total number of compliance checks",
+		},
+		[]string{"check_type", "status"},
+	)
+
+	complianceViolationsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "aim_compliance_violations_total",
+			Help: "Total number of compliance violations detected",
+		},
+	)
+
+	// Database metrics
+	databaseConnectionsActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aim_database_connections_active",
+			Help: "Number of active database connections",
+		},
+	)
+
+	databaseQueryDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "aim_database_query_duration_seconds",
+			Help:    "Database query duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"query_type"},
+	)
+
+	// API Key metrics
+	apiKeyOperationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_api_key_operations_total",
+			Help: "Total number of API key operations",
+		},
+		[]string{"operation", "status"},
+	)
+
+	activeAPIKeysGauge = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aim_active_api_keys",
+			Help: "Number of currently active API keys",
+		},
+	)
+
+	// Audit log metrics
+	auditLogsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aim_audit_logs_total",
+			Help: "Total number of audit log entries",
+		},
+		[]string{"action", "resource_type"},
+	)
+)
+
+// PrometheusMiddleware collects HTTP metrics for all requests
+func PrometheusMiddleware() fiber.Handler {
+	return func(c fiber.Ctx) error {
+		start := time.Now()
+
+		// Process request
+		err := c.Next()
+
+		// Record metrics
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Response().StatusCode())
+		method := c.Method()
+		path := c.Path()
+
+		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
+		httpRequestDuration.WithLabelValues(method, path, status).Observe(duration)
+
+		return err
+	}
+}
+
+// RecordSecurityAlert records a security alert
+func RecordSecurityAlert(severity, alertType string) {
+	securityAlertsTotal.WithLabelValues(severity, alertType).Inc()
+}
+
+// RecordSecurityThreat records a security threat
+func RecordSecurityThreat(severity, threatType string) {
+	securityThreatsTotal.WithLabelValues(severity, threatType).Inc()
+}
+
+// UpdateTrustScore updates the trust score for an agent
+func UpdateTrustScore(agentID, agentName string, score float64) {
+	trustScoreGauge.WithLabelValues(agentID, agentName).Set(score)
+	trustScoreHistogram.Observe(score)
+}
+
+// RecordAgentOperation records an agent operation
+func RecordAgentOperation(operation, status string) {
+	agentOperationsTotal.WithLabelValues(operation, status).Inc()
+}
+
+// UpdateActiveAgents updates the count of active agents
+func UpdateActiveAgents(count float64) {
+	activeAgentsGauge.Set(count)
+}
+
+// UpdateMCPServersTotal updates the total number of MCP servers
+func UpdateMCPServersTotal(count float64) {
+	mcpServersTotal.Set(count)
+}
+
+// RecordMCPAttestation records an MCP attestation
+func RecordMCPAttestation(agentID, mcpID, status string) {
+	mcpAttestationsTotal.WithLabelValues(agentID, mcpID, status).Inc()
+}
+
+// RecordVerificationEvent records a verification event
+func RecordVerificationEvent(eventType, status string) {
+	verificationEventsTotal.WithLabelValues(eventType, status).Inc()
+}
+
+// ObserveVerificationDuration observes the duration of a verification event
+func ObserveVerificationDuration(eventType string, duration float64) {
+	verificationDuration.WithLabelValues(eventType).Observe(duration)
+}
+
+// RecordComplianceCheck records a compliance check
+func RecordComplianceCheck(checkType, status string) {
+	complianceChecksTotal.WithLabelValues(checkType, status).Inc()
+}
+
+// RecordComplianceViolation records a compliance violation
+func RecordComplianceViolation() {
+	complianceViolationsTotal.Inc()
+}
+
+// UpdateDatabaseConnections updates the count of active database connections
+func UpdateDatabaseConnections(count float64) {
+	databaseConnectionsActive.Set(count)
+}
+
+// ObserveDatabaseQueryDuration observes the duration of a database query
+func ObserveDatabaseQueryDuration(queryType string, duration float64) {
+	databaseQueryDuration.WithLabelValues(queryType).Observe(duration)
+}
+
+// RecordAPIKeyOperation records an API key operation
+func RecordAPIKeyOperation(operation, status string) {
+	apiKeyOperationsTotal.WithLabelValues(operation, status).Inc()
+}
+
+// UpdateActiveAPIKeys updates the count of active API keys
+func UpdateActiveAPIKeys(count float64) {
+	activeAPIKeysGauge.Set(count)
+}
+
+// RecordAuditLog records an audit log entry
+func RecordAuditLog(action, resourceType string) {
+	auditLogsTotal.WithLabelValues(action, resourceType).Inc()
+}
+
+// PrometheusHandler returns a Fiber handler that exposes Prometheus metrics
+// Thread-safe implementation that gathers and encodes metrics on each request
+func PrometheusHandler() fiber.Handler {
+	return func(c fiber.Ctx) error {
+		// Set response headers for Prometheus text format
+		c.Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+
+		// Gather metrics from the default registry
+		metricFamilies, err := prometheus.DefaultGatherer.Gather()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString("Error gathering metrics: " + err.Error())
+		}
+
+		// Encode metrics to a buffer first (thread-safe)
+		var buf bytes.Buffer
+		encoder := expfmt.NewEncoder(&buf, expfmt.NewFormat(expfmt.TypeTextPlain))
+
+		for _, mf := range metricFamilies {
+			if err := encoder.Encode(mf); err != nil {
+				return c.Status(fiber.StatusInternalServerError).SendString("Error encoding metrics: " + err.Error())
+			}
+		}
+
+		// Send the buffered metrics
+		return c.SendString(buf.String())
+	}
+}

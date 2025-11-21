@@ -145,7 +145,7 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 	}
 
 	// Get unacknowledged alerts count
-	unacknowledgedAlerts, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	_, _, unacknowledgedAlerts, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		unacknowledgedAlerts = 0
 	}
@@ -232,17 +232,22 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 		})
 	}
 
-	// Get unacknowledged count
-	unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	// Get alert counts (all, acknowledged, unacknowledged)
+	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
+		// If count fails, set defaults but don't fail the request
+		allCount = total
+		acknowledgedCount = 0
 		unacknowledgedCount = 0
 	}
 
 	return c.JSON(fiber.Map{
-		"alerts":         alerts,
-		"total":          total,
-		"unacknowledged": unacknowledgedCount,
-		"limit":          limit,
-		"offset":         offset,
+		"alerts":              alerts,
+		"total":               total,
+		"all_count":           allCount,
+		"acknowledged_count":  acknowledgedCount,
+		"unacknowledged_count": unacknowledgedCount,
+		"limit":               limit,
+		"offset":              offset,
 	})
 }

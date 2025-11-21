@@ -67,12 +67,12 @@ func (h *SecurityPolicyHandler) GetPolicy(c fiber.Ctx) error {
 type CreatePolicyRequest struct {
 	Name              string                   `json:"name" validate:"required"`
 	Description       string                   `json:"description"`
-	PolicyType        domain.PolicyType        `json:"policyType" validate:"required"`
-	EnforcementAction domain.EnforcementAction `json:"enforcementAction" validate:"required"`
-	SeverityThreshold domain.AlertSeverity     `json:"severityThreshold" validate:"required"`
+	PolicyType        domain.PolicyType        `json:"policy_type" validate:"required"`
+	EnforcementAction domain.EnforcementAction `json:"enforcement_action" validate:"required"`
+	SeverityThreshold domain.AlertSeverity     `json:"severity_threshold" validate:"required"`
 	Rules             map[string]interface{}   `json:"rules"`
-	AppliesTo         string                   `json:"appliesTo" validate:"required"`
-	IsEnabled         bool                     `json:"isEnabled"`
+	AppliesTo         string                   `json:"applies_to" validate:"required"`
+	IsEnabled         bool                     `json:"is_enabled"`
 	Priority          int                      `json:"priority" validate:"required"`
 }
 

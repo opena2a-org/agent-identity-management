@@ -225,3 +225,261 @@ func (s *SecurityPolicyService) DisablePolicy(ctx context.Context, id uuid.UUID)
 	policy.IsEnabled = false
 	return s.policyRepo.Update(policy)
 }
+
+// EvaluateTrustScoreLow evaluates security policies for low trust score agents
+// Returns enforcement decision and whether to create an alert
+func (s *SecurityPolicyService) EvaluateTrustScoreLow(
+	ctx context.Context,
+	agent *domain.Agent,
+	actionType string,
+	resource string,
+	auditID uuid.UUID,
+) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// Get active trust_score_low policies for this organization
+	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeTrustScoreLow)
+	if err != nil {
+		return false, false, "", fmt.Errorf("failed to fetch trust score policies: %w", err)
+	}
+
+	// If no policies configured, don't enforce (allow by default)
+	if len(policies) == 0 {
+		return false, false, "", nil
+	}
+
+	// Evaluate policies by priority (highest first)
+	for _, policy := range policies {
+		if !policy.IsEnabled {
+			continue
+		}
+
+		// Check if policy applies to this agent
+		if !s.policyAppliesToAgent(policy, agent) {
+			continue
+		}
+
+		// Check trust score threshold from rules
+		threshold, ok := policy.Rules["trust_threshold"].(float64)
+		if !ok {
+			threshold = 0.3 // Default threshold
+		}
+
+		// Trigger if agent trust score is below threshold
+		if agent.TrustScore < threshold {
+			fmt.Printf("✅ Trust Score Policy '%s' triggered for agent %s (score: %.2f < %.2f)\n",
+				policy.Name, agent.Name, agent.TrustScore, threshold)
+
+			switch policy.EnforcementAction {
+			case domain.EnforcementBlockAndAlert:
+				return true, true, policy.Name, nil
+			case domain.EnforcementAlertOnly:
+				return false, true, policy.Name, nil
+			case domain.EnforcementAllow:
+				return false, false, policy.Name, nil
+			}
+		}
+	}
+
+	// No policy triggered
+	return false, false, "", nil
+}
+
+// EvaluateUnusualActivity evaluates security policies for unusual activity patterns
+// Returns enforcement decision and whether to create an alert
+func (s *SecurityPolicyService) EvaluateUnusualActivity(
+	ctx context.Context,
+	agent *domain.Agent,
+	actionType string,
+	resource string,
+	auditID uuid.UUID,
+) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// Get active unusual_activity policies for this organization
+	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeUnusualActivity)
+	if err != nil {
+		return false, false, "", fmt.Errorf("failed to fetch unusual activity policies: %w", err)
+	}
+
+	// If no policies configured, don't enforce
+	if len(policies) == 0 {
+		return false, false, "", nil
+	}
+
+	// Evaluate policies by priority (highest first)
+	for _, policy := range policies {
+		if !policy.IsEnabled {
+			continue
+		}
+
+		// Check if policy applies to this agent
+		if !s.policyAppliesToAgent(policy, agent) {
+			continue
+		}
+
+		// TODO: Implement actual anomaly detection logic
+		// For MVP, this would check:
+		// - API call rate spikes (api_rate_threshold from rules)
+		// - Off-hours access (check_off_hours from rules)
+		// - Unusual resource access patterns
+
+		fmt.Printf("✅ Unusual Activity Policy '%s' evaluated for agent %s\n",
+			policy.Name, agent.Name)
+
+		// For now, we don't trigger any unusual activity (needs historical data)
+		// This will be enhanced with actual anomaly detection in future iterations
+	}
+
+	return false, false, "", nil
+}
+
+// EvaluateDataExfiltration evaluates security policies for data exfiltration attempts
+// Returns enforcement decision and whether to create an alert
+func (s *SecurityPolicyService) EvaluateDataExfiltration(
+	ctx context.Context,
+	agent *domain.Agent,
+	actionType string,
+	resource string,
+	auditID uuid.UUID,
+) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// Get active data_exfiltration policies for this organization
+	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeDataExfiltration)
+	if err != nil {
+		return false, false, "", fmt.Errorf("failed to fetch data exfiltration policies: %w", err)
+	}
+
+	// If no policies configured, don't enforce
+	if len(policies) == 0 {
+		return false, false, "", nil
+	}
+
+	// Evaluate policies by priority (highest first)
+	for _, policy := range policies {
+		if !policy.IsEnabled {
+			continue
+		}
+
+		// Check if policy applies to this agent
+		if !s.policyAppliesToAgent(policy, agent) {
+			continue
+		}
+
+		// Check for data exfiltration patterns in action
+		patterns, ok := policy.Rules["patterns"].([]interface{})
+		if ok {
+			for _, p := range patterns {
+				pattern, ok := p.(string)
+				if !ok {
+					continue
+				}
+
+				// Check if action matches exfiltration pattern
+				if strings.Contains(strings.ToLower(actionType), pattern) ||
+					strings.Contains(strings.ToLower(resource), pattern) {
+					fmt.Printf("✅ Data Exfiltration Policy '%s' triggered for agent %s (pattern: %s)\n",
+						policy.Name, agent.Name, pattern)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name, nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name, nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name, nil
+					}
+				}
+			}
+		}
+	}
+
+	return false, false, "", nil
+}
+
+// EvaluateConfigDrift evaluates security policies for configuration drift
+// Returns enforcement decision and whether to create an alert
+func (s *SecurityPolicyService) EvaluateConfigDrift(
+	ctx context.Context,
+	agent *domain.Agent,
+	actionType string,
+	resource string,
+	auditID uuid.UUID,
+) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// Get active config_drift policies for this organization
+	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeConfigDrift)
+	if err != nil {
+		return false, false, "", fmt.Errorf("failed to fetch config drift policies: %w", err)
+	}
+
+	// If no policies configured, don't enforce
+	if len(policies) == 0 {
+		return false, false, "", nil
+	}
+
+	// Evaluate policies by priority (highest first)
+	for _, policy := range policies {
+		if !policy.IsEnabled {
+			continue
+		}
+
+		// Check if policy applies to this agent
+		if !s.policyAppliesToAgent(policy, agent) {
+			continue
+		}
+
+		// TODO: Implement actual config drift detection
+		// For MVP, this would check:
+		// - Agent capability changes
+		// - Public key rotations without approval
+		// - Permission escalations
+
+		fmt.Printf("✅ Config Drift Policy '%s' evaluated for agent %s\n",
+			policy.Name, agent.Name)
+
+		// For now, we don't trigger config drift (needs historical baseline)
+		// This will be enhanced with actual drift detection in future iterations
+	}
+
+	return false, false, "", nil
+}
+
+// EvaluateUnauthorizedAccess evaluates security policies for unauthorized access attempts
+// Returns enforcement decision and whether to create an alert
+func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
+	ctx context.Context,
+	agent *domain.Agent,
+	actionType string,
+	resource string,
+	auditID uuid.UUID,
+) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// Get active unauthorized_access policies for this organization
+	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeUnauthorizedAccess)
+	if err != nil {
+		return false, false, "", fmt.Errorf("failed to fetch unauthorized access policies: %w", err)
+	}
+
+	// If no policies configured, don't enforce
+	if len(policies) == 0 {
+		return false, false, "", nil
+	}
+
+	// Evaluate policies by priority (highest first)
+	for _, policy := range policies {
+		if !policy.IsEnabled {
+			continue
+		}
+
+		// Check if policy applies to this agent
+		if !s.policyAppliesToAgent(policy, agent) {
+			continue
+		}
+
+		// Check for unauthorized access patterns
+		// This is typically triggered when agent attempts to access resources
+		// outside their defined scope/capabilities
+
+		fmt.Printf("✅ Unauthorized Access Policy '%s' evaluated for agent %s\n",
+			policy.Name, agent.Name)
+
+		// For now, unauthorized access is primarily handled by capability violation
+		// This policy type can be enhanced with more specific access control rules
+	}
+
+	return false, false, "", nil
+}
