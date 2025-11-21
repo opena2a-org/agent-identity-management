@@ -801,11 +801,23 @@ class APIClient {
   }
 
   // Alerts
-  async getAlerts(limit = 100, offset = 0): Promise<any[]> {
+  async getAlerts(limit = 100, offset = 0): Promise<{ 
+    alerts: any[]; 
+    total: number;
+    all_count: number;
+    acknowledged_count: number;
+    unacknowledged_count: number;
+  }> {
     const response: any = await this.request(
       `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`
     );
-    return response.alerts || [];
+    return {
+      alerts: response.alerts || [],
+      total: response.total || 0,
+      all_count: response.all_count || 0,
+      acknowledged_count: response.acknowledged_count || 0,
+      unacknowledged_count: response.unacknowledged_count || 0,
+    };
   }
 
   async acknowledgeAlert(alertId: string): Promise<void> {
@@ -815,8 +827,8 @@ class APIClient {
   }
 
   async getUnacknowledgedAlertCount(): Promise<number> {
-    const alerts = await this.getAlerts(100, 0);
-    return alerts.filter((a: any) => !a.is_acknowledged).length;
+    const alertsObj = await this.getAlerts(100, 0);
+    return alertsObj.alerts.filter((a: any) => !a.is_acknowledged).length;
   }
 
   async getPendingCapabilityRequestsCount(): Promise<number> {

@@ -35,13 +35,25 @@ func (s *AlertService) GetUnacknowledgedAlerts(ctx context.Context, orgID uuid.U
 	return s.alertRepo.GetUnacknowledged(orgID)
 }
 
-// CountUnacknowledged counts unacknowledged alerts for an organization
-func (s *AlertService) CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (int, error) {
-	alerts, err := s.alertRepo.GetUnacknowledged(orgID)
+// CountUnacknowledged returns counts for all alerts, acknowledged alerts, and unacknowledged alerts for an organization
+func (s *AlertService) CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (allCount, acknowledgedCount, unacknowledgedCount int, err error) {
+	// Get total count of all alerts
+	allCount, err = s.alertRepo.CountByOrganization(orgID)
 	if err != nil {
-		return 0, err
+		return 0, 0, 0, err
 	}
-	return len(alerts), nil
+
+	// Get unacknowledged alerts
+	unacknowledgedAlerts, err := s.alertRepo.GetUnacknowledged(orgID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	unacknowledgedCount = len(unacknowledgedAlerts)
+
+	// Calculate acknowledged count
+	acknowledgedCount = allCount - unacknowledgedCount
+
+	return allCount, acknowledgedCount, unacknowledgedCount, nil
 }
 
 // CheckAPIKeyExpiry checks for expiring API keys and creates alerts
@@ -114,6 +126,7 @@ func (s *AlertService) GetAlerts(
 	status string,
 	limit int,
 	offset int,
+
 ) ([]*domain.Alert, int, error) {
 	// For now, just return organization alerts
 	// TODO: Implement full filtering in repository layer
@@ -121,8 +134,11 @@ func (s *AlertService) GetAlerts(
 	if err != nil {
 		return nil, 0, err
 	}
-
-	return alerts, len(alerts), nil
+	total, err := s.alertRepo.CountByOrganization(orgID)
+	if err != nil {
+		return alerts, 0, fmt.Errorf("failed to get total alerts: %w", err)
+	}
+	return alerts, total, nil
 }
 
 // AcknowledgeAlert acknowledges an alert
