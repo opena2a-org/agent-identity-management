@@ -27,6 +27,7 @@ import (
 	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
 	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
 	"github.com/opena2a/identity/backend/internal/infrastructure/email"
+	"github.com/opena2a/identity/backend/internal/infrastructure/metrics"
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a/identity/backend/internal/interfaces/http/middleware"
@@ -135,9 +136,14 @@ func main() {
 		StreamRequestBody: false,
 	})
 
+	// Prometheus metrics endpoint (no auth required)
+	// CRITICAL: Must be registered BEFORE Prometheus middleware to avoid circular recording
+	app.Get("/metrics", metrics.PrometheusHandler())
+
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(middleware.LoggerMiddleware())
+	app.Use(metrics.PrometheusMiddleware())    // Prometheus metrics collection
 	app.Use(middleware.AnalyticsTracking(db)) // Real-time API call tracking
 
 	// CORS with allowed origins from environment
