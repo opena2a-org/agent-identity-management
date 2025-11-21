@@ -803,24 +803,28 @@ func (r *VerificationEventRepositorySimple) UpdateResult(id uuid.UUID, result do
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `
-		UPDATE verification_events
-		SET
-			result = $1,
-			status = CASE
-				WHEN $1 = 'verified' THEN 'success'
-				WHEN $1 = 'denied' THEN 'failed'
-				ELSE 'failed'
-			END,
-			error_reason = COALESCE($2, error_reason),
-			metadata = COALESCE($3::jsonb, metadata),
-			completed_at = CASE
-				WHEN completed_at IS NULL THEN NOW()
-				ELSE completed_at
-			END
-		WHERE id = $4`
+	resultStr := string(result)
+	status := "failed"
+	if resultStr == string(domain.VerificationResultVerified) {
+		status = "success"
+	} else if resultStr == string(domain.VerificationResultDenied) {
+		status = "failed"
+	}
 
-	execResult, err := r.db.Exec(query, result, reason, metadataJSON, id)
+	query := `
+    UPDATE verification_events
+    SET
+        result = $1,
+        status = $2,
+        error_reason = COALESCE($3, error_reason),
+        metadata = COALESCE($4::jsonb, metadata),
+        completed_at = CASE
+            WHEN completed_at IS NULL THEN NOW()
+            ELSE completed_at
+        END
+    WHERE id = $5`
+
+	execResult, err := r.db.Exec(query, resultStr, status, reason, metadataJSON, id)
 	if err != nil {
 		return err
 	}

@@ -33,7 +33,8 @@ import { AutoDetectButton } from "@/components/agents/auto-detect-button";
 import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
-import { api } from "@/lib/api";
+import { downloadSDK } from "@/lib/agent-sdk";
+import { api, Agent } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
@@ -51,22 +52,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthGuard } from "@/components/auth-guard";
-
-interface Agent {
-  id: string;
-  name: string;
-  display_name: string;
-  description: string;
-  agent_type: string;
-  status: string;
-  version: string;
-  trust_score: number;
-  talks_to?: string[];
-  capabilities?: string[]; // Basic capability tags from SDK detection
-  created_at: string;
-  updated_at: string;
-  organization_id: string;
-}
 
 interface MCPServer {
   id: string;
@@ -106,6 +91,7 @@ export default function AgentDetailsPage({
   const [reactivating, setReactivating] = useState(false);
   const [rotatingCreds, setRotatingCreds] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [downloadingSDK, setDownloadingSDK] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [showRotateCredsConfirm, setShowRotateCredsConfirm] = useState(false);
@@ -281,6 +267,22 @@ export default function AgentDetailsPage({
     } finally {
       setRotatingCreds(false);
       setShowRotateCredsConfirm(false);
+    }
+  };
+
+  // Handle SDK download
+  const handleDownloadSDK = async () => {
+    if (!agentId || !agent) return;
+    
+    setDownloadingSDK(true);
+    try {
+      console.log("Starting SDK download for agent:", agentId, agent.name);
+      await downloadSDK(agentId, agent.name, 'python');
+    } catch (error) {
+      console.error('Failed to download SDK:', error);
+      alert('Failed to download SDK. Please try again.');
+    } finally {
+      setDownloadingSDK(false);
     }
   };
 
@@ -472,9 +474,18 @@ export default function AgentDetailsPage({
             />
             <Button
               variant="outline"
-              onClick={() => router.push('/dashboard/sdk')}
+              onClick={handleDownloadSDK}
+              disabled={downloadingSDK}
             >
-              <Download className="h-4 w-4 mr-1" /> Download SDK
+              {downloadingSDK ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Downloading...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-1" /> Download SDK
+                </>
+              )}
             </Button>
             <Button
               variant="outline"

@@ -18,20 +18,18 @@ type AgentHandler struct {
 	trustScoreHandler         *TrustScoreHandler
 	alertService              *application.AlertService
 	verificationEventService  *application.VerificationEventService
-	capabilityService        *application.CapabilityService 
-
+	capabilityService         *application.CapabilityService
 }
 
 func NewAgentHandler(
 	agentService *application.AgentService,
-	mcpService   *application.MCPService,
+	mcpService *application.MCPService,
 	auditService *application.AuditService,
 	apiKeyService *application.APIKeyService,
 	trustScoreHandler *TrustScoreHandler,
 	alertService *application.AlertService,
 	verificationEventService *application.VerificationEventService,
-	capabilityService        *application.CapabilityService,
-
+	capabilityService *application.CapabilityService,
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -42,7 +40,6 @@ func NewAgentHandler(
 		alertService:             alertService,
 		verificationEventService: verificationEventService,
 		capabilityService:        capabilityService,
-
 	}
 }
 
@@ -103,10 +100,10 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 			"error": "Failed to fetch agents",
 		})
 	}
-    enriched := make([]fiber.Map, 0, len(agents))
-    for _, agent := range agents {
-        enriched = append(enriched, h.enrichAgentResponse(c, agent))
-    }
+	enriched := make([]fiber.Map, 0, len(agents))
+	for _, agent := range agents {
+		enriched = append(enriched, h.enrichAgentResponse(c, agent))
+	}
 	return c.JSON(fiber.Map{
 		"agents": enriched,
 		"total":  len(enriched),
@@ -359,9 +356,9 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		ActionType string                 `json:"action_type"` // "read_file", "write_file", "execute_code", "network_request", "database_query"
-		Resource   string                 `json:"resource"`    // e.g., "/data/file.csv" or "SELECT * FROM users"
-		Metadata   map[string]interface{} `json:"metadata"`    // Additional context
+		ActionType string                 `json:"action_type"`        // "read_file", "write_file", "execute_code", "network_request", "database_query"
+		Resource   string                 `json:"resource"`           // e.g., "/data/file.csv" or "SELECT * FROM users"
+		Metadata   map[string]interface{} `json:"metadata"`           // Additional context
 		Protocol   *string                `json:"protocol,omitempty"` // Optional: "mcp", "a2a", "acp", "did", "oauth", "saml" - SDK auto-detects or user declares
 	}
 
@@ -487,10 +484,10 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 			AlertType:      domain.AlertSecurityBreach, // Using security_breach for capability violations
 			Severity:       domain.AlertSeverityHigh,
 			Title:          fmt.Sprintf("Capability Violation: %s attempted %s", agent.DisplayName, req.ActionType),
-			Description:    fmt.Sprintf("Agent '%s' attempted action '%s' on resource '%s' without required capability. Reason: %s",
+			Description: fmt.Sprintf("Agent '%s' attempted action '%s' on resource '%s' without required capability. Reason: %s",
 				agent.DisplayName, req.ActionType, req.Resource, reason),
-			ResourceType:   "agent",
-			ResourceID:     agentID,
+			ResourceType: "agent",
+			ResourceID:   agentID,
 		}
 
 		// Create alert (non-blocking - don't fail the verification if alert creation fails)
@@ -618,6 +615,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	// Get agent credentials (decrypts private key)
 	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
 	if err != nil {
+		fmt.Println(err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve agent credentials",
 		})
@@ -851,19 +849,19 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":            "add_mcp_servers",
-			"added_servers":     addedServers,
-			"detected_method":   req.DetectedMethod,
-			"total_talks_to":    len(updatedAgent.TalksTo),
-			"auth_method":       c.Locals("auth_method"), // API key or JWT
+			"action":          "add_mcp_servers",
+			"added_servers":   addedServers,
+			"detected_method": req.DetectedMethod,
+			"total_talks_to":  len(updatedAgent.TalksTo),
+			"auth_method":     c.Locals("auth_method"), // API key or JWT
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"message":        fmt.Sprintf("Successfully added %d MCP server(s)", len(addedServers)),
-		"talks_to":       updatedAgent.TalksTo,
-		"added_servers":  addedServers,
-		"total_count":    len(updatedAgent.TalksTo),
+		"message":       fmt.Sprintf("Successfully added %d MCP server(s)", len(addedServers)),
+		"talks_to":      updatedAgent.TalksTo,
+		"added_servers": addedServers,
+		"total_count":   len(updatedAgent.TalksTo),
 	})
 }
 
@@ -931,16 +929,16 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":          "remove_mcp_server",
-			"removed_server":  mcpServerID,
-			"total_talks_to":  len(updatedAgent.TalksTo),
+			"action":         "remove_mcp_server",
+			"removed_server": mcpServerID,
+			"total_talks_to": len(updatedAgent.TalksTo),
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"message":       "Successfully removed MCP server",
-		"talks_to":      updatedAgent.TalksTo,
-		"total_count":   len(updatedAgent.TalksTo),
+		"message":     "Successfully removed MCP server",
+		"talks_to":    updatedAgent.TalksTo,
+		"total_count": len(updatedAgent.TalksTo),
 	})
 }
 
@@ -991,10 +989,10 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 	// TODO: Implement full server details lookup
 
 	return c.JSON(fiber.Map{
-		"agent_id":     agentID.String(),
-		"agent_name":   agent.Name,
-		"talks_to":     agent.TalksTo,
-		"total":        len(agent.TalksTo),
+		"agent_id":   agentID.String(),
+		"agent_name": agent.Name,
+		"talks_to":   agent.TalksTo,
+		"total":      len(agent.TalksTo),
 	})
 }
 
@@ -1079,12 +1077,12 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 			c.IP(),
 			c.Get("User-Agent"),
 			map[string]interface{}{
-				"action":             "auto_detect_mcps",
-				"detected_count":     len(result.DetectedServers),
-				"registered_count":   result.RegisteredCount,
-				"mapped_count":       result.MappedCount,
-				"config_path":        req.ConfigPath,
-				"auto_register":      req.AutoRegister,
+				"action":           "auto_detect_mcps",
+				"detected_count":   len(result.DetectedServers),
+				"registered_count": result.RegisteredCount,
+				"mapped_count":     result.MappedCount,
+				"config_path":      req.ConfigPath,
+				"auto_register":    req.AutoRegister,
 			},
 		)
 	}
@@ -1146,34 +1144,34 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 		}
 	}
 	capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
-    if err != nil {
-        capabilities = []*domain.AgentCapability{}
-    }
+	if err != nil {
+		capabilities = []*domain.AgentCapability{}
+	}
 	// Return agent details (excluding sensitive private key)
 	return c.JSON(fiber.Map{
 		"success": true,
 		"agent": fiber.Map{
-			"id":                   agent.ID,
-			"organization_id":      agent.OrganizationID,
-			"name":                 agent.Name,
-			"display_name":         agent.DisplayName,
-			"description":          agent.Description,
-			"agent_type":           agent.AgentType,
-			"status":               agent.Status,
-			"version":              agent.Version,
-			"public_key":           agent.PublicKey,
-			"trust_score":          agent.TrustScore,
-			"verified_at":          agent.VerifiedAt,
-			"created_at":           agent.CreatedAt,
-			"updated_at":           agent.UpdatedAt,
-			"key_algorithm":        agent.KeyAlgorithm,
-			"key_created_at":       agent.KeyCreatedAt,
-			"key_expires_at":       agent.KeyExpiresAt,
-			"rotation_count":       agent.RotationCount,
-			"talks_to":             agent.TalksTo,
-			"capabilities":         capabilities,
+			"id":                         agent.ID,
+			"organization_id":            agent.OrganizationID,
+			"name":                       agent.Name,
+			"display_name":               agent.DisplayName,
+			"description":                agent.Description,
+			"agent_type":                 agent.AgentType,
+			"status":                     agent.Status,
+			"version":                    agent.Version,
+			"public_key":                 agent.PublicKey,
+			"trust_score":                agent.TrustScore,
+			"verified_at":                agent.VerifiedAt,
+			"created_at":                 agent.CreatedAt,
+			"updated_at":                 agent.UpdatedAt,
+			"key_algorithm":              agent.KeyAlgorithm,
+			"key_created_at":             agent.KeyCreatedAt,
+			"key_expires_at":             agent.KeyExpiresAt,
+			"rotation_count":             agent.RotationCount,
+			"talks_to":                   agent.TalksTo,
+			"capabilities":               capabilities,
 			"capability_violation_count": agent.CapabilityViolationCount,
-			"is_compromised":       agent.IsCompromised,
+			"is_compromised":             agent.IsCompromised,
 		},
 	})
 }
@@ -1290,11 +1288,11 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name":       agent.Name,
-			"old_trust_score":  agent.TrustScore,
-			"new_trust_score":  req.Score,
-			"reason":           req.Reason,
-			"action":           "manual_override",
+			"agent_name":      agent.Name,
+			"old_trust_score": agent.TrustScore,
+			"new_trust_score": req.Score,
+			"reason":          req.Reason,
+			"action":          "manual_override",
 		},
 	)
 
@@ -1638,4 +1636,3 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 		"key_expires_at":      agent.KeyExpiresAt,
 	})
 }
-

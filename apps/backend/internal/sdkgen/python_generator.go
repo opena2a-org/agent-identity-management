@@ -349,7 +349,17 @@ class AIMClient:
 
         try:
             private_key_bytes = base64.b64decode(private_key)
-            self.signing_key = SigningKey(private_key_bytes)
+            # Ed25519 private key from Go is 64 bytes (32-byte seed + 32-byte public key)
+            # PyNaCl SigningKey expects only the 32-byte seed
+            if len(private_key_bytes) == 64:
+                # Extract seed (first 32 bytes)
+                seed = private_key_bytes[:32]
+                self.signing_key = SigningKey(seed)
+            elif len(private_key_bytes) == 32:
+                # Already just the seed
+                self.signing_key = SigningKey(private_key_bytes)
+            else:
+                raise ValueError(f"Invalid private key length: {len(private_key_bytes)} bytes (expected 32 or 64)")
         except Exception as e:
             raise ConfigurationError(f"Invalid private key format: {e}")
 
@@ -440,7 +450,7 @@ class AIMClient:
         try:
             result = self._make_request(
                 method="POST",
-                endpoint="/api/v1/verifications",
+                endpoint="/api/v1/sdk-api/verifications",
                 data=request_payload
             )
 
@@ -477,7 +487,7 @@ class AIMClient:
             try:
                 result = self._make_request(
                     method="GET",
-                    endpoint=f"/api/v1/verifications/{verification_id}"
+                endpoint=f"/api/v1/sdk-api/verifications/{verification_id}"
                 )
 
                 status = result.get("status")
@@ -514,12 +524,15 @@ class AIMClient:
         try:
             self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/verifications/{verification_id}/result",
+                endpoint=f"/api/v1/sdk-api/verifications/{verification_id}/result",
                 data={
-                    "success": success,
-                    "result_summary": result_summary,
-                    "error_message": error_message,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "result": "success" if success else "failure",
+                    "reason": error_message or result_summary,
+                    "metadata": {
+                        "result_summary": result_summary,
+                        "error_message": error_message,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
                 }
             )
         except Exception:
