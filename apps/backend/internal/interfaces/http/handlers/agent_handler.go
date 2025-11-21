@@ -586,101 +586,102 @@ func (h *AgentHandler) LogActionResult(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /agents/{id}/sdk [get]
 func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	agentID, err := uuid.Parse(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
-	}
+		orgID := c.Locals("organization_id").(uuid.UUID)
+		agentID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid agent ID",
+			})
+		}
 
-	// Get SDK language (default: python)
-	language := c.Query("lang", "python")
-	if language != "python" && language != "nodejs" && language != "go" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid language. Supported: python, nodejs, go",
-		})
-	}
+		// Get SDK language (default: python)
+		language := c.Query("lang", "python")
+		if language != "python" && language != "nodejs" && language != "go" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid language. Supported: python, nodejs, go",
+			})
+		}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
-	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
-	}
+		// Verify agent belongs to organization
+		agent, err := h.agentService.GetAgent(c.Context(), agentID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Agent not found",
+			})
+		}
+		if agent.OrganizationID != orgID {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Access denied",
+			})
+		}
 
-	// Get agent credentials (decrypts private key)
-	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve agent credentials",
-		})
-	}
+		// Get agent credentials (decrypts private key)
+		publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
+		if err != nil {
+			fmt.Println(err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{	
+				"error": "Failed to retrieve agent credentials",
+			})
+		}
 
-	// Generate SDK package based on language
-	var sdkBytes []byte
-	var filename string
+		// Generate SDK package based on language
+		var sdkBytes []byte
+		var filename string
 
-	switch language {
-	case "python":
-		sdkBytes, err = sdkgen.GeneratePythonSDK(sdkgen.PythonSDKConfig{
-			AgentID:    agentID.String(),
-			PublicKey:  publicKey,
-			PrivateKey: privateKey,
-			AIMURL:     getAIMBaseURL(c),
-			AgentName:  agent.Name,
-			Version:    "1.0.0",
-		})
-		filename = fmt.Sprintf("aim-sdk-%s-python.zip", agent.Name)
+		switch language {
+		case "python":
+			sdkBytes, err = sdkgen.GeneratePythonSDK(sdkgen.PythonSDKConfig{
+				AgentID:    agentID.String(),
+				PublicKey:  publicKey,
+				PrivateKey: privateKey,
+				AIMURL:     getAIMBaseURL(c),
+				AgentName:  agent.Name,
+				Version:    "1.0.0",
+			})
+			filename = fmt.Sprintf("aim-sdk-%s-python.zip", agent.Name)
 
-	case "nodejs":
-		// TODO: Implement Node.js SDK generator
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"error": "Node.js SDK not yet implemented",
-		})
+		case "nodejs":
+			// TODO: Implement Node.js SDK generator
+			return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+				"error": "Node.js SDK not yet implemented",
+			})
 
-	case "go":
-		// TODO: Implement Go SDK generator
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"error": "Go SDK not yet implemented",
-		})
-	}
+		case "go":
+			// TODO: Implement Go SDK generator
+			return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+				"error": "Go SDK not yet implemented",
+			})
+		}
 
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate SDK",
-		})
-	}
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to generate SDK",
+			})
+		}
 
-	// Set response headers for file download
-	c.Set("Content-Type", "application/zip")
-	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Set("Content-Length", fmt.Sprintf("%d", len(sdkBytes)))
+		// Set response headers for file download
+		c.Set("Content-Type", "application/zip")
+		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Set("Content-Length", fmt.Sprintf("%d", len(sdkBytes)))
 
-	// Log audit
-	userID := c.Locals("user_id").(uuid.UUID)
-	h.auditService.LogAction(
-		c.Context(),
-		orgID,
-		userID,
-		domain.AuditActionView,
-		"agent_sdk",
-		agentID,
-		c.IP(),
-		c.Get("User-Agent"),
-		map[string]interface{}{
-			"language":   language,
-			"agent_name": agent.Name,
-		},
-	)
+		// Log audit
+		userID := c.Locals("user_id").(uuid.UUID)
+		h.auditService.LogAction(
+			c.Context(),
+			orgID,
+			userID,
+			domain.AuditActionView,
+			"agent_sdk",
+			agentID,
+			c.IP(),
+			c.Get("User-Agent"),
+			map[string]interface{}{
+				"language":   language,
+				"agent_name": agent.Name,
+			},
+		)
 
-	return c.Send(sdkBytes)
+		return c.Send(sdkBytes)
 }
 
 // GetCredentials returns the agent's cryptographic credentials (public and private keys)

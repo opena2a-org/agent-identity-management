@@ -17,10 +17,10 @@ import (
 
 // VerificationHandler handles agent action verification requests
 type VerificationHandler struct {
-	agentService              *application.AgentService
-	auditService              *application.AuditService
-	trustService              *application.TrustCalculator
-	verificationEventService  *application.VerificationEventService
+	agentService             *application.AgentService
+	auditService             *application.AuditService
+	trustService             *application.TrustCalculator
+	verificationEventService *application.VerificationEventService
 }
 
 // NewVerificationHandler creates a new verification handler
@@ -52,12 +52,12 @@ type VerificationRequest struct {
 
 // VerificationResponse represents the verification result
 type VerificationResponse struct {
-	ID          string    `json:"id"`
-	Status      string    `json:"status"` // "approved", "denied", "pending"
-	ApprovedBy  string    `json:"approved_by,omitempty"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
-	DenialReason string   `json:"denial_reason,omitempty"`
-	TrustScore  float64   `json:"trust_score"`
+	ID           string    `json:"id"`
+	Status       string    `json:"status"` // "approved", "denied", "pending"
+	ApprovedBy   string    `json:"approved_by,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	DenialReason string    `json:"denial_reason,omitempty"`
+	TrustScore   float64   `json:"trust_score"`
 }
 
 // CreateVerification handles POST /api/v1/verifications
@@ -184,12 +184,12 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	if shouldCreateAlert {
 		// Determine severity based on action type and context
 		severity := h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
-		
+
 		alertTitle := fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 		alertDescription := fmt.Sprintf(
 			"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-			"This action was logged but allowed for monitoring purposes. "+
-			"Trust Score: %.2f. Verification ID: %s",
+				"This action was logged but allowed for monitoring purposes. "+
+				"Trust Score: %.2f. Verification ID: %s",
 			agent.Name, agent.ID.String(), req.ActionType, req.Resource,
 			trustScore, verificationID.String(),
 		)
@@ -309,6 +309,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	} else {
 		fmt.Printf("✅ Verification event created: ID=%s, OrgID=%s, AgentID=%s\n",
 			event.ID, event.OrganizationID, *event.AgentID)
+		// Use the actual database ID from the created event
+		verificationID = event.ID
 	}
 
 	// Build response
@@ -392,7 +394,7 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 
 	// Handle resource carefully - Python SDK uses null, not empty string
 	if req.Resource == "" {
-		signaturePayload["resource"] = nil  // Match Python's null
+		signaturePayload["resource"] = nil // Match Python's null
 	} else {
 		signaturePayload["resource"] = req.Resource
 	}
@@ -479,14 +481,14 @@ func (h *VerificationHandler) calculateActionTrustScore(agent *domain.Agent, act
 func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64 {
 	riskLevels := map[string]float64{
 		// Low risk (read-only)
-		"read_database":   1.0,
-		"read_file":       1.0,
-		"query_api":       1.0,
+		"read_database": 1.0,
+		"read_file":     1.0,
+		"query_api":     1.0,
 		// Medium risk (modifications)
-		"write_database":  0.8,
-		"write_file":      0.8,
-		"send_email":      0.8,
-		"modify_config":   0.7,
+		"write_database": 0.8,
+		"write_file":     0.8,
+		"send_email":     0.8,
+		"modify_config":  0.7,
 		// High risk (destructive)
 		"delete_data":     0.5,
 		"delete_file":     0.5,
@@ -510,9 +512,9 @@ func (h *VerificationHandler) determineVerificationStatus(
 ) (status string, denialReason string) {
 	// Minimum trust score thresholds
 	const (
-		MinTrustForLowRisk    = 0.3  // 30%
-		MinTrustForMediumRisk = 0.5  // 50%
-		MinTrustForHighRisk   = 0.7  // 70%
+		MinTrustForLowRisk    = 0.3 // 30%
+		MinTrustForMediumRisk = 0.5 // 50%
+		MinTrustForHighRisk   = 0.7 // 70%
 	)
 
 	// Determine required trust based on action type
@@ -614,9 +616,11 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/verifications/{id}/result [post]
 func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
+	// 📍 LOG 2: HANDLER ENTRY
+	// requestID := c.Locals("request_id")
 	verificationID := c.Params("id")
 	if verificationID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{		
 			"error": "verification_id is required",
 		})
 	}
@@ -648,6 +652,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 		})
 	}
 
+
 	// Map result string to VerificationResult type
 	var result domain.VerificationResult
 	if req.Result == "success" {
@@ -662,6 +667,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 		reasonPtr = &req.Reason
 	}
 
+
 	// Update verification event in database
 	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, reasonPtr, req.Metadata)
 	if err != nil {
@@ -669,6 +675,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 			"error": "Verification not found or update failed",
 		})
 	}
+
 
 	// Return success response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -693,7 +700,7 @@ func (h *VerificationHandler) determineAlertSeverity(actionType string, context 
 			return domain.AlertSeverityInfo
 		}
 	}
-	
+
 	// Check context for risk_level
 	if context != nil {
 		if contextRiskLevel, ok := context["risk_level"].(string); ok {
