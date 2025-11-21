@@ -314,17 +314,12 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 			continue
 		}
 
-		// TODO: Implement actual anomaly detection logic
-		// For MVP, this would check:
-		// - API call rate spikes (api_rate_threshold from rules)
-		// - Off-hours access (check_off_hours from rules)
-		// - Unusual resource access patterns
+		// Note: This policy type is available for future enhancement.
+		// Currently acts as a placeholder for custom anomaly detection.
+		// Admins can configure it but it won't trigger unless extended.
 
-		fmt.Printf("✅ Unusual Activity Policy '%s' evaluated for agent %s\n",
+		fmt.Printf("✅ Unusual Activity Policy '%s' evaluated for agent %s (currently inactive)\n",
 			policy.Name, agent.Name)
-
-		// For now, we don't trigger any unusual activity (needs historical data)
-		// This will be enhanced with actual anomaly detection in future iterations
 	}
 
 	return false, false, "", nil
@@ -423,17 +418,12 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			continue
 		}
 
-		// TODO: Implement actual config drift detection
-		// For MVP, this would check:
-		// - Agent capability changes
-		// - Public key rotations without approval
-		// - Permission escalations
+		// Note: This policy type is available for future enhancement.
+		// Could be extended to detect capability changes, key rotations, etc.
+		// Admins can configure it but it won't trigger unless extended.
 
-		fmt.Printf("✅ Config Drift Policy '%s' evaluated for agent %s\n",
+		fmt.Printf("✅ Config Drift Policy '%s' evaluated for agent %s (currently inactive)\n",
 			policy.Name, agent.Name)
-
-		// For now, we don't trigger config drift (needs historical baseline)
-		// This will be enhanced with actual drift detection in future iterations
 	}
 
 	return false, false, "", nil
@@ -470,15 +460,12 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 			continue
 		}
 
-		// Check for unauthorized access patterns
-		// This is typically triggered when agent attempts to access resources
-		// outside their defined scope/capabilities
+		// Note: Most unauthorized access is handled by capability_violation policy.
+		// This policy type is available for future custom access control rules.
+		// Admins can configure it but it won't trigger unless extended.
 
-		fmt.Printf("✅ Unauthorized Access Policy '%s' evaluated for agent %s\n",
+		fmt.Printf("✅ Unauthorized Access Policy '%s' evaluated for agent %s (currently inactive)\n",
 			policy.Name, agent.Name)
-
-		// For now, unauthorized access is primarily handled by capability violation
-		// This policy type can be enhanced with more specific access control rules
 	}
 
 	return false, false, "", nil

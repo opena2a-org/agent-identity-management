@@ -3,6 +3,7 @@ package metrics
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -185,13 +186,48 @@ func PrometheusMiddleware() fiber.Handler {
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().StatusCode())
 		method := c.Method()
-		path := c.Path()
+		path := normalizePath(c.Path())
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(method, path, status).Observe(duration)
 
 		return err
 	}
+}
+
+// normalizePath normalizes request paths to prevent high cardinality in Prometheus
+// Replaces UUIDs and dynamic IDs with placeholders to avoid label explosion
+func normalizePath(path string) string {
+	// Limit path length to prevent truncation issues
+	if len(path) > 100 {
+		path = path[:100]
+	}
+
+	// Replace common dynamic segments with placeholders
+	// UUIDs: /agents/550e8400-e29b-41d4-a716-446655440000 -> /agents/:id
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		// Replace UUIDs (8-4-4-4-12 format)
+		if len(part) == 36 && strings.Count(part, "-") == 4 {
+			parts[i] = ":id"
+		}
+		// Replace numeric IDs
+		if len(part) > 0 && isNumeric(part) {
+			parts[i] = ":id"
+		}
+	}
+
+	return strings.Join(parts, "/")
+}
+
+// isNumeric checks if a string contains only digits
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // RecordSecurityAlert records a security alert
