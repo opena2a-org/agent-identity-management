@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   Loader2,
@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { api, Agent } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
+import { toast } from "sonner";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 
 interface RegisterAgentModalProps {
   isOpen: boolean;
@@ -88,11 +90,31 @@ export function RegisterAgentModal({
     capabilities: [],
   });
   const [formData, setFormData] = useState<FormData>(createEmptyFormData());
+
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const displayNameRef = useRef<HTMLInputElement | null>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const versionRef = useRef<HTMLInputElement | null>(null);
+  const certificateUrlRef = useRef<HTMLInputElement | null>(null);
+  const repositoryUrlRef = useRef<HTMLInputElement | null>(null);
+  const documentationUrlRef = useRef<HTMLInputElement | null>(null);
   const [initialFormData, setInitialFormData] = useState<FormData>(
     createEmptyFormData()
   );
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
   const [newMcpServer, setNewMcpServer] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (error && errorBannerRef.current) {
+      requestAnimationFrame(() => {
+        errorBannerRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    }
+  }, [error]);
 
   // Update form data when initialData or editMode changes
   useEffect(() => {
@@ -113,9 +135,9 @@ export function RegisterAgentModal({
       setInitialFormData(mapped);
     } else if (isOpen && !editMode) {
       // Reset form for new agent
-        const empty = createEmptyFormData();
-        setFormData(empty);
-        setInitialFormData(empty);
+      const empty = createEmptyFormData();
+      setFormData(empty);
+      setInitialFormData(empty);
     }
   }, [isOpen, editMode, initialData]);
 
@@ -158,6 +180,32 @@ export function RegisterAgentModal({
     }
 
     setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      requestAnimationFrame(() => {
+        if (newErrors.name && nameRef.current) {
+          nameRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          nameRef.current.focus();
+        } else if (newErrors.display_name && displayNameRef.current) {
+          displayNameRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          displayNameRef.current.focus();
+        } else if (newErrors.description && descriptionRef.current) {
+          descriptionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          descriptionRef.current.focus();
+        } else if (newErrors.version && versionRef.current) {
+          versionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          versionRef.current.focus();
+        } else if (newErrors.certificate_url && certificateUrlRef.current) {
+          certificateUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          certificateUrlRef.current.focus();
+        } else if (newErrors.repository_url && repositoryUrlRef.current) {
+          repositoryUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          repositoryUrlRef.current.focus();
+        } else if (newErrors.documentation_url && documentationUrlRef.current) {
+          documentationUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          documentationUrlRef.current.focus();
+        }
+      });
+    }
     return Object.keys(newErrors).length === 0;
   };
 
@@ -195,7 +243,7 @@ export function RegisterAgentModal({
         agentData.talks_to = formData.talks_to;
       }
       agentData.capabilities = formData.capabilities;
-      
+
       const result =
         editMode && initialData?.id
           ? await api.updateAgent(initialData.id, agentData)
@@ -204,13 +252,19 @@ export function RegisterAgentModal({
       setSuccess(true);
       setCreatedAgent(result);
 
-      // Don't auto-close for new registrations - let user download SDK first
       if (editMode) {
+        toast.success("Agent updated successfully", {
+          description: `${result.display_name || result.name} has been updated.`,
+        });
         setTimeout(() => {
           onSuccess?.(result);
           onClose();
           resetForm();
-        }, 1500);
+        }, 1200);
+      } else {
+        toast.success("Agent created successfully", {
+          description: `${result.display_name || result.name} is ready to integrate.`,
+        });
       }
     } catch (err) {
       console.error("Failed to save agent:", err);
@@ -336,7 +390,7 @@ export function RegisterAgentModal({
     if (success) return false;
 
     // Check if any field has been filled out
-   return JSON.stringify(formData) !== JSON.stringify(initialFormData);
+    return JSON.stringify(formData) !== JSON.stringify(initialFormData);
   };
 
   // Handle click on overlay (outside modal)
@@ -407,7 +461,17 @@ export function RegisterAgentModal({
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="relative min-h-[400px] p-6 space-y-6">
+          <LoadingOverlay
+            show={loading || (editMode && success)}
+            label={
+              loading
+                ? editMode
+                  ? "Updating agent..."
+                  : "Registering agent..."
+                : "Processing..."
+            }
+          />
           {/* Success Message */}
           {success && !editMode && createdAgent && (
             <div className="space-y-4">
@@ -718,19 +782,12 @@ export function RegisterAgentModal({
             </div>
           )}
 
-          {/* Edit Mode Success Message */}
-          {success && editMode && (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <p className="text-sm text-green-800 dark:text-green-300">
-                Agent updated successfully!
-              </p>
-            </div>
-          )}
-
           {/* Error Message */}
           {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
+            <div
+              ref={errorBannerRef}
+              className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3"
+            >
               <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
               <div className="flex-1">
                 <p className="text-sm text-red-800 dark:text-red-300">
@@ -755,6 +812,7 @@ export function RegisterAgentModal({
                     Agent Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    ref={nameRef}
                     type="text"
                     value={formData.name}
                     onChange={(e) =>
@@ -763,17 +821,17 @@ export function RegisterAgentModal({
                     placeholder="e.g., claude-assistant"
                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none text-gray-900 dark:text-gray-100 ${
                       // Styling for normal/active state
-                      loading || success || editMode 
-                        ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed border-gray-300 dark:border-gray-600 focus:ring-0" 
+                      loading || success || editMode
+                        ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed border-gray-300 dark:border-gray-600 focus:ring-0"
                         : "bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 border-gray-200 dark:border-gray-700"
-                    } ${
+                      } ${
                       // Styling for error state (overrides normal/active styling if present)
                       errors.name
                         ? "border-red-500"
                         : ""
-                    }`}
+                      }`}
                     disabled={loading || success || editMode}
-                />
+                  />
                   {errors.name && (
                     <p className="mt-1 text-xs text-red-500">{errors.name}</p>
                   )}
@@ -785,17 +843,17 @@ export function RegisterAgentModal({
                     Display Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    ref={displayNameRef}
                     type="text"
                     value={formData.display_name}
                     onChange={(e) =>
                       setFormData({ ...formData, display_name: e.target.value })
                     }
                     placeholder="e.g., Claude AI Assistant"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                      errors.display_name
-                        ? "border-red-500"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.display_name
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
+                      }`}
                     disabled={loading || success}
                   />
                   {errors.display_name && (
@@ -811,6 +869,7 @@ export function RegisterAgentModal({
                     Description
                   </label>
                   <textarea
+                    ref={descriptionRef}
                     value={formData.description}
                     onChange={(e) =>
                       setFormData({ ...formData, description: e.target.value })
@@ -851,17 +910,17 @@ export function RegisterAgentModal({
                       Version <span className="text-red-500">*</span>
                     </label>
                     <input
+                      ref={versionRef}
                       type="text"
                       value={formData.version}
                       onChange={(e) =>
                         setFormData({ ...formData, version: e.target.value })
                       }
                       placeholder="1.0.0"
-                      className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                        errors.version
-                          ? "border-red-500"
-                          : "border-gray-200 dark:border-gray-700"
-                      }`}
+                      className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.version
+                        ? "border-red-500"
+                        : "border-gray-200 dark:border-gray-700"
+                        }`}
                       disabled={loading || success}
                     />
                     {errors.version && (
@@ -885,6 +944,7 @@ export function RegisterAgentModal({
                     Certificate URL
                   </label>
                   <input
+                    ref={certificateUrlRef}
                     type="url"
                     value={formData.certificate_url}
                     onChange={(e) =>
@@ -894,11 +954,10 @@ export function RegisterAgentModal({
                       })
                     }
                     placeholder="https://example.com/certs/agent-cert.pem"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                      errors.certificate_url
-                        ? "border-red-500"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.certificate_url
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
+                      }`}
                     disabled={loading || success}
                   />
                   {errors.certificate_url && (
@@ -914,6 +973,7 @@ export function RegisterAgentModal({
                     Repository URL
                   </label>
                   <input
+                    ref={repositoryUrlRef}
                     type="url"
                     value={formData.repository_url}
                     onChange={(e) =>
@@ -923,11 +983,10 @@ export function RegisterAgentModal({
                       })
                     }
                     placeholder="https://github.com/yourusername/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                      errors.repository_url
-                        ? "border-red-500"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.repository_url
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
+                      }`}
                     disabled={loading || success}
                   />
                   {errors.repository_url && (
@@ -943,6 +1002,7 @@ export function RegisterAgentModal({
                     Documentation URL
                   </label>
                   <input
+                    ref={documentationUrlRef}
                     type="url"
                     value={formData.documentation_url}
                     onChange={(e) =>
@@ -952,11 +1012,10 @@ export function RegisterAgentModal({
                       })
                     }
                     placeholder="https://docs.example.com/agents/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                      errors.documentation_url
-                        ? "border-red-500"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.documentation_url
+                      ? "border-red-500"
+                      : "border-gray-200 dark:border-gray-700"
+                      }`}
                     disabled={loading || success}
                   />
                   {errors.documentation_url && (
@@ -1086,7 +1145,7 @@ export function RegisterAgentModal({
                 <button
                   type="submit"
                   disabled={loading || success || JSON.stringify(formData) === JSON.stringify(initialFormData)}
-                  className=                
+                  className=
                   "px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}

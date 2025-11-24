@@ -24,6 +24,7 @@ import { MCPDetailModal } from "@/components/modals/mcp-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
+import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 interface MCPServer {
   id: string;
   name: string;
@@ -260,6 +261,9 @@ export default function MCPServersPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedMCP, setSelectedMCP] = useState<MCPServer | null>(null);
   const [editingMCP, setEditingMCP] = useState<MCPServer | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MCPServer | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Role (for action permissions)
   const [userRole, setUserRole] = useState<
@@ -393,16 +397,29 @@ export default function MCPServersPage() {
     setShowRegisterModal(true);
   };
 
-  const handleDeleteMCP = async (mcp: MCPServer) => {
-    if (!confirm(`Are you sure you want to delete ${mcp.name}?`)) return;
+  const requestDeleteMCP = (mcp: MCPServer) => {
+    setDeleteTarget(mcp);
+    setShowDeleteConfirm(true);
+  };
 
+  const handleDeleteMCP = async () => {
+    if (!deleteTarget) return;
+
+    setDeleteLoading(true);
     try {
-      await api.deleteMCPServer(mcp.id);
-      setMcpServers(mcpServers.filter((s) => s.id !== mcp.id));
-      setShowDetailModal(false);
+      await api.deleteMCPServer(deleteTarget.id);
+      setMcpServers((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      if (selectedMCP?.id === deleteTarget.id) {
+        setShowDetailModal(false);
+        setSelectedMCP(null);
+      }
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
     } catch (err) {
       console.error("Failed to delete MCP server:", err);
       alert("Failed to delete MCP server");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -589,7 +606,7 @@ export default function MCPServersPage() {
                       )}
                       {(userRole === "admin" || userRole === "manager") && (
                         <button
-                          onClick={() => handleDeleteMCP(server)}
+                          onClick={() => requestDeleteMCP(server)}
                           className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           title="Delete"
                         >
@@ -684,7 +701,25 @@ export default function MCPServersPage() {
         }}
         mcp={selectedMCP}
         onEdit={handleEditMCP}
-        onDelete={handleDeleteMCP}
+        onDelete={requestDeleteMCP}
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete MCP Server"
+        message={`Are you sure you want to delete "${
+          deleteTarget?.name ?? "this MCP server"
+        }"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleteLoading}
+        onConfirm={handleDeleteMCP}
+        onCancel={() => {
+          if (deleteLoading) return;
+          setShowDeleteConfirm(false);
+          setDeleteTarget(null);
+        }}
       />
     </div>
     </AuthGuard>
