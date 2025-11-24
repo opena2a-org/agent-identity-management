@@ -3,17 +3,45 @@ package metrics
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/expfmt"
 )
 
+// Custom registry to avoid conflicts with default registry
+var registry = prometheus.NewRegistry()
+
+func init() {
+	// Register all metrics with custom registry
+	registry.MustRegister(
+		httpRequestsTotal,
+		httpRequestDuration,
+		securityAlertsTotal,
+		securityThreatsTotal,
+		trustScoreGauge,
+		trustScoreHistogram,
+		agentOperationsTotal,
+		activeAgentsGauge,
+		mcpServersTotal,
+		mcpAttestationsTotal,
+		verificationEventsTotal,
+		verificationDuration,
+		complianceChecksTotal,
+		complianceViolationsTotal,
+		databaseConnectionsActive,
+		databaseQueryDuration,
+		apiKeyOperationsTotal,
+		activeAPIKeysGauge,
+		auditLogsTotal,
+	)
+}
+
 var (
 	// HTTP metrics
-	httpRequestsTotal = promauto.NewCounterVec(
+	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_http_requests_total",
 			Help: "Total number of HTTP requests",
@@ -21,7 +49,7 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	httpRequestDuration = promauto.NewHistogramVec(
+	httpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "aim_http_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
@@ -31,7 +59,7 @@ var (
 	)
 
 	// Security metrics
-	securityAlertsTotal = promauto.NewCounterVec(
+	securityAlertsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_security_alerts_total",
 			Help: "Total number of security alerts",
@@ -39,7 +67,7 @@ var (
 		[]string{"severity", "type"},
 	)
 
-	securityThreatsTotal = promauto.NewCounterVec(
+	securityThreatsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_security_threats_total",
 			Help: "Total number of detected security threats",
@@ -48,7 +76,7 @@ var (
 	)
 
 	// Trust score metrics
-	trustScoreGauge = promauto.NewGaugeVec(
+	trustScoreGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "aim_trust_score",
 			Help: "Current trust score of agents",
@@ -56,7 +84,7 @@ var (
 		[]string{"agent_id", "agent_name"},
 	)
 
-	trustScoreHistogram = promauto.NewHistogram(
+	trustScoreHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "aim_trust_score_distribution",
 			Help:    "Distribution of trust scores across all agents",
@@ -65,7 +93,7 @@ var (
 	)
 
 	// Agent metrics
-	agentOperationsTotal = promauto.NewCounterVec(
+	agentOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_agent_operations_total",
 			Help: "Total number of agent operations",
@@ -73,7 +101,7 @@ var (
 		[]string{"operation", "status"},
 	)
 
-	activeAgentsGauge = promauto.NewGauge(
+	activeAgentsGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "aim_active_agents",
 			Help: "Number of currently active agents",
@@ -81,14 +109,14 @@ var (
 	)
 
 	// MCP Server metrics
-	mcpServersTotal = promauto.NewGauge(
+	mcpServersTotal = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "aim_mcp_servers_total",
 			Help: "Total number of registered MCP servers",
 		},
 	)
 
-	mcpAttestationsTotal = promauto.NewCounterVec(
+	mcpAttestationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_mcp_attestations_total",
 			Help: "Total number of MCP attestations",
@@ -97,7 +125,7 @@ var (
 	)
 
 	// Verification metrics
-	verificationEventsTotal = promauto.NewCounterVec(
+	verificationEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_verification_events_total",
 			Help: "Total number of verification events",
@@ -105,7 +133,7 @@ var (
 		[]string{"event_type", "status"},
 	)
 
-	verificationDuration = promauto.NewHistogramVec(
+	verificationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "aim_verification_duration_seconds",
 			Help:    "Duration of verification events in seconds",
@@ -115,7 +143,7 @@ var (
 	)
 
 	// Compliance metrics
-	complianceChecksTotal = promauto.NewCounterVec(
+	complianceChecksTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_compliance_checks_total",
 			Help: "Total number of compliance checks",
@@ -123,7 +151,7 @@ var (
 		[]string{"check_type", "status"},
 	)
 
-	complianceViolationsTotal = promauto.NewCounter(
+	complianceViolationsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "aim_compliance_violations_total",
 			Help: "Total number of compliance violations detected",
@@ -131,14 +159,14 @@ var (
 	)
 
 	// Database metrics
-	databaseConnectionsActive = promauto.NewGauge(
+	databaseConnectionsActive = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "aim_database_connections_active",
 			Help: "Number of active database connections",
 		},
 	)
 
-	databaseQueryDuration = promauto.NewHistogramVec(
+	databaseQueryDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "aim_database_query_duration_seconds",
 			Help:    "Database query duration in seconds",
@@ -148,7 +176,7 @@ var (
 	)
 
 	// API Key metrics
-	apiKeyOperationsTotal = promauto.NewCounterVec(
+	apiKeyOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_api_key_operations_total",
 			Help: "Total number of API key operations",
@@ -156,7 +184,7 @@ var (
 		[]string{"operation", "status"},
 	)
 
-	activeAPIKeysGauge = promauto.NewGauge(
+	activeAPIKeysGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "aim_active_api_keys",
 			Help: "Number of currently active API keys",
@@ -164,7 +192,7 @@ var (
 	)
 
 	// Audit log metrics
-	auditLogsTotal = promauto.NewCounterVec(
+	auditLogsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aim_audit_logs_total",
 			Help: "Total number of audit log entries",
@@ -176,6 +204,11 @@ var (
 // PrometheusMiddleware collects HTTP metrics for all requests
 func PrometheusMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
+		// Skip metrics collection for the /metrics endpoint itself to avoid circular recording
+		if c.Path() == "/metrics" {
+			return c.Next()
+		}
+
 		start := time.Now()
 
 		// Process request
@@ -185,13 +218,48 @@ func PrometheusMiddleware() fiber.Handler {
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().StatusCode())
 		method := c.Method()
-		path := c.Path()
+		path := normalizePath(c.Path())
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(method, path, status).Observe(duration)
 
 		return err
 	}
+}
+
+// normalizePath normalizes request paths to prevent high cardinality in Prometheus
+// Replaces UUIDs and dynamic IDs with placeholders to avoid label explosion
+func normalizePath(path string) string {
+	// Limit path length to prevent truncation issues
+	if len(path) > 100 {
+		path = path[:100]
+	}
+
+	// Replace common dynamic segments with placeholders
+	// UUIDs: /agents/550e8400-e29b-41d4-a716-446655440000 -> /agents/:id
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		// Replace UUIDs (8-4-4-4-12 format)
+		if len(part) == 36 && strings.Count(part, "-") == 4 {
+			parts[i] = ":id"
+		}
+		// Replace numeric IDs
+		if len(part) > 0 && isNumeric(part) {
+			parts[i] = ":id"
+		}
+	}
+
+	return strings.Join(parts, "/")
+}
+
+// isNumeric checks if a string contains only digits
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // RecordSecurityAlert records a security alert
@@ -282,8 +350,8 @@ func PrometheusHandler() fiber.Handler {
 		// Set response headers for Prometheus text format
 		c.Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 
-		// Gather metrics from the default registry
-		metricFamilies, err := prometheus.DefaultGatherer.Gather()
+		// Gather metrics from our custom registry
+		metricFamilies, err := registry.Gather()
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).SendString("Error gathering metrics: " + err.Error())
 		}

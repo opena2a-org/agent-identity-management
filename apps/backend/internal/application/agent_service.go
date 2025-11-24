@@ -615,8 +615,102 @@ func (s *AgentService) VerifyAction(
 		}
 	}
 
-	// 6. ✅ ACTION ALLOWED - Agent has proper capability
-	return true, "Action matches registered capabilities", auditID, nil
+	// 6. ✅ CAPABILITY CHECK PASSED - Now evaluate additional security policies
+	// Even if agent has the capability, we still need to check other policy types
+
+	// 6.1 Trust Score Policy Evaluation
+	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := s.policyService.EvaluateTrustScoreLow(
+		ctx, agent, actionType, resource, auditID,
+	)
+	if err != nil {
+		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+	}
+	if trustScoreAlert {
+		s.createPolicyAlert(agent, "Trust Score Low", trustScorePolicyName, trustScoreBlocked,
+			fmt.Sprintf("Agent has low trust score (%.2f)", agent.TrustScore), domain.AlertSeverityWarning, auditID)
+	}
+	if trustScoreBlocked {
+		return false, fmt.Sprintf(
+			"Action blocked by trust score policy '%s': Agent trust score too low (%.2f)",
+			trustScorePolicyName, agent.TrustScore,
+		), auditID, nil
+	}
+
+	// 6.2 Data Exfiltration Policy Evaluation
+	exfilBlocked, exfilAlert, exfilPolicyName, err := s.policyService.EvaluateDataExfiltration(
+		ctx, agent, actionType, resource, auditID,
+	)
+	if err != nil {
+		fmt.Printf("⚠️  Data exfiltration policy evaluation failed: %v\n", err)
+	}
+	if exfilAlert {
+		s.createPolicyAlert(agent, "Data Exfiltration Attempt", exfilPolicyName, exfilBlocked,
+			fmt.Sprintf("Suspected data exfiltration pattern detected: %s on %s", actionType, resource),
+			domain.AlertSeverityCritical, auditID)
+	}
+	if exfilBlocked {
+		return false, fmt.Sprintf(
+			"Action blocked by data exfiltration policy '%s': Suspicious pattern detected",
+			exfilPolicyName,
+		), auditID, nil
+	}
+
+	// 6.3 Unusual Activity Policy Evaluation (stub - needs historical data)
+	unusualBlocked, unusualAlert, unusualPolicyName, err := s.policyService.EvaluateUnusualActivity(
+		ctx, agent, actionType, resource, auditID,
+	)
+	if err != nil {
+		fmt.Printf("⚠️  Unusual activity policy evaluation failed: %v\n", err)
+	}
+	if unusualAlert {
+		s.createPolicyAlert(agent, "Unusual Activity", unusualPolicyName, unusualBlocked,
+			"Anomalous behavior pattern detected", domain.AlertSeverityWarning, auditID)
+	}
+	if unusualBlocked {
+		return false, fmt.Sprintf(
+			"Action blocked by unusual activity policy '%s'",
+			unusualPolicyName,
+		), auditID, nil
+	}
+
+	// 6.4 Config Drift Policy Evaluation (stub - needs baseline)
+	driftBlocked, driftAlert, driftPolicyName, err := s.policyService.EvaluateConfigDrift(
+		ctx, agent, actionType, resource, auditID,
+	)
+	if err != nil {
+		fmt.Printf("⚠️  Config drift policy evaluation failed: %v\n", err)
+	}
+	if driftAlert {
+		s.createPolicyAlert(agent, "Configuration Drift", driftPolicyName, driftBlocked,
+			"Agent configuration has drifted from baseline", domain.AlertSeverityWarning, auditID)
+	}
+	if driftBlocked {
+		return false, fmt.Sprintf(
+			"Action blocked by config drift policy '%s'",
+			driftPolicyName,
+		), auditID, nil
+	}
+
+	// 6.5 Unauthorized Access Policy Evaluation (stub)
+	unauthBlocked, unauthAlert, unauthPolicyName, err := s.policyService.EvaluateUnauthorizedAccess(
+		ctx, agent, actionType, resource, auditID,
+	)
+	if err != nil {
+		fmt.Printf("⚠️  Unauthorized access policy evaluation failed: %v\n", err)
+	}
+	if unauthAlert {
+		s.createPolicyAlert(agent, "Unauthorized Access Attempt", unauthPolicyName, unauthBlocked,
+			"Unauthorized access pattern detected", domain.AlertSeverityHigh, auditID)
+	}
+	if unauthBlocked {
+		return false, fmt.Sprintf(
+			"Action blocked by unauthorized access policy '%s'",
+			unauthPolicyName,
+		), auditID, nil
+	}
+
+	// 7. ✅ ALL POLICIES PASSED - Action is allowed
+	return true, "Action matches registered capabilities and passes all security policies", auditID, nil
 }
 
 // matchesCapability checks if an action matches a registered capability
@@ -1210,6 +1304,46 @@ func (s *AgentService) calculateTrustScoreImpact(isBlocked bool) int {
 	}
 	// Alert-only violations have lower impact
 	return -5
+}
+
+// createPolicyAlert creates a security alert for policy violations
+func (s *AgentService) createPolicyAlert(
+	agent *domain.Agent,
+	alertType string,
+	policyName string,
+	isBlocked bool,
+	description string,
+	severity domain.AlertSeverity,
+	auditID uuid.UUID,
+) {
+	alertTitle := fmt.Sprintf("%s: %s", alertType, agent.DisplayName)
+	alertDescription := fmt.Sprintf(
+		"Agent '%s' triggered security policy '%s'. %s. "+
+		"Enforcement: %s. Audit ID: %s",
+		agent.DisplayName, policyName, description,
+		map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[isBlocked],
+		auditID.String(),
+	)
+
+	alert := &domain.Alert{
+		ID:             uuid.New(),
+		OrganizationID: agent.OrganizationID,
+		AlertType:      domain.AlertSecurityBreach,
+		Severity:       severity,
+		Title:          alertTitle,
+		Description:    alertDescription,
+		ResourceType:   "agent",
+		ResourceID:     agent.ID,
+		IsAcknowledged: false,
+		CreatedAt:      time.Now(),
+	}
+
+	if err := s.alertRepo.Create(alert); err != nil {
+		fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
+	} else {
+		fmt.Printf("🚨 SECURITY ALERT: %s for agent %s (policy: %s, action: %s)\n",
+			alertType, agent.Name, policyName, map[bool]string{true: "BLOCKED", false: "MONITORED"}[isBlocked])
+	}
 }
 
 // CreateCapabilityViolation creates a capability violation record for dashboard tracking

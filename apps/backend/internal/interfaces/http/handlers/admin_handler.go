@@ -648,11 +648,21 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		status,
 		limit,
 		offset,
+		
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch alerts",
 		})
+	}
+
+	// Get alert counts (all, acknowledged, unacknowledged)
+	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	if err != nil {
+		// If count fails, set defaults but don't fail the request
+		allCount = total
+		acknowledgedCount = 0
+		unacknowledgedCount = 0
 	}
 
 	// Log audit with enhanced metadata
@@ -684,10 +694,13 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"alerts": alerts,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"alerts":             alerts,
+		"total":              total,
+		"all_count":          allCount,
+		"acknowledged_count": acknowledgedCount,
+		"unacknowledged_count": unacknowledgedCount,
+		"limit":              limit,
+		"offset":             offset,
 	})
 }
 
@@ -1185,8 +1198,8 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 		})
 	}
 
-	// Call alert service to count unacknowledged alerts
-	count, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	// Call alert service to count alerts
+	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1194,7 +1207,9 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"count": count,
+		"all_count":           allCount,
+		"acknowledged_count":  acknowledgedCount,
+		"unacknowledged_count": unacknowledgedCount,
 	})
 }
 

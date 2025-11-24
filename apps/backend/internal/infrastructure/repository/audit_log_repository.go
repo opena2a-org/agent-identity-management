@@ -158,3 +158,59 @@ func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error
 
 	return logs, nil
 }
+
+// CountActionsByAgentInTimeWindow counts how many times an agent performed an action in the last N minutes
+func (r *AuditLogRepository) CountActionsByAgentInTimeWindow(agentID uuid.UUID, action domain.AuditAction, windowMinutes int) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM audit_logs
+		WHERE resource_id = $1
+		  AND resource_type = 'agent'
+		  AND action = $2
+		  AND timestamp >= NOW() - INTERVAL '1 minute' * $3
+	`
+
+	var count int
+	err := r.db.QueryRow(query, agentID, action, windowMinutes).Scan(&count)
+	return count, err
+}
+
+// GetRecentActionsByAgent gets the most recent actions by an agent
+func (r *AuditLogRepository) GetRecentActionsByAgent(agentID uuid.UUID, limit int) ([]*domain.AuditLog, error) {
+	query := `
+		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		FROM audit_logs
+		WHERE resource_id = $1 AND resource_type = 'agent'
+		ORDER BY timestamp DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.Query(query, agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanLogs(rows)
+}
+
+// GetAgentActionsByIPAddress gets actions by an agent from a specific IP address
+func (r *AuditLogRepository) GetAgentActionsByIPAddress(agentID uuid.UUID, ipAddress string, limit int) ([]*domain.AuditLog, error) {
+	query := `
+		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		FROM audit_logs
+		WHERE resource_id = $1
+		  AND resource_type = 'agent'
+		  AND ip_address = $2
+		ORDER BY timestamp DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.Query(query, agentID, ipAddress, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanLogs(rows)
+}

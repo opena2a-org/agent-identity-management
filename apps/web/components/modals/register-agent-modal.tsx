@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { api, Agent } from "@/lib/api";
+import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 
 interface RegisterAgentModalProps {
   isOpen: boolean;
@@ -224,33 +225,7 @@ export function RegisterAgentModal({
 
     setDownloadingSDK(true);
     try {
-      const token = api.getToken();
-
-      // Get runtime-detected API URL from api client's baseURL
-      const apiBaseURL = (api as any).baseURL;
-
-      const response = await fetch(
-        `${apiBaseURL}/api/v1/agents/${createdAgent.id}/sdk?lang=python`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to download SDK");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `aim-sdk-${createdAgent.name}-python.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      await downloadAgentSDK(createdAgent.id, createdAgent.name, 'python');
 
       // After successful download, close modal
       setTimeout(() => {

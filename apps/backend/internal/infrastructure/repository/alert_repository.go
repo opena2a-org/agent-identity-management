@@ -127,6 +127,13 @@ func (r *AlertRepository) Delete(id uuid.UUID) error {
 	return err
 }
 
+func (r *AlertRepository) CountByOrganization(orgID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM alerts WHERE organization_id = $1`
+	var total int
+	err := r.db.QueryRow(query, orgID).Scan(&total)
+	return total, err
+}
+
 func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 	var alerts []*domain.Alert
 

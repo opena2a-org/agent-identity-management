@@ -145,7 +145,7 @@ docker compose up -d
 - Email: `admin@opena2a.org`
 - Password: `AIM2025!Secure`
 
-> ⚠️ **Security**: Change the default password immediately after first login in production deployments!
+> ⚠️ **Security**: You will be required to change the default password on first login. This is enforced for security.
 
 ### 2. Download SDK from Dashboard
 ```bash
@@ -267,6 +267,22 @@ if verification.approved:
 - Automatic policy enforcement
 - Security dashboard with metrics
 
+**Advanced Security Policies** (3 Policy Types)
+1. **Unusual Activity Detection**
+   - API rate spike detection with configurable thresholds
+   - Off-hours access monitoring (detect logins outside business hours)
+   - Unusual access pattern detection (tracking diverse resource access)
+
+2. **Configuration Drift Monitoring**
+   - Capability change detection (alerts on permission modifications)
+   - Public key rotation tracking with approval requirements
+   - Permission escalation detection for dangerous capabilities
+
+3. **Unauthorized Access Control**
+   - IP-based restrictions with whitelist and wildcard support
+   - Time-based access control (day-of-week and hour restrictions)
+   - Resource-level and action-level access control with pattern matching
+
 ---
 
 ## 💼 Use Cases
@@ -322,6 +338,23 @@ if verification.approved:
 │                    AIM SDK (Python)                              │
 │                   secure("agent-name")                           │
 └──────────────────────────────────────────────────────────────────┘
+```
+
+### Observability & Monitoring
+
+AIM includes built-in **Prometheus metrics** for production monitoring:
+
+- **Endpoint**: `http://localhost:8080/metrics`
+- **Metrics Tracked**: HTTP request latency, request counts, response status codes
+- **Path Normalization**: UUIDs and IDs replaced with `:id` placeholders to prevent label cardinality explosion
+- **Integration**: Compatible with Prometheus, Grafana, and other monitoring tools
+
+**Example Prometheus configuration**:
+```yaml
+scrape_configs:
+  - job_name: 'aim-backend'
+    static_configs:
+      - targets: ['localhost:8080']
 ```
 
 ---
