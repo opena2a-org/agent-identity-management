@@ -152,7 +152,8 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 - **Bulk alert management** — Acknowledge all alerts at once
 - **Configuration drift detection** — Detect unauthorized MCP server connections
 
-**Advanced Security Policies** (3 Policy Types)
+**Advanced Security Policies** (6 Policy Types)
+
 1. **Unusual Activity Detection**
    - API rate spike detection with configurable thresholds
    - Off-hours access monitoring (detect logins outside business hours)
@@ -167,6 +168,21 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
    - IP-based restrictions with whitelist and wildcard support
    - Time-based access control (day-of-week and hour restrictions)
    - Resource-level and action-level access control with pattern matching
+
+4. **Capability Violation Detection**
+   - Real-time monitoring of capability boundary violations
+   - Automatic alerts when agents attempt unauthorized actions
+   - Tracking and reporting of violation patterns
+
+5. **Trust Score Monitoring**
+   - Low trust score threshold alerts
+   - Automatic action restrictions for low-trust agents
+   - Trust score trend analysis and notifications
+
+6. **Data Exfiltration Prevention**
+   - Detection of unusual data access patterns
+   - Volume-based transfer monitoring
+   - Sensitive resource access alerts
 
 ---
 
