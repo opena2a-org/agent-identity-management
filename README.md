@@ -397,6 +397,7 @@ docker compose -f docker-compose.dev.yml up -d
 ## 📄 License
 
 GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for details.
+
 ---
 
 ## 🏷️ Search Topics
