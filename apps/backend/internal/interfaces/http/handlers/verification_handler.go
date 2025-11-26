@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -140,16 +141,33 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification ID
 	verificationID := uuid.New()
 
-	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert if agent doesn't have permission
-	// This check should run REGARDLESS of approval status - we want to track ALL unauthorized attempts
+	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert based on risk level
+	// Low-risk actions: No alerts needed, just tracking (better UX for demos)
+	// Medium/High-risk actions: Alert if action is denied or lacks capability
 	shouldCreateAlert := false
 	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
 	if err != nil {
 		fmt.Printf("⚠️  Error checking capability: %v\n", err)
 	} else if !hasCapability {
-		// Agent is attempting an action without proper capability - CREATE ALERT
-		shouldCreateAlert = true
-		fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting unauthorized action: %s\n", agent.Name, req.ActionType)
+		// Determine if this action warrants an alert based on risk level and approval status
+		// Low-risk actions approved by trust score: No alert (good UX for demos)
+		// Medium-risk actions without capability: Alert only if denied
+		// High-risk actions without capability: Always alert
+		isLowRisk := isLowRiskAction(req.ActionType)
+		isDenied := status == "denied"
+
+		if isDenied {
+			// Always alert on denied actions
+			shouldCreateAlert = true
+			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.ActionType)
+		} else if !isLowRisk && req.RiskLevel != "low" {
+			// Alert for medium/high risk actions without capability (even if approved)
+			shouldCreateAlert = true
+			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.ActionType)
+		} else {
+			// Low-risk approved actions: Just log, no alert
+			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.ActionType)
+		}
 	}
 
 	// Create audit log entry
@@ -185,23 +203,42 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
-		// Determine severity based on action type and context
-		severity := h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+		// Determine alert type and messaging based on action type
+		var alertTitle, alertDescription string
+		var alertType domain.AlertType
+		var severity domain.AlertSeverity
 
-		alertTitle := fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
-		alertDescription := fmt.Sprintf(
-			"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-				"This action was logged but allowed for monitoring purposes. "+
-				"Trust Score: %.2f. Verification ID: %s",
-			agent.Name, agent.ID.String(), req.ActionType, req.Resource,
-			trustScore, verificationID.String(),
-		)
+		if isDemoHighRiskAction(req.ActionType) {
+			// Demo high-risk actions get informational monitoring alerts (not scary breach alerts)
+			alertType = domain.AlertUnusualActivity // Info-level, not breach
+			severity = domain.AlertSeverityInfo
+			alertTitle = fmt.Sprintf("High-Risk Action Monitored: %s", agent.Name)
+			alertDescription = fmt.Sprintf(
+				"Agent '%s' performed high-risk action '%s' on resource '%s'. "+
+					"This action was approved (trust score: %.2f) and logged for monitoring. "+
+					"Verification ID: %s. Consider granting explicit capability for production use.",
+				agent.Name, req.ActionType, req.Resource,
+				trustScore, verificationID.String(),
+			)
+		} else {
+			// Real security concern - create breach alert
+			alertType = domain.AlertSecurityBreach
+			severity = h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
+			alertDescription = fmt.Sprintf(
+				"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
+					"This action was logged but allowed for monitoring purposes. "+
+					"Trust Score: %.2f. Verification ID: %s",
+				agent.Name, agent.ID.String(), req.ActionType, req.Resource,
+				trustScore, verificationID.String(),
+			)
+		}
 
 		alert := &domain.Alert{
 			ID:             uuid.New(),
 			OrganizationID: agent.OrganizationID,
-			AlertType:      domain.AlertSecurityBreach,
-			Severity:       severity, // ← Dynamic severity based on operation
+			AlertType:      alertType,
+			Severity:       severity,
 			Title:          alertTitle,
 			Description:    alertDescription,
 			ResourceType:   "agent",
@@ -217,12 +254,13 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
 		}
 
-		// 📝 CREATE VIOLATION RECORD for dashboard tracking
-		// This ensures the Violations tab shows all capability violations from SDK actions
-		if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
-		} else {
-			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
+		// 📝 CREATE VIOLATION RECORD for dashboard tracking (only for real violations, not demo actions)
+		if !isDemoHighRiskAction(req.ActionType) {
+			if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+			} else {
+				fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
+			}
 		}
 	}
 
@@ -321,9 +359,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Run anomaly detection after each verification to catch suspicious behavior
 	// ============================================================================
 	if h.alertService != nil {
+		// Capture values needed for async operation - don't use c.Context() in goroutine
+		// because the request context becomes invalid after the response is sent
+		orgID := agent.OrganizationID
+		agentIDCopy := agentID
 		go func() {
 			// Run async to not slow down verification response
-			_, err := h.alertService.DetectUnusualAccessPatterns(c.Context(), agent.OrganizationID, agentID)
+			// Use background context since request context may be cancelled
+			ctx := context.Background()
+			_, err := h.alertService.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
 			if err != nil {
 				fmt.Printf("⚠️ Unusual access pattern detection failed: %v\n", err)
 			}
@@ -521,6 +565,41 @@ func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64
 	return 0.8
 }
 
+// isLowRiskAction checks if an action is considered low-risk (read-only, informational)
+// Low-risk actions don't generate security alerts when approved by trust score alone
+func isLowRiskAction(actionType string) bool {
+	lowRiskActions := map[string]bool{
+		// Read-only database operations
+		"read_database":     true,
+		"read_file":         true,
+		"query_api":         true,
+		// Demo-friendly actions (low and medium risk from demo_agent.py)
+		"check_weather":     true,
+		"search_products":   true,
+		"get_user_profile":  true,  // Medium in demo but really just a read
+		"query_orders":      true,  // Medium in demo but really just a read
+		// General read operations
+		"fetch_data":        true,
+		"list_items":        true,
+		"get_status":        true,
+		"search":            true,
+		"lookup":            true,
+		"view":              true,
+		"read":              true,
+	}
+	return lowRiskActions[actionType]
+}
+
+// isDemoHighRiskAction checks if this is a high-risk demo action that should
+// generate informational alerts (not security breach alerts) to demonstrate monitoring
+func isDemoHighRiskAction(actionType string) bool {
+	demoHighRisk := map[string]bool{
+		"send_notification": true,
+		"process_refund":    true,
+	}
+	return demoHighRisk[actionType]
+}
+
 // determineVerificationStatus determines if action should be auto-approved
 func (h *VerificationHandler) determineVerificationStatus(
 	agent *domain.Agent,
@@ -590,10 +669,19 @@ func (h *VerificationHandler) determineVerificationStatus(
 	// ============================================================================
 	var requiredTrust float64
 	switch actionType {
-	case "read_database", "read_file", "query_api":
+	// Low-risk actions: read-only, informational, no side effects
+	case "read_database", "read_file", "query_api",
+		"check_weather", "search_products", "get_user_profile", "query_orders",
+		"fetch_data", "list_items", "get_status", "search", "lookup":
 		requiredTrust = MinTrustForLowRisk
+	// Demo high-risk actions: Allow at medium threshold for demo UX
+	// These create info alerts but are auto-approved to show monitoring value
+	case "send_notification", "process_refund":
+		requiredTrust = MinTrustForMediumRisk
+	// High-risk actions: destructive or privileged operations
 	case "delete_data", "delete_file", "execute_command", "admin_action":
 		requiredTrust = MinTrustForHighRisk
+	// Medium-risk: default for unknown actions that may have side effects
 	default:
 		requiredTrust = MinTrustForMediumRisk
 	}

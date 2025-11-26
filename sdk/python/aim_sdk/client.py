@@ -1851,20 +1851,12 @@ def _register_via_oauth(
     registration_data["public_key"] = public_key_b64
     print(f"✅ Keypair generated")
 
-    # Initialize OAuth token manager with SDK credentials path
-    # OAuthTokenManager expects a file path, not the credentials dict
-    # Always use home directory for credentials (~/.aim/) - never project directory
-    # This ensures credentials are user-specific and not accidentally committed to version control
-    from pathlib import Path
-    sdk_dir = Path.home() / ".aim"
-
-    # Create the directory if it doesn't exist
-    sdk_dir.mkdir(parents=True, exist_ok=True)
-
-    # OAuthTokenManager will handle finding encrypted or plaintext credentials
-    sdk_creds_path = sdk_dir / "credentials.json"
-
-    token_manager = OAuthTokenManager(str(sdk_creds_path))
+    # Initialize OAuth token manager - let it discover credentials automatically
+    # OAuthTokenManager._discover_credentials_path() checks:
+    # 1. Home directory (~/.aim/credentials.json)
+    # 2. SDK package directory (for downloaded SDKs with embedded credentials)
+    # If SDK credentials exist, they're auto-copied to home directory
+    token_manager = OAuthTokenManager()  # Auto-discover credentials
     access_token = token_manager.get_access_token()
 
     if not access_token:
