@@ -109,11 +109,10 @@ function StatCard({ stat }: { stat: any }) {
               </div>
               {stat.change && (
                 <div
-                  className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    stat.changeType === "positive"
+                  className={`ml-2 flex items-baseline text-sm font-semibold ${stat.changeType === "positive"
                       ? "text-green-600"
                       : "text-red-600"
-                  }`}
+                    }`}
                 >
                   {stat.change}
                 </div>
@@ -589,7 +588,7 @@ function DashboardContent() {
                       }}
                       formatter={(value: number, name: string) => [
                         value,
-                        name === "verified"
+                        name === "Verified"
                           ? "Verified Agents"
                           : "Pending Agents",
                       ]}

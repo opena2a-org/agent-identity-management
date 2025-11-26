@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { extractErrorMessage, ERROR_MESSAGES } from "@/lib/error-utils";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 
 interface RegisterMCPModalProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export function RegisterMCPModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const [formData, setFormData] = useState<FormData>({
+  const createEmptyFormData = (): FormData => ({
     name: "",
     description: "",
     url: "",
@@ -43,29 +44,39 @@ export function RegisterMCPModal({
     verification_url: "",
   });
 
+  const [formData, setFormData] = useState<FormData>(createEmptyFormData());
+  const [initialFormData, setInitialFormData] = useState<FormData>(createEmptyFormData());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const urlRef = useRef<HTMLInputElement | null>(null);
+  const versionRef = useRef<HTMLInputElement | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (error && errorBannerRef.current) {
+      requestAnimationFrame(() => {
+        errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  }, [error]);
 
   // Update form data when initialData or editMode changes
   useEffect(() => {
     if (isOpen && editMode && initialData) {
-      setFormData({
+      const mapped: FormData = {
         name: initialData.name || "",
         description: initialData.description || "",
         url: initialData.url || "",
         version: initialData.version || "1.0.0",
         public_key: initialData.public_key || "",
         verification_url: initialData.verification_url || "",
-      });
+      };
+      setFormData(mapped);
+      setInitialFormData(mapped);
     } else if (isOpen && !editMode) {
-      // Reset form for new MCP server
-      setFormData({
-        name: "",
-        description: "",
-        url: "",
-        version: "1.0.0",
-        public_key: "",
-        verification_url: "",
-      });
+      const empty = createEmptyFormData();
+      setFormData(empty);
+      setInitialFormData(empty);
     }
   }, [isOpen, editMode, initialData]);
 
@@ -102,6 +113,20 @@ export function RegisterMCPModal({
     }
 
     setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      requestAnimationFrame(() => {
+        if (newErrors.name && nameRef.current) {
+          nameRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          nameRef.current.focus();
+        } else if (newErrors.url && urlRef.current) {
+          urlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          urlRef.current.focus();
+        } else if (newErrors.version && versionRef.current) {
+          versionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          versionRef.current.focus();
+        }
+      });
+    }
     return Object.keys(newErrors).length === 0;
   };
 
@@ -143,9 +168,14 @@ export function RegisterMCPModal({
       setSuccess(true);
 
       // Show success toast
-      toast.success("MCP Server Registered Successfully", {
-        description: `${formData.name} has been registered and is ready to use.`,
-      });
+      toast.success(
+        editMode ? "MCP Server Updated Successfully" : "MCP Server Registered Successfully",
+        {
+          description: editMode
+            ? `${formData.name} has been updated.`
+            : `${formData.name} has been registered and is ready to use.`,
+        }
+      );
 
       setTimeout(() => {
         onSuccess?.(result);
@@ -180,56 +210,37 @@ export function RegisterMCPModal({
   };
 
   const resetForm = () => {
-    setFormData({
-      name: "",
-      description: "",
-      url: "",
-      version: "1.0.0",
-      public_key: "",
-      verification_url: "",
-    });
+    const empty = createEmptyFormData();
+    setFormData(empty);
+    setInitialFormData(empty);
     setErrors({});
     setError(null);
     setSuccess(false);
   };
 
+  const isFormDirty = () =>
+    !success && JSON.stringify(formData) !== JSON.stringify(initialFormData);
+
   const handleClose = () => {
-    if (!loading) {
-      resetForm();
-      onClose();
+    if (loading) return;
+
+    if (isFormDirty()) {
+      const confirmed = confirm(
+        "You have unsaved changes. Are you sure you want to close without saving?"
+      );
+      if (!confirmed) {
+        return;
+      }
     }
-  };
 
-  // Check if form has been modified
-  const isFormDirty = () => {
-    // If server is already created successfully, no need to confirm
-    if (success) return false;
-
-    // Check if any field has been filled out
-    return (
-      formData.name.trim() !== "" ||
-      formData.description.trim() !== "" ||
-      formData.url.trim() !== "" ||
-      formData.version !== "1.0.0" ||
-      formData.public_key.trim() !== "" ||
-      formData.verification_url.trim() !== ""
-    );
+    resetForm();
+    onClose();
   };
 
   // Handle click on overlay (outside modal)
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-      if (isFormDirty()) {
-        if (
-          confirm(
-            "You have unsaved changes. Are you sure you want to close without saving?"
-          )
-        ) {
-          handleClose();
-        }
-      } else {
-        handleClose();
-      }
+      handleClose();
     }
   };
 
@@ -257,7 +268,17 @@ export function RegisterMCPModal({
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="relative min-h-[400px] p-6 space-y-6">
+          <LoadingOverlay
+            show={loading || success}
+            label={
+              loading
+                ? editMode
+                  ? "Updating server..."
+                  : "Registering server..."
+                : "Processing..."
+            }
+          />
           {/* Success Message */}
           {success && (
             <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
@@ -269,8 +290,11 @@ export function RegisterMCPModal({
           )}
 
           {/* Error Message */}
-          {/* {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
+          {error && (
+            <div
+              ref={errorBannerRef}
+              className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3"
+            >
               <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
               <div className="flex-1">
                 <p className="text-sm text-red-800 dark:text-red-300">
@@ -278,7 +302,7 @@ export function RegisterMCPModal({
                 </p>
               </div>
             </div>
-          )} */}
+          )}
 
           {/* Basic Information */}
           <div className="space-y-4">
@@ -292,17 +316,17 @@ export function RegisterMCPModal({
                 Server Name <span className="text-red-500">*</span>
               </label>
               <input
+                ref={nameRef}
                 type="text"
                 value={formData.name}
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
                 placeholder="e.g., filesystem-mcp or github-mcp"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                  errors.name
-                    ? "border-red-500"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
+                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.name
+                  ? "border-red-500"
+                  : "border-gray-200 dark:border-gray-700"
+                  }`}
                 disabled={loading || success}
               />
               {errors.name && (
@@ -316,17 +340,17 @@ export function RegisterMCPModal({
                 Server URL <span className="text-red-500">*</span>
               </label>
               <input
+                ref={urlRef}
                 type="url"
                 value={formData.url}
                 onChange={(e) =>
                   setFormData({ ...formData, url: e.target.value })
                 }
                 placeholder="https://mcp.example.com"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                  errors.url
-                    ? "border-red-500"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
+                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.url
+                  ? "border-red-500"
+                  : "border-gray-200 dark:border-gray-700"
+                  }`}
                 disabled={loading || success}
               />
               {errors.url && (
@@ -357,17 +381,17 @@ export function RegisterMCPModal({
                 Version
               </label>
               <input
+                ref={versionRef}
                 type="text"
                 value={formData.version}
                 onChange={(e) =>
                   setFormData({ ...formData, version: e.target.value })
                 }
                 placeholder="1.0.0"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                  errors.version
-                    ? "border-red-500"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
+                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.version
+                  ? "border-red-500"
+                  : "border-gray-200 dark:border-gray-700"
+                  }`}
                 disabled={loading || success}
               />
               {errors.version && (
@@ -465,7 +489,7 @@ export function RegisterMCPModal({
             </button>
             <button
               type="submit"
-              disabled={loading || success}
+              disabled={loading || (editMode && !success && !isFormDirty())}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
