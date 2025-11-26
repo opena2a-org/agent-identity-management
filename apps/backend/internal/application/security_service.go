@@ -201,3 +201,8 @@ func (s *SecurityService) CreateIncident(ctx context.Context, incident *domain.S
 func (s *SecurityService) BlockThreat(ctx context.Context, threatID uuid.UUID) error {
 	return s.securityRepo.BlockThreat(threatID)
 }
+
+// CountOpenIncidents returns the number of open/investigating security incidents
+func (s *SecurityService) CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error) {
+	return s.securityRepo.CountOpenIncidents(orgID)
+}

@@ -21,6 +21,7 @@ type AdminHandler struct {
 	auditService        *application.AuditService
 	alertService        *application.AlertService
 	registrationService *application.RegistrationService
+	securityService     *application.SecurityService
 }
 
 func NewAdminHandler(
@@ -31,6 +32,7 @@ func NewAdminHandler(
 	auditService *application.AuditService,
 	alertService *application.AlertService,
 	registrationService *application.RegistrationService,
+	securityService *application.SecurityService,
 ) *AdminHandler {
 	return &AdminHandler{
 		authService:         authService,
@@ -40,6 +42,7 @@ func NewAdminHandler(
 		auditService:        auditService,
 		alertService:        alertService,
 		registrationService: registrationService,
+		securityService:     securityService,
 	}
 }
 
@@ -920,6 +923,22 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		verificationRate = float64(verifiedAgents) / float64(len(agents)) * 100
 	}
 
+	// Get security incidents count
+	securityIncidents := 0
+	if h.securityService != nil {
+		incidentCount, err := h.securityService.CountOpenIncidents(c.Context(), orgID)
+		if err == nil {
+			securityIncidents = incidentCount
+		}
+	}
+
+	// Get active users count (users who logged in within the last 60 minutes)
+	activeUsers := len(users) // Default to total users if count fails
+	activeUserCount, err := h.authService.CountActiveUsers(c.Context(), orgID, 60)
+	if err == nil {
+		activeUsers = activeUserCount
+	}
+
 	// Log audit with dashboard metrics
 	h.auditService.LogAction(
 		c.Context(),
@@ -954,12 +973,12 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 
 		// User metrics
 		"total_users":  len(users),
-		"active_users": len(users), // TODO: track last_active_at
+		"active_users": activeUsers,
 
 		// Security metrics
 		"active_alerts":      total,
 		"critical_alerts":    criticalAlerts,
-		"security_incidents": 0, // TODO: add incidents tracking
+		"security_incidents": securityIncidents,
 
 		// Organization
 		"organization_id": orgID,

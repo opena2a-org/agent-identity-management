@@ -221,6 +221,41 @@ func (r *AlertRepository) CountByOrganizationFiltered(orgID uuid.UUID, status st
 	return total, err
 }
 
+func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	query := `
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		FROM alerts
+		WHERE resource_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(query, resourceID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanAlerts(rows)
+}
+
+func (r *AlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*domain.Alert, error) {
+	query := `
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		FROM alerts
+		WHERE resource_id = $1 AND is_acknowledged = false
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(query, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanAlerts(rows)
+}
+
 func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 	var alerts []*domain.Alert
 

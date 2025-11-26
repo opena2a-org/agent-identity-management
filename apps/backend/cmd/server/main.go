@@ -457,13 +457,14 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 
 	auditService := application.NewAuditService(repos.AuditLog)
 
-	trustCalculator := application.NewTrustCalculator(
+	trustCalculator := application.NewTrustCalculatorWithVerification(
 		repos.TrustScore,
 		repos.APIKey,
 		repos.AuditLog,
 		repos.Capability,
-		repos.Agent, // For fetching agent data
-		repos.Alert, // For security alerts scoring
+		repos.Agent,             // For fetching agent data
+		repos.Alert,             // For security alerts scoring
+		repos.VerificationEvent, // For real verification statistics
 	)
 
 	// ✅ Initialize drift detection service BEFORE verification event service
@@ -498,6 +499,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	alertService := application.NewAlertService(
 		repos.Alert,
 		repos.Agent,
+		db,
 	)
 
 	complianceService := application.NewComplianceService(
@@ -667,6 +669,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.Alert,
 			services.Registration, // ✅ Renamed from OAuth to Registration
+			services.Security,     // ✅ For security incidents tracking
 		),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,
@@ -709,6 +712,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Verification: handlers.NewVerificationHandler(
 			services.Agent,
 			services.Audit,
+			services.Alert,
 			services.Trust,
 			services.VerificationEvent,
 		),
@@ -948,6 +952,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	admin.Get("/capability-requests/:id", h.CapabilityRequest.GetCapabilityRequest)
 	admin.Post("/capability-requests/:id/approve", h.CapabilityRequest.ApproveCapabilityRequest)
 	admin.Post("/capability-requests/:id/reject", h.CapabilityRequest.RejectCapabilityRequest)
+
+	// Verification Approval Management routes (admin only - for require_approval decorator)
+	admin.Get("/verifications/pending", h.Verification.ListPendingVerifications)
+	admin.Post("/verifications/:id/approve", h.Verification.ApproveVerification)
+	admin.Post("/verifications/:id/deny", h.Verification.DenyVerification)
 
 	// Compliance routes (admin only)
 	// Basic compliance features - Advanced features (SOC 2, HIPAA, GDPR, ISO 27001) reserved for premium

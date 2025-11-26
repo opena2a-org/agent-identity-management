@@ -86,9 +86,8 @@ class OAuthTokenManager:
                     return sdk_creds
         except:
             pass
-        cwd_creds = Path.cwd() / ".aim" / "credentials.json"
-        if cwd_creds.exists():
-            return cwd_creds
+        # Always use home directory for credentials - never project directory
+        # This ensures credentials are user-specific and not accidentally committed to version control
         return home_creds
 
     def _credentials_exist(self) -> bool:
@@ -412,9 +411,9 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
     Returns:
         Credentials dict or None if not found
     """
-    # Check current directory first (SDK download location)
+    # Always use home directory for credentials (~/.aim/) - never project directory
+    # This ensures credentials are user-specific and not accidentally committed to version control
     credentials_paths = [
-        Path.cwd() / ".aim" / "credentials.json",
         Path.home() / ".aim" / "credentials.json"
     ]
 

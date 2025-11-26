@@ -100,6 +100,12 @@ func (s *AuthService) GetUsersByOrganization(ctx context.Context, orgID uuid.UUI
 	return s.userRepo.GetByOrganization(orgID)
 }
 
+// CountActiveUsers returns the count of users who logged in recently
+// withinMinutes: time window for "active" definition (e.g., 60 for last hour)
+func (s *AuthService) CountActiveUsers(ctx context.Context, orgID uuid.UUID, withinMinutes int) (int, error) {
+	return s.userRepo.CountActiveUsers(orgID, withinMinutes)
+}
+
 // UpdateUserRole updates a user's role
 func (s *AuthService) UpdateUserRole(
 	ctx context.Context,

@@ -60,4 +60,5 @@ type UserRepository interface {
 	Update(user *User) error
 	UpdateRole(id uuid.UUID, role UserRole) error
 	Delete(id uuid.UUID) error
+	CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error)
 }

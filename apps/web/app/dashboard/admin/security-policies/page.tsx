@@ -84,6 +84,7 @@ const policyTypeLabels: Record<string, string> = {
   unusual_activity: "Unusual Activity",
   unauthorized_access: "Unauthorized Access",
   config_drift: "Configuration Drift",
+  auth_failure: "Authentication Failure",
 };
 
 export default function SecurityPoliciesPage() {
@@ -136,14 +137,8 @@ export default function SecurityPoliciesPage() {
   const fetchPolicies = async () => {
     try {
       const data = await api.getSecurityPolicies();
-      // ✅ MVP: Only show capability_violation policy (the only enforced policy)
-      // Filter out non-enforced policies to avoid confusion
-
-      const enforcedPolicies = data.filter(
-        (p: SecurityPolicy) => p.policy_type === "capability_violation"
-      );
       // Sort by priority (highest first)
-      const sorted = enforcedPolicies.sort(
+      const sorted = data.sort(
         (a: SecurityPolicy, b: SecurityPolicy) => b.priority - a.priority
       );
       setPolicies(sorted);
@@ -395,12 +390,11 @@ export default function SecurityPoliciesPage() {
             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm">
               <p className="font-medium text-blue-900 dark:text-blue-100">
-                Capability Violation Enforcement (MVP)
+                Security Policy Enforcement
               </p>
               <p className="text-blue-800 dark:text-blue-200">
-                This policy prevents agents from performing actions outside their defined capability list.
-                It protects against scope violations like EchoLeak (CVE-2025-32711) where agents attempt
-                unauthorized operations.
+                Security policies protect your agents from various threats including capability violations,
+                trust score degradation, data exfiltration attempts, and unusual activity patterns.
               </p>
               <ul className="space-y-1 text-blue-800 dark:text-blue-200 mt-2">
                 <li className="flex items-center gap-2">
@@ -412,10 +406,6 @@ export default function SecurityPoliciesPage() {
                   <strong>Block & Alert:</strong> Prevent violations and create alerts (enforcement mode - recommended)
                 </li>
               </ul>
-              <p className="text-blue-700 dark:text-blue-300 mt-3">
-                💡 <strong>Tip:</strong> Additional policy types (trust score monitoring, unusual activity detection,
-                data exfiltration prevention) are planned for post-MVP release. See the roadmap for details.
-              </p>
             </div>
           </div>
         </CardContent>

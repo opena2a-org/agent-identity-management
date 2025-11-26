@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -378,19 +379,19 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	}
 
 	// Check if MCP server name/ID is in agent's talks_to list
-	// TODO: Re-enable when TalksTo field is added to Agent struct
-	isAuthorized := true // Temporarily allow all MCP server access
-	/* Commented out until TalksTo field exists on Agent
-	if agent.TalksTo != nil {
+	isAuthorized := false
+	if len(agent.TalksTo) == 0 {
+		// If no TalksTo configured, allow all MCP servers (backwards compatibility)
+		isAuthorized = true
+	} else {
 		for _, allowedServer := range agent.TalksTo {
 			// Match by name (case-insensitive) or ID
-			if allowedServer == mcpServer.Name || allowedServer == serverID.String() {
+			if strings.EqualFold(allowedServer, mcpServer.Name) || allowedServer == serverID.String() {
 				isAuthorized = true
 				break
 			}
 		}
 	}
-	*/
 
 	// If NOT authorized, create alert and reject
 	if !isAuthorized {

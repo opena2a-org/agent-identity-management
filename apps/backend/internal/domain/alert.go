@@ -13,6 +13,7 @@ const (
 	AlertCertificateExpiring    AlertType = "certificate_expiring"
 	AlertAPIKeyExpiring         AlertType = "api_key_expiring"
 	AlertTrustScoreLow          AlertType = "trust_score_low"
+	AlertTrustScoreDrop         AlertType = "trust_score_drop" // Significant decrease in trust score
 	AlertAgentOffline           AlertType = "agent_offline"
 	AlertSecurityBreach         AlertType = "security_breach"
 	AlertUnusualActivity        AlertType = "unusual_activity"
@@ -59,6 +60,8 @@ type AlertRepository interface {
 	CountByOrganization(orgID uuid.UUID) (int, error)
 	CountByOrganizationFiltered(orgID uuid.UUID, status string) (int, error)
 	GetUnacknowledged(orgID uuid.UUID) ([]*Alert, error)
+	GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*Alert, error)
+	GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*Alert, error)
 	Acknowledge(id, userID uuid.UUID) error
 	BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error)
 	Delete(id uuid.UUID) error
