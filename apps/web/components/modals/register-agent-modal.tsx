@@ -21,6 +21,7 @@ import { api, Agent } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { useMemo } from "react";
 
 interface RegisterAgentModalProps {
   isOpen: boolean;
@@ -409,6 +410,16 @@ export function RegisterAgentModal({
       }
     }
   };
+
+  const mergedCapabilities = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...(CAPABILITY_OPTIONS || []),
+        ...((initialFormData?.capabilities as string[]) || []),
+        ...(formData.capabilities || []),
+      ])
+    );
+  }, [initialFormData?.capabilities, formData.capabilities]);
 
   const toggleCapability = (capability: string) => {
     setFormData((prev) => ({
@@ -1036,7 +1047,7 @@ export function RegisterAgentModal({
                   actions the agent can perform.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {CAPABILITY_OPTIONS.map((capability) => (
+                  {mergedCapabilities.map((capability) => (
                     <label
                       key={capability}
                       className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800"

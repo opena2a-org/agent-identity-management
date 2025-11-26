@@ -10,27 +10,28 @@ import (
 )
 
 type CapabilityRequestHandlers struct {
-	service *application.CapabilityRequestService
+	service   *application.CapabilityRequestService
+	agentRepo domain.AgentRepository
 }
 
-func NewCapabilityRequestHandlers(service *application.CapabilityRequestService) *CapabilityRequestHandlers {
+func NewCapabilityRequestHandlers(service *application.CapabilityRequestService, agentRepo domain.AgentRepository) *CapabilityRequestHandlers {
 	return &CapabilityRequestHandlers{
-		service: service,
+		service:   service,
+		agentRepo: agentRepo,
 	}
 }
 
 // CreateCapabilityRequest godoc
-// @Summary Create a new capability request (SDK)
-// @Description Agents can request additional capabilities after registration via SDK
+// @Summary Create a new capability request
+// @Description Agents can request additional capabilities after registration. The requester is automatically derived from the agent's owner.
 // @Tags capability-requests
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Param id path string true "Agent ID"
 // @Param request body domain.CreateCapabilityRequestInput true "Capability request details"
 // @Success 201 {object} domain.CapabilityRequest
 // @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Router /api/v1/sdk-api/agents/{id}/capability-requests [post]
 func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
@@ -42,11 +43,11 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 		})
 	}
 
-	// Get user ID from API key context (the user who owns the API key)
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized - user ID not found",
+	// Fetch the agent to get the user ID from the agent's CreatedBy field
+	agent, err := h.agentRepo.GetByID(agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "agent not found",
 		})
 	}
 
@@ -77,11 +78,12 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 	}
 
 	// Create capability request input
+	// Use the agent's CreatedBy field (owner) as the RequestedBy
 	input := &domain.CreateCapabilityRequestInput{
 		AgentID:        agentID,
 		CapabilityType: req.CapabilityType,
 		Reason:         req.Reason,
-		RequestedBy:    userID,
+		RequestedBy:    agent.CreatedBy, // Using the agent's owner as the requester
 	}
 
 	// Create the request
@@ -104,7 +106,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 		}
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create capability request",
+			"error":   "failed to create capability request",
 			"details": errMsg,
 		})
 	}

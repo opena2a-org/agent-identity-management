@@ -144,7 +144,7 @@ func main() {
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(middleware.LoggerMiddleware())
-	app.Use(metrics.PrometheusMiddleware())    // Prometheus metrics collection
+	app.Use(metrics.PrometheusMiddleware())   // Prometheus metrics collection
 	app.Use(middleware.AnalyticsTracking(db)) // Real-time API call tracking
 	// app.Use(middleware.RequestLoggerMiddleware())
 
@@ -752,6 +752,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		CapabilityRequest: handlers.NewCapabilityRequestHandlers(
 			services.CapabilityRequest,
+			repos.Agent,
 		),
 	}
 }

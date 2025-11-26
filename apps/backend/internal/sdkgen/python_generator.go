@@ -93,13 +93,15 @@ This example demonstrates automatic identity verification.
 from aim_sdk import AIMClient
 from aim_sdk.config import AGENT_ID, PUBLIC_KEY, PRIVATE_KEY, AIM_URL
 
-# Initialize AIM client with auto-generated credentials
+# Method 1: Use embedded credentials from config
 client = AIMClient(
     agent_id=AGENT_ID,
     public_key=PUBLIC_KEY,
     private_key=PRIVATE_KEY,
     aim_url=AIM_URL
 )
+
+
 
 # Example 1: Automatic verification with decorator
 @client.perform_action("read_database", resource="users_table")
@@ -150,6 +152,20 @@ def send_sensitive_email():
         print(f"❌ Action failed: {e}")
 
 
+# Example 3: Request additional capability
+def request_write_capability():
+    """Example of requesting an additional capability"""
+    try:
+        result = client.request_capability(
+            capability_type="write_database",
+            reason="Need write access to update user records for analytics feature"
+        )
+        print(f"✅ Capability request submitted: {result['id']}")
+        print(f"   Status: {result['status']}")
+    except Exception as e:
+        print(f"❌ Capability request failed: {e}")
+
+
 if __name__ == "__main__":
     # Example 1: Automatic verification
     print("Example 1: Automatic verification with decorator")
@@ -159,6 +175,10 @@ if __name__ == "__main__":
     # Example 2: Manual verification
     print("\nExample 2: Manual verification")
     send_sensitive_email()
+
+    # Example 3: Request capability
+    print("\nExample 3: Request additional capability")
+    request_write_capability()
 `
 
 	t := template.Must(template.New("example").Parse(tmpl))
@@ -304,7 +324,7 @@ import base64
 import functools
 import json
 import time
-from typing import Any, Callable, Optional, Dict
+from typing import Any, Callable, Optional, Dict, List
 from datetime import datetime, timezone
 
 import requests
@@ -320,7 +340,10 @@ from .exceptions import (
 
 
 class AIMClient:
-    """AIM SDK Client for automatic identity verification."""
+    """
+    AIM SDK Client for automatic identity verification.
+
+    """
 
     def __init__(
         self,
@@ -343,26 +366,25 @@ class AIMClient:
 
         self.agent_id = agent_id
         self.aim_url = aim_url.rstrip('/')
+        
         self.timeout = timeout
         self.auto_retry = auto_retry
         self.max_retries = max_retries
 
+       
         try:
             private_key_bytes = base64.b64decode(private_key)
-            # Ed25519 private key from Go is 64 bytes (32-byte seed + 32-byte public key)
-            # PyNaCl SigningKey expects only the 32-byte seed
             if len(private_key_bytes) == 64:
-                # Extract seed (first 32 bytes)
                 seed = private_key_bytes[:32]
                 self.signing_key = SigningKey(seed)
             elif len(private_key_bytes) == 32:
-                # Already just the seed
                 self.signing_key = SigningKey(private_key_bytes)
             else:
-                raise ValueError(f"Invalid private key length: {len(private_key_bytes)} bytes (expected 32 or 64)")
+                raise ValueError(f"Invalid private key length: {len(private_key_bytes)} bytes")
         except Exception as e:
             raise ConfigurationError(f"Invalid private key format: {e}")
 
+        
         try:
             expected_public_key = self.signing_key.verify_key.encode(encoder=Base64Encoder).decode('utf-8')
             if expected_public_key != public_key:
@@ -372,12 +394,14 @@ class AIMClient:
 
         self.public_key = public_key
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': f'AIM-Python-SDK/1.0.0',
+        headers = {
+            'User-Agent': 'AIM-Python-SDK/1.0.0',
             'Content-Type': 'application/json'
-        })
+        }
+       
 
     def _sign_message(self, message: str) -> str:
+        """Sign a message using Ed25519 private key."""
         message_bytes = message.encode('utf-8')
         signed = self.signing_key.sign(message_bytes)
         signature = signed.signature
@@ -390,6 +414,7 @@ class AIMClient:
         data: Optional[Dict] = None,
         retry_count: int = 0
     ) -> Dict:
+        """Make authenticated HTTP request to AIM server."""
         url = f"{self.aim_url}{endpoint}"
 
         try:
@@ -431,21 +456,29 @@ class AIMClient:
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300
     ) -> Dict:
+        """Request verification for an action from AIM."""
         timestamp = datetime.now(timezone.utc).isoformat()
+
+        signature_payload = {
+            "action_type": action_type,
+            "agent_id": self.agent_id,
+            "context": context or {},
+            "resource": resource,
+            "timestamp": timestamp
+        }
+        
+        signature_message = json.dumps(signature_payload, sort_keys=True, separators=(', ', ': '))
+        signature = self._sign_message(signature_message)
 
         request_payload = {
             "agent_id": self.agent_id,
             "action_type": action_type,
             "resource": resource,
             "context": context or {},
-            "timestamp": timestamp
+            "timestamp": timestamp,
+            "signature": signature,
+            "public_key": self.public_key
         }
-
-        signature_message = json.dumps(request_payload, sort_keys=True)
-        signature = self._sign_message(signature_message)
-
-        request_payload["signature"] = signature
-        request_payload["public_key"] = self.public_key
 
         try:
             result = self._make_request(
@@ -480,6 +513,7 @@ class AIMClient:
             raise VerificationError(f"Verification request failed: {e}")
 
     def _wait_for_approval(self, verification_id: str, timeout_seconds: int) -> Dict:
+        """Poll AIM server for verification approval."""
         start_time = time.time()
         poll_interval = 2
 
@@ -487,7 +521,7 @@ class AIMClient:
             try:
                 result = self._make_request(
                     method="GET",
-                endpoint=f"/api/v1/sdk-api/verifications/{verification_id}"
+                    endpoint=f"/api/v1/sdk-api/verifications/{verification_id}"
                 )
 
                 status = result.get("status")
@@ -521,22 +555,68 @@ class AIMClient:
         result_summary: Optional[str] = None,
         error_message: Optional[str] = None
     ):
+        """Log the result of an action execution to AIM."""
         try:
             self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/sdk-api/verifications/{verification_id}/result",
                 data={
                     "result": "success" if success else "failure",
-                    "reason": error_message or result_summary,
-                    "metadata": {
-                        "result_summary": result_summary,
-                        "error_message": error_message,
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }
+                    "result_summary": result_summary,
+                    "error_message": error_message,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
                 }
             )
         except Exception:
             pass
+
+    def request_capability(
+        self,
+        capability_type: str,
+        reason: str
+    ) -> Dict:
+        """Request an additional capability for the agent."""
+        if not capability_type or not isinstance(capability_type, str):
+            raise ConfigurationError("capability_type must be a non-empty string")
+        
+        if not reason or len(reason) < 10:
+            raise ConfigurationError("reason must be at least 10 characters")
+
+        try:
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capability-requests",
+                data={
+                    "capability_type": capability_type,
+                    "reason": reason
+                }
+            )
+            return result
+        except Exception as e:
+            raise VerificationError(f"Capability request failed: {e}")
+
+    def register_mcp(
+        self,
+        mcp_server_id: str,
+        detection_method: str = "manual",
+        confidence: float = 100.0,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """Register an MCP server to this agent's talks_to list."""
+        try:
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-servers",
+                data={
+                    "mcp_server_ids": [mcp_server_id],
+                    "detected_method": detection_method,
+                    "confidence": confidence,
+                    "metadata": metadata or {}
+                }
+            )
+            return result
+        except Exception as e:
+            raise VerificationError(f"MCP registration failed: {e}")
 
     def perform_action(
         self,
@@ -545,6 +625,7 @@ class AIMClient:
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300
     ):
+        """Decorator for automatic action verification."""
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
@@ -580,6 +661,7 @@ class AIMClient:
         return decorator
 
     def close(self):
+        """Close the HTTP session."""
         self.session.close()
 
     def __enter__(self):
@@ -587,6 +669,9 @@ class AIMClient:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+
+
 `
 
 const pythonSetupFile = `from setuptools import setup, find_packages
