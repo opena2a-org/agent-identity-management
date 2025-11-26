@@ -61,11 +61,11 @@ interface MCPServer {
   command?: string;
   args?: string[];
   status?: string;
-  verification_status?: string;
+  verificationStatus?: string;
   isActive?: boolean;
   trustScore?: number;
-  last_verified_at?: string;
-  created_at: string;
+  lastVerifiedAt?: string;
+  createdAt: string;
   capabilities?: string[];
 }
 
@@ -122,7 +122,7 @@ export default function AgentDetailsPage({
 
         // Fetch all MCP servers (for graph visualization)
         const mcpServersResponse = await api.listMCPServers(100, 0);
-        setAllMCPServers(mcpServersResponse.mcp_servers || []);
+        setAllMCPServers(mcpServersResponse.mcpServers || []);
 
         // Fetch verification events (for trust score chart)
         try {
@@ -144,17 +144,17 @@ export default function AgentDetailsPage({
         // This gets the actual MCP servers the agent is connected to from agent_mcp_connections table
         try {
           const agentMCPsResponse = await api.getAgentMCPServers(agentId!);
-          if (agentMCPsResponse.mcp_servers && agentMCPsResponse.mcp_servers.length > 0) {
+          if (agentMCPsResponse.mcpServers && agentMCPsResponse.mcpServers.length > 0) {
             // Merge these servers into allMCPServers (they may not be in the org-wide list yet)
-            const mcpServerIds = agentMCPsResponse.mcp_servers.map(s => s.id);
+            const mcpServerIds = agentMCPsResponse.mcpServers.map(s => s.id);
             setAllMCPServers(prev => {
               const existingIds = new Set(prev.map(s => s.id));
               // Convert ConnectedMCPServer to MCPServer format
-              const newServers = agentMCPsResponse.mcp_servers!
+              const newServers = agentMCPsResponse.mcpServers!
                 .filter(s => !existingIds.has(s.id))
                 .map(s => ({
                   ...s,
-                  created_at: s.created_at || new Date().toISOString(), // Add created_at if missing
+                  created_at: s.createdAt || new Date().toISOString(), // Add created_at if missing
                 } as MCPServer));
               return [...prev, ...newServers];
             });
@@ -162,7 +162,7 @@ export default function AgentDetailsPage({
             // Update agent's talks_to to include these server IDs
             // This fixes the data consistency issue where talks_to is out of sync
             if (agentData) {
-              agentData.talks_to = mcpServerIds;
+              agentData.talksTo = mcpServerIds;
               setAgent({ ...agentData });
             }
           }
@@ -260,7 +260,7 @@ export default function AgentDetailsPage({
     setRotatingCreds(true);
     try {
       const result = await api.rotateAgentCredentials(agentId);
-      alert(`Credentials rotated successfully!\n\nNew API Key:\n${result.api_key}\n\nPlease save this key - you won't be able to see it again.`);
+      alert(`Credentials rotated successfully!\n\nNew API Key:\n${result.apiKey}\n\nPlease save this key - you won't be able to see it again.`);
       handleRefresh();
     } catch (e: any) {
       alert(e?.message || "Credential rotation failed");
@@ -307,20 +307,20 @@ export default function AgentDetailsPage({
 
   // Get connected MCP server names and details
   const connectedMCPServers = useMemo(() => {
-    if (!agent?.talks_to || allMCPServers.length === 0) return [];
+    if (!agent?.talksTo || allMCPServers.length === 0) return [];
 
     // Filter MCP servers that this agent talks to
     return allMCPServers
-      .filter((server) => agent.talks_to?.includes(server.id))
+      .filter((server) => agent.talksTo?.includes(server.id))
       .map((server) => server.name);
-  }, [agent?.talks_to, allMCPServers]);
+  }, [agent?.talksTo, allMCPServers]);
 
   // Get connected MCP server details with capabilities
   const connectedMCPServerDetails = useMemo(() => {
-    if (!agent?.talks_to || allMCPServers.length === 0) return [];
+    if (!agent?.talksTo || allMCPServers.length === 0) return [];
 
-    return allMCPServers.filter((server) => agent.talks_to?.includes(server.id));
-  }, [agent?.talks_to, allMCPServers]);
+    return allMCPServers.filter((server) => agent.talksTo?.includes(server.id));
+  }, [agent?.talksTo, allMCPServers]);
 
   // Loading state
   if (isLoading) {
@@ -442,7 +442,7 @@ export default function AgentDetailsPage({
               </div>
               <p className="text-muted-foreground mb-2">{agent.description}</p>
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline">{agent.agent_type}</Badge>
+                <Badge variant="outline">{agent.agentType}</Badge>
                 {isActive ? (
                   <Badge className="bg-green-500/10 text-green-600">
                     Active
@@ -451,9 +451,9 @@ export default function AgentDetailsPage({
                   <Badge variant="secondary">Inactive</Badge>
                 )}
                 <Badge
-                  className={getTrustColor((agent.trust_score ?? 0) * 100)}
+                  className={getTrustColor((agent.trustScore ?? 0) * 100)}
                 >
-                  Trust: {((agent.trust_score ?? 0) * 100).toFixed(1)}%
+                  Trust: {((agent.trustScore ?? 0) * 100).toFixed(1)}%
                 </Badge>
               </div>
             </div>
@@ -468,7 +468,7 @@ export default function AgentDetailsPage({
             />
             <MCPServerSelector
               agentId={agent.id}
-              currentMCPServers={agent.talks_to ?? []}
+              currentMCPServers={agent.talksTo ?? []}
               onSelectionComplete={handleRefresh}
               variant="outline"
             />
@@ -625,14 +625,14 @@ export default function AgentDetailsPage({
           </CardHeader>
           <CardContent>
             <div
-              className={`text-2xl font-bold ${getTrustColor((agent.trust_score ?? 0) * 100).split(" ")[0]}`}
+              className={`text-2xl font-bold ${getTrustColor((agent.trustScore ?? 0) * 100).split(" ")[0]}`}
             >
-              {((agent.trust_score ?? 0) * 100).toFixed(1)}%
+              {((agent.trustScore ?? 0) * 100).toFixed(1)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {(agent.trust_score ?? 0) * 100 >= 80
+              {(agent.trustScore ?? 0) * 100 >= 80
                 ? "High trust"
-                : (agent.trust_score ?? 0) * 100 >= 60
+                : (agent.trustScore ?? 0) * 100 >= 60
                   ? "Medium trust"
                   : "Low trust"}
             </p>
@@ -880,7 +880,7 @@ export default function AgentDetailsPage({
                   <span className="text-sm font-medium text-muted-foreground">
                     Type:
                   </span>
-                  <span className="col-span-2 text-sm">{agent.agent_type}</span>
+                  <span className="col-span-2 text-sm">{agent.agentType}</span>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-3 items-center gap-4">
@@ -937,9 +937,9 @@ export default function AgentDetailsPage({
                   </span>
                   <span className="col-span-2 text-sm">
                     <Badge
-                      className={getTrustColor((agent.trust_score ?? 0) * 100)}
+                      className={getTrustColor((agent.trustScore ?? 0) * 100)}
                     >
-                      {((agent.trust_score ?? 0) * 100).toFixed(1)}%
+                      {((agent.trustScore ?? 0) * 100).toFixed(1)}%
                     </Badge>
                   </span>
                 </div>
@@ -949,7 +949,7 @@ export default function AgentDetailsPage({
                     Created:
                   </span>
                   <span className="col-span-2 text-sm">
-                    {new Date(agent.created_at).toLocaleString()}
+                    {new Date(agent.createdAt).toLocaleString()}
                   </span>
                 </div>
                 <Separator />
@@ -958,7 +958,7 @@ export default function AgentDetailsPage({
                     Last Updated:
                   </span>
                   <span className="col-span-2 text-sm">
-                    {new Date(agent.updated_at).toLocaleString()}
+                    {new Date(agent.updatedAt).toLocaleString()}
                   </span>
                 </div>
                 <Separator />
@@ -967,7 +967,7 @@ export default function AgentDetailsPage({
                     Organization ID:
                   </span>
                   <span className="col-span-2 text-sm font-mono">
-                    {agent.organization_id}
+                    {agent.organizationId}
                   </span>
                 </div>
               </div>

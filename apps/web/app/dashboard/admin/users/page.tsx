@@ -46,7 +46,6 @@ interface User {
   id: string;
   email: string;
   name: string;
-  display_name?: string;
   role: "admin" | "manager" | "member" | "viewer" | "pending";
   status:
     | "pending"
@@ -54,16 +53,16 @@ interface User {
     | "suspended"
     | "deactivated"
     | "pending_approval";
-  organization_id?: string;
-  organization_name?: string;
+  organizationId?: string;
+  organizationName?: string;
   provider: string;
-  approved_by?: string;
-  approved_at?: string;
-  created_at: string;
-  last_login_at?: string;
-  requested_at?: string;
-  picture_url?: string;
-  is_registration_request?: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  requestedAt?: string;
+  pictureUrl?: string;
+  isRegistrationRequest?: boolean;
 }
 
 const roleColors = {
@@ -155,8 +154,8 @@ export default function UsersPage() {
 
   const fetchAPIKeysCount = async () => {
     try {
-      const { api_keys } = await api.listAPIKeys();
-      setApiKeysCount(api_keys?.length || 0);
+      const { apiKeys } = await api.listAPIKeys();
+      setApiKeysCount(apiKeys?.length || 0);
     } catch (error) {
       console.error("Failed to fetch API keys count:", error);
     }
@@ -179,7 +178,7 @@ export default function UsersPage() {
 
   const approveUser = async (user: User) => {
     try {
-      if (user.is_registration_request) {
+      if (user.isRegistrationRequest) {
         await api.approveRegistrationRequest(user.id);
         toast.success("Registration request approved successfully");
       } else {
@@ -195,7 +194,7 @@ export default function UsersPage() {
   };
 
   const rejectUser = async (user: User) => {
-    const message = user.is_registration_request
+    const message = user.isRegistrationRequest
       ? "Are you sure you want to reject this registration request?"
       : "Are you sure you want to reject this user? This will delete their account.";
 
@@ -204,7 +203,7 @@ export default function UsersPage() {
     }
 
     try {
-      if (user.is_registration_request) {
+      if (user.isRegistrationRequest) {
         await api.rejectRegistrationRequest(user.id);
         alert("Registration request rejected successfully");
       } else {
@@ -222,11 +221,10 @@ export default function UsersPage() {
     users?.filter((user) => {
       const matchesSearch =
         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.display_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        user.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesOrg =
-        filterOrg === "all" || user.organization_id === filterOrg;
+        filterOrg === "all" || user.organizationId === filterOrg;
       const matchesStatus =
         filterStatus === "all" || user.status === filterStatus;
 
@@ -239,10 +237,10 @@ export default function UsersPage() {
   const organizations = Array.from(
     new Set(
       users
-        ?.filter((u) => u.organization_id)
+        ?.filter((u) => u.organizationId)
         .map((u) => ({
-          id: u.organization_id!,
-          name: u.organization_name || "Unknown",
+          id: u.organizationId!,
+          name: u.organizationName || "Unknown",
         })) || []
     )
   );
@@ -252,7 +250,7 @@ export default function UsersPage() {
       (u) =>
         u.status === "pending" ||
         u.status === "pending_approval" ||
-        u.is_registration_request
+        u.isRegistrationRequest
     ).length || 0;
   const activeCount = users?.filter((u) => u.status === "active").length || 0;
 
@@ -470,7 +468,7 @@ export default function UsersPage() {
                   const isPending =
                     user.status === "pending" ||
                     user.status === "pending_approval" ||
-                    user.is_registration_request;
+                    user.isRegistrationRequest;
                   return (
                     <tr
                       key={user.id}
@@ -483,10 +481,10 @@ export default function UsersPage() {
                           </div>
                           <div>
                             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {user.name || user.display_name || user.email}
+                              {user.name || user.email}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400">
-                              Joined {formatDate(user.created_at)}
+                              Joined {formatDate(user.createdAt)}
                             </div>
                           </div>
                         </div>
@@ -552,8 +550,8 @@ export default function UsersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {user.last_login_at
-                          ? new Date(user.last_login_at).toLocaleString()
+                        {user.lastLoginAt
+                          ? new Date(user.lastLoginAt).toLocaleString()
                           : "—"}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

@@ -21,14 +21,14 @@ const (
 // Tag represents a label that can be attached to agents and MCP servers
 type Tag struct {
 	ID             uuid.UUID   `json:"id"`
-	OrganizationID uuid.UUID   `json:"organization_id"`
+	OrganizationID uuid.UUID   `json:"organizationId"`
 	Key            string      `json:"key"`
 	Value          string      `json:"value"`
 	Category       TagCategory `json:"category"`
 	Description    string      `json:"description"`
 	Color          string      `json:"color"`
-	CreatedAt      time.Time   `json:"created_at"`
-	CreatedBy      uuid.UUID   `json:"created_by"`
+	CreatedAt      time.Time   `json:"createdAt"`
+	CreatedBy      uuid.UUID   `json:"createdBy"`
 }
 
 // CreateTagInput represents input for creating a new tag

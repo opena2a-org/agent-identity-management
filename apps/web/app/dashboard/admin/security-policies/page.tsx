@@ -43,20 +43,19 @@ import { AuthGuard } from "@/components/auth-guard";
 
 interface SecurityPolicy {
   id: string;
-  organization_id: string;
+  organizationId: string;
   name: string;
   description: string;
-  policy_type: string;
-  
-  enforcement_action: "alert_only" | "block_and_alert" | "allow";
-  severity_threshold: string;
+  policyType: string;
+  enforcementAction: "alert_only" | "block_and_alert" | "allow";
+  severityThreshold: string;
   rules: Record<string, any>;
-  applies_to: string;
-  is_enabled: boolean;
+  appliesTo: string;
+  isEnabled: boolean;
   priority: number;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const enforcementColors = {
@@ -154,7 +153,7 @@ export default function SecurityPoliciesPage() {
       await api.toggleSecurityPolicy(policyId, !currentlyEnabled);
       setPolicies(
         policies.map((p) =>
-          p.id === policyId ? { ...p, is_enabled: !currentlyEnabled } : p
+          p.id === policyId ? { ...p, isEnabled: !currentlyEnabled } : p
         )
       );
     } catch (error) {
@@ -165,16 +164,16 @@ export default function SecurityPoliciesPage() {
 
   const handlePolicyToggle = (policy: SecurityPolicy, newEnabled: boolean) => {
     // If enabling and enforcement is blocking mode, show warning
-    if (newEnabled && policy.enforcement_action === "block_and_alert") {
+    if (newEnabled && policy.enforcementAction === "block_and_alert") {
       setPendingPolicyToggle({
         policyId: policy.id,
         policyName: policy.name,
-        currentAction: policy.enforcement_action,
+        currentAction: policy.enforcementAction,
       });
       setShowBlockingWarning(true);
     } else {
       // Safe to toggle directly
-      togglePolicy(policy.id, policy.is_enabled);
+      togglePolicy(policy.id, policy.isEnabled);
     }
   };
 
@@ -204,19 +203,19 @@ export default function SecurityPoliciesPage() {
       await api.updateSecurityPolicy(policyId, {
         name: policy.name,
         description: policy.description,
-        policy_type: policy.policy_type,
-        enforcement_action: newAction,
-        severity_threshold: policy.severity_threshold,
+        policyType: policy.policyType,
+        enforcementAction: newAction,
+        severityThreshold: policy.severityThreshold,
         rules: policy.rules,
-        applies_to: policy.applies_to,
-        is_enabled: policy.is_enabled,
+        appliesTo: policy.appliesTo,
+        isEnabled: policy.isEnabled,
         priority: policy.priority,
       });
-     
+
       // Update local state
       setPolicies(
         policies.map((p) =>
-          p.id === policyId ? { ...p, enforcement_action: newAction } : p
+          p.id === policyId ? { ...p, enforcementAction: newAction } : p
         )
       );
     } catch (error) {
@@ -258,12 +257,12 @@ export default function SecurityPoliciesPage() {
     }
   };
 
-  const enabledCount = policies.filter((p) => p.is_enabled).length;
+  const enabledCount = policies.filter((p) => p.isEnabled).length;
   const blockingCount = policies.filter(
-    (p) => p.is_enabled && p.enforcement_action === "block_and_alert"
+    (p) => p.isEnabled && p.enforcementAction === "block_and_alert"
   ).length;
   const monitoringCount = policies.filter(
-    (p) => p.is_enabled && p.enforcement_action === "alert_only"
+    (p) => p.isEnabled && p.enforcementAction === "alert_only"
   ).length;
 
   if (loading) {
@@ -437,15 +436,15 @@ export default function SecurityPoliciesPage() {
 
             {policies.map((policy) => {
               const EnforcementIcon =
-                enforcementIcons[policy.enforcement_action] || Shield;
+                enforcementIcons[policy.enforcementAction] || Shield;
               const isBlocking =
-                policy.enforcement_action === "block_and_alert";
+                policy.enforcementAction === "block_and_alert";
 
               return (
                 <div
                   key={policy.id}
                   className={`p-6 border rounded-lg transition-all ${
-                    policy.is_enabled
+                    policy.isEnabled
                       ? "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                       : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60"
                   }`}
@@ -455,14 +454,14 @@ export default function SecurityPoliciesPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`p-2 rounded-lg ${
-                            policy.is_enabled
+                            policy.isEnabled
                               ? "bg-green-100 dark:bg-green-900/30"
                               : "bg-gray-100 dark:bg-gray-800"
                           }`}
                         >
                           <Shield
                             className={`h-5 w-5 ${
-                              policy.is_enabled
+                              policy.isEnabled
                                 ? "text-green-600 dark:text-green-400"
                                 : "text-gray-400"
                             }`}
@@ -474,18 +473,18 @@ export default function SecurityPoliciesPage() {
                               {policy.name}
                             </h3>
                             <Badge
-                              className={`${enforcementColors[policy.enforcement_action] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
+                              className={`${enforcementColors[policy.enforcementAction] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
                             >
                               <EnforcementIcon className="h-3 w-3 mr-1" />
-                              {enforcementLabels[policy.enforcement_action] ||
-                                policy.enforcement_action}
+                              {enforcementLabels[policy.enforcementAction] ||
+                                policy.enforcementAction}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               Priority: {policy.priority}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
-                              {policyTypeLabels[policy.policy_type] ||
-                                policy.policy_type}
+                              {policyTypeLabels[policy.policyType] ||
+                                policy.policyType}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">
@@ -498,7 +497,7 @@ export default function SecurityPoliciesPage() {
                         <div>
                           <span className="font-medium">Applies to:</span>{" "}
                           <span className="capitalize">
-                            {policy.applies_to.replace("_", " ")}
+                            {policy.appliesTo.replace("_", " ")}
                           </span>
                         </div>
                         <div>
@@ -506,7 +505,7 @@ export default function SecurityPoliciesPage() {
                             Severity threshold:
                           </span>{" "}
                           <span className="capitalize">
-                            {policy.severity_threshold}
+                            {policy.severityThreshold}
                           </span>
                         </div>
                         {policy.rules &&
@@ -520,7 +519,7 @@ export default function SecurityPoliciesPage() {
                           )}
                       </div>
 
-                      {isBlocking && policy.is_enabled && (
+                      {isBlocking && policy.isEnabled && (
                         <div className="flex items-center gap-2 pl-14 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
                           <AlertOctagon className="h-4 w-4 text-red-600" />
                           <p className="text-xs text-red-800 dark:text-red-200 font-medium">
@@ -538,7 +537,7 @@ export default function SecurityPoliciesPage() {
                           Enforcement Mode
                         </p>
                         <Select
-                          value={policy.enforcement_action}
+                          value={policy.enforcementAction}
                           onValueChange={(
                             value: "alert_only" | "block_and_alert" | "allow"
                           ) => handleEnforcementChange(policy, value)}
@@ -577,16 +576,16 @@ export default function SecurityPoliciesPage() {
                           </p>
                           <p
                             className={`text-sm font-medium ${
-                              policy.is_enabled
+                              policy.isEnabled
                                 ? "text-green-600"
                                 : "text-gray-500"
                             }`}
                           >
-                            {policy.is_enabled ? "Enabled" : "Disabled"}
+                            {policy.isEnabled ? "Enabled" : "Disabled"}
                           </p>
                         </div>
                         <Switch
-                          checked={policy.is_enabled}
+                          checked={policy.isEnabled}
                           onCheckedChange={(checked) =>
                             handlePolicyToggle(policy, checked)
                           }

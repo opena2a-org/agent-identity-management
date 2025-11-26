@@ -28,25 +28,25 @@ const (
 
 // User represents a platform user
 type User struct {
-	ID                     uuid.UUID   `json:"id"`
-	OrganizationID         uuid.UUID   `json:"organization_id"`
-	Email                  string      `json:"email"`
-	Name                   string      `json:"name"`
-	AvatarURL              *string     `json:"avatar_url"` // Nullable for local users
-	Role                   UserRole    `json:"role"`
-	Provider               string      `json:"provider"`     // Auth provider: "local", "google", "github", "microsoft"
-	ProviderID             string      `json:"provider_id"`  // Provider-specific user ID
-	Status                 UserStatus  `json:"status"` // pending, active, suspended, deactivated
-	PasswordHash           *string     `json:"-"` // Never expose in JSON
-	ForcePasswordChange    bool        `json:"force_password_change"`
-	PasswordResetToken     *string     `json:"-"` // Never expose in JSON
-	PasswordResetExpiresAt *time.Time  `json:"-"` // Never expose in JSON
-	ApprovedBy             *uuid.UUID  `json:"approved_by,omitempty"` // Admin who approved this user
-	ApprovedAt             *time.Time  `json:"approved_at,omitempty"` // When user was approved
-	LastLoginAt            *time.Time  `json:"last_login_at"`
-	DeletedAt              *time.Time  `json:"deleted_at,omitempty"` // When user was soft-deleted (deactivated)
-	CreatedAt              time.Time   `json:"created_at"`
-	UpdatedAt              time.Time   `json:"updated_at"`
+	ID                     uuid.UUID  `json:"id"`
+	OrganizationID         uuid.UUID  `json:"organizationId"`
+	Email                  string     `json:"email"`
+	Name                   string     `json:"name"`
+	AvatarURL              *string    `json:"avatarUrl"` // Nullable for local users
+	Role                   UserRole   `json:"role"`
+	Provider               string     `json:"provider"`   // Auth provider: "local", "google", "github", "microsoft"
+	ProviderID             string     `json:"providerId"` // Provider-specific user ID
+	Status                 UserStatus `json:"status"`     // pending, active, suspended, deactivated
+	PasswordHash           *string    `json:"-"`          // Never expose in JSON
+	ForcePasswordChange    bool       `json:"forcePasswordChange"`
+	PasswordResetToken     *string    `json:"-"` // Never expose in JSON
+	PasswordResetExpiresAt *time.Time `json:"-"` // Never expose in JSON
+	ApprovedBy             *uuid.UUID `json:"approvedBy,omitempty"` // Admin who approved this user
+	ApprovedAt             *time.Time `json:"approvedAt,omitempty"` // When user was approved
+	LastLoginAt            *time.Time `json:"lastLoginAt"`
+	DeletedAt              *time.Time `json:"deletedAt,omitempty"` // When user was soft-deleted (deactivated)
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
 }
 
 // UserRepository defines the interface for user persistence

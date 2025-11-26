@@ -182,7 +182,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
 			"verification_id": verificationID.String(),
-			"trust_score":     trustScore,
+			"trustScore":     trustScore,
 			"auto_approved":   status == "approved",
 			"action_type":     req.ActionType,
 			"resource":        req.Resource,
@@ -303,7 +303,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		"action_type":     req.ActionType,
 		"resource":        req.Resource,
 		"context":         req.Context,
-		"trust_score":     trustScore,
+		"trustScore":     trustScore,
 		"auto_approved":   status == "approved",
 	}
 	if status == "denied" {

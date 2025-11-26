@@ -49,16 +49,16 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface WebhookItem {
   id: string;
-  organization_id: string;
+  organizationId: string;
   name: string;
   url: string;
   events: string[];
-  is_active: boolean;
+  isActive: boolean;
   secret: string;
-  created_at: string;
-  last_triggered_at?: string;
-  success_count: number;
-  failure_count: number;
+  createdAt: string;
+  lastTriggeredAt?: string;
+  successCount: number;
+  failureCount: number;
 }
 
 export default function WebhooksPage() {
@@ -128,7 +128,7 @@ export default function WebhooksPage() {
       if (result.success) {
         toast({
           title: 'Test successful',
-          description: `Webhook responded with status ${result.response_code}`,
+          description: `Webhook responded with status ${result.responseCode}`,
         });
       } else {
         toast({
@@ -155,11 +155,11 @@ export default function WebhooksPage() {
         name: webhook.name,
         url: webhook.url,
         events: webhook.events,
-        is_active: !webhook.is_active,
+        isActive: !webhook.isActive,
       });
       toast({
-        title: webhook.is_active ? 'Webhook disabled' : 'Webhook enabled',
-        description: `The webhook has been ${webhook.is_active ? 'disabled' : 'enabled'} successfully.`,
+        title: webhook.isActive ? 'Webhook disabled' : 'Webhook enabled',
+        description: `The webhook has been ${webhook.isActive ? 'disabled' : 'enabled'} successfully.`,
       });
       fetchWebhooks();
     } catch (err: any) {
@@ -179,9 +179,9 @@ export default function WebhooksPage() {
   };
 
   const getSuccessRate = (webhook: WebhookItem) => {
-    const total = webhook.success_count + webhook.failure_count;
+    const total = webhook.successCount + webhook.failureCount;
     if (total === 0) return 0;
-    return (webhook.success_count / total) * 100;
+    return (webhook.successCount / total) * 100;
   };
 
   if (loading) {
@@ -302,7 +302,7 @@ export default function WebhooksPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                      {webhooks.filter((w) => w.is_active).length}
+                      {webhooks.filter((w) => w.isActive).length}
                     </div>
                   </dd>
                 </dl>
@@ -322,7 +322,7 @@ export default function WebhooksPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                      {webhooks.reduce((sum, w) => sum + w.success_count, 0).toLocaleString()}
+                      {webhooks.reduce((sum, w) => sum + w.successCount, 0).toLocaleString()}
                     </div>
                   </dd>
                 </dl>
@@ -342,7 +342,7 @@ export default function WebhooksPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-red-600 dark:text-red-400">
-                      {webhooks.reduce((sum, w) => sum + w.failure_count, 0).toLocaleString()}
+                      {webhooks.reduce((sum, w) => sum + w.failureCount, 0).toLocaleString()}
                     </div>
                   </dd>
                 </dl>
@@ -423,7 +423,7 @@ export default function WebhooksPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {webhook.is_active ? (
+                          {webhook.isActive ? (
                             <Badge className="bg-green-100 text-green-800 border-green-200">
                               <Power className="h-3 w-3 mr-1" />
                               Active
@@ -457,10 +457,10 @@ export default function WebhooksPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {webhook.last_triggered_at ? (
+                          {webhook.lastTriggeredAt ? (
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(webhook.last_triggered_at), {
+                              {formatDistanceToNow(new Date(webhook.lastTriggeredAt), {
                                 addSuffix: true,
                               })}
                             </div>
@@ -485,7 +485,7 @@ export default function WebhooksPage() {
                             >
                               <TestTube className="h-4 w-4" />
                             </button>
-                            {webhook.is_active ? (
+                            {webhook.isActive ? (
                               <button
                                 onClick={() => handleToggleWebhook(webhook)}
                                 disabled={togglingWebhookId === webhook.id}

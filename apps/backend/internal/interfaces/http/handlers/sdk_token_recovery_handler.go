@@ -123,8 +123,8 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
 		Metadata: map[string]interface{}{
 			"source":          "token_recovery",
-			"recovered_from":  tokenID,
-			"recovery_reason": "token_revoked",
+			"recoveredFrom":  tokenID,
+			"recoveryReason": "token_revoked",
 		},
 	}
 

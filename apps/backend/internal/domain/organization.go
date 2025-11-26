@@ -11,13 +11,13 @@ type Organization struct {
 	ID        uuid.UUID              `json:"id"`
 	Name      string                 `json:"name"`
 	Domain    string                 `json:"domain"`
-	PlanType  string                 `json:"plan_type"` // free, pro, enterprise
-	MaxAgents int                    `json:"max_agents"`
-	MaxUsers  int                    `json:"max_users"`
-	IsActive  bool                   `json:"is_active"`
-	Settings  map[string]interface{} `json:"settings"`   // Additional org settings
-	CreatedAt time.Time              `json:"created_at"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	PlanType  string                 `json:"planType"` // free, pro, enterprise
+	MaxAgents int                    `json:"maxAgents"`
+	MaxUsers  int                    `json:"maxUsers"`
+	IsActive  bool                   `json:"isActive"`
+	Settings  map[string]interface{} `json:"settings"` // Additional org settings
+	CreatedAt time.Time              `json:"createdAt"`
+	UpdatedAt time.Time              `json:"updatedAt"`
 }
 
 // OrganizationRepository defines the interface for organization persistence

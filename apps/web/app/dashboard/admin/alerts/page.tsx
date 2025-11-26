@@ -38,16 +38,16 @@ import { toast } from "sonner";
 
 interface Alert {
   id: string;
-  alert_type: string;
+  alertType: string;
   severity: "low" | "medium" | "high" | "critical" | "info" | "warning"; // ✅ All severity levels
   title: string;
   description: string;
-  resource_type: string;
-  resource_id: string;
-  is_acknowledged: boolean;
-  acknowledged_by?: string;
-  acknowledged_at?: string;
-  created_at: string;
+  resourceType: string;
+  resourceId: string;
+  isAcknowledged: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  createdAt: string;
 }
 
 const severityConfig = {
@@ -108,7 +108,7 @@ export default function AlertsPage() {
       const userRole = (payload.role as any) || "viewer";
       setRole(userRole);
       const extractedUserId =
-        payload.user_id || payload.sub || payload.id || null;
+        payload.userId || payload.sub || payload.id || null;
       setUserId(extractedUserId);
       if (userRole !== "admin") {
         router.replace("/dashboard");
@@ -151,9 +151,9 @@ export default function AlertsPage() {
       const data = await api.getAlerts(effectiveLimit, offset, statusFilter);
       setAlerts(data.alerts);
       setTotal(data.total);
-      setAllCount(data.all_count || 0);
-      setAcknowledgedCount(data.acknowledged_count || 0);
-      setUnacknowledgedCount(data.unacknowledged_count || 0);
+      setAllCount(data.allCount || 0);
+      setAcknowledgedCount(data.acknowledgedCount || 0);
+      setUnacknowledgedCount(data.unacknowledgedCount || 0);
     } catch (error) {
       console.error("Failed to fetch alerts:", error);
     } finally {
@@ -174,7 +174,7 @@ export default function AlertsPage() {
           a.id === alertId
             ? {
                 ...a,
-                is_acknowledged: true,
+                isAcknowledged: true,
                 acknowledged_at: new Date().toISOString(),
               }
             : a
@@ -231,10 +231,10 @@ export default function AlertsPage() {
       const response = await api.bulkAcknowledgeAlerts(userId);
       setAlerts(
         alerts.map((a) =>
-          !a.is_acknowledged
+          !a.isAcknowledged
             ? {
                 ...a,
-                is_acknowledged: true,
+                isAcknowledged: true,
                 acknowledged_at: new Date().toISOString(),
               }
             : a
@@ -263,15 +263,15 @@ export default function AlertsPage() {
       severityFilter === "all" || alert.severity === severityFilter;
     const matchesStatus =
       statusFilter === "all" ||
-      (statusFilter === "acknowledged" && alert.is_acknowledged) ||
-      (statusFilter === "unacknowledged" && !alert.is_acknowledged);
+      (statusFilter === "acknowledged" && alert.isAcknowledged) ||
+      (statusFilter === "unacknowledged" && !alert.isAcknowledged);
     let matchesSearch = true;
     if (searchQuery.trim() !== "") {
       const searchFields: { [key: string]: string } = {
         title: alert.title,
         description: alert.description,
-        resource_id: alert.resource_id,
-        alert_type: alert.alert_type,
+        resource_id: alert.resourceId,
+        alert_type: alert.alertType,
       };
       const value = (searchFields[searchField] ?? "").toLowerCase();
       matchesSearch = value.includes(searchQuery.toLowerCase());
@@ -311,18 +311,18 @@ export default function AlertsPage() {
     // Severity counts are still calculated from loaded alerts (client-side)
     // since API doesn't provide severity breakdown
     critical: alerts.filter(
-      (a) => a.severity === "critical" && !a.is_acknowledged
+      (a) => a.severity === "critical" && !a.isAcknowledged
     ).length,
-    high: alerts.filter((a) => a.severity === "high" && !a.is_acknowledged)
+    high: alerts.filter((a) => a.severity === "high" && !a.isAcknowledged)
       .length,
     medium: alerts.filter(
       (a) =>
         (a.severity === "medium" || a.severity === "warning") &&
-        !a.is_acknowledged
+        !a.isAcknowledged
     ).length,
     low: alerts.filter(
       (a) =>
-        (a.severity === "low" || a.severity === "info") && !a.is_acknowledged
+        (a.severity === "low" || a.severity === "info") && !a.isAcknowledged
     ).length,
   };
 
@@ -606,13 +606,13 @@ export default function AlertsPage() {
               const config = severityConfig[alert.severity];
               const Icon = config.icon;
               const TypeIcon =
-                alertTypeIcons[alert.alert_type] || AlertTriangle;
+                alertTypeIcons[alert.alertType] || AlertTriangle;
 
               return (
                 <div
                   key={alert.id}
                   className={`p-4 border-2 rounded-lg ${
-                    alert.is_acknowledged
+                    alert.isAcknowledged
                       ? "opacity-60 bg-muted/30"
                       : config.color
                   }`}
@@ -628,7 +628,7 @@ export default function AlertsPage() {
                               <h3 className="font-semibold">{alert.title}</h3>
                               <Badge variant="outline" className="text-xs">
                                 <TypeIcon className="h-3 w-3 mr-1" />
-                                {alert.alert_type.replace(/_/g, " ")}
+                                {alert.alertType.replace(/_/g, " ")}
                               </Badge>
                             </div>
                             <p className="text-sm mt-1">{alert.description}</p>
@@ -637,27 +637,27 @@ export default function AlertsPage() {
 
                         <div className="flex items-center gap-4 text-xs">
                           <span>
-                            {alert.resource_type}:{" "}
-                            {alert.resource_id.substring(0, 8)}...
+                            {alert.resourceType}:{" "}
+                            {alert.resourceId.substring(0, 8)}...
                           </span>
                           <span>•</span>
-                          <span>{formatDateTime(alert.created_at)}</span>
+                          <span>{formatDateTime(alert.createdAt)}</span>
                         </div>
 
-                        {alert.is_acknowledged && (
+                        {alert.isAcknowledged && (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <CheckCircle2 className="h-3 w-3" />
                             <span>
                               Acknowledged{" "}
-                              {alert.acknowledged_at &&
-                                formatDateTime(alert.acknowledged_at)}
+                              {alert.acknowledgedAt &&
+                                formatDateTime(alert.acknowledgedAt)}
                             </span>
                           </div>
                         )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 justify-end sm:justify-start">
-                        {!alert.is_acknowledged && (
+                        {!alert.isAcknowledged && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -667,7 +667,7 @@ export default function AlertsPage() {
                             Acknowledge
                           </Button>
                         )}
-                        {alert.is_acknowledged && (
+                        {alert.isAcknowledged && (
                           <Button
                             size="sm"
                             variant="outline"

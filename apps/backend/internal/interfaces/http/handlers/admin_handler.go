@@ -100,12 +100,12 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		Name                  string     `json:"name"`
 		Role                  string     `json:"role"`
 		Status                string     `json:"status"`
-		CreatedAt             time.Time  `json:"created_at"`
+		CreatedAt             time.Time  `json:"createdAt"`
 		Provider              string     `json:"provider,omitempty"`
-		LastLoginAt           *time.Time `json:"last_login_at,omitempty"`
-		RequestedAt           *time.Time `json:"requested_at,omitempty"`
-		PictureURL            *string    `json:"picture_url,omitempty"`
-		IsRegistrationRequest bool       `json:"is_registration_request"`
+		LastLoginAt           *time.Time `json:"lastLoginAt,omitempty"`
+		RequestedAt           *time.Time `json:"requestedAt,omitempty"`
+		PictureURL            *string    `json:"pictureUrl,omitempty"`
+		IsRegistrationRequest bool       `json:"isRegistrationRequest"`
 	}
 
 	var allUsers []UserWithStatus
@@ -167,17 +167,17 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_users":           len(users),
-			"pending_registrations": len(pendingRequests),
-			"total_combined":        len(allUsers),
+			"totalUsers":            len(users),
+			"pendingRegistrations":  len(pendingRequests),
+			"totalCombined":         len(allUsers),
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"users":                 allUsers,
-		"total":                 len(allUsers),
-		"approved_users":        len(users),
-		"pending_registrations": len(pendingRequests),
+		"users":                allUsers,
+		"total":                len(allUsers),
+		"approvedUsers":        len(users),
+		"pendingRegistrations": len(pendingRequests),
 	})
 }
 
@@ -698,9 +698,9 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"alerts":               alerts,
 		"total":                total,
-		"all_count":            allCount,
-		"acknowledged_count":   acknowledgedCount,
-		"unacknowledged_count": unacknowledgedCount,
+		"allCount":            allCount,
+		"acknowledgedCount":   acknowledgedCount,
+		"unacknowledgedCount": unacknowledgedCount,
 		"limit":                limit,
 		"offset":               offset,
 	})
@@ -792,9 +792,9 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 	)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":            fmt.Sprintf("Acknowledged %d alerts", ackCount),
-		"acknowledged_count": ackCount,
-		"bulk_acknowledged":  ackCount > 0,
+		"message":           fmt.Sprintf("Acknowledged %d alerts", ackCount),
+		"acknowledgedCount": ackCount,
+		"bulkAcknowledged":  ackCount > 0,
 	})
 }
 
@@ -950,38 +950,38 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_agents":      len(agents),
-			"verified_agents":   verifiedAgents,
-			"total_mcp_servers": len(mcpServersList),
-			"total_users":       len(users),
-			"active_alerts":     total,
-			"critical_alerts":   criticalAlerts,
+			"totalAgents":      len(agents),
+			"verifiedAgents":   verifiedAgents,
+			"totalMcpServers": len(mcpServersList),
+			"totalUsers":       len(users),
+			"activeAlerts":     total,
+			"criticalAlerts":   criticalAlerts,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		// Agent metrics
-		"total_agents":      len(agents),
-		"verified_agents":   verifiedAgents,
-		"pending_agents":    pendingAgents,
-		"verification_rate": verificationRate,
-		"avg_trust_score":   avgTrustScore,
+		"totalAgents":      len(agents),
+		"verifiedAgents":   verifiedAgents,
+		"pendingAgents":    pendingAgents,
+		"verificationRate": verificationRate,
+		"avgTrustScore":   avgTrustScore,
 
 		// MCP Server metrics
-		"total_mcp_servers":  len(mcpServersList),
-		"active_mcp_servers": activeMCPServers,
+		"totalMcpServers":  len(mcpServersList),
+		"activeMcpServers": activeMCPServers,
 
 		// User metrics
-		"total_users":  len(users),
-		"active_users": activeUsers,
+		"totalUsers":  len(users),
+		"activeUsers": activeUsers,
 
 		// Security metrics
-		"active_alerts":      total,
-		"critical_alerts":    criticalAlerts,
-		"security_incidents": securityIncidents,
+		"activeAlerts":      total,
+		"criticalAlerts":    criticalAlerts,
+		"securityIncidents": securityIncidents,
 
 		// Organization
-		"organization_id": orgID,
+		"organizationId": orgID,
 	})
 }
 
@@ -1008,7 +1008,7 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_pending": len(users),
+			"totalPending": len(users),
 		},
 	)
 
@@ -1241,20 +1241,20 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"organization_name": org.Name,
-			"plan_type":         org.PlanType,
-			"is_active":         org.IsActive,
+			"organizationName": org.Name,
+			"planType":         org.PlanType,
+			"isActive":         org.IsActive,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"id":         org.ID,
-		"name":       org.Name,
-		"domain":     org.Domain,
-		"plan_type":  org.PlanType,
-		"max_agents": org.MaxAgents,
-		"max_users":  org.MaxUsers,
-		"is_active":  org.IsActive,
+		"id":        org.ID,
+		"name":      org.Name,
+		"domain":    org.Domain,
+		"planType":  org.PlanType,
+		"maxAgents": org.MaxAgents,
+		"maxUsers":  org.MaxUsers,
+		"isActive":  org.IsActive,
 	})
 }
 
@@ -1284,9 +1284,9 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"all_count":            allCount,
-		"acknowledged_count":   acknowledgedCount,
-		"unacknowledged_count": unacknowledgedCount,
+		"allCount":            allCount,
+		"acknowledgedCount":   acknowledgedCount,
+		"unacknowledgedCount": unacknowledgedCount,
 	})
 }
 

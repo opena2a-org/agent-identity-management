@@ -129,7 +129,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					Metadata: map[string]interface{}{
 						"source":         "token_rotation",
 						"rotated_from":   tokenID,
-						"rotation_count": 1,
+						"rotationCount": 1,
 					},
 				}
 

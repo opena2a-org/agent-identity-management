@@ -25,7 +25,7 @@ interface AutoDetectButtonProps {
 }
 
 interface DetectionResult {
-  detected_servers: Array<{
+  detectedServers: Array<{
     name: string
     command: string
     args: string[]
@@ -34,11 +34,11 @@ interface DetectionResult {
     source: string
     metadata?: Record<string, any>
   }>
-  registered_count: number
-  mapped_count: number
-  total_talks_to: number
-  dry_run: boolean
-  errors_encountered?: string[]
+  registeredCount: number
+  mappedCount: number
+  totalTalksTo: number
+  dryRun: boolean
+  errorsEncountered?: string[]
 }
 
 // Helper to get default config path based on platform
@@ -83,15 +83,15 @@ export function AutoDetectButton({
 
     try {
       const detectionResult = await api.detectAndMapMCPServers(agentId, {
-        config_path: configPath,
-        auto_register: autoRegister,
-        dry_run: dryRun,
+        configPath: configPath,
+        autoRegister: autoRegister,
+        dryRun: dryRun,
       })
 
       setResult(detectionResult)
 
       // If not a dry run and detection was successful, call onDetectionComplete
-      if (!dryRun && detectionResult.detected_servers.length > 0 && onDetectionComplete) {
+      if (!dryRun && detectionResult.detectedServers.length > 0 && onDetectionComplete) {
         onDetectionComplete()
       }
     } catch (err: any) {
@@ -196,32 +196,32 @@ export function AutoDetectButton({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3 rounded-lg bg-muted">
                     <div className="text-2xl font-bold text-foreground">
-                      {result.detected_servers.length}
+                      {result.detectedServers.length}
                     </div>
                     <div className="text-xs text-muted-foreground">Detected</div>
                   </div>
                   <div className="p-3 rounded-lg bg-muted">
                     <div className="text-2xl font-bold text-green-600">
-                      {result.registered_count}
+                      {result.registeredCount}
                     </div>
                     <div className="text-xs text-muted-foreground">Registered</div>
                   </div>
                   <div className="p-3 rounded-lg bg-muted">
                     <div className="text-2xl font-bold text-blue-600">
-                      {result.mapped_count}
+                      {result.mappedCount}
                     </div>
                     <div className="text-xs text-muted-foreground">Mapped</div>
                   </div>
                   <div className="p-3 rounded-lg bg-muted">
                     <div className="text-2xl font-bold text-purple-600">
-                      {result.total_talks_to}
+                      {result.totalTalksTo}
                     </div>
                     <div className="text-xs text-muted-foreground">Total MCPs</div>
                   </div>
                 </div>
 
                 {/* Dry Run Notice */}
-                {result.dry_run && (
+                {result.dryRun && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 text-blue-600">
                     <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
                     <div className="text-sm">
@@ -232,22 +232,22 @@ export function AutoDetectButton({
                 )}
 
                 {/* Success Message */}
-                {!result.dry_run && result.detected_servers.length > 0 && (
+                {!result.dryRun && result.detectedServers.length > 0 && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-green-500/10 text-green-600">
                     <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0" />
                     <div className="text-sm">
-                      Successfully detected and mapped {result.mapped_count} MCP server(s) to this
+                      Successfully detected and mapped {result.mappedCount} MCP server(s) to this
                       agent!
                     </div>
                   </div>
                 )}
 
                 {/* Detected Servers List */}
-                {result.detected_servers.length > 0 && (
+                {result.detectedServers.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold">Detected MCP Servers:</h4>
                     <div className="space-y-2">
-                      {result.detected_servers.map((server, index) => (
+                      {result.detectedServers.map((server, index) => (
                         <div
                           key={index}
                           className="p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
@@ -283,11 +283,11 @@ export function AutoDetectButton({
                 )}
 
                 {/* Errors */}
-                {result.errors_encountered && result.errors_encountered.length > 0 && (
+                {result.errorsEncountered && result.errorsEncountered.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold text-orange-600">Warnings:</h4>
                     <div className="space-y-1">
-                      {result.errors_encountered.map((err, index) => (
+                      {result.errorsEncountered.map((err, index) => (
                         <div
                           key={index}
                           className="text-xs text-orange-600 p-2 rounded bg-orange-500/10"
@@ -300,7 +300,7 @@ export function AutoDetectButton({
                 )}
 
                 {/* No Servers Found */}
-                {result.detected_servers.length === 0 && (
+                {result.detectedServers.length === 0 && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-muted">
                     <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-muted-foreground">
@@ -314,7 +314,7 @@ export function AutoDetectButton({
           </div>
 
           <DialogFooter>
-            {result && !result.dry_run ? (
+            {result && !result.dryRun ? (
               <Button onClick={handleClose}>Done</Button>
             ) : (
               <>

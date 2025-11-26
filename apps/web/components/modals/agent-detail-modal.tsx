@@ -303,7 +303,7 @@ export function AgentDetailModal({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {agent.display_name}
+                {agent.displayName}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {agent.name}
@@ -337,11 +337,11 @@ export function AgentDetailModal({
                 Trust Score
               </span>
               <span
-                className={`text-2xl font-bold ${getTrustScoreColor(agent.trust_score)}`}
+                className={`text-2xl font-bold ${getTrustScoreColor(agent.trustScore)}`}
               >
-                {agent.trust_score <= 1
-                  ? Math.round(agent.trust_score * 100)
-                  : Math.round(agent.trust_score)}
+                {agent.trustScore <= 1
+                  ? Math.round(agent.trustScore * 100)
+                  : Math.round(agent.trustScore)}
                 %
               </span>
             </div>
@@ -351,12 +351,12 @@ export function AgentDetailModal({
               </span>
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  agent.agent_type === "ai_agent"
+                  agent.agentType === "ai_agent"
                     ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
                     : "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
                 }`}
               >
-                {agent.agent_type === "ai_agent" ? "AI Agent" : "MCP Server"}
+                {agent.agentType === "ai_agent" ? "AI Agent" : "MCP Server"}
               </span>
             </div>
           </div>
@@ -451,9 +451,9 @@ export function AgentDetailModal({
               </svg>
               Talks To (MCP Servers)
             </h3>
-            {agent.talks_to && agent.talks_to.length > 0 ? (
+            {agent.talksTo && agent.talksTo.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {agent.talks_to.map((mcpServer, index) => (
+                {agent.talksTo.map((mcpServer, index) => (
                   <div
                     key={index}
                     className="px-3 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md text-sm font-medium text-purple-900 dark:text-purple-100"
@@ -769,7 +769,7 @@ export function AgentDetailModal({
                 Organization ID
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">
-                {agent.organization_id}
+                {agent.organizationId}
               </p>
             </div>
 
@@ -779,7 +779,7 @@ export function AgentDetailModal({
                 Created
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100">
-                {formatDate(agent.created_at)}
+                {formatDate(agent.createdAt)}
               </p>
             </div>
 
@@ -789,7 +789,7 @@ export function AgentDetailModal({
                 Last Updated
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100">
-                {formatDate(agent.updated_at)}
+                {formatDate(agent.updatedAt)}
               </p>
             </div>
           </div>
@@ -807,7 +807,7 @@ export function AgentDetailModal({
                     Agent registered
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(agent.created_at)}
+                    {formatDate(agent.createdAt)}
                   </p>
                 </div>
               </div>
@@ -818,7 +818,7 @@ export function AgentDetailModal({
                     Agent updated
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(agent.updated_at)}
+                    {formatDate(agent.updatedAt)}
                   </p>
                 </div>
               </div>

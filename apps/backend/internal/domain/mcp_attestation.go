@@ -18,17 +18,17 @@ const (
 
 // AgentMCPConnection represents a bidirectional relationship between an agent and MCP server
 type AgentMCPConnection struct {
-	ID                uuid.UUID      `json:"id"`
-	AgentID           uuid.UUID      `json:"agent_id"`
-	MCPServerID       uuid.UUID      `json:"mcp_server_id"`
-	DetectionID       *uuid.UUID     `json:"detection_id"`
-	ConnectionType    ConnectionType `json:"connection_type"`
-	FirstConnectedAt  time.Time      `json:"first_connected_at"`
-	LastAttestedAt    *time.Time     `json:"last_attested_at"`
-	AttestationCount  int            `json:"attestation_count"`
-	IsActive          bool           `json:"is_active"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
+	ID               uuid.UUID      `json:"id"`
+	AgentID          uuid.UUID      `json:"agentId"`
+	MCPServerID      uuid.UUID      `json:"mcpServerId"`
+	DetectionID      *uuid.UUID     `json:"detectionId"`
+	ConnectionType   ConnectionType `json:"connectionType"`
+	FirstConnectedAt time.Time      `json:"firstConnectedAt"`
+	LastAttestedAt   *time.Time     `json:"lastAttestedAt"`
+	AttestationCount int            `json:"attestationCount"`
+	IsActive         bool           `json:"isActive"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
 }
 
 // AttestationPayload represents the data that an agent attests to about an MCP server
@@ -61,43 +61,43 @@ func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
 // MCPAttestation represents a cryptographically signed attestation from a verified agent
 type MCPAttestation struct {
 	ID                uuid.UUID          `json:"id"`
-	MCPServerID       uuid.UUID          `json:"mcp_server_id"`
-	AgentID           *uuid.UUID         `json:"agent_id"`           // Nullable for manual attestations
-	AttestationData   AttestationPayload `json:"attestation_data"`
+	MCPServerID       uuid.UUID          `json:"mcpServerId"`
+	AgentID           *uuid.UUID         `json:"agentId"`          // Nullable for manual attestations
+	AttestationData   AttestationPayload `json:"attestationData"`
 	Signature         string             `json:"signature"`
-	SignatureVerified bool               `json:"signature_verified"`
-	VerifiedAt        *time.Time         `json:"verified_at"`
-	ExpiresAt         time.Time          `json:"expires_at"`
-	IsValid           bool               `json:"is_valid"`
-	CreatedAt         time.Time          `json:"created_at"`
+	SignatureVerified bool               `json:"signatureVerified"`
+	VerifiedAt        *time.Time         `json:"verifiedAt"`
+	ExpiresAt         time.Time          `json:"expiresAt"`
+	IsValid           bool               `json:"isValid"`
+	CreatedAt         time.Time          `json:"createdAt"`
 
 	// Populated via JOIN queries
-	AgentName       string  `json:"agent_name,omitempty"`
-	AgentTrustScore float64 `json:"agent_trust_score,omitempty"`
+	AgentName       string  `json:"agentName,omitempty"`
+	AgentTrustScore float64 `json:"agentTrustScore,omitempty"`
 }
 
 // AttestationWithAgentDetails is returned from API endpoints that need agent info
 type AttestationWithAgentDetails struct {
 	ID                    uuid.UUID `json:"id"`
-	AgentID               uuid.UUID `json:"agent_id"`
-	AgentName             string    `json:"agent_name"`
-	AgentTrustScore       float64   `json:"agent_trust_score"`
-	VerifiedAt            string    `json:"verified_at"`
-	ExpiresAt             string    `json:"expires_at"`
-	CapabilitiesConfirmed []string  `json:"capabilities_confirmed"`
-	ConnectionLatencyMs   float64   `json:"connection_latency_ms"`
-	HealthCheckPassed     bool      `json:"health_check_passed"`
-	IsValid               bool      `json:"is_valid"`
+	AgentID               uuid.UUID `json:"agentId"`
+	AgentName             string    `json:"agentName"`
+	AgentTrustScore       float64   `json:"agentTrustScore"`
+	VerifiedAt            string    `json:"verifiedAt"`
+	ExpiresAt             string    `json:"expiresAt"`
+	CapabilitiesConfirmed []string  `json:"capabilitiesConfirmed"`
+	ConnectionLatencyMs   float64   `json:"connectionLatencyMs"`
+	HealthCheckPassed     bool      `json:"healthCheckPassed"`
+	IsValid               bool      `json:"isValid"`
 
 	// Attestation metadata - who and how
-	AttestationType       string    `json:"attestation_type"`        // "sdk" or "manual"
-	AttestedBy            string    `json:"attested_by"`             // Agent name or User name
-	AttesterType          string    `json:"attester_type"`           // "agent" or "user"
-	SignatureVerified     bool      `json:"signature_verified"`      // Whether cryptographic signature was verified
-	SDKVersion            string    `json:"sdk_version,omitempty"`   // SDK version used (if SDK attestation)
-	ConnectionSuccessful  bool      `json:"connection_successful"`   // Whether connection test succeeded
-	AgentOwnerName        string    `json:"agent_owner_name,omitempty"` // Name of user who owns the agent (for SDK attestations)
-	AgentOwnerID          uuid.UUID `json:"agent_owner_id,omitempty"`   // ID of user who owns the agent (for SDK attestations)
+	AttestationType      string    `json:"attestationType"`           // "sdk" or "manual"
+	AttestedBy           string    `json:"attestedBy"`                // Agent name or User name
+	AttesterType         string    `json:"attesterType"`              // "agent" or "user"
+	SignatureVerified    bool      `json:"signatureVerified"`         // Whether cryptographic signature was verified
+	SDKVersion           string    `json:"sdkVersion,omitempty"`      // SDK version used (if SDK attestation)
+	ConnectionSuccessful bool      `json:"connectionSuccessful"`      // Whether connection test succeeded
+	AgentOwnerName       string    `json:"agentOwnerName,omitempty"`  // Name of user who owns the agent (for SDK attestations)
+	AgentOwnerID         uuid.UUID `json:"agentOwnerId,omitempty"`    // ID of user who owns the agent (for SDK attestations)
 }
 
 // VerificationMethod represents how an MCP server was verified

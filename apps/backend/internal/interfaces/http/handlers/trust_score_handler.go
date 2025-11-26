@@ -71,14 +71,14 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name":  agent.Name,
-			"trust_score": score.Score,
+			"agentName":  agent.Name,
+			"trustScore": score.Score,
 			"factors":     score.Factors,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"agent_id":      agentID,
+		"agentId":      agentID,
 		"score":         score.Score,
 		"factors":       score.Factors,
 		"calculated_at": score.LastCalculated,
@@ -118,8 +118,8 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"agent_id":      agentID,
-		"agent_name":    agent.Name,
+		"agentId":      agentID,
+		"agentName":    agent.Name,
 		"score":         score.Score,
 		"factors":       score.Factors,
 		"calculated_at": score.LastCalculated,
@@ -247,8 +247,8 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	// Return audit trail with proper JSON field names for frontend
 	// Domain model already has correct JSON tags mapping to frontend expectations
 	return c.JSON(fiber.Map{
-		"agent_id":   agentID,
-		"agent_name": agent.Name,
+		"agentId":   agentID,
+		"agentName": agent.Name,
 		"history":    history,
 		"total":      len(history),
 	})

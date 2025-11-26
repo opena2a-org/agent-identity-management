@@ -9,17 +9,17 @@ import (
 // APIKey represents an API key for agent authentication
 type APIKey struct {
 	ID             uuid.UUID  `json:"id"`
-	OrganizationID uuid.UUID  `json:"organization_id"`
-	AgentID        uuid.UUID  `json:"agent_id"`
-	AgentName      string     `json:"agent_name,omitempty"` // Fetched via JOIN
+	OrganizationID uuid.UUID  `json:"organizationId"`
+	AgentID        uuid.UUID  `json:"agentId"`
+	AgentName      string     `json:"agentName,omitempty"` // Fetched via JOIN
 	Name           string     `json:"name"`
-	KeyHash        string     `json:"key_hash"` // SHA-256 hash
-	Prefix         string     `json:"prefix"`   // First 8 chars for identification
-	LastUsedAt     *time.Time `json:"last_used_at"`
-	ExpiresAt      *time.Time `json:"expires_at"`
-	IsActive       bool       `json:"is_active"`
-	CreatedAt      time.Time  `json:"created_at"`
-	CreatedBy      uuid.UUID  `json:"created_by"`
+	KeyHash        string     `json:"keyHash"` // SHA-256 hash
+	Prefix         string     `json:"prefix"`  // First 8 chars for identification
+	LastUsedAt     *time.Time `json:"lastUsedAt"`
+	ExpiresAt      *time.Time `json:"expiresAt"`
+	IsActive       bool       `json:"isActive"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	CreatedBy      uuid.UUID  `json:"createdBy"`
 }
 
 // APIKeyRepository defines the interface for API key persistence

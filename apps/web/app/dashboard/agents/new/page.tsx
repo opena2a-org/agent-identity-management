@@ -9,24 +9,24 @@ import { AuthGuard } from '@/components/auth-guard';
 
 interface AgentFormData {
   name: string;
-  display_name: string;
+  displayName: string;
   description: string;
-  agent_type: 'ai_agent' | 'mcp_server';
+  agentType: 'ai_agent' | 'mcp_server';
   version: string;
-  repository_url: string;
-  documentation_url: string;
+  repositoryUrl: string;
+  documentationUrl: string;
 }
 
 export default function NewAgentPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
-    display_name: '',
+    displayName: '',
     description: '',
-    agent_type: 'ai_agent',
+    agentType: 'ai_agent',
     version: '',
-    repository_url: '',
-    documentation_url: '',
+    repositoryUrl: '',
+    documentationUrl: '',
     // ✅ REMOVED: public_key - AIM generates this automatically
   });
 
@@ -78,9 +78,9 @@ export default function NewAgentPage() {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, agent_type: 'ai_agent' })}
+                  onClick={() => setFormData({ ...formData, agentType: 'ai_agent' })}
                   className={`p-4 border-2 rounded-lg transition-colors ${
-                    formData.agent_type === 'ai_agent'
+                    formData.agentType === 'ai_agent'
                       ? 'border-blue-600 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -93,9 +93,9 @@ export default function NewAgentPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, agent_type: 'mcp_server' })}
+                  onClick={() => setFormData({ ...formData, agentType: 'mcp_server' })}
                   className={`p-4 border-2 rounded-lg transition-colors ${
-                    formData.agent_type === 'mcp_server'
+                    formData.agentType === 'mcp_server'
                       ? 'border-blue-600 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -137,8 +137,8 @@ export default function NewAgentPage() {
                 required
                 placeholder="e.g., Customer Support Agent"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                value={formData.display_name}
-                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                value={formData.displayName}
+                onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
               />
             </div>
 
@@ -180,8 +180,8 @@ export default function NewAgentPage() {
                 type="url"
                 placeholder="https://github.com/org/repo"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                value={formData.repository_url}
-                onChange={(e) => setFormData({ ...formData, repository_url: e.target.value })}
+                value={formData.repositoryUrl}
+                onChange={(e) => setFormData({ ...formData, repositoryUrl: e.target.value })}
               />
               <p className="mt-1 text-sm text-gray-500">
                 Improves trust score if provided
@@ -197,8 +197,8 @@ export default function NewAgentPage() {
                 type="url"
                 placeholder="https://docs.example.com"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                value={formData.documentation_url}
-                onChange={(e) => setFormData({ ...formData, documentation_url: e.target.value })}
+                value={formData.documentationUrl}
+                onChange={(e) => setFormData({ ...formData, documentationUrl: e.target.value })}
               />
             </div>
 

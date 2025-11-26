@@ -93,7 +93,7 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 				"attestation_id":       response.AttestationID,
 				"confidence_score":     response.MCPConfidenceScore,
 				"attestation_count":    response.AttestationCount,
-				"agent_id":             req.Attestation.AgentID,
+				"agentId":             req.Attestation.AgentID,
 				"capabilities_found":   req.Attestation.CapabilitiesFound,
 				"connection_latency_ms": req.Attestation.ConnectionLatencyMs,
 			},
@@ -214,7 +214,7 @@ func (h *MCPAttestationHandler) GetAgentMCPServers(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"mcp_servers": mcpServers,
+		"mcpServers": mcpServers,
 		"total":       len(mcpServers),
 	})
 }
@@ -419,7 +419,7 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":           true,
 		"connection_id":     connection.ID,
-		"agent_id":          connection.AgentID,
+		"agentId":          connection.AgentID,
 		"mcp_server_id":     connection.MCPServerID,
 		"connection_type":   connection.ConnectionType,
 		"attestation_count": connection.AttestationCount,

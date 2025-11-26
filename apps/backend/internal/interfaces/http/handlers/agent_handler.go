@@ -57,34 +57,34 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
         capabilityTypes = append(capabilityTypes, cap.CapabilityType)
     }
 
-    // Return flat response with all agent fields + capabilities
+    // Return flat response with all agent fields + capabilities (camelCase for frontend)
     return fiber.Map{
-        "id":                         agent.ID,
-        "organization_id":            agent.OrganizationID,
-        "name":                       agent.Name,
-        "display_name":               agent.DisplayName,
-        "description":                agent.Description,
-        "agent_type":                 agent.AgentType,
-        "status":                     agent.Status,
-        "version":                    agent.Version,
-        "public_key":                 agent.PublicKey,
-        "trust_score":                agent.TrustScore,
-        "verified_at":                agent.VerifiedAt,
-        "created_at":                 agent.CreatedAt,
-        "updated_at":                 agent.UpdatedAt,
-        "talks_to":                   agent.TalksTo,
-        "capabilities":               capabilityTypes, 
-        "capability_violation_count": agent.CapabilityViolationCount,
-        "is_compromised":             agent.IsCompromised,
-        "certificate_url":            agent.CertificateURL,
-        "repository_url":             agent.RepositoryURL,
-        "documentation_url":          agent.DocumentationURL,
-        "key_algorithm":              agent.KeyAlgorithm,
-        "created_by":                 agent.CreatedBy,
-        "last_active":                agent.LastActive,
-        "key_created_at":             agent.KeyCreatedAt,
-        "key_expires_at":             agent.KeyExpiresAt,
-        "rotation_count":             agent.RotationCount,
+        "id":                       agent.ID,
+        "organizationId":           agent.OrganizationID,
+        "name":                     agent.Name,
+        "displayName":              agent.DisplayName,
+        "description":              agent.Description,
+        "agentType":                agent.AgentType,
+        "status":                   agent.Status,
+        "version":                  agent.Version,
+        "publicKey":                agent.PublicKey,
+        "trustScore":               agent.TrustScore,
+        "verifiedAt":               agent.VerifiedAt,
+        "createdAt":                agent.CreatedAt,
+        "updatedAt":                agent.UpdatedAt,
+        "talksTo":                  agent.TalksTo,
+        "capabilities":             capabilityTypes,
+        "capabilityViolationCount": agent.CapabilityViolationCount,
+        "isCompromised":            agent.IsCompromised,
+        "certificateUrl":           agent.CertificateURL,
+        "repositoryUrl":            agent.RepositoryURL,
+        "documentationUrl":         agent.DocumentationURL,
+        "keyAlgorithm":             agent.KeyAlgorithm,
+        "createdBy":                agent.CreatedBy,
+        "lastActive":               agent.LastActive,
+        "keyCreatedAt":             agent.KeyCreatedAt,
+        "keyExpiresAt":             agent.KeyExpiresAt,
+        "rotationCount":            agent.RotationCount,
     }
 }
 
@@ -142,8 +142,8 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name": agent.Name,
-			"agent_type": agent.AgentType,
+			"agentName": agent.Name,
+			"agentType": agent.AgentType,
 		},
 	)
 
@@ -226,7 +226,7 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name": agent.Name,
+			"agentName": agent.Name,
 		},
 	)
 
@@ -323,15 +323,15 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name":  agent.Name,
-			"trust_score": agent.TrustScore,
+			"agentName":  agent.Name,
+			"trustScore": agent.TrustScore,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"verified":    true,
-		"trust_score": agent.TrustScore,
-		"verified_at": agent.VerifiedAt,
+		"trustScore": agent.TrustScore,
+		"verifiedAt": agent.VerifiedAt,
 	})
 }
 
@@ -674,7 +674,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"language":   language,
-			"agent_name": agent.Name,
+			"agentName": agent.Name,
 		},
 	)
 
@@ -734,7 +734,7 @@ func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name": agent.Name,
+			"agentName": agent.Name,
 		},
 	)
 
@@ -859,7 +859,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":       fmt.Sprintf("Successfully added %d MCP server(s)", len(addedServers)),
-		"talks_to":      updatedAgent.TalksTo,
+		"talksTo":      updatedAgent.TalksTo,
 		"added_servers": addedServers,
 		"total_count":   len(updatedAgent.TalksTo),
 	})
@@ -937,7 +937,7 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":     "Successfully removed MCP server",
-		"talks_to":    updatedAgent.TalksTo,
+		"talksTo":    updatedAgent.TalksTo,
 		"total_count": len(updatedAgent.TalksTo),
 	})
 }
@@ -989,9 +989,9 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 	// TODO: Implement full server details lookup
 
 	return c.JSON(fiber.Map{
-		"agent_id":   agentID.String(),
-		"agent_name": agent.Name,
-		"talks_to":   agent.TalksTo,
+		"agentId":   agentID.String(),
+		"agentName": agent.Name,
+		"talksTo":   agent.TalksTo,
 		"total":      len(agent.TalksTo),
 	})
 }
@@ -1152,26 +1152,26 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 		"success": true,
 		"agent": fiber.Map{
 			"id":                         agent.ID,
-			"organization_id":            agent.OrganizationID,
+			"organizationId":            agent.OrganizationID,
 			"name":                       agent.Name,
-			"display_name":               agent.DisplayName,
+			"displayName":               agent.DisplayName,
 			"description":                agent.Description,
-			"agent_type":                 agent.AgentType,
+			"agentType":                 agent.AgentType,
 			"status":                     agent.Status,
 			"version":                    agent.Version,
-			"public_key":                 agent.PublicKey,
-			"trust_score":                agent.TrustScore,
-			"verified_at":                agent.VerifiedAt,
-			"created_at":                 agent.CreatedAt,
-			"updated_at":                 agent.UpdatedAt,
-			"key_algorithm":              agent.KeyAlgorithm,
-			"key_created_at":             agent.KeyCreatedAt,
-			"key_expires_at":             agent.KeyExpiresAt,
-			"rotation_count":             agent.RotationCount,
-			"talks_to":                   agent.TalksTo,
+			"publicKey":                 agent.PublicKey,
+			"trustScore":                agent.TrustScore,
+			"verifiedAt":                agent.VerifiedAt,
+			"createdAt":                 agent.CreatedAt,
+			"updatedAt":                 agent.UpdatedAt,
+			"keyAlgorithm":              agent.KeyAlgorithm,
+			"keyCreatedAt":             agent.KeyCreatedAt,
+			"keyExpiresAt":             agent.KeyExpiresAt,
+			"rotationCount":             agent.RotationCount,
+			"talksTo":                   agent.TalksTo,
 			"capabilities":               capabilities,
-			"capability_violation_count": agent.CapabilityViolationCount,
-			"is_compromised":             agent.IsCompromised,
+			"capabilityViolationCount": agent.CapabilityViolationCount,
+			"isCompromised":             agent.IsCompromised,
 		},
 	})
 }
@@ -1288,9 +1288,9 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name":      agent.Name,
-			"old_trust_score": agent.TrustScore,
-			"new_trust_score": req.Score,
+			"agentName":      agent.Name,
+			"oldTrustScore": agent.TrustScore,
+			"newTrustScore": req.Score,
 			"reason":          req.Reason,
 			"action":          "manual_override",
 		},
@@ -1298,10 +1298,10 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"success":     true,
-		"agent_id":    agentID,
-		"agent_name":  updatedAgent.Name,
-		"trust_score": updatedAgent.TrustScore,
-		"updated_at":  updatedAgent.UpdatedAt,
+		"agentId":    agentID,
+		"agentName":  updatedAgent.Name,
+		"trustScore": updatedAgent.TrustScore,
+		"updatedAt":  updatedAgent.UpdatedAt,
 		"message":     "Trust score updated successfully",
 	})
 }
@@ -1382,9 +1382,9 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"action":      "suspend",
-			"agent_name":  agent.Name,
+			"agentName":  agent.Name,
 			"status":      agent.Status,
-			"trust_score": agent.TrustScore,
+			"trustScore": agent.TrustScore,
 		},
 	)
 
@@ -1392,7 +1392,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 		"success":     true,
 		"message":     "Agent suspended successfully",
 		"status":      agent.Status,
-		"trust_score": agent.TrustScore,
+		"trustScore": agent.TrustScore,
 		"agent":       agent,
 	})
 }
@@ -1453,9 +1453,9 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"action":      "reactivate",
-			"agent_name":  agent.Name,
+			"agentName":  agent.Name,
 			"status":      agent.Status,
-			"trust_score": agent.TrustScore,
+			"trustScore": agent.TrustScore,
 		},
 	)
 
@@ -1463,8 +1463,8 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		"success":     true,
 		"message":     "Agent reactivated successfully",
 		"status":      agent.Status,
-		"trust_score": agent.TrustScore,
-		"verified_at": agent.VerifiedAt,
+		"trustScore": agent.TrustScore,
+		"verifiedAt": agent.VerifiedAt,
 		"agent":       agent,
 	})
 }
@@ -1526,22 +1526,22 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"action":         "rotate_credentials",
-			"agent_name":     agent.Name,
-			"rotation_count": agent.RotationCount,
-			"key_created_at": agent.KeyCreatedAt,
-			"key_expires_at": agent.KeyExpiresAt,
+			"agentName":     agent.Name,
+			"rotationCount": agent.RotationCount,
+			"keyCreatedAt": agent.KeyCreatedAt,
+			"keyExpiresAt": agent.KeyExpiresAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"success":             true,
 		"message":             "Credentials rotated successfully",
-		"public_key":          publicKey,
+		"publicKey":          publicKey,
 		"private_key":         privateKey, // ⚠️ SENSITIVE: Only returned once during rotation
 		"previous_public_key": agent.PreviousPublicKey,
-		"rotation_count":      agent.RotationCount,
-		"key_created_at":      agent.KeyCreatedAt,
-		"key_expires_at":      agent.KeyExpiresAt,
+		"rotationCount":      agent.RotationCount,
+		"keyCreatedAt":      agent.KeyCreatedAt,
+		"keyExpiresAt":      agent.KeyExpiresAt,
 		"warning":             "Store the private key securely. It will not be shown again.",
 	})
 }
@@ -1620,19 +1620,19 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"action":         "update_public_key",
-			"agent_name":     agent.Name,
-			"rotation_count": agent.RotationCount,
-			"key_created_at": agent.KeyCreatedAt,
+			"agentName":     agent.Name,
+			"rotationCount": agent.RotationCount,
+			"keyCreatedAt": agent.KeyCreatedAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"success":             true,
 		"message":             "Public key updated successfully",
-		"public_key":          agent.PublicKey,
+		"publicKey":          agent.PublicKey,
 		"previous_public_key": agent.PreviousPublicKey,
-		"rotation_count":      agent.RotationCount,
-		"key_created_at":      agent.KeyCreatedAt,
-		"key_expires_at":      agent.KeyExpiresAt,
+		"rotationCount":      agent.RotationCount,
+		"keyCreatedAt":      agent.KeyCreatedAt,
+		"keyExpiresAt":      agent.KeyExpiresAt,
 	})
 }

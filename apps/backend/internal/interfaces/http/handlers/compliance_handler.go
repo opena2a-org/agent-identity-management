@@ -118,16 +118,16 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"start_date": startDate,
-			"end_date":   endDate,
+			"startDate": startDate,
+			"endDate":   endDate,
 			"interval":   req.Interval,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"metrics":    metrics,
-		"start_date": startDate,
-		"end_date":   endDate,
+		"startDate": startDate,
+		"endDate":   endDate,
 		"interval":   req.Interval,
 	})
 }
@@ -203,7 +203,7 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"check_type": req.CheckType,
+			"checkType": req.CheckType,
 		},
 	)
 
@@ -275,8 +275,8 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"format":     format,
-			"start_date": startDate,
-			"end_date":   endDate,
+			"startDate": startDate,
+			"endDate":   endDate,
 		},
 	)
 
@@ -284,8 +284,8 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		c.Set("Content-Type", "application/json")
 		c.Set("Content-Disposition", "attachment; filename=compliance-report.json")
 		return c.JSON(fiber.Map{
-			"generated_at":    time.Now().Format(time.RFC3339),
-			"organization_id": orgID,
+			"generatedAt":    time.Now().Format(time.RFC3339),
+			"organizationId": orgID,
 			"status":          status,
 			"metrics":         metricsData,
 		})

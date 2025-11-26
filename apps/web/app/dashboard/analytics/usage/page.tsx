@@ -25,12 +25,12 @@ import { AuthGuard } from '@/components/auth-guard';
 
 interface UsageData {
   period: string;
-  api_calls: number;
-  active_agents: number;
-  total_agents: number;
-  data_volume: number;
+  apiCalls: number;
+  activeAgents: number;
+  totalAgents: number;
+  dataVolume: number;
   uptime: number;
-  generated_at: string;
+  generatedAt: string;
 }
 
 export default function UsageStatisticsPage() {
@@ -154,7 +154,7 @@ export default function UsageStatisticsPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                      {data?.api_calls?.toLocaleString() || '0'}
+                      {data?.apiCalls?.toLocaleString() || '0'}
                     </div>
                   </dd>
                 </dl>
@@ -174,7 +174,7 @@ export default function UsageStatisticsPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                      {data?.active_agents || 0}
+                      {data?.activeAgents || 0}
                     </div>
                   </dd>
                 </dl>
@@ -194,7 +194,7 @@ export default function UsageStatisticsPage() {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                      {data?.total_agents || 0}
+                      {data?.totalAgents || 0}
                     </div>
                   </dd>
                 </dl>
@@ -234,7 +234,7 @@ export default function UsageStatisticsPage() {
               <div className="flex flex-col items-center p-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <BarChart3 className="h-8 w-8 text-blue-600 dark:text-blue-400 mb-3" />
                 <div className="text-3xl font-semibold text-blue-600 dark:text-blue-400">
-                  {(data?.data_volume || 0).toFixed(2)} MB
+                  {(data?.dataVolume || 0).toFixed(2)} MB
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Data Volume</div>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
@@ -258,7 +258,7 @@ export default function UsageStatisticsPage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Last Updated</span>
                 <span className="font-medium text-gray-900 dark:text-gray-100">
-                  {data?.generated_at ? new Date(data.generated_at).toLocaleString() : 'N/A'}
+                  {data?.generatedAt ? new Date(data.generatedAt).toLocaleString() : 'N/A'}
                 </span>
               </div>
             </div>

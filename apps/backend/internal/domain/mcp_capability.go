@@ -19,16 +19,16 @@ const (
 // MCPServerCapability represents an individual capability exposed by an MCP server
 type MCPServerCapability struct {
 	ID               uuid.UUID         `json:"id"`
-	MCPServerID      uuid.UUID         `json:"mcp_server_id"`
+	MCPServerID      uuid.UUID         `json:"mcpServerId"`
 	Name             string            `json:"name"`        // e.g., "get_weather", "search_code"
 	CapabilityType   MCPCapabilityType `json:"type"`        // tool, resource, or prompt
 	Description      string            `json:"description"` // Human-readable description
 	CapabilitySchema json.RawMessage   `json:"schema"`      // JSON schema for input/output
-	DetectedAt       time.Time         `json:"detected_at"`
-	LastVerifiedAt   *time.Time        `json:"last_verified_at"`
-	IsActive         bool              `json:"is_active"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
+	DetectedAt       time.Time         `json:"detectedAt"`
+	LastVerifiedAt   *time.Time        `json:"lastVerifiedAt"`
+	IsActive         bool              `json:"isActive"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	UpdatedAt        time.Time         `json:"updatedAt"`
 }
 
 // MCPServerCapabilityRepository defines the interface for MCP capability persistence
@@ -44,9 +44,9 @@ type MCPServerCapabilityRepository interface {
 
 // MCPCapabilitySummary represents a summary of capabilities by type
 type MCPCapabilitySummary struct {
-	ServerID      uuid.UUID `json:"server_id"`
-	TotalCount    int       `json:"total_count"`
-	ToolCount     int       `json:"tool_count"`
-	ResourceCount int       `json:"resource_count"`
-	PromptCount   int       `json:"prompt_count"`
+	ServerID      uuid.UUID `json:"serverId"`
+	TotalCount    int       `json:"totalCount"`
+	ToolCount     int       `json:"toolCount"`
+	ResourceCount int       `json:"resourceCount"`
+	PromptCount   int       `json:"promptCount"`
 }

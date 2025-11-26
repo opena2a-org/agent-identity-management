@@ -55,9 +55,9 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 		"email":           user.Email,
 		"name":            user.Name,
 		"role":            user.Role,
-		"organization_id": user.OrganizationID,
+		"organizationId": user.OrganizationID,
 		"last_login_at":   user.LastLoginAt,
-		"created_at":      user.CreatedAt,
+		"createdAt":      user.CreatedAt,
 		"status":          user.Status,
 	})
 }
@@ -129,7 +129,7 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 			"email":                 user.Email,
 			"name":                  user.Name,
 			"role":                  user.Role,
-			"organization_id":       user.OrganizationID,
+			"organizationId":       user.OrganizationID,
 			"force_password_change": user.ForcePasswordChange,
 		},
 	})
@@ -215,9 +215,9 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 		"name":       org.Name,
 		"plan":       org.PlanType,
 		"max_agents": org.MaxAgents,
-		"is_active":  org.IsActive,
-		"created_at": org.CreatedAt,
-		"updated_at": org.UpdatedAt,
+		"isActive":  org.IsActive,
+		"createdAt": org.CreatedAt,
+		"updatedAt": org.UpdatedAt,
 	})
 }
 

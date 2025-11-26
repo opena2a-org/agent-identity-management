@@ -19,17 +19,17 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface Policy {
   id: string;
-  data_type: string;
-  retention_period_days: number;
+  dataType: string;
+  retentionPeriodDays: number;
   description: string;
-  auto_delete: boolean;
-  created_at: string;
+  autoDelete: boolean;
+  createdAt: string;
 }
 
 interface StorageMetrics {
-  total_records: number;
-  oldest_record_date: string;
-  deletion_candidates: number;
+  totalRecords: number;
+  oldestRecordDate: string;
+  deletionCandidates: number;
 }
 
 export function DataRetention() {
@@ -45,7 +45,7 @@ export function DataRetention() {
     try {
       const data = await api.getDataRetention();
       setPolicies(data.policies);
-      setMetrics(data.storage_metrics);
+      setMetrics(data.storageMetrics);
     } catch (err: any) {
       console.error('Failed to fetch data retention:', err);
       setError(err.message || 'Failed to load data retention');
@@ -152,7 +152,7 @@ export function DataRetention() {
               <CardContent className="pt-6">
                 <div className="text-sm text-muted-foreground mb-1">Total Records</div>
                 <div className="text-2xl font-bold text-blue-600">
-                  {metrics.total_records.toLocaleString()}
+                  {metrics.totalRecords.toLocaleString()}
                 </div>
               </CardContent>
             </Card>
@@ -161,7 +161,7 @@ export function DataRetention() {
               <CardContent className="pt-6">
                 <div className="text-sm text-muted-foreground mb-1">Oldest Record</div>
                 <div className="text-2xl font-bold text-yellow-600">
-                  {formatDistanceToNow(new Date(metrics.oldest_record_date), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(metrics.oldestRecordDate), { addSuffix: true })}
                 </div>
               </CardContent>
             </Card>
@@ -170,7 +170,7 @@ export function DataRetention() {
               <CardContent className="pt-6">
                 <div className="text-sm text-muted-foreground mb-1">Deletion Candidates</div>
                 <div className="text-2xl font-bold text-red-600">
-                  {metrics.deletion_candidates.toLocaleString()}
+                  {metrics.deletionCandidates.toLocaleString()}
                 </div>
               </CardContent>
             </Card>
@@ -199,7 +199,7 @@ export function DataRetention() {
                 <TableRow key={policy.id}>
                   <TableCell>
                     <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
-                      {policy.data_type}
+                      {policy.dataType}
                     </code>
                   </TableCell>
                   <TableCell>
@@ -207,9 +207,9 @@ export function DataRetention() {
                       <p className="text-sm text-muted-foreground">{policy.description}</p>
                     </div>
                   </TableCell>
-                  <TableCell>{getRetentionBadge(policy.retention_period_days)}</TableCell>
+                  <TableCell>{getRetentionBadge(policy.retentionPeriodDays)}</TableCell>
                   <TableCell>
-                    {policy.auto_delete ? (
+                    {policy.autoDelete ? (
                       <Badge className="bg-green-100 text-green-800 border-green-200">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Enabled
@@ -224,7 +224,7 @@ export function DataRetention() {
                   <TableCell>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="h-4 w-4" />
-                      <span>{new Date(policy.created_at).toLocaleDateString()}</span>
+                      <span>{new Date(policy.createdAt).toLocaleDateString()}</span>
                     </div>
                   </TableCell>
                 </TableRow>

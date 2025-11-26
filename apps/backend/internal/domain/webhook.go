@@ -21,30 +21,30 @@ const (
 // Webhook represents a webhook subscription
 type Webhook struct {
 	ID             uuid.UUID      `json:"id"`
-	OrganizationID uuid.UUID      `json:"organization_id"`
+	OrganizationID uuid.UUID      `json:"organizationId"`
 	Name           string         `json:"name"`
 	URL            string         `json:"url"`
 	Events         []WebhookEvent `json:"events"`
 	Secret         string         `json:"secret"` // For webhook signature verification
-	IsActive       bool           `json:"is_active"`
-	LastTriggered  *time.Time     `json:"last_triggered"`
-	FailureCount   int            `json:"failure_count"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	CreatedBy      uuid.UUID      `json:"created_by"`
+	IsActive       bool           `json:"isActive"`
+	LastTriggered  *time.Time     `json:"lastTriggered"`
+	FailureCount   int            `json:"failureCount"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	CreatedBy      uuid.UUID      `json:"createdBy"`
 }
 
 // WebhookDelivery represents a webhook delivery attempt
 type WebhookDelivery struct {
 	ID           uuid.UUID    `json:"id"`
-	WebhookID    uuid.UUID    `json:"webhook_id"`
+	WebhookID    uuid.UUID    `json:"webhookId"`
 	Event        WebhookEvent `json:"event"`
 	Payload      string       `json:"payload"`
-	StatusCode   int          `json:"status_code"`
-	ResponseBody string       `json:"response_body"`
+	StatusCode   int          `json:"statusCode"`
+	ResponseBody string       `json:"responseBody"`
 	Success      bool         `json:"success"`
-	AttemptCount int          `json:"attempt_count"`
-	CreatedAt    time.Time    `json:"created_at"`
+	AttemptCount int          `json:"attemptCount"`
+	CreatedAt    time.Time    `json:"createdAt"`
 }
 
 // WebhookRepository defines the interface for webhook persistence

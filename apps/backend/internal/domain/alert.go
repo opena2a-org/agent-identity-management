@@ -38,17 +38,17 @@ const (
 // Alert represents a security or operational alert
 type Alert struct {
 	ID             uuid.UUID     `json:"id"`
-	OrganizationID uuid.UUID     `json:"organization_id"`
-	AlertType      AlertType     `json:"alert_type"`
+	OrganizationID uuid.UUID     `json:"organizationId"`
+	AlertType      AlertType     `json:"alertType"`
 	Severity       AlertSeverity `json:"severity"`
 	Title          string        `json:"title"`
 	Description    string        `json:"description"`
-	ResourceType   string        `json:"resource_type"`
-	ResourceID     uuid.UUID     `json:"resource_id"`
-	IsAcknowledged bool          `json:"is_acknowledged"`
-	AcknowledgedBy *uuid.UUID    `json:"acknowledged_by"`
-	AcknowledgedAt *time.Time    `json:"acknowledged_at"`
-	CreatedAt      time.Time     `json:"created_at"`
+	ResourceType   string        `json:"resourceType"`
+	ResourceID     uuid.UUID     `json:"resourceId"`
+	IsAcknowledged bool          `json:"isAcknowledged"`
+	AcknowledgedBy *uuid.UUID    `json:"acknowledgedBy"`
+	AcknowledgedAt *time.Time    `json:"acknowledgedAt"`
+	CreatedAt      time.Time     `json:"createdAt"`
 }
 
 // AlertRepository defines the interface for alert persistence

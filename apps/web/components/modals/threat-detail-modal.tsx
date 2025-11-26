@@ -14,14 +14,14 @@ import { formatDateTime } from "@/lib/date-utils";
 
 interface SecurityThreat {
   id: string;
-  target_id: string;
-  target_name?: string;
-  threat_type: string;
+  targetId: string;
+  targetName?: string;
+  threatType: string;
   severity: "low" | "medium" | "high" | "critical";
   description: string;
-  is_blocked: boolean;
-  created_at: string;
-  source_ip?: string;
+  isBlocked: boolean;
+  createdAt: string;
+  sourceIp?: string;
   metadata?: Record<string, any>;
 }
 
@@ -102,7 +102,7 @@ export default function ThreatDetailModal({
             </span>
             <div className="flex items-center gap-2 ml-auto">
               <Link
-                href={`/dashboard/agents?search=${threat.target_id}`}
+                href={`/dashboard/agents?search=${threat.targetId}`}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               >
                 <User className="h-3 w-3" />
@@ -110,7 +110,7 @@ export default function ThreatDetailModal({
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <Link
-                href={`/dashboard/monitoring?agent=${threat.target_id}`}
+                href={`/dashboard/monitoring?agent=${threat.targetId}`}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               >
                 <Activity className="h-3 w-3" />
@@ -158,7 +158,7 @@ export default function ThreatDetailModal({
               Threat Type
             </label>
             <p className="mt-1 text-sm text-gray-900 dark:text-white font-semibold">
-              {threat.threat_type}
+              {threat.threatType}
             </p>
           </div>
 
@@ -179,10 +179,10 @@ export default function ThreatDetailModal({
                 Affected Target
               </label>
               <p className="mt-1 text-sm text-gray-900 dark:text-white font-medium">
-                {threat.target_name || threat.target_id}
+                {threat.targetName || threat.targetId}
               </p>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 font-mono">
-                ID: {threat.target_id}
+                ID: {threat.targetId}
               </p>
             </div>
             <div>
@@ -190,7 +190,7 @@ export default function ThreatDetailModal({
                 Source IP
               </label>
               <p className="mt-1 text-sm text-gray-900 dark:text-white font-mono">
-                {threat.source_ip || "N/A"}
+                {threat.sourceIp || "N/A"}
               </p>
             </div>
           </div>
@@ -203,9 +203,9 @@ export default function ThreatDetailModal({
               </label>
               <p className="mt-1">
                 <span
-                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getStatusColor(threat.is_blocked)}`}
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full uppercase ${getStatusColor(threat.isBlocked)}`}
                 >
-                  {threat.is_blocked ? "Blocked" : "Active"}
+                  {threat.isBlocked ? "Blocked" : "Active"}
                 </span>
               </p>
             </div>
@@ -214,7 +214,7 @@ export default function ThreatDetailModal({
                 Detected At
               </label>
               <p className="mt-1 text-sm text-gray-900 dark:text-white">
-                {formatDateTime(threat.created_at)}
+                {formatDateTime(threat.createdAt)}
               </p>
             </div>
           </div>
@@ -245,7 +245,7 @@ export default function ThreatDetailModal({
                   <li>Review agent activity logs for suspicious patterns</li>
                   <li>Verify agent capabilities match registered scope</li>
                   <li>Check if trust score has decreased recently</li>
-                  {!threat.is_blocked && (
+                  {!threat.isBlocked && (
                     <li className="font-semibold">
                       Consider blocking this agent if threat persists
                     </li>

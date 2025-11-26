@@ -248,7 +248,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"webhook_name": webhook.Name,
-			"is_active":    webhook.IsActive,
+			"isActive":    webhook.IsActive,
 		},
 	)
 

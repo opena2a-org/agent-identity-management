@@ -238,7 +238,7 @@ function AgentsPageContent() {
     avgTrustScore:
       agents && agents.length > 0
         ? Math.round(
-            (agents.reduce((sum, a) => sum + a.trust_score, 0) / agents.length) * 100
+            (agents.reduce((sum, a) => sum + a.trustScore, 0) / agents.length) * 100
           )
         : 0,
   };
@@ -274,7 +274,7 @@ function AgentsPageContent() {
     agents?.filter((agent) => {
       const matchesSearch =
         agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        agent.display_name.toLowerCase().includes(searchTerm.toLowerCase());
+        agent.displayName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus =
         statusFilter === "all" || agent.status === statusFilter;
 
@@ -283,7 +283,7 @@ function AgentsPageContent() {
       if (urlFilter === "low_trust") {
         // Normalize trust score: convert decimal (0-1) to percentage (0-100) if needed
         const normalizedScore =
-          agent.trust_score <= 1 ? agent.trust_score * 100 : agent.trust_score;
+          agent.trustScore <= 1 ? agent.trustScore * 100 : agent.trustScore;
         matchesUrlFilter = normalizedScore < 60;
       }
 
@@ -455,7 +455,7 @@ function AgentsPageContent() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                        {agent?.agent_type === "ai_agent" ? (
+                        {agent?.agentType === "ai_agent" ? (
                           <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         ) : (
                           <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -463,7 +463,7 @@ function AgentsPageContent() {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {agent?.display_name}
+                          {agent?.displayName}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {agent?.name}
@@ -474,12 +474,12 @@ function AgentsPageContent() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        agent?.agent_type === "ai_agent"
+                        agent?.agentType === "ai_agent"
                           ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
                           : "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
                       }`}
                     >
-                      {agent?.agent_type === "ai_agent"
+                      {agent?.agentType === "ai_agent"
                         ? "AI Agent"
                         : "MCP Server"}
                     </span>
@@ -494,12 +494,12 @@ function AgentsPageContent() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="w-40">
-                      <TrustScoreBar score={agent?.trust_score} />
+                      <TrustScoreBar score={agent?.trustScore} />
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {agent?.updated_at && formatDate(agent.updated_at)}
+                      {agent?.updatedAt && formatDate(agent.updatedAt)}
                     </div>
                   </td>
                   <td
@@ -588,7 +588,7 @@ function AgentsPageContent() {
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         title="Delete Agent"
-        message={`Are you sure you want to delete "${selectedAgent?.display_name}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${selectedAgent?.displayName}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"

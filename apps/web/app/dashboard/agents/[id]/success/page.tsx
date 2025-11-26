@@ -11,12 +11,12 @@ import { AuthGuard } from '@/components/auth-guard';
 interface Agent {
   id: string;
   name: string;
-  display_name: string;
+  displayName: string;
   description: string;
-  public_key?: string;
-  agent_type: string;
+  publicKey?: string;
+  agentType: string;
   status: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export default function AgentSuccessPage() {
@@ -146,7 +146,7 @@ export default function AgentSuccessPage() {
           Agent Registered Successfully!
         </h1>
         <p className="text-gray-600 max-w-2xl mx-auto">
-          Your agent <span className="font-semibold">{agent.display_name}</span> has been registered with AIM.
+          Your agent <span className="font-semibold">{agent.displayName}</span> has been registered with AIM.
           Download the SDK to start building with automatic identity verification.
         </p>
       </div>
@@ -189,18 +189,18 @@ export default function AgentSuccessPage() {
           </div>
 
           {/* Public Key */}
-          {agent.public_key && (
+          {agent.publicKey && (
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-700">Public Key (Ed25519)</p>
                 <p className="text-sm text-gray-600 font-mono break-all truncate max-w-[500px]">
-                  {agent.public_key}
+                  {agent.publicKey}
                 </p>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => copyToClipboard(agent.public_key!, 'public_key')}
+                onClick={() => copyToClipboard(agent.publicKey!, 'public_key')}
               >
                 {copiedField === 'public_key' ? (
                   <Check className="h-4 w-4 text-green-600" />

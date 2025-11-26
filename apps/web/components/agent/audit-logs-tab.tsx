@@ -20,11 +20,11 @@ import { formatDistanceToNow } from 'date-fns';
 interface AuditLog {
   id: string;
   action: string;
-  performed_by: string;
-  performed_by_email: string;
+  performedBy: string;
+  performedByEmail: string;
   timestamp: string;
   details: string;
-  ip_address?: string;
+  ipAddress?: string;
 }
 
 interface AuditLogsTabProps {
@@ -49,11 +49,11 @@ export function AuditLogsTab({ agentId, defaultLimit = 50 }: AuditLogsTabProps) 
       const transformedLogs = (data.logs || []).map((log: any) => ({
         id: log.id,
         action: log.action,
-        performed_by: log.user_id || log.performed_by || 'system',
-        performed_by_email: log.user_email || log.performed_by_email || '',
-        timestamp: log.created_at || log.timestamp,
+        performedBy: log.userId || log.performedBy || 'system',
+        performedByEmail: log.userEmail || log.performedByEmail || '',
+        timestamp: log.createdAt || log.timestamp,
         details: log.details,
-        ip_address: log.ip_address,
+        ipAddress: log.ipAddress,
       }));
       setLogs(transformedLogs);
       setTotal(data.total);
@@ -218,8 +218,8 @@ export function AuditLogsTab({ agentId, defaultLimit = 50 }: AuditLogsTabProps) 
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <div className="font-medium text-sm">{log.performed_by}</div>
-                        <div className="text-xs text-muted-foreground">{log.performed_by_email}</div>
+                        <div className="font-medium text-sm">{log.performedBy}</div>
+                        <div className="text-xs text-muted-foreground">{log.performedByEmail}</div>
                       </div>
                     </div>
                   </TableCell>
@@ -227,10 +227,10 @@ export function AuditLogsTab({ agentId, defaultLimit = 50 }: AuditLogsTabProps) 
                     <p className="text-sm text-muted-foreground max-w-md">{log.details}</p>
                   </TableCell>
                   <TableCell>
-                    {log.ip_address ? (
+                    {log.ipAddress ? (
                       <div className="flex items-center gap-1 text-sm">
                         <MapPin className="h-3 w-3 text-muted-foreground" />
-                        <code className="text-xs bg-muted px-2 py-1 rounded">{log.ip_address}</code>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">{log.ipAddress}</code>
                       </div>
                     ) : (
                       <span className="text-sm text-muted-foreground">N/A</span>

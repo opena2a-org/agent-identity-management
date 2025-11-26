@@ -153,12 +153,12 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 
 	stats := map[string]interface{}{
 		"period":        periodLabel,    // Human-readable period label
-		"total_agents":  totalAgents,
-		"active_agents": activeAgents,
-		"api_calls":     apiCalls,       // ✅ REAL DATA from database
-		"data_volume":   dataVolumeMB,   // ✅ REAL DATA in MB
+		"totalAgents":  totalAgents,
+		"activeAgents": activeAgents,
+		"apiCalls":     apiCalls,       // ✅ REAL DATA from database
+		"dataVolume":   dataVolumeMB,   // ✅ REAL DATA in MB
 		"uptime":        uptime,          // ✅ REAL DATA - calculated from verification events
-		"generated_at":  time.Now().UTC(),
+		"generatedAt":  time.Now().UTC(),
 	}
 
 	return c.JSON(stats)
@@ -275,9 +275,9 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			for _, trend := range sortedTrends {
 				trendsData = append(trendsData, map[string]interface{}{
 					"date":        trend.date.Format("2006-01-02"),
-					"week_start":  trend.date.Format("2006-01-02"),
-					"avg_score":   trend.avgScore,
-					"agent_count": trend.count,
+					"weekStart":  trend.date.Format("2006-01-02"),
+					"avgScore":   trend.avgScore,
+					"agentCount": trend.count,
 				})
 			}
 			
@@ -294,8 +294,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			return c.JSON(fiber.Map{
 				"period":          fmt.Sprintf("Last %d weeks", weeks),
 				"trends":          trendsData,
-				"current_average": avgScore,
-				"data_type":       "weekly",
+				"currentAverage": avgScore,
+				"dataType":       "weekly",
 			})
 		}
 		defer rows.Close()
@@ -311,9 +311,9 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 
 			trends = append(trends, map[string]interface{}{
 				"date":        weekStart.Format("2006-01-02"),
-				"week_start":  weekStart.Format("2006-01-02"),
-				"avg_score":   avgScore,
-				"agent_count": agentCount,
+				"weekStart":  weekStart.Format("2006-01-02"),
+				"avgScore":   avgScore,
+				"agentCount": agentCount,
 				"scores_by_range": map[string]interface{}{
 					"excellent": excellent,
 					"good":      good,
@@ -359,11 +359,11 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"period":     fmt.Sprintf("Last %d weeks", weeks),
 			"trends":     trends,
-			"data_type":  "weekly",
+			"dataType":  "weekly",
 			"summary": fiber.Map{
-				"overall_avg":       currentAvg,
-				"trend_direction":   trendDirection,
-				"change_percentage": changePercentage,
+				"overallAvg":       currentAvg,
+				"trendDirection":   trendDirection,
+				"changePercentage": changePercentage,
 			},
 		})
 	} else {
@@ -432,8 +432,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			for _, trend := range sortedTrends {
 				trendsData = append(trendsData, map[string]interface{}{
 					"date":        trend.date.Format("2006-01-02"),
-					"avg_score":   trend.avgScore,
-					"agent_count": trend.count,
+					"avgScore":   trend.avgScore,
+					"agentCount": trend.count,
 				})
 			}
 			
@@ -450,8 +450,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			return c.JSON(fiber.Map{
 				"period":          fmt.Sprintf("Last %d days", days),
 				"trends":          trendsData,
-				"current_average": avgScore,
-				"data_type":       "daily",
+				"currentAverage": avgScore,
+				"dataType":       "daily",
 			})
 		}
 		defer rows.Close()
@@ -467,8 +467,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 
 			trends = append(trends, map[string]interface{}{
 				"date":        date.Format("2006-01-02"),
-				"avg_score":   avgScore,
-				"agent_count": agentCount,
+				"avgScore":   avgScore,
+				"agentCount": agentCount,
 				"scores_by_range": map[string]interface{}{
 					"excellent": excellent,
 					"good":      good,
@@ -514,11 +514,11 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"period":    fmt.Sprintf("Last %d days", days),
 			"trends":    trends,
-			"data_type": "daily",
+			"dataType": "daily",
 			"summary": fiber.Map{
-				"overall_avg":       currentAvg,
-				"trend_direction":   trendDirection,
-				"change_percentage": changePercentage,
+				"overallAvg":       currentAvg,
+				"trendDirection":   trendDirection,
+				"changePercentage": changePercentage,
 			},
 		})
 	}
@@ -634,7 +634,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 				"month":      data.date.Format("Jan"),
 				"verified":   data.verified,
 				"pending":    data.pending,
-				"month_year": data.date.Format("2006-01"),
+				"monthYear": data.date.Format("2006-01"),
 			})
 		}
 
@@ -644,17 +644,17 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 				"month":      now.Format("Jan"),
 				"verified":   verifiedCount,
 				"pending":    pendingCount,
-				"month_year": now.Format("2006-01"),
+				"monthYear": now.Format("2006-01"),
 			})
 		}
 
 		return c.JSON(fiber.Map{
 			"period":   fmt.Sprintf("Last %d months", months),
 			"activity": activity,
-			"current_stats": map[string]interface{}{
-				"total_verified": verifiedCount,
-				"total_pending":  pendingCount,
-				"total_agents":   len(agents),
+			"currentStats": map[string]interface{}{
+				"totalVerified": verifiedCount,
+				"totalPending":  pendingCount,
+				"totalAgents":   len(agents),
 			},
 		})
 	}
@@ -672,7 +672,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 			"month":      monthStart.Format("Jan"),
 			"verified":   verified,
 			"pending":    pending,
-			"month_year": monthStart.Format("2006-01"),
+			"monthYear": monthStart.Format("2006-01"),
 		})
 	}
 
@@ -722,7 +722,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 				"month":      data.date.Format("Jan"),
 				"verified":   data.verified,
 				"pending":    data.pending,
-				"month_year": data.date.Format("2006-01"),
+				"monthYear": data.date.Format("2006-01"),
 			})
 		}
 
@@ -733,7 +733,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 				"month":      now.Format("Jan"),
 				"verified":   verifiedCount,
 				"pending":    pendingCount,
-				"month_year": now.Format("2006-01"),
+				"monthYear": now.Format("2006-01"),
 			})
 		}
 	}
@@ -741,10 +741,10 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"period":   fmt.Sprintf("Last %d months", months),
 		"activity": activity,
-		"current_stats": map[string]interface{}{
-			"total_verified": verifiedCount,
-			"total_pending":  pendingCount,
-			"total_agents":   len(agents),
+		"currentStats": map[string]interface{}{
+			"totalVerified": verifiedCount,
+			"totalPending":  pendingCount,
+			"totalAgents":   len(agents),
 		},
 	})
 }
@@ -802,14 +802,14 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			}
 
 			activities = append(activities, map[string]interface{}{
-				"agent_id":       agent.ID.String(),
-				"agent_name":     agent.Name,
+				"agentId":       agent.ID.String(),
+				"agentName":     agent.Name,
 				"status":         agent.Status,
-				"trust_score":    agent.TrustScore,
-				"last_active":    agent.CreatedAt,
+				"trustScore":    agent.TrustScore,
+				"lastActive":    agent.CreatedAt,
 				"timestamp":      agent.CreatedAt, // Frontend expects 'timestamp' field
-				"api_calls":      0,
-				"data_processed": 0.0,
+				"apiCalls":      0,
+				"dataProcessed": 0.0,
 			})
 		}
 
@@ -838,10 +838,10 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"activities": activities,
 			"summary": fiber.Map{
-				"total_activities": totalActivities,
-				"success_count":    successCount,
-				"failure_count":    failureCount,
-				"success_rate":     successRate,
+				"totalActivities": totalActivities,
+				"successCount":    successCount,
+				"failureCount":    failureCount,
+				"successRate":     successRate,
 			},
 			"total":  len(agents),
 			"limit":  limit,
@@ -866,14 +866,14 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		}
 
 		activities = append(activities, map[string]interface{}{
-			"agent_id":       agentID.String(),
-			"agent_name":     name,
+			"agentId":       agentID.String(),
+			"agentName":     name,
 			"status":         status,
-			"trust_score":    trustScore,
-			"last_active":    lastActive,
+			"trustScore":    trustScore,
+			"lastActive":    lastActive,
 			"timestamp":      lastActive, // Frontend expects 'timestamp' field
-			"api_calls":      apiCalls,
-			"data_processed": dataProcessedMB, // in MB
+			"apiCalls":      apiCalls,
+			"dataProcessed": dataProcessedMB, // in MB
 		})
 	}
 
@@ -907,10 +907,10 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"activities": activities,
 		"summary": fiber.Map{
-			"total_activities": totalActivities,
-			"success_count":    successCount,
-			"failure_count":    failureCount,
-			"success_rate":     successRate,
+			"totalActivities": totalActivities,
+			"successCount":    successCount,
+			"failureCount":    failureCount,
+			"successRate":     successRate,
 		},
 		"total":  total,
 		"limit":  limit,
@@ -1043,33 +1043,33 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		// Agent metrics
-		"total_agents":      totalAgents,
-		"verified_agents":   verifiedAgents,
-		"pending_agents":    pendingAgents,
-		"verification_rate": verificationRate,
-		"avg_trust_score":   avgTrustScore,
+		"totalAgents":      totalAgents,
+		"verifiedAgents":   verifiedAgents,
+		"pendingAgents":    pendingAgents,
+		"verificationRate": verificationRate,
+		"avgTrustScore":   avgTrustScore,
 
 		// MCP Server metrics
-		"total_mcp_servers":  totalMCPServers,
-		"active_mcp_servers": activeMCPServers,
+		"totalMcpServers":  totalMCPServers,
+		"activeMcpServers": activeMCPServers,
 
 		// User metrics ✅ REAL DATA
-		"total_users":  totalUsers,
-		"active_users": activeUsers,
+		"totalUsers":  totalUsers,
+		"activeUsers": activeUsers,
 
 		// Security metrics ✅ REAL DATA
-		"active_alerts":      activeAlerts,
-		"critical_alerts":    criticalAlerts,
-		"security_incidents": securityIncidents,
+		"activeAlerts":      activeAlerts,
+		"criticalAlerts":    criticalAlerts,
+		"securityIncidents": securityIncidents,
 
 		// Verification metrics (last 24 hours)
-		"total_verifications":      stats.TotalVerifications,
-		"successful_verifications": stats.SuccessCount,
-		"failed_verifications":     stats.FailedCount,
-		"avg_response_time":        stats.AvgDurationMs,
+		"totalVerifications":      stats.TotalVerifications,
+		"successfulVerifications": stats.SuccessCount,
+		"failedVerifications":     stats.FailedCount,
+		"avgResponseTime":        stats.AvgDurationMs,
 
 		// Organization
-		"organization_id": orgID.String(),
+		"organizationId": orgID.String(),
 	})
 }
 
@@ -1242,19 +1242,19 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"period": fiber.Map{
-			"start_date": startTime.Format("2006-01-02"),
-			"end_date":   time.Now().Format("2006-01-02"),
+			"startDate": startTime.Format("2006-01-02"),
+			"endDate":   time.Now().Format("2006-01-02"),
 			"days":       days,
 		},
 		"summary": fiber.Map{
-			"total_agents":           len(agents),
-			"total_mcp_servers":      len(mcpServers),
+			"totalAgents":           len(agents),
+			"totalMcpServers":      len(mcpServers),
 			"verification_count":     verificationCount,
 			"attestation_count":      attestationCount,
 			"total_activity_events":  verificationCount + attestationCount,
 		},
 		"activity_by_day": activityByDay,
 		"recent_activity": recentActivity,
-		"generated_at":    time.Now().UTC(),
+		"generatedAt":    time.Now().UTC(),
 	})
 }

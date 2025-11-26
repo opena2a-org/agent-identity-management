@@ -23,8 +23,8 @@ interface ActivityTimelineProps {
 
 interface AgentActivity {
   id: string;
-  agent_id: string;
-  agent_name: string;
+  agentId: string;
+  agentName: string;
   action: string;
   status: "success" | "failure" | "pending";
   timestamp: string;
@@ -34,10 +34,10 @@ interface AgentActivity {
 interface ActivityData {
   activities: AgentActivity[];
   summary: {
-    total_activities: number;
-    success_count: number;
-    failure_count: number;
-    success_rate: number;
+    totalActivities: number;
+    successCount: number;
+    failureCount: number;
+    successRate: number;
   };
 }
 
@@ -187,7 +187,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {data.summary.total_activities}
+                    {data.summary.totalActivities}
                   </div>
                 </dd>
               </dl>
@@ -208,7 +208,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-green-600">
-                    {data.summary.success_count}
+                    {data.summary.successCount}
                   </div>
                 </dd>
               </dl>
@@ -229,7 +229,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-red-600">
-                    {data.summary.failure_count}
+                    {data.summary.failureCount}
                   </div>
                 </dd>
               </dl>
@@ -250,7 +250,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {data.summary.success_rate.toFixed(1)}%
+                    {data.summary.successRate.toFixed(1)}%
                   </div>
                 </dd>
               </dl>
@@ -273,7 +273,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
           <div className="space-y-3">
             {data.activities.map((activity, index) => (
               <div
-                key={`${activity.agent_id}-${activity.timestamp}-${index}`}
+                key={`${activity.agentId}-${activity.timestamp}-${index}`}
                 className="flex gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 {/* Status Icon */}
@@ -286,7 +286,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-                        {activity.agent_name}
+                        {activity.agentName}
                       </span>
                       <span className="text-sm text-gray-600 dark:text-gray-400">
                         {activity.action}
@@ -307,7 +307,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                   )}
 
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
-                    Agent ID: {activity.agent_id.substring(0, 8)}...
+                    Agent ID: {activity.agentId.substring(0, 8)}...
                   </div>
                 </div>
               </div>
@@ -316,7 +316,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
         )}
 
         {/* Load More */}
-        {data.activities.length > 0 && data.summary.total_activities > limit && (
+        {data.activities.length > 0 && data.summary.totalActivities > limit && (
           <div className="text-center mt-4">
             <Button
               variant="outline"

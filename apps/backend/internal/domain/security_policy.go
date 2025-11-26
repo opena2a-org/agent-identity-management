@@ -29,41 +29,41 @@ const (
 
 // SecurityPolicy represents a configurable security policy
 type SecurityPolicy struct {
-	ID               uuid.UUID         `json:"id"`
-	OrganizationID   uuid.UUID         `json:"organization_id"`
-	Name             string            `json:"name"`
-	Description      string            `json:"description"`
-	PolicyType       PolicyType        `json:"policy_type"`
-	EnforcementAction EnforcementAction `json:"enforcement_action"`
+	ID                uuid.UUID         `json:"id"`
+	OrganizationID    uuid.UUID         `json:"organizationId"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	PolicyType        PolicyType        `json:"policyType"`
+	EnforcementAction EnforcementAction `json:"enforcementAction"`
 
 	// Severity threshold - only trigger for alerts at or above this level
-	SeverityThreshold AlertSeverity `json:"severity_threshold"`
+	SeverityThreshold AlertSeverity `json:"severityThreshold"`
 
 	// Policy configuration (JSON)
 	Rules map[string]interface{} `json:"rules"`
 
 	// Scope
-	AppliesTo string `json:"applies_to"` // "all", "agent_id:xxx", "agent_type:ai", etc.
+	AppliesTo string `json:"appliesTo"` // "all", "agent_id:xxx", "agent_type:ai", etc.
 
 	// Status
-	IsEnabled bool      `json:"is_enabled"`
-	Priority  int       `json:"priority"` // Higher priority policies evaluated first
+	IsEnabled bool `json:"isEnabled"`
+	Priority  int  `json:"priority"` // Higher priority policies evaluated first
 
 	// Timestamps
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	CreatedBy uuid.UUID  `json:"created_by"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	CreatedBy uuid.UUID `json:"createdBy"`
 }
 
 // PolicyEvaluationResult represents the result of evaluating a policy
 type PolicyEvaluationResult struct {
-	PolicyID          uuid.UUID         `json:"policy_id"`
-	PolicyName        string            `json:"policy_name"`
+	PolicyID          uuid.UUID         `json:"policyId"`
+	PolicyName        string            `json:"policyName"`
 	Triggered         bool              `json:"triggered"`
-	EnforcementAction EnforcementAction `json:"enforcement_action"`
+	EnforcementAction EnforcementAction `json:"enforcementAction"`
 	Reason            string            `json:"reason"`
-	ShouldBlock       bool              `json:"should_block"`
-	ShouldAlert       bool              `json:"should_alert"`
+	ShouldBlock       bool              `json:"shouldBlock"`
+	ShouldAlert       bool              `json:"shouldAlert"`
 }
 
 // SecurityPolicyRepository defines the interface for security policy persistence
