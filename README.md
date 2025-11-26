@@ -266,6 +266,8 @@ if verification.approved:
 - Real-time threat alerts and notifications
 - Automatic policy enforcement
 - Security dashboard with metrics
+- **Bulk alert management** — Acknowledge all alerts at once
+- **Configuration drift detection** — Detect unauthorized MCP server connections
 
 **Advanced Security Policies** (3 Policy Types)
 1. **Unusual Activity Detection**
@@ -495,6 +497,12 @@ go run cmd/migrate/main.go create <migration_name>
 - Public key infrastructure for verification
 - Certificate chain validation
 - Revocation list maintained
+- **Configuration drift detection** — Alerts when agents connect to unregistered MCP servers
+
+**Session Security**
+- Automatic session expiry detection with graceful redirect
+- Toast notifications for expired sessions
+- Secure token refresh handling
 
 **Zero-Trust Architecture**
 - No implicit trust between components
@@ -645,13 +653,15 @@ GET    /api/v1/trust-scores/aggregate      # Aggregate scores
 POST   /api/v1/trust-scores/:agent_id/override   # Manual override
 ```
 
-### Security Monitoring (9 endpoints)
+### Security Monitoring (11 endpoints)
 ```
-GET    /api/v1/security/dashboard          # Security dashboard (NEW)
+GET    /api/v1/security/dashboard          # Security dashboard
 GET    /api/v1/security/threats            # List threats
 GET    /api/v1/security/anomalies          # Detected anomalies
-GET    /api/v1/security/alerts             # List alerts with pagination (NEW)
-POST   /api/v1/security/alerts/:id/acknowledge  # Acknowledge alert
+GET    /api/v1/security/alerts             # List alerts with pagination
+GET    /api/v1/security/alerts?status=X    # Filter alerts (acknowledged/unacknowledged)
+POST   /api/v1/security/alerts/:id/acknowledge  # Acknowledge single alert
+POST   /api/v1/admin/alerts/bulk-acknowledge    # Bulk acknowledge all alerts (NEW)
 GET    /api/v1/security/metrics            # Security metrics
 GET    /api/v1/security/policies           # Security policies
 POST   /api/v1/security/policies           # Create policy

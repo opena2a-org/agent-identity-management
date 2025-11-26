@@ -172,6 +172,45 @@ agent = secure("my-agent")  # ✅ Can use all detected capabilities immediately
 client.capabilities.request("delete_data", reason="Cleanup feature")
 ```
 
+### Request Additional Capabilities
+
+Use `request_capability()` to request capabilities that weren't detected during registration:
+
+```python
+# Request a new capability (requires admin approval)
+result = agent.request_capability(
+    capability_type="write_database",
+    reason="Need to update user preferences"
+)
+
+if result["status"] == "pending":
+    print(f"Request {result['id']} submitted - awaiting admin approval")
+elif result["status"] == "approved":
+    print("Capability granted!")
+```
+
+## MCP Server Registration
+
+### Register MCP Servers Programmatically
+
+Use `register_mcp()` to register MCP servers your agent connects to:
+
+```python
+# Register an MCP server
+mcp_result = agent.register_mcp(
+    server_name="my-database-server",
+    server_url="http://localhost:3001",
+    capabilities=["read", "write", "delete"]
+)
+
+print(f"MCP Server registered: {mcp_result['id']}")
+```
+
+This is useful when:
+- Auto-detection doesn't find your MCP servers
+- You're connecting to dynamically provisioned MCP servers
+- You want to pre-register servers before connecting
+
 ## Credential Storage
 
 Credentials are automatically saved to `~/.aim/credentials.json` with secure permissions (0600).
