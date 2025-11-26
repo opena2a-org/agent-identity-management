@@ -18,24 +18,64 @@ Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-n
 [![GitHub Issues](https://img.shields.io/github/issues/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/pulls)
 
-### [**View Full Documentation at opena2a.org/docs**](https://opena2a.org/docs)
-
-[5-Minute Tutorials](https://opena2a.org/docs/tutorials) • [Python SDK](sdk/python/README.md) • [Quick Start](#-quick-start) • [API Reference](https://opena2a.org/docs/aim/api-reference)
+### 📚 [**View Full Documentation at opena2a.org/docs**](https://opena2a.org/docs)
 
 </div>
 
 ---
 
-## **New to AIM? Start Here**
+## ⚡ See AIM Working in 60 Seconds
+
+**No reading docs. No configuration. Just run and watch your dashboard update in real-time.**
+
+### Step 1: Start AIM (30 seconds)
+
+```bash
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
+docker compose up -d
+```
+
+Open http://localhost:3000 → Login: `admin@opena2a.org` / `AIM2025!Secure`
+
+### Step 2: Download & Run Demo Agent (30 seconds)
+
+```bash
+# In the AIM dashboard: Settings → SDK Download → Download Python SDK
+
+# Then in your terminal:
+cd ~/projects                          # or ~/dev, ~/Desktop, etc.
+unzip ~/Downloads/aim-sdk-python.zip
+cd aim-sdk-python
+pip install -e .
+
+# Run the interactive demo!
+python demo_agent.py
+```
+
+### Step 3: Watch Your Dashboard Update! 🎉
+
+Open **[http://localhost:3000/dashboard/agents](http://localhost:3000/dashboard/agents)** side-by-side with your terminal.
+
+Trigger actions from the demo menu and watch:
+- ✅ Agent registration appear instantly
+- ✅ Trust scores update in real-time
+- ✅ Activity logs populate as you trigger actions
+- ✅ Different risk levels (low/medium/high) monitored differently
+
+**That's it!** You just secured your first AI agent. 🚀
+
+---
+
+## 📚 Learn More
 
 | Resource | Time | Description |
 |----------|------|-------------|
-| [**SDK Quickstart**](https://opena2a.org/docs/tutorials/sdk-quickstart) | 2 min | Secure your first agent with 3 lines of Python |
+| [**SDK Quickstart**](https://opena2a.org/docs/tutorials/sdk-quickstart) | 2 min | Build your own agent with 3 lines of Python |
 | [**API Quickstart**](https://opena2a.org/docs/tutorials/api-quickstart) | 3 min | REST API examples with curl |
 | [**Dashboard Walkthrough**](https://opena2a.org/docs/tutorials/ui-walkthrough) | 3 min | Navigate the AIM dashboard |
 | [**Register MCP Servers**](https://opena2a.org/docs/tutorials/mcp-registration) | 3 min | Connect and attest MCP servers |
-
-**Full documentation:** [**https://opena2a.org/docs**](https://opena2a.org/docs)
+| [**Full Documentation**](https://opena2a.org/docs) | — | Complete guides and API reference |
 
 ---
 
@@ -140,39 +180,11 @@ def get_weather(city):
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Build Your Own Agent
 
-### 1. Deploy AIM
+Already ran the demo? Here's how to build your own secure agent:
 
-```bash
-git clone https://github.com/opena2a-org/agent-identity-management.git
-cd agent-identity-management
-docker compose up -d
-```
-
-**Services**:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8080
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
-
-**Default Credentials**:
-- Email: `admin@opena2a.org`
-- Password: `AIM2025!Secure`
-
-> ⚠️ **Security**: You will be required to change the default password on first login. This is enforced for security.
-
-### 2. Download SDK from Dashboard
-```bash
-# 1. Log in to AIM at http://localhost:3000
-# 2. Go to Settings → SDK Download
-# 3. Download SDK with pre-configured credentials
-# 4. Extract and you're ready to go!
-```
-
-**Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials.
-
-### 3. Secure Your First Agent (3 Lines!)
+### The Basics (3 Lines of Code)
 ```python
 from aim_sdk import secure
 
@@ -220,30 +232,7 @@ agent = secure(
 )
 ```
 
-### 4. Verify Actions Before Execution
-```python
-# Before performing sensitive operations
-verification = client.verify_action(
-    action_type="database_query",
-    action_details={
-        "query": "SELECT * FROM users",
-        "risk_level": "medium"
-    }
-)
-
-if verification.approved:
-    # Execute the action
-    results = execute_query(verification.parameters["query"])
-
-    # Log the result
-    client.log_action_result(
-        action_type="database_query",
-        success=True,
-        metadata={"rows_returned": len(results)}
-    )
-```
-
-**That's it!** Your agent now has production-ready security with complete audit trails.
+**Pro tip:** Copy the `demo_agent.py` file from the SDK and modify it for your use case!
 
 ---
 
