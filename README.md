@@ -18,9 +18,24 @@ Real-time threat detection • Zero-trust architecture • Self-hosted & cloud-n
 [![GitHub Issues](https://img.shields.io/github/issues/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/opena2a-org/agent-identity-management)](https://github.com/opena2a-org/agent-identity-management/pulls)
 
-[Documentation](https://opena2a.org/docs) • [Python SDK](sdk/python/README.md) • [Quick Start](#-quick-start)
+### [**View Full Documentation at opena2a.org/docs**](https://opena2a.org/docs)
+
+[5-Minute Tutorials](https://opena2a.org/docs/tutorials) • [Python SDK](sdk/python/README.md) • [Quick Start](#-quick-start) • [API Reference](https://opena2a.org/docs/aim/api-reference)
 
 </div>
+
+---
+
+## **New to AIM? Start Here**
+
+| Resource | Time | Description |
+|----------|------|-------------|
+| [**SDK Quickstart**](https://opena2a.org/docs/tutorials/sdk-quickstart) | 2 min | Secure your first agent with 3 lines of Python |
+| [**API Quickstart**](https://opena2a.org/docs/tutorials/api-quickstart) | 3 min | REST API examples with curl |
+| [**Dashboard Walkthrough**](https://opena2a.org/docs/tutorials/ui-walkthrough) | 3 min | Navigate the AIM dashboard |
+| [**Register MCP Servers**](https://opena2a.org/docs/tutorials/mcp-registration) | 3 min | Connect and attest MCP servers |
+
+**Full documentation:** [**https://opena2a.org/docs**](https://opena2a.org/docs)
 
 ---
 
@@ -582,7 +597,17 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 
 ## Support & Resources
 
-- **📖 Comprehensive Documentation**: [opena2a.org/docs](https://opena2a.org/docs) — Complete guides, tutorials, and API reference
+### Documentation
+
+| Resource | Link |
+|----------|------|
+| **Full Documentation** | [**opena2a.org/docs**](https://opena2a.org/docs) |
+| 5-Minute Tutorials | [opena2a.org/docs/tutorials](https://opena2a.org/docs/tutorials) |
+| API Reference | [opena2a.org/docs/aim/api-reference](https://opena2a.org/docs/aim/api-reference) |
+| SDK Guide | [opena2a.org/docs/api/sdks](https://opena2a.org/docs/api/sdks) |
+
+### Community
+
 - **📧 Email**: [info@opena2a.org](mailto:info@opena2a.org)
 - **💬 Discord**: [Join our community](https://discord.gg/uRZa3KXgEn)
 - **🔗 Website**: [opena2a.org](https://opena2a.org)
