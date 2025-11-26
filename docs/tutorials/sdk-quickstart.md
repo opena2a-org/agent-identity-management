@@ -11,6 +11,27 @@ Secure your first AI agent with 3 lines of Python code. No configuration needed.
 
 ---
 
+## Fastest Way: Run the Demo Agent (60 seconds!)
+
+After downloading the SDK, you can see AIM in action immediately:
+
+```bash
+# Extract and install
+cd ~/projects  # or wherever you keep projects
+unzip ~/Downloads/aim-sdk-python.zip
+cd aim-sdk-python
+pip install -e .
+
+# Run the interactive demo
+python demo_agent.py
+```
+
+Open your [AIM Dashboard](http://localhost:3000/dashboard/agents) side-by-side and watch it update in real-time as you trigger actions!
+
+The demo includes weather checks, product searches, user lookups, notifications, and refunds - each with different risk levels so you can see how AIM monitors them.
+
+---
+
 ## Step 1: Download the SDK (30 seconds)
 
 The SDK comes pre-configured with your credentials. No API keys to manage.
@@ -18,11 +39,13 @@ The SDK comes pre-configured with your credentials. No API keys to manage.
 1. Login to AIM at http://localhost:3000
 2. Go to **Settings → SDK Download**
 3. Click **Download Python SDK**
-4. Extract the ZIP file
+4. Extract the ZIP file to your projects folder:
 
 ```bash
-unzip aim-sdk-python.zip
+cd ~/projects  # or ~/dev, ~/Desktop, etc.
+unzip ~/Downloads/aim-sdk-python.zip
 cd aim-sdk-python
+pip install -e .
 ```
 
 > **Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials.

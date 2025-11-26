@@ -179,52 +179,79 @@ export default function SDKDownloadPage() {
         <div className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Terminal className="h-5 w-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Quick Start</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Quick Start - See Results in 60 Seconds!</h3>
           </div>
 
           <div className="space-y-6">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">1. Extract & Install SDK</h4>
+              <h4 className="font-medium text-gray-900 mb-2">1. Extract SDK to Your Projects Folder</h4>
               <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
                 <code className="text-sm text-green-400 font-mono">
-                  unzip aim-sdk-python.zip<br />
+                  # Recommended: Extract to your home directory or projects folder<br />
+                  cd ~/projects  # or any folder you prefer<br />
+                  unzip ~/Downloads/aim-sdk-python.zip<br />
                   cd aim-sdk-python<br />
                   pip install -e .
                 </code>
               </div>
-              <p className="text-sm text-gray-600 flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>All security dependencies (cryptography, keyring) auto-install automatically!</span>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                <p className="text-sm text-blue-800">
+                  <strong>Where to extract?</strong> Anywhere you keep your projects! Common locations:
+                </p>
+                <ul className="text-sm text-blue-700 mt-1 ml-4 list-disc">
+                  <li><code>~/projects/aim-sdk-python</code></li>
+                  <li><code>~/dev/aim-sdk-python</code></li>
+                  <li><code>~/Desktop/aim-sdk-python</code> (for quick testing)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4">
+              <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+                <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">NEW</span>
+                2. Run the Demo Agent - Watch Dashboard Update Live!
+              </h4>
+              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
+                <code className="text-sm text-green-400 font-mono">
+                  python demo_agent.py
+                </code>
+              </div>
+              <p className="text-sm text-green-800 mb-2">
+                The demo agent includes interactive actions you can trigger. Open your{' '}
+                <a href="/dashboard/agents" className="underline font-medium">Agents Dashboard</a>{' '}
+                side-by-side and watch it update in real-time as you perform actions!
+              </p>
+              <p className="text-sm text-green-700">
+                <strong>Actions included:</strong> Weather checks, product searches, user lookups, notifications, and more - each with different risk levels so you can see how AIM monitors them differently.
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">2. Register Your Agent - ONE LINE!</h4>
+              <h4 className="font-medium text-gray-900 mb-2">3. Build Your Own Agent</h4>
               <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <code className="text-sm text-green-400 font-mono">
                   from aim_sdk import secure<br />
                   <br />
-                  # ONE LINE - Enterprise security enabled! 🚀<br />
-                  agent = secure(&quot;your-agent-name&quot;)<br />
+                  # ONE LINE - Enterprise security enabled!<br />
+                  agent = secure(&quot;my-agent&quot;)<br />
                   <br />
-                  # ✨ That&apos;s it! Your agent is now secure.<br />
+                  # Add security to any function with a decorator<br />
+                  @agent.track_action(risk_level=&quot;low&quot;)<br />
+                  def my_function():<br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;return &quot;Hello from a secured agent!&quot;<br />
                   <br />
-                  # Automatically enabled:<br />
-                  # ✅ Ed25519 cryptographic signing on every request<br />
-                  # ✅ Auto-MCP detection from Claude Desktop config<br />
-                  # ✅ Real-time trust scoring and behavior analytics<br />
-                  # ✅ Audit logging and compliance reporting<br />
-                  # ✅ Anomaly detection and security alerts
+                  # Every call is now verified, logged, and monitored!<br />
+                  result = my_function()
                 </code>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>That&apos;s it! One line. Zero configuration. production-ready security.</span>
+                <span>Copy the demo_agent.py file and modify it for your use case!</span>
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. View Real-Time Security Analytics</h4>
+              <h4 className="font-medium text-gray-900 mb-2">4. View Real-Time Security Analytics</h4>
               <p className="text-gray-700 dark:text-gray-300 mb-3">
                 Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics in real-time.
               </p>

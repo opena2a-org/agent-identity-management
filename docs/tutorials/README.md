@@ -2,6 +2,24 @@
 
 Get started with AIM quickly. Each tutorial is designed to deliver value in under 5 minutes.
 
+---
+
+## Fastest Way to See AIM in Action (60 seconds!)
+
+```bash
+# 1. Download SDK from AIM dashboard (Settings → SDK Download)
+# 2. Extract and run:
+cd ~/projects
+unzip ~/Downloads/aim-sdk-python.zip
+cd aim-sdk-python
+pip install -e .
+python demo_agent.py
+```
+
+Open your [AIM Dashboard](http://localhost:3000/dashboard/agents) side-by-side and watch it update in real-time!
+
+---
+
 ## Quick Start Tutorials
 
 | Tutorial | Time | Description |
@@ -11,7 +29,7 @@ Get started with AIM quickly. Each tutorial is designed to deliver value in unde
 | [Dashboard Walkthrough](./dashboard-walkthrough.md) | 3 min | Navigate the AIM dashboard |
 | [MCP Registration](./mcp-registration.md) | 3 min | Register and attest MCP servers |
 
-## Zero to Secured in 60 Seconds
+## Build Your Own Agent
 
 ```python
 from aim_sdk import secure
@@ -30,6 +48,8 @@ def call_api(data):
 # - Monitored for anomalies
 # - Trust score updated
 ```
+
+**Pro tip:** Copy `demo_agent.py` from the SDK and modify it for your use case!
 
 ## Prerequisites
 
