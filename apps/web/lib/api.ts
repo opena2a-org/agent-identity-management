@@ -823,16 +823,18 @@ class APIClient {
   }
 
   // Alerts
-  async getAlerts(limit = 100, offset = 0): Promise<{ 
+  async getAlerts(limit = 100, offset = 0, status?: string): Promise<{ 
     alerts: any[]; 
     total: number;
     all_count: number;
     acknowledged_count: number;
     unacknowledged_count: number;
   }> {
-    const response: any = await this.request(
-      `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`
-    );
+    let url = `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`;
+    if (status && status !== 'all') {
+      url += `&status=${status}`;
+    }
+    const response: any = await this.request(url);
     return {
       alerts: response.alerts || [],
       total: response.total || 0,
@@ -845,6 +847,17 @@ class APIClient {
   async acknowledgeAlert(alertId: string): Promise<void> {
     return this.request(`/api/v1/admin/alerts/${alertId}/acknowledge`, {
       method: "POST",
+    });
+  }
+
+  async bulkAcknowledgeAlerts(userId: string): Promise<{
+    message: string;
+    acknowledged_count: number;
+    bulk_acknowledged: boolean;
+  }> {
+    return this.request(`/api/v1/admin/alerts/bulk-acknowledge`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
     });
   }
 

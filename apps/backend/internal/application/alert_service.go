@@ -128,13 +128,12 @@ func (s *AlertService) GetAlerts(
 	offset int,
 
 ) ([]*domain.Alert, int, error) {
-	// For now, just return organization alerts
-	// TODO: Implement full filtering in repository layer
-	alerts, err := s.alertRepo.GetByOrganization(orgID, limit, offset)
+	// Use filtered repository methods if status is provided
+	alerts, err := s.alertRepo.GetByOrganizationFiltered(orgID, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := s.alertRepo.CountByOrganization(orgID)
+	total, err := s.alertRepo.CountByOrganizationFiltered(orgID, status)
 	if err != nil {
 		return alerts, 0, fmt.Errorf("failed to get total alerts: %w", err)
 	}
@@ -149,6 +148,15 @@ func (s *AlertService) AcknowledgeAlert(
 	userID uuid.UUID,
 ) error {
 	return s.alertRepo.Acknowledge(alertID, userID)
+}
+
+// BulkAcknowledgeAlerts acknowledges multiple alerts in one request
+func (s *AlertService) BulkAcknowledgeAlerts(
+	ctx context.Context,
+	orgID uuid.UUID,
+	userID uuid.UUID,
+) (int, error) {
+	return s.alertRepo.BulkAcknowledge(orgID, userID)
 }
 
 // ResolveAlert marks an alert as resolved

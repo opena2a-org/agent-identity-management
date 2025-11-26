@@ -55,8 +55,11 @@ type AlertRepository interface {
 	Create(alert *Alert) error
 	GetByID(id uuid.UUID) (*Alert, error)
 	GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*Alert, error)
+	GetByOrganizationFiltered(orgID uuid.UUID, status string, limit, offset int) ([]*Alert, error)
 	CountByOrganization(orgID uuid.UUID) (int, error)
+	CountByOrganizationFiltered(orgID uuid.UUID, status string) (int, error)
 	GetUnacknowledged(orgID uuid.UUID) ([]*Alert, error)
 	Acknowledge(id, userID uuid.UUID) error
+	BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error)
 	Delete(id uuid.UUID) error
 }

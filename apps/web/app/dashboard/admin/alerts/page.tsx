@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -34,6 +34,7 @@ import { formatDateTime } from "@/lib/date-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthGuard } from "@/components/auth-guard";
 import { eventEmitter, Events } from "@/lib/events";
+import { toast } from "sonner";
 
 interface Alert {
   id: string;
@@ -93,6 +94,7 @@ export default function AlertsPage() {
   const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
     "viewer"
   );
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Admin-only guard per request
   useEffect(() => {
@@ -105,6 +107,9 @@ export default function AlertsPage() {
       const payload = JSON.parse(atob(token.split(".")[1]));
       const userRole = (payload.role as any) || "viewer";
       setRole(userRole);
+      const extractedUserId =
+        payload.user_id || payload.sub || payload.id || null;
+      setUserId(extractedUserId);
       if (userRole !== "admin") {
         router.replace("/dashboard");
         return;
@@ -125,7 +130,7 @@ export default function AlertsPage() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("unacknowledged");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState<number | "all">(10);
   const [searchField, setSearchField] = useState<string>("title");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -134,15 +139,16 @@ export default function AlertsPage() {
     setPage(1);
   }, [severityFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchAlerts();
-  }, [page, pageSize, severityFilter, statusFilter]);
-
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const offset = (page - 1) * pageSize;
-      const data = await api.getAlerts(pageSize, offset);
+      const isAll = pageSize === "all";
+      const effectiveLimit = isAll
+        ? Math.max(allCount || 0, 1000)
+        : pageSize;
+      const offset = isAll ? 0 : (page - 1) * (pageSize as number);
+
+      const data = await api.getAlerts(effectiveLimit, offset, statusFilter);
       setAlerts(data.alerts);
       setTotal(data.total);
       setAllCount(data.all_count || 0);
@@ -153,9 +159,13 @@ export default function AlertsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, severityFilter, statusFilter, allCount]);
 
-  const acknowledgeAlert = async (alertId: string) => {
+  useEffect(() => {
+    fetchAlerts();
+  }, [fetchAlerts]);
+
+  const acknowledgeAlert = async (alertId: string, alertTitle: string) => {
     try {
       await api.acknowledgeAlert(alertId);
       // Update local state
@@ -172,9 +182,19 @@ export default function AlertsPage() {
       );
       // Emit event for real-time sidebar update
       eventEmitter.emit(Events.ALERT_ACKNOWLEDGED);
+      toast.success("Alert acknowledged", {
+        description: `"${alertTitle}" has been marked as acknowledged.`,
+      });
+      await fetchAlerts();
     } catch (error) {
       console.error("Failed to acknowledge alert:", error);
-      window.alert("Failed to acknowledge alert");
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to acknowledge alert. Please try again.";
+      toast.error("Acknowledgement failed", {
+        description: errorMessage,
+      });
     }
   };
 
@@ -194,6 +214,7 @@ export default function AlertsPage() {
       eventEmitter.emit(Events.ALERT_RESOLVED);
 
       window.alert("Alert resolved successfully");
+      await fetchAlerts();
     } catch (error) {
       console.error("Failed to resolve alert:", error);
       window.alert("Failed to resolve alert");
@@ -202,8 +223,12 @@ export default function AlertsPage() {
 
   const acknowledgeAll = async () => {
     try {
-      const unacknowledged = filteredAlerts.filter((a) => !a.is_acknowledged);
-      await Promise.all(unacknowledged.map((a) => api.acknowledgeAlert(a.id)));
+      if (!userId) {
+        window.alert("User context missing; please re-authenticate.");
+        return;
+      }
+
+      const response = await api.bulkAcknowledgeAlerts(userId);
       setAlerts(
         alerts.map((a) =>
           !a.is_acknowledged
@@ -215,11 +240,21 @@ export default function AlertsPage() {
             : a
         )
       );
+      toast.success("Alerts acknowledged", {
+        description: response?.message || "All alerts marked as acknowledged.",
+      });
       // Emit event for real-time sidebar update
       eventEmitter.emit(Events.ALERT_ACKNOWLEDGED);
+      await fetchAlerts();
     } catch (error) {
       console.error("Failed to acknowledge all alerts:", error);
-      window.alert("Failed to acknowledge all alerts");
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to acknowledge all alerts. Please try again.";
+      toast.error("Bulk acknowledgement failed", {
+        description: errorMessage,
+      });
     }
   };
 
@@ -256,7 +291,10 @@ export default function AlertsPage() {
 
   // Calculate total pages based on filtered count
   const totalFilteredCount = getTotalCountForFilter();
-  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+  const totalPages =
+    pageSize === "all"
+      ? 1
+      : Math.max(1, Math.ceil(totalFilteredCount / (pageSize as number)));
 
   useEffect(() => {
     // If current page is beyond total pages, go to last page
@@ -424,57 +462,61 @@ export default function AlertsPage() {
         <CardHeader>
           <CardTitle>Filter Alerts</CardTitle>
         </CardHeader>
-        <CardContent className="flex gap-4 items-center">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[240px]">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                <div className="flex items-center justify-between w-full">
-                  <span>All Alerts</span>
-                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
-                    {allCount}
-                  </span>
-                </div>
-              </SelectItem>
-              <SelectItem value="unacknowledged">
-                <div className="flex items-center justify-between w-full">
-                  <span>Unacknowledged</span>
-                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
-                    {unacknowledgedCount}
-                  </span>
-                </div>
-              </SelectItem>
-              <SelectItem value="acknowledged">
-                <div className="flex items-center justify-between w-full">
-                  <span>Acknowledged</span>
-                  <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
-                    {acknowledgedCount}
-                  </span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={severityFilter} onValueChange={setSeverityFilter}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filter by severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Severities</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-            </SelectContent>
-          </Select>
-         
+        <CardContent className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center">
+          <div className="w-full md:w-auto">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[240px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center justify-between w-full">
+                    <span>All Alerts</span>
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                      {allCount}
+                    </span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="unacknowledged">
+                  <div className="flex items-center justify-between w-full">
+                    <span>Unacknowledged</span>
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                      {unacknowledgedCount}
+                    </span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="acknowledged">
+                  <div className="flex items-center justify-between w-full">
+                    <span>Acknowledged</span>
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-semibold">
+                      {acknowledgedCount}
+                    </span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <div className="flex gap-2 items-center">
+          <div className="w-full md:w-auto">
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="w-full md:w-[200px]">
+                <SelectValue placeholder="Filter by severity" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="info">Info</SelectItem>
+                <SelectItem value="warning">Warning</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex w-full flex-col gap-2 md:flex-row md:items-center md:flex-1">
             <Select value={searchField} onValueChange={setSearchField}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full md:w-[140px]">
                 <SelectValue placeholder="Search by" />
               </SelectTrigger>
               <SelectContent>
@@ -484,41 +526,55 @@ export default function AlertsPage() {
                 <SelectItem value="alert_type">Alert Type</SelectItem>
               </SelectContent>
             </Select>
-            <input
-              type="text"
-              className="border rounded px-2 py-1 w-[220px] focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              placeholder={`🔍 Search ${searchField.charAt(0).toUpperCase() + searchField.slice(1)}`}
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              autoComplete="off"
-            />
-            {searchQuery && (
-              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>Clear</Button>
-            )}
+
+            <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
+              <input
+                type="text"
+                className="w-full rounded border px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                placeholder={`🔍 Search ${searchField.charAt(0).toUpperCase() + searchField.slice(1)}`}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoComplete="off"
+              />
+              {searchQuery && (
+                <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-2 items-center">
-            <span>Rows per page:</span>
-            <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
-              <SelectTrigger className="w-[80px]">
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <span className="text-sm font-medium">Rows per page:</span>
+            <Select
+              value={pageSize === "all" ? "all" : String(pageSize)}
+              onValueChange={v => {
+                if (v === "all") {
+                  setPageSize("all");
+                  setPage(1);
+                } else {
+                  setPageSize(Number(v));
+                }
+              }}
+            >
+              <SelectTrigger className="w-full md:w-[100px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="50">50</SelectItem>
                 <SelectItem value="100">100</SelectItem>
+                <SelectItem value="all">All</SelectItem>
               </SelectContent>
             </Select>
           </div>
-
-         
         </CardContent>
       </Card>
 
       {/* Pagination Controls */}
-      <div className="flex gap-2 items-center mt-4">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Button
-          disabled={page === 1}
+          disabled={page === 1 || pageSize === "all"}
           onClick={() => setPage(page - 1)}
           variant="outline"
         >
@@ -528,7 +584,7 @@ export default function AlertsPage() {
           Page {page} of {totalPages}
         </span>
         <Button
-          disabled={page >= totalPages}
+          disabled={page >= totalPages || pageSize === "all"}
           onClick={() => setPage(page + 1)}
           variant="outline"
         >
@@ -600,12 +656,12 @@ export default function AlertsPage() {
                         )}
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 justify-end sm:justify-start">
                         {!alert.is_acknowledged && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => acknowledgeAlert(alert.id)}
+                            onClick={() => acknowledgeAlert(alert.id, alert.title)}
                           >
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Acknowledge

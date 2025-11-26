@@ -135,18 +135,18 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		}
 
 		allUsers = append(allUsers, UserWithStatus{
-			ID:                    req.ID,
-			Email:                 req.Email,
-			Name:                  fullName,
-			Role:                  "pending",
-			Status:                "pending_approval",
-			CreatedAt:             req.CreatedAt,
-			Provider:              func() string {
-			if req.OAuthProvider != nil {
-				return string(*req.OAuthProvider)
-			}
-			return "manual"
-		}(),
+			ID:        req.ID,
+			Email:     req.Email,
+			Name:      fullName,
+			Role:      "pending",
+			Status:    "pending_approval",
+			CreatedAt: req.CreatedAt,
+			Provider: func() string {
+				if req.OAuthProvider != nil {
+					return string(*req.OAuthProvider)
+				}
+				return "manual"
+			}(),
 			RequestedAt:           &req.RequestedAt,
 			PictureURL:            req.ProfilePictureURL,
 			IsRegistrationRequest: true,
@@ -648,7 +648,6 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		status,
 		limit,
 		offset,
-		
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -694,13 +693,13 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"alerts":             alerts,
-		"total":              total,
-		"all_count":          allCount,
-		"acknowledged_count": acknowledgedCount,
+		"alerts":               alerts,
+		"total":                total,
+		"all_count":            allCount,
+		"acknowledged_count":   acknowledgedCount,
 		"unacknowledged_count": unacknowledgedCount,
-		"limit":              limit,
-		"offset":             offset,
+		"limit":                limit,
+		"offset":               offset,
 	})
 }
 
@@ -735,6 +734,65 @@ func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
 	)
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// BulkAcknowledgeAlerts acknowledges multiple alerts at once
+func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// If user_id supplied, ensure it matches authenticated user
+	if req.UserID != "" {
+		bodyUserID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Invalid user ID: %s", req.UserID),
+			})
+		}
+		if bodyUserID != userID {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "User ID mismatch",
+			})
+		}
+	}
+
+	ackCount, err := h.alertService.BulkAcknowledgeAlerts(c.Context(), orgID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit with metadata
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionAcknowledge,
+		"alert",
+		uuid.Nil,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"bulk_acknowledge_scope": "all_alerts",
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":            fmt.Sprintf("Acknowledged %d alerts", ackCount),
+		"acknowledged_count": ackCount,
+		"bulk_acknowledged":  ackCount > 0,
+	})
 }
 
 // ResolveAlert marks an alert as resolved
@@ -1207,8 +1265,8 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"all_count":           allCount,
-		"acknowledged_count":  acknowledgedCount,
+		"all_count":            allCount,
+		"acknowledged_count":   acknowledgedCount,
 		"unacknowledged_count": unacknowledgedCount,
 	})
 }

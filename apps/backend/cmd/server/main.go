@@ -928,6 +928,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Alerts
 	admin.Get("/alerts", h.Admin.GetAlerts)
 	admin.Get("/alerts/unacknowledged/count", h.Admin.GetUnacknowledgedAlertCount)
+	admin.Post("/alerts/bulk-acknowledge", h.Admin.BulkAcknowledgeAlerts)
 	admin.Post("/alerts/:id/acknowledge", h.Admin.AcknowledgeAlert)
 	admin.Post("/alerts/:id/resolve", h.Admin.ResolveAlert)
 
