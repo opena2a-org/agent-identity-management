@@ -1,5 +1,9 @@
 "use client";
 
+import { toast } from "sonner";
+
+const SESSION_EXPIRED_TOAST_ID = "session-expired";
+
 // Runtime API URL configuration
 // CRITICAL: This function MUST be called ONLY in browser context (client-side)
 // to ensure proper URL detection for environment-agnostic deployments
@@ -412,6 +416,21 @@ class APIClient {
       headers,
       credentials: "include", // Send cookies with requests
     });
+
+    if (response.status === 401) {
+      this.clearToken();
+      if (typeof window !== "undefined") {
+        toast.error("Session expired", {
+          id: SESSION_EXPIRED_TOAST_ID,
+          description: "Please sign in again to continue.",
+        });
+
+        setTimeout(() => {
+          window.location.replace("/auth/login");
+        }, 1500);
+      }
+      throw new Error("Unauthorized");
+    }
 
     if (!response.ok) {
       const error = await response
