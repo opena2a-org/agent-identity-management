@@ -67,6 +67,26 @@ Trigger actions from the demo menu and watch:
 
 ---
 
+## 🛠️ Build Your Own Agent
+
+Ready to build your own? It's just 3 lines:
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")  # That's it - agent is secured!
+
+@agent.track_action(risk_level="low")
+def my_function(data):
+    return api.call(data)  # Verified, logged, monitored
+```
+
+**Pro tip:** Copy `demo_agent.py` from the SDK and modify it for your use case!
+
+For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart).
+
+---
+
 ## 📚 Learn More
 
 | Resource | Time | Description |
@@ -177,62 +197,6 @@ def get_weather(city):
 **With AIM**: Attack blocked instantly, admin alerted in real-time, complete audit trail for forensics.
 
 **This is the difference between a trusted agent and a ticking time bomb.**
-
----
-
-## ⚡ Build Your Own Agent
-
-Already ran the demo? Here's how to build your own secure agent:
-
-### The Basics (3 Lines of Code)
-```python
-from aim_sdk import secure
-
-# LINE 1: Register your agent (zero config!)
-agent = secure("my-agent")
-
-# LINE 2: Add decorator to verify EVERY action
-@agent.track_action(risk_level="low")
-def call_external_api(data):
-    # LINE 3: Your code - runs ONLY if verification passes
-    return api.post("/endpoint", json=data)
-
-# Now every call to call_external_api() is:
-# ✅ Verified BEFORE execution (prevents rogue behavior!)
-# ✅ Logged to immutable audit trail
-# ✅ Monitored for anomalies
-# ✅ Trust score updated automatically
-# ✅ Alerts triggered if suspicious
-```
-
-**Without the decorator?** Your agent can do anything without oversight. ❌
-**With the decorator?** Every action verified, logged, and monitored. ✅
-
-**Two Decorator Types**:
-```python
-# For monitoring and logging (executes immediately)
-@agent.track_action(risk_level="low")
-def safe_operation():
-    return api.get("/data")
-
-# For critical actions (requires admin approval first)
-@agent.require_approval(risk_level="critical")
-def dangerous_operation():
-    return db.execute("DROP TABLE users")  # ⏸️ PAUSES until admin approves!
-```
-
-**Advanced Usage** (optional parameters):
-```python
-# Customize if needed - but defaults work for 95% of use cases
-agent = secure(
-    "my-agent",
-    api_key="aim_abc123",           # Manual mode: override OAuth credentials
-    capabilities=["read_db"],       # Manual: override auto-detection
-    auto_detect=False               # Disable auto-detection entirely
-)
-```
-
-**Pro tip:** Copy the `demo_agent.py` file from the SDK and modify it for your use case!
 
 ---
 
