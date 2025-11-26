@@ -18,7 +18,7 @@
 
 ---
 
-## 🚨 The Problem: AI Agents Are a Security Blind Spot
+## 🚨 AI Agents Are a Security Blind Spot
 
 Your AI agents are making decisions, calling APIs, and accessing data — but can you answer:
 
@@ -53,7 +53,6 @@ Open http://localhost:3000 → Login: `admin@opena2a.org` / `AIM2025!Secure`
 # In the AIM dashboard: Settings → SDK Download → Download Python SDK
 
 # Then in your terminal:
-cd ~/projects                          # or ~/dev, ~/Desktop, etc.
 unzip ~/Downloads/aim-sdk-python.zip
 cd aim-sdk-python
 pip install -e .
