@@ -35,7 +35,7 @@ Without visibility, a single rogue agent can exfiltrate data, rack up API bills,
 
 ## ⚡ See AIM Working in 60 Seconds
 
-**No reading docs. No configuration. Just run and watch your dashboard update in real-time.**
+**Just run and watch your dashboard update in real-time.**
 
 ### Step 1: Start AIM (30 seconds)
 
@@ -192,58 +192,6 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 
 ---
 
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         AIM Platform                            │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   Backend    │  │   Frontend   │  │   Database   │         │
-│  │   (Go 1.23)  │  │  (Next.js)   │  │ (PostgreSQL) │         │
-│  │   Fiber v3   │  │  React 19    │  │      16      │         │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘         │
-│         │                                                        │
-│         │  REST API (160 endpoints)                             │
-│         │                                                        │
-└─────────┼────────────────────────────────────────────────────────┘
-          │
-          │  HTTPS + Ed25519 Signing
-          │
-┌─────────▼────────────────────────────────────────────────────────┐
-│                      Your AI Agents                              │
-│                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
-│  │  LangChain  │  │   CrewAI    │  │    Custom   │            │
-│  │   Agents    │  │   Agents    │  │   Agents    │            │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘            │
-│         │                 │                 │                   │
-│         └─────────────────┴─────────────────┘                   │
-│                           │                                      │
-│                    AIM SDK (Python)                              │
-│                   secure("agent-name")                           │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Observability & Monitoring
-
-AIM includes built-in **Prometheus metrics** for production monitoring:
-
-- **Endpoint**: `http://localhost:8080/metrics`
-- **Metrics Tracked**: HTTP request latency, request counts, response status codes
-- **Path Normalization**: UUIDs and IDs replaced with `:id` placeholders to prevent label cardinality explosion
-- **Integration**: Compatible with Prometheus, Grafana, and other monitoring tools
-
-**Example Prometheus configuration**:
-```yaml
-scrape_configs:
-  - job_name: 'aim-backend'
-    static_configs:
-      - targets: ['localhost:8080']
-```
-
----
-
 ## 🚀 Deployment
 
 ### Docker Compose (Recommended)
@@ -308,60 +256,6 @@ NEXT_PUBLIC_ENABLE_ANALYTICS=true
 NEXT_PUBLIC_ENVIRONMENT=production
 ```
 </details>
-
----
-
-## 🧪 Development
-
-### Backend (Go)
-
-```bash
-cd backend
-
-# Install dependencies
-go mod download
-
-# Run tests
-go test ./...
-
-# Run with hot reload
-air
-
-# Build
-go build -o aim-backend cmd/server/main.go
-```
-
-### Frontend (Next.js)
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Run production build
-npm start
-```
-
-### Database Migrations
-
-```bash
-# Run migrations
-cd backend
-go run cmd/migrate/main.go up
-
-# Rollback migration
-go run cmd/migrate/main.go down
-
-# Create new migration
-go run cmd/migrate/main.go create <migration_name>
-```
 
 ---
 
@@ -438,14 +332,6 @@ docker compose -f docker-compose.dev.yml up -d
 
 ---
 
-## 📄 License
-
-GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for details.
-
-**Why AGPL?** We believe in open-source security infrastructure. AGPL ensures that any modifications to AIM remain open-source, even when deployed as a service.
-
----
-
 ## 🆚 Comparison
 
 ### AIM vs. Traditional Security
@@ -493,7 +379,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 - [x] Admin UI with real-time updates
 - [x] Production deployment on Azure
 
-### Q1 2026 🔄 (In Progress)
+### Q1-Q2 2026 🔄 (In Progress)
 - [ ] GraphQL API
 - [ ] CLI tool for automation
 - [ ] Terraform provider
@@ -501,143 +387,16 @@ GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for d
 
 ---
 
-## Technical Reference
-
-<details>
-<summary><h3>📊 API Overview (160 Endpoints)</h3></summary>
-
-### Agent Management (12 endpoints)
-```
-POST   /api/v1/agents/register          # Register new agent
-GET    /api/v1/agents/:id                # Get agent details
-PATCH  /api/v1/agents/:id                # Update agent
-DELETE /api/v1/agents/:id                # Delete agent
-POST   /api/v1/agents/:id/verify         # Verify agent signature
-GET    /api/v1/agents/:id/credentials    # Get API credentials
-POST   /api/v1/agents/:id/rotate-key     # Rotate agent keys
-GET    /api/v1/agents/:id/trust-score    # Get trust score
-GET    /api/v1/agents/:id/activity       # Get activity logs
-GET    /api/v1/agents/:id/violations     # Get violations
-GET    /api/v1/agents/:id/key-vault      # Get key vault info
-GET    /api/v1/agents/:id/mcp-servers    # MCP connections
-```
-
-### MCP Server Management (15 endpoints)
-```
-POST   /api/v1/mcp-servers/register      # Register MCP server
-GET    /api/v1/mcp-servers/:id           # Get MCP details
-PATCH  /api/v1/mcp-servers/:id           # Update MCP
-DELETE /api/v1/mcp-servers/:id           # Delete MCP
-POST   /api/v1/mcp-servers/:id/attest    # Attest MCP server
-GET    /api/v1/mcp-servers/:id/agents    # Connected agents
-POST   /api/v1/mcp-servers/:id/verify    # Verify attestation
-GET    /api/v1/mcp-servers/:id/capabilities  # Get capabilities
-POST   /api/v1/mcp-servers/:id/revoke    # Revoke attestation
-...
-```
-
-### Trust Scoring (6 endpoints)
-```
-GET    /api/v1/trust-scores/:agent_id     # Current score
-GET    /api/v1/trust-scores/:agent_id/history  # Score history
-POST   /api/v1/trust-scores/:agent_id/calculate  # Recalculate
-GET    /api/v1/trust-scores/:agent_id/factors    # Score breakdown
-GET    /api/v1/trust-scores/aggregate      # Aggregate scores
-POST   /api/v1/trust-scores/:agent_id/override   # Manual override
-```
-
-### Security Monitoring (11 endpoints)
-```
-GET    /api/v1/security/dashboard          # Security dashboard
-GET    /api/v1/security/threats            # List threats
-GET    /api/v1/security/anomalies          # Detected anomalies
-GET    /api/v1/security/alerts             # List alerts with pagination
-GET    /api/v1/security/alerts?status=X    # Filter alerts (acknowledged/unacknowledged)
-POST   /api/v1/security/alerts/:id/acknowledge  # Acknowledge single alert
-POST   /api/v1/admin/alerts/bulk-acknowledge    # Bulk acknowledge all alerts (NEW)
-GET    /api/v1/security/metrics            # Security metrics
-GET    /api/v1/security/policies           # Security policies
-POST   /api/v1/security/policies           # Create policy
-```
-
-### Analytics & Reporting (2 endpoints)
-```
-GET    /api/v1/analytics/usage             # Usage statistics
-GET    /api/v1/analytics/activity          # Activity summary (NEW)
-```
-
-### Capability Management (8 endpoints)
-```
-POST   /api/v1/capabilities/grant          # Grant capability
-POST   /api/v1/capabilities/revoke         # Revoke capability
-GET    /api/v1/capabilities/:agent_id      # List capabilities
-POST   /api/v1/capabilities/request        # Request capability
-GET    /api/v1/capabilities/requests       # List requests
-POST   /api/v1/capabilities/approve/:id    # Approve request
-POST   /api/v1/capabilities/reject/:id     # Reject request
-GET    /api/v1/capabilities/violations     # List violations
-```
-
-**Total**: 160 endpoints across 26 categories
-
-See [API Documentation](https://opena2a.org/docs/api/rest) for complete reference.
-
-</details>
-
-<details>
-<summary><h3>🗄️ Database Schema</h3></summary>
-
-### Core Tables
-
-**agents** — Agent registry
-- `id`, `name`, `agent_type`, `owner_id`
-- `public_key`, `key_algorithm`, `key_created_at`
-- `trust_score`, `status`, `last_seen_at`
-
-**mcp_servers** — MCP server registry
-- `id`, `server_id`, `name`, `url`
-- `public_key`, `attestation_signature`
-- `capabilities`, `status`, `verified_at`
-
-**agent_mcp_connections** — Agent-MCP relationships
-- `agent_id`, `mcp_server_id`, `connected_at`
-- `detection_method`, `confidence_score`
-
-**verification_events** — Action verification log
-- `id`, `agent_id`, `action_type`, `resource_type`
-- `approved`, `risk_level`, `trust_score_at_time`
-
-**trust_scores** — Trust score history
-- `agent_id`, `score`, `factors`, `calculated_at`
-
-**capabilities** — Agent capabilities
-- `agent_id`, `capability_name`, `granted_by`
-- `granted_at`, `expires_at`, `metadata`
-
-**security_anomalies** — Behavioral anomaly detection
-- `agent_id`, `anomaly_type`, `severity`
-- `detected_at`, `resolved_at`, `metadata`
-
-### Capability Management
-- **capability_requests** — Pending capability requests
-- **capability_violations** — Unauthorized action attempts
-
-### MCP Attestation
-- **mcp_attestations** — Cryptographic attestation records
-- **mcp_capabilities** — MCP server capabilities
-
-</details>
-
----
-
 <div align="center">
-
-**Built by the [OpenA2A](https://opena2a.org) team**
 
 ⭐ **Star us on GitHub** if AIM helps secure your AI agents!
 
 </div>
 
+---
+## 📄 License
+
+GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) for details.
 ---
 
 ## 🏷️ Search Topics
