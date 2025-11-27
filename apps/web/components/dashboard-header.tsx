@@ -12,7 +12,7 @@ export function DashboardHeader() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [user, setUser] = useState<{
     email: string;
-    display_name?: string;
+    displayName?: string;
     role?: UserRole;
     provider?: string;
   } | null>(null);
@@ -27,7 +27,7 @@ export function DashboardHeader() {
             : (userData?.role as UserRole);
         setUser({
           email: userData?.email || "",
-          display_name:
+          displayName:
             (userData as any)?.name || userData?.email?.split("@")[0] || "User",
           role: normalizedRole,
           provider: (userData as any)?.provider || undefined,
@@ -49,7 +49,7 @@ export function DashboardHeader() {
 
             setUser({
               email: payload?.email || "",
-              display_name: payload?.email?.split("@")[0] || "User",
+              displayName: payload?.email?.split("@")[0] || "User",
               role: (payload?.role as UserRole) || "viewer",
             });
           } catch (e) {
@@ -154,7 +154,7 @@ export function DashboardHeader() {
                 {/* User Info Header */}
                 <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {user?.display_name || "User Account"}
+                    {user?.displayName || "User Account"}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {user?.email || "Loading..."}

@@ -22,7 +22,6 @@ import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
 
 interface APIKeyWithAgent extends APIKey {
-  agent_name?: string;
 }
 
 function StatCard({ stat }: { stat: any }) {
@@ -179,14 +178,14 @@ export default function APIKeysPage() {
       ]);
 
       // Map agent names to keys
-      const keys = keysData?.api_keys || [];
+      const keys = keysData?.apiKeys || [];
       const agents = agentsData?.agents || [];
 
       const keysWithAgents = keys.map((key) => ({
         ...key,
         // Use backend-provided agent_name if available, otherwise look up from agents list
-        agent_name:
-          key.agent_name || agents.find((a) => a.id === key.agent_id)?.name,
+        agentName:
+          key.agentName || agents.find((a) => a.id === key.agentId)?.name,
       }));
 
       setApiKeys(keysWithAgents);
@@ -208,16 +207,16 @@ export default function APIKeysPage() {
     total: apiKeys.length,
     active: apiKeys.filter(
       (k) =>
-        k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())
+        k.isActive && (!k.expiresAt || new Date(k.expiresAt) > new Date())
     ).length,
     disabled: apiKeys.filter(
       (k) =>
-        !k.is_active && (!k.expires_at || new Date(k.expires_at) > new Date())
+        !k.isActive && (!k.expiresAt || new Date(k.expiresAt) > new Date())
     ).length,
     expired: apiKeys.filter(
-      (k) => k.expires_at && new Date(k.expires_at) < new Date()
+      (k) => k.expiresAt && new Date(k.expiresAt) < new Date()
     ).length,
-    neverUsed: apiKeys.filter((k) => !k.last_used_at).length,
+    neverUsed: apiKeys.filter((k) => !k.lastUsedAt).length,
   };
 
   const statCards = [
@@ -249,23 +248,23 @@ export default function APIKeysPage() {
     const matchesSearch =
       key.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       key.prefix.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      key.agent_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      key.agentName?.toLowerCase().includes(searchTerm.toLowerCase());
 
     let matchesStatus: boolean = true;
     if (statusFilter === "active") {
       matchesStatus =
-        key.is_active &&
-        (!key.expires_at || new Date(key.expires_at) > new Date());
+        key.isActive &&
+        (!key.expiresAt || new Date(key.expiresAt) > new Date());
     } else if (statusFilter === "disabled") {
       matchesStatus =
-        !key.is_active &&
-        (!key.expires_at || new Date(key.expires_at) > new Date());
+        !key.isActive &&
+        (!key.expiresAt || new Date(key.expiresAt) > new Date());
     } else if (statusFilter === "expired") {
-      matchesStatus = key.expires_at
-        ? new Date(key.expires_at) < new Date()
+      matchesStatus = key.expiresAt
+        ? new Date(key.expiresAt) < new Date()
         : false;
     } else if (statusFilter === "never-used") {
-      matchesStatus = !key.last_used_at;
+      matchesStatus = !key.lastUsedAt;
     }
 
     return matchesSearch && matchesStatus;
@@ -346,17 +345,17 @@ export default function APIKeysPage() {
     // Just add the new key to the list without reloading
     try {
       // Fetch only the agents data if needed, or use the existing agent name
-      const agentName = agents.find((a) => a.id === newKey.agent_id)?.name;
+      const agentName = agents.find((a) => a.id === newKey.agentId)?.name;
 
       const newKeyWithAgent: APIKeyWithAgent = {
         id: newKey.id,
         name: newKey.name,
-        prefix: newKey.api_key?.substring(0, 16) || "aim_live_...", // Extract prefix from full key
-        agent_id: newKey.agent_id,
-        agent_name: agentName,
-        is_active: true,
-        created_at: newKey.created_at,
-        expires_at: newKey.expires_at,
+        prefix: newKey.apiKey?.substring(0, 16) || "aim_live_...", // Extract prefix from full key
+        agentId: newKey.agentId,
+        agentName: agentName,
+        isActive: true,
+        createdAt: newKey.createdAt,
+        expiresAt: newKey.expiresAt,
       };
 
       // Add the new key to the beginning of the list
@@ -502,42 +501,42 @@ export default function APIKeysPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {key?.agent_name || "Unknown"}
+                        {key?.agentName || "Unknown"}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {key?.last_used_at && formatDate(key.last_used_at)}
+                        {key?.lastUsedAt && formatDate(key.lastUsedAt)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div
-                        className={`text-sm ${key?.expires_at && isExpired(key.expires_at) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
+                        className={`text-sm ${key?.expiresAt && isExpired(key.expiresAt) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
                       >
-                        {key?.expires_at && formatDate(key.expires_at)}
+                        {key?.expiresAt && formatDate(key.expiresAt)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          !key?.is_active
+                          !key?.isActive
                             ? "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300"
-                            : key?.expires_at && isExpired(key.expires_at)
+                            : key?.expiresAt && isExpired(key.expiresAt)
                               ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
                               : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
                         }`}
                       >
-                        {!key?.is_active
+                        {!key?.isActive
                           ? "Disabled"
-                          : key?.expires_at && isExpired(key.expires_at)
+                          : key?.expiresAt && isExpired(key.expiresAt)
                             ? "Expired"
                             : "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        {key?.is_active &&
-                        (!key?.expires_at || !isExpired(key.expires_at)) ? (
+                        {key?.isActive &&
+                        (!key?.expiresAt || !isExpired(key.expiresAt)) ? (
                           <button
                             onClick={() => handleDisableKey(key)}
                             className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
@@ -545,7 +544,7 @@ export default function APIKeysPage() {
                           >
                             <Ban className="h-4 w-4" />
                           </button>
-                        ) : !key?.is_active && permissions.canDeleteAPIKey ? (
+                        ) : !key?.isActive && permissions.canDeleteAPIKey ? (
                           <button
                             onClick={() => handleDeleteKey(key)}
                             className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"

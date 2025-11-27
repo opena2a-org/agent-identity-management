@@ -18,16 +18,16 @@ const (
 
 // Verification represents an agent verification request
 type Verification struct {
-	ID             uuid.UUID          `json:"id"`
-	OrganizationID uuid.UUID          `json:"organization_id"`
-	AgentID        uuid.UUID          `json:"agent_id"`
-	AgentName      string             `json:"agent_name"`
-	Action         string             `json:"action"`
-	Status         VerificationStatus `json:"status"`
-	DurationMs     int                `json:"duration_ms"`
+	ID             uuid.UUID              `json:"id"`
+	OrganizationID uuid.UUID              `json:"organizationId"`
+	AgentID        uuid.UUID              `json:"agentId"`
+	AgentName      string                 `json:"agentName"`
+	Action         string                 `json:"action"`
+	Status         VerificationStatus     `json:"status"`
+	DurationMs     int                    `json:"durationMs"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt      time.Time          `json:"timestamp"` // Mapped to timestamp for frontend compatibility
-	UpdatedAt      time.Time          `json:"-"`
+	CreatedAt      time.Time              `json:"timestamp"` // Mapped to timestamp for frontend compatibility
+	UpdatedAt      time.Time              `json:"-"`
 }
 
 // VerificationRepository defines the interface for verification data access

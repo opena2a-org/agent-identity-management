@@ -327,3 +327,22 @@ func (r *UserRepository) Delete(id uuid.UUID) error {
 	_, err := r.db.Exec(query, id)
 	return err
 }
+
+// CountActiveUsers returns the count of users who logged in within the specified minutes
+func (r *UserRepository) CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM users
+		WHERE organization_id = $1
+		  AND last_login_at >= NOW() - INTERVAL '1 minute' * $2
+		  AND status = 'active'
+	`
+
+	var count int
+	err := r.db.QueryRow(query, orgID, withinMinutes).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count active users: %w", err)
+	}
+
+	return count, nil
+}

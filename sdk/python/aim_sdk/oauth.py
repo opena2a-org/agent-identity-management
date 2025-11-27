@@ -86,9 +86,8 @@ class OAuthTokenManager:
                     return sdk_creds
         except:
             pass
-        cwd_creds = Path.cwd() / ".aim" / "credentials.json"
-        if cwd_creds.exists():
-            return cwd_creds
+        # Always use home directory for credentials - never project directory
+        # This ensures credentials are user-specific and not accidentally committed to version control
         return home_creds
 
     def _credentials_exist(self) -> bool:
@@ -403,8 +402,8 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
     Load credentials from SDK-embedded location.
 
     This function looks for credentials in multiple locations:
-    1. Current directory (./.aim/credentials.json) - for SDK download
-    2. Home directory (~/.aim/credentials.json) - for installed SDK
+    1. Home directory (~/.aim/credentials.json) - for installed SDK
+    2. SDK package directory (aim_sdk/../.aim/credentials.json) - for downloaded SDK
 
     Args:
         use_secure_storage: Try encrypted storage first (default: True)
@@ -412,11 +411,20 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
     Returns:
         Credentials dict or None if not found
     """
-    # Check current directory first (SDK download location)
+    # Build list of credential paths to check
     credentials_paths = [
-        Path.cwd() / ".aim" / "credentials.json",
         Path.home() / ".aim" / "credentials.json"
     ]
+
+    # Also check SDK package directory for downloaded SDKs
+    try:
+        import aim_sdk
+        sdk_package_root = Path(aim_sdk.__file__).parent.parent
+        sdk_creds = sdk_package_root / ".aim" / "credentials.json"
+        if sdk_creds.exists() and sdk_creds not in credentials_paths:
+            credentials_paths.append(sdk_creds)
+    except Exception:
+        pass  # Continue without SDK path
 
     for credentials_path in credentials_paths:
         # Try secure storage first

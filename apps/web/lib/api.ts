@@ -1,5 +1,9 @@
 "use client";
 
+import { toast } from "sonner";
+
+const SESSION_EXPIRED_TOAST_ID = "session-expired";
+
 // Runtime API URL configuration
 // CRITICAL: This function MUST be called ONLY in browser context (client-side)
 // to ensure proper URL detection for environment-agnostic deployments
@@ -48,58 +52,58 @@ const getApiUrl = (): string => {
 
 export interface Agent {
   id: string;
-  organization_id: string;
+  organizationId: string;
   name: string;
-  display_name: string;
+  displayName: string;
   description: string;
-  agent_type: "ai_agent" | "mcp_server";
+  agentType: "ai_agent" | "mcp_server";
   status: "pending" | "verified" | "suspended" | "revoked";
   version: string;
-  trust_score: number;
-  talks_to?: string[];
+  trustScore: number;
+  talksTo?: string[];
   capabilities?: any[];
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Organization {
   id: string;
   name: string;
   plan: "community" | "pro" | "enterprise";
-  max_agents: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  maxAgents: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface User {
   id: string;
-  organization_id?: string;
-  organization_name?: string;
+  organizationId?: string;
+  organizationName?: string;
   email: string;
   name: string;
-  avatar_url?: string;
+  avatarUrl?: string;
   role: "admin" | "manager" | "member" | "viewer" | "pending";
   status: "active" | "pending_approval" | "suspended" | "deactivated";
-  force_password_change?: boolean;
-  created_at: string;
+  forcePasswordChange?: boolean;
+  createdAt: string;
   provider?: string;
-  last_login_at?: string;
-  requested_at?: string;
-  picture_url?: string;
-  is_registration_request?: boolean;
+  lastLoginAt?: string;
+  requestedAt?: string;
+  pictureUrl?: string;
+  isRegistrationRequest?: boolean;
 }
 
 export interface APIKey {
   id: string;
-  agent_id: string;
+  agentId: string;
   name: string;
   prefix: string;
-  last_used_at?: string;
-  expires_at?: string;
-  is_active: boolean;
-  created_at: string;
-  agent_name?: string; // Optional - may be included by backend in some responses
+  lastUsedAt?: string;
+  expiresAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  agentName?: string; // Optional - may be included by backend in some responses
 }
 
 export type TagCategory =
@@ -111,14 +115,14 @@ export type TagCategory =
 
 export interface Tag {
   id: string;
-  organization_id: string;
+  organizationId: string;
   key: string;
   value: string;
   category: TagCategory;
   description: string;
   color: string;
-  created_at: string;
-  created_by: string;
+  createdAt: string;
+  createdBy: string;
 }
 
 export interface CreateTagInput {
@@ -130,7 +134,7 @@ export interface CreateTagInput {
 }
 
 export interface AddTagsInput {
-  tag_ids: string[];
+  tagIds: string[];
 }
 
 export interface AgentCapability {
@@ -214,15 +218,15 @@ export interface DetectionStatusResponse {
 
 // ✅ Agent Attestation Types (Phase 5: Revolutionary Zero-Effort MCP Verification)
 export interface AttestationPayload {
-  agent_id: string;
-  mcp_url: string;
-  mcp_name: string;
-  capabilities_found: string[];
-  connection_successful: boolean;
-  health_check_passed: boolean;
-  connection_latency_ms: number;
+  agentId: string;
+  mcpUrl: string;
+  mcpName: string;
+  capabilitiesFound: string[];
+  connectionSuccessful: boolean;
+  healthCheckPassed: boolean;
+  connectionLatencyMs: number;
   timestamp: string; // ISO 8601 timestamp
-  sdk_version: string;
+  sdkVersion: string;
 }
 
 export interface AttestMCPRequest {
@@ -232,40 +236,40 @@ export interface AttestMCPRequest {
 
 export interface AttestMCPResponse {
   success: boolean;
-  attestation_id: string;
-  mcp_confidence_score: number; // 0-100
-  attestation_count: number;
+  attestationId: string;
+  mcpConfidenceScore: number; // 0-100
+  attestationCount: number;
   message: string;
 }
 
 export interface AttestationWithAgentDetails {
   id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_trust_score: number;
-  verified_at: string; // ISO 8601 timestamp
-  expires_at: string; // ISO 8601 timestamp
-  capabilities_confirmed: string[];
-  connection_latency_ms: number;
-  health_check_passed: boolean;
-  is_valid: boolean;
+  agentId: string;
+  agentName: string;
+  agentTrustScore: number;
+  verifiedAt: string; // ISO 8601 timestamp
+  expiresAt: string; // ISO 8601 timestamp
+  capabilitiesConfirmed: string[];
+  connectionLatencyMs: number;
+  healthCheckPassed: boolean;
+  isValid: boolean;
 }
 
 export interface GetMCPAttestationsResponse {
   attestations: AttestationWithAgentDetails[];
   total: number;
-  confidence_score: number; // 0-100
-  last_attested_at: string; // ISO 8601 timestamp
+  confidenceScore: number; // 0-100
+  lastAttestedAt: string; // ISO 8601 timestamp
 }
 
 export interface ConnectedAgent {
   id: string;
   name: string;
-  display_name: string;
-  trust_score: number;
+  displayName: string;
+  trustScore: number;
   status: string;
-  last_attested_at?: string;
-  attestation_count: number;
+  lastAttestedAt?: string;
+  attestationCount: number;
 }
 
 export interface GetConnectedAgentsResponse {
@@ -275,31 +279,31 @@ export interface GetConnectedAgentsResponse {
 
 export interface ConnectedMCPServer {
   id: string;
-  organization_id?: string;
+  organizationId?: string;
   name: string;
   description?: string;
   url: string;
   version?: string;
-  public_key?: string;
+  publicKey?: string;
   status?: string;
-  is_verified?: boolean;
-  last_verified_at?: string;
-  verification_url?: string;
+  isVerified?: boolean;
+  lastVerifiedAt?: string;
+  verificationUrl?: string;
   capabilities?: string[];
-  trust_score?: number;
-  registered_by_agent?: string | null;
-  created_by?: string;
-  created_at?: string;
-  updated_at?: string;
+  trustScore?: number;
+  registeredByAgent?: string | null;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
   tags?: string[] | null;
-  verification_method: string;
-  attestation_count: number;
-  confidence_score: number;
-  last_attested_at?: string;
+  verificationMethod: string;
+  attestationCount: number;
+  confidenceScore: number;
+  lastAttestedAt?: string;
 }
 
 export interface GetAgentMCPServersResponse {
-  mcp_servers: ConnectedMCPServer[];
+  mcpServers: ConnectedMCPServer[];
   total: number;
 }
 
@@ -412,6 +416,21 @@ class APIClient {
       headers,
       credentials: "include", // Send cookies with requests
     });
+
+    if (response.status === 401) {
+      this.clearToken();
+      if (typeof window !== "undefined") {
+        toast.error("Session expired", {
+          id: SESSION_EXPIRED_TOAST_ID,
+          description: "Please sign in again to continue.",
+        });
+
+        setTimeout(() => {
+          window.location.replace("/auth/login");
+        }, 1500);
+      }
+      throw new Error("Unauthorized");
+    }
 
     if (!response.ok) {
       const error = await response
@@ -638,7 +657,7 @@ class APIClient {
 
   async rotateAgentCredentials(
     id: string
-  ): Promise<{ api_key: string; message: string }> {
+  ): Promise<{ apiKey: string; message: string }> {
     return this.request(`/api/v1/agents/${id}/rotate-credentials`, {
       method: "POST",
     });
@@ -648,7 +667,7 @@ class APIClient {
     id: string,
     score: number,
     reason: string
-  ): Promise<{ success: boolean; new_score: number }> {
+  ): Promise<{ success: boolean; newScore: number }> {
     return this.request(`/api/v1/agents/${id}/trust-score`, {
       method: "PUT",
       body: JSON.stringify({ score, reason }),
@@ -656,29 +675,29 @@ class APIClient {
   }
 
   async getAgentTrustScoreHistory(id: string): Promise<{
-    agent_id: string;
+    agentId: string;
     history: Array<{
       timestamp: string;
-      trust_score: number;
+      trustScore: number;
       reason: string;
-      changed_by: string;
+      changedBy: string;
     }>;
   }> {
     return this.request(`/api/v1/agents/${id}/trust-score/history`);
   }
 
   // API Keys
-  async listAPIKeys(): Promise<{ api_keys: APIKey[] }> {
+  async listAPIKeys(): Promise<{ apiKeys: APIKey[] }> {
     return this.request("/api/v1/api-keys");
   }
 
   async createAPIKey(
     agentId: string,
     name: string
-  ): Promise<{ api_key: string; id: string }> {
+  ): Promise<{ apiKey: string; id: string }> {
     return this.request("/api/v1/api-keys", {
       method: "POST",
-      body: JSON.stringify({ agent_id: agentId, name }),
+      body: JSON.stringify({ agentId: agentId, name }),
     });
   }
 
@@ -693,7 +712,7 @@ class APIClient {
   }
 
   // Trust Score
-  async getTrustScore(agentId: string): Promise<{ trust_score: number }> {
+  async getTrustScore(agentId: string): Promise<{ trustScore: number }> {
     return this.request(`/api/v1/trust-score/agents/${agentId}`);
   }
 
@@ -804,22 +823,24 @@ class APIClient {
   }
 
   // Alerts
-  async getAlerts(limit = 100, offset = 0): Promise<{ 
-    alerts: any[]; 
+  async getAlerts(limit = 100, offset = 0, status?: string): Promise<{
+    alerts: any[];
     total: number;
-    all_count: number;
-    acknowledged_count: number;
-    unacknowledged_count: number;
+    allCount: number;
+    acknowledgedCount: number;
+    unacknowledgedCount: number;
   }> {
-    const response: any = await this.request(
-      `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`
-    );
+    let url = `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`;
+    if (status && status !== 'all') {
+      url += `&status=${status}`;
+    }
+    const response: any = await this.request(url);
     return {
       alerts: response.alerts || [],
       total: response.total || 0,
-      all_count: response.all_count || 0,
-      acknowledged_count: response.acknowledged_count || 0,
-      unacknowledged_count: response.unacknowledged_count || 0,
+      allCount: response.allCount || 0,
+      acknowledgedCount: response.acknowledgedCount || 0,
+      unacknowledgedCount: response.unacknowledgedCount || 0,
     };
   }
 
@@ -829,9 +850,20 @@ class APIClient {
     });
   }
 
+  async bulkAcknowledgeAlerts(userId: string): Promise<{
+    message: string;
+    acknowledgedCount: number;
+    bulkAcknowledged: boolean;
+  }> {
+    return this.request(`/api/v1/admin/alerts/bulk-acknowledge`, {
+      method: "POST",
+      body: JSON.stringify({ userId: userId }),
+    });
+  }
+
   async getUnacknowledgedAlertCount(): Promise<number> {
     const alertsObj = await this.getAlerts(100, 0);
-    return alertsObj.alerts.filter((a: any) => !a.is_acknowledged).length;
+    return alertsObj.alerts.filter((a: any) => !a.isAcknowledged).length;
   }
 
   async getPendingCapabilityRequestsCount(): Promise<number> {
@@ -847,33 +879,33 @@ class APIClient {
   // Dashboard stats - Viewer-accessible analytics endpoint
   async getDashboardStats(): Promise<{
     // Agent metrics
-    total_agents: number;
-    verified_agents: number;
-    pending_agents: number;
-    verification_rate: number;
-    avg_trust_score: number;
+    totalAgents: number;
+    verifiedAgents: number;
+    pendingAgents: number;
+    verificationRate: number;
+    avgTrustScore: number;
 
     // MCP Server metrics
-    total_mcp_servers: number;
-    active_mcp_servers: number;
+    totalMcpServers: number;
+    activeMcpServers: number;
 
     // User metrics
-    total_users: number;
-    active_users: number;
+    totalUsers: number;
+    activeUsers: number;
 
     // Security metrics
-    active_alerts: number;
-    critical_alerts: number;
-    security_incidents: number;
+    activeAlerts: number;
+    criticalAlerts: number;
+    securityIncidents: number;
 
     // Verification metrics (last 24 hours)
-    total_verifications?: number;
-    successful_verifications?: number;
-    failed_verifications?: number;
-    avg_response_time?: number;
+    totalVerifications?: number;
+    successfulVerifications?: number;
+    failedVerifications?: number;
+    avgResponseTime?: number;
 
     // Organization
-    organization_id: string;
+    organizationId: string;
   }> {
     return this.request("/api/v1/analytics/dashboard");
   }
@@ -881,27 +913,27 @@ class APIClient {
   // Admin Dashboard stats - Admin-only endpoint with comprehensive platform metrics
   async getAdminDashboardStats(): Promise<{
     // Agent metrics
-    total_agents: number;
-    verified_agents: number;
-    pending_agents: number;
-    verification_rate: number;
-    avg_trust_score: number;
+    totalAgents: number;
+    verifiedAgents: number;
+    pendingAgents: number;
+    verificationRate: number;
+    avgTrustScore: number;
 
     // MCP Server metrics
-    total_mcp_servers: number;
-    active_mcp_servers: number;
+    totalMcpServers: number;
+    activeMcpServers: number;
 
     // User metrics
-    total_users: number;
-    active_users: number;
+    totalUsers: number;
+    activeUsers: number;
 
     // Security metrics
-    active_alerts: number;
-    critical_alerts: number;
-    security_incidents: number;
+    activeAlerts: number;
+    criticalAlerts: number;
+    securityIncidents: number;
 
     // Organization
-    organization_id: string;
+    organizationId: string;
   }> {
     return this.request("/api/v1/admin/dashboard/stats");
   }
@@ -913,12 +945,12 @@ class APIClient {
       month: string;
       verified: number;
       pending: number;
-      month_year: string;
+      monthYear: string;
     }>;
-    current_stats: {
-      total_verified: number;
-      total_pending: number;
-      total_agents: number;
+    currentStats: {
+      totalVerified: number;
+      totalPending: number;
+      totalAgents: number;
     };
   }> {
     return this.request(
@@ -928,12 +960,12 @@ class APIClient {
 
   async getUsageStatistics(days = 30): Promise<{
     period: string;
-    api_calls: number;
-    active_agents: number;
-    total_agents: number;
-    data_volume: number;
+    apiCalls: number;
+    activeAgents: number;
+    totalAgents: number;
+    dataVolume: number;
     uptime: number;
-    generated_at: string;
+    generatedAt: string;
   }> {
     return this.request(`/api/v1/analytics/usage?days=${days}`);
   }
@@ -942,9 +974,9 @@ class APIClient {
     period: string;
     trends: Array<{
       date: string;
-      avg_score: number; // ✅ FIXED: Backend returns avg_score, not avg_trust_score
-      agent_count: number;
-      scores_by_range: {
+      avgScore: number;
+      agentCount: number;
+      scoresByRange: {
         excellent: number; // 90-100
         good: number; // 75-89
         fair: number; // 50-74
@@ -952,9 +984,9 @@ class APIClient {
       };
     }>;
     summary: {
-      overall_avg: number;
-      trend_direction: "up" | "down" | "stable";
-      change_percentage: number;
+      overallAvg: number;
+      trendDirection: "up" | "down" | "stable";
+      changePercentage: number;
     };
   }> {
     return this.request(`/api/v1/analytics/trends?days=${days}`);
@@ -963,18 +995,18 @@ class APIClient {
   async getAgentActivity(limit = 50): Promise<{
     activities: Array<{
       id: string;
-      agent_id: string;
-      agent_name: string;
+      agentId: string;
+      agentName: string;
       action: string;
       status: "success" | "failure" | "pending";
       timestamp: string;
       details?: string;
     }>;
     summary: {
-      total_activities: number;
-      success_count: number;
-      failure_count: number;
-      success_rate: number;
+      totalActivities: number;
+      successCount: number;
+      failureCount: number;
+      successRate: number;
     };
   }> {
     return this.request(`/api/v1/analytics/agents/activity?limit=${limit}`);
@@ -984,16 +1016,16 @@ class APIClient {
   async listWebhooks(): Promise<
     Array<{
       id: string;
-      organization_id: string;
+      organizationId: string;
       name: string;
       url: string;
       events: string[];
-      is_active: boolean;
+      isActive: boolean;
       secret: string;
-      created_at: string;
-      last_triggered_at?: string;
-      success_count: number;
-      failure_count: number;
+      createdAt: string;
+      lastTriggeredAt?: string;
+      successCount: number;
+      failureCount: number;
     }>
   > {
     const response = await this.request<{ webhooks: any[] }>(
@@ -1009,13 +1041,13 @@ class APIClient {
     secret?: string;
   }): Promise<{
     id: string;
-    organization_id: string;
+    organizationId: string;
     name: string;
     url: string;
     events: string[];
-    is_active: boolean;
+    isActive: boolean;
     secret: string;
-    created_at: string;
+    createdAt: string;
   }> {
     return this.request("/api/v1/webhooks", {
       method: "POST",
@@ -1025,23 +1057,23 @@ class APIClient {
 
   async getWebhook(id: string): Promise<{
     id: string;
-    organization_id: string;
+    organizationId: string;
     name: string;
     url: string;
     events: string[];
-    is_active: boolean;
+    isActive: boolean;
     secret: string;
-    created_at: string;
-    last_triggered_at?: string;
-    success_count: number;
-    failure_count: number;
+    createdAt: string;
+    lastTriggeredAt?: string;
+    successCount: number;
+    failureCount: number;
     deliveries: Array<{
       id: string;
       event: string;
       status: "success" | "failure";
-      response_code: number;
+      responseCode: number;
       timestamp: string;
-      error_message?: string;
+      errorMessage?: string;
     }>;
   }> {
     return this.request(`/api/v1/webhooks/${id}`);
@@ -1057,16 +1089,16 @@ class APIClient {
       name?: string;
       url?: string;
       events?: string[];
-      is_active?: boolean;
+      isActive?: boolean;
     }
   ): Promise<{
     id: string;
-    organization_id: string;
+    organizationId: string;
     name: string;
     url: string;
     events: string[];
-    is_active: boolean;
-    created_at: string;
+    isActive: boolean;
+    createdAt: string;
   }> {
     return this.request(`/api/v1/webhooks/${id}`, {
       method: "PUT",
@@ -1076,7 +1108,7 @@ class APIClient {
 
   async testWebhook(id: string): Promise<{
     success: boolean;
-    response_code: number;
+    responseCode: number;
     message: string;
   }> {
     return this.request(`/api/v1/webhooks/${id}/test`, { method: "POST" });
@@ -1089,11 +1121,11 @@ class APIClient {
   ): Promise<{
     verifications: Array<{
       id: string;
-      agent_id: string;
-      agent_name: string;
+      agentId: string;
+      agentName: string;
       action: string;
       status: "approved" | "denied" | "pending";
-      duration_ms: number;
+      durationMs: number;
       timestamp: string;
       metadata: any;
     }>;
@@ -1127,17 +1159,17 @@ class APIClient {
   ): Promise<{
     threats: Array<{
       id: string;
-      target_id: string;
-      target_name?: string;
-      threat_type: string;
+      targetId: string;
+      targetName?: string;
+      threatType: string;
       severity: "low" | "medium" | "high" | "critical";
       title?: string;
       description: string;
       source?: string;
-      target_type?: string;
-      is_blocked: boolean;
-      created_at: string;
-      resolved_at?: string;
+      targetType?: string;
+      isBlocked: boolean;
+      createdAt: string;
+      resolvedAt?: string;
     }>;
     total: number;
   }> {
@@ -1152,11 +1184,11 @@ class APIClient {
   ): Promise<{
     anomalies: Array<{
       id: string;
-      agent_id: string;
-      anomaly_type: string;
+      agentId: string;
+      anomalyType: string;
       severity: string;
       description: string;
-      detected_at: string;
+      detectedAt: string;
     }>;
     total: number;
   }> {
@@ -1166,12 +1198,12 @@ class APIClient {
   }
 
   async getSecurityMetrics(): Promise<{
-    total_threats: number;
-    active_threats: number;
-    total_anomalies: number;
-    total_incidents: number;
-    threat_trend: Array<{ date: string; count: number }>;
-    severity_distribution: Array<{ severity: string; count: number }>;
+    totalThreats: number;
+    activeThreats: number;
+    totalAnomalies: number;
+    totalIncidents: number;
+    threatTrend: Array<{ date: string; count: number }>;
+    severityDistribution: Array<{ severity: string; count: number }>;
   }> {
     return this.request("/api/v1/security/metrics");
   }
@@ -1181,7 +1213,7 @@ class APIClient {
     limit = 100,
     offset = 0
   ): Promise<{
-    mcp_servers: Array<{
+    mcpServers: Array<{
       id: string;
       name: string;
       url: string;
@@ -1192,9 +1224,9 @@ class APIClient {
         | "verified"
         | "suspended"
         | "revoked";
-      is_verified?: boolean;
-      last_verified_at?: string;
-      created_at: string;
+      isVerified?: boolean;
+      lastVerifiedAt?: string;
+      createdAt: string;
     }>;
     total: number;
   }> {
@@ -1217,13 +1249,13 @@ class APIClient {
   }
 
   async getMCPServerConnectedAgents(id: string): Promise<{
-    connected_agents: Array<{
+    connectedAgents: Array<{
       id: string;
       name: string;
-      display_name: string;
+      displayName: string;
       status: string;
-      trust_score: number;
-      updated_at: string;
+      trustScore: number;
+      updatedAt: string;
     }>;
     count: number;
   }> {
@@ -1248,16 +1280,16 @@ class APIClient {
   async getMCPServerCapabilities(id: string): Promise<{
     capabilities: Array<{
       id: string;
-      mcp_server_id: string;
+      mcpServerId: string;
       name: string;
       type: "tool" | "resource" | "prompt";
       description: string;
       schema: any;
-      detected_at: string;
-      last_verified_at?: string;
-      is_active: boolean;
-      created_at: string;
-      updated_at: string;
+      detectedAt: string;
+      lastVerifiedAt?: string;
+      isActive: boolean;
+      createdAt: string;
+      updatedAt: string;
     }>;
     total: number;
   }> {
@@ -1268,8 +1300,8 @@ class APIClient {
     agents: Array<{
       id: string;
       name: string;
-      display_name: string;
-      agent_type: string;
+      displayName: string;
+      agentType: string;
       status: string;
     }>;
     total: number;
@@ -1330,20 +1362,20 @@ class APIClient {
     return this.request(`/api/v1/agents/${agentId}/mcp-servers`);
   }
 
-  // Add MCP servers to agent's talks_to list
+  // Add MCP servers to agent's talksTo list
   async addMCPServersToAgent(
     agentId: string,
     data: {
-      mcp_server_ids: string[];
-      detected_method?: string;
+      mcpServerIds: string[];
+      detectedMethod?: string;
       confidence?: number;
       metadata?: Record<string, any>;
     }
   ): Promise<{
     message: string;
-    talks_to: string[];
-    added_servers: string[];
-    total_count: number;
+    talksTo: string[];
+    addedServers: string[];
+    totalCount: number;
   }> {
     return this.request(`/api/v1/agents/${agentId}/mcp-servers`, {
       method: "PUT",
@@ -1351,14 +1383,14 @@ class APIClient {
     });
   }
 
-  // Remove a single MCP server from agent's talks_to list
+  // Remove a single MCP server from agent's talksTo list
   async removeMCPServerFromAgent(
     agentId: string,
     mcpServerId: string
   ): Promise<{
     message: string;
-    talks_to: string[];
-    total_count: number;
+    talksTo: string[];
+    totalCount: number;
   }> {
     return this.request(
       `/api/v1/agents/${agentId}/mcp-servers/${mcpServerId}`,
@@ -1372,12 +1404,12 @@ class APIClient {
   async detectAndMapMCPServers(
     agentId: string,
     data: {
-      config_path: string;
-      auto_register?: boolean;
-      dry_run?: boolean;
+      configPath: string;
+      autoRegister?: boolean;
+      dryRun?: boolean;
     }
   ): Promise<{
-    detected_servers: Array<{
+    detectedServers: Array<{
       name: string;
       command: string;
       args: string[];
@@ -1386,11 +1418,11 @@ class APIClient {
       source: string;
       metadata?: Record<string, any>;
     }>;
-    registered_count: number;
-    mapped_count: number;
-    total_talks_to: number;
-    dry_run: boolean;
-    errors_encountered?: string[];
+    registeredCount: number;
+    mappedCount: number;
+    totalTalksTo: number;
+    dryRun: boolean;
+    errorsEncountered?: string[];
   }> {
     return this.request(`/api/v1/agents/${agentId}/mcp-servers/detect`, {
       method: "POST",
@@ -1531,7 +1563,7 @@ class APIClient {
   async addTagsToAgent(agentId: string, tagIds: string[]): Promise<void> {
     return this.request(`/api/v1/agents/${agentId}/tags`, {
       method: "POST",
-      body: JSON.stringify({ tag_ids: tagIds }),
+      body: JSON.stringify({ tagIds: tagIds }),
     });
   }
 
@@ -1586,7 +1618,7 @@ class APIClient {
   ): Promise<void> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`, {
       method: "POST",
-      body: JSON.stringify({ tag_ids: tagIds }),
+      body: JSON.stringify({ tagIds: tagIds }),
     });
   }
 
@@ -1702,7 +1734,7 @@ class APIClient {
   }): Promise<any[]> {
     const queryParams = new URLSearchParams();
     if (params?.status) queryParams.append("status", params.status);
-    if (params?.agentId) queryParams.append("agent_id", params.agentId);
+    if (params?.agentId) queryParams.append("agentId", params.agentId);
     if (params?.limit) queryParams.append("limit", params.limit.toString());
     if (params?.offset) queryParams.append("offset", params.offset.toString());
 
@@ -1747,12 +1779,12 @@ class APIClient {
   async createSecurityPolicy(data: {
     name: string;
     description?: string;
-    policy_type: string;
-    enforcement_action: "alert_only" | "block_and_alert" | "allow";
-    severity_threshold: string;
+    policyType: string;
+    enforcementAction: "alert_only" | "block_and_alert" | "allow";
+    severityThreshold: string;
     rules?: Record<string, any>;
-    applies_to: string;
-    is_enabled: boolean;
+    appliesTo: string;
+    isEnabled: boolean;
     priority: number;
   }): Promise<any> {
     return this.request("/api/v1/admin/security-policies", {
@@ -1767,12 +1799,12 @@ class APIClient {
     data: {
       name: string;
       description?: string;
-      policy_type: string;
-      enforcement_action: "alert_only" | "block_and_alert" | "allow";
-      severity_threshold: string;
+      policyType: string;
+      enforcementAction: "alert_only" | "block_and_alert" | "allow";
+      severityThreshold: string;
       rules?: Record<string, any>;
-      applies_to: string;
-      is_enabled: boolean;
+      appliesTo: string;
+      isEnabled: boolean;
       priority: number;
     }
   ): Promise<any> {
@@ -1806,20 +1838,20 @@ class APIClient {
 
   // Get compliance status overview
   async getComplianceStatus(): Promise<{
-    compliance_level: string;
-    total_agents: number;
-    verified_agents: number;
-    verification_rate: number; // Already in percentage (0-100)
-    average_trust_score: number; // Already in percentage (0-100)
-    recent_audit_count: number;
+    complianceLevel: string;
+    totalAgents: number;
+    verifiedAgents: number;
+    verificationRate: number; // Already in percentage (0-100)
+    averageTrustScore: number; // Already in percentage (0-100)
+    recentAuditCount: number;
   }> {
     return this.request("/api/v1/compliance/status");
   }
 
   // Get compliance metrics
   async getComplianceMetrics(): Promise<{
-    start_date: string;
-    end_date: string;
+    startDate: string;
+    endDate: string;
     interval: string;
     metrics: {
       period: {
@@ -1827,13 +1859,13 @@ class APIClient {
         end: string;
         interval: string;
       };
-      agent_verification_trend: Array<{
+      agentVerificationTrend: Array<{
         date: string;
         verified: number;
       }>;
-      trust_score_trend: Array<{
+      trustScoreTrend: Array<{
         date: string;
-        avg_score: number; // 0-1 scale
+        avgScore: number; // 0-1 scale
       }>;
     };
   }> {
@@ -1847,8 +1879,8 @@ class APIClient {
       email: string;
       name: string;
       role: string;
-      last_login: string;
-      created_at: string;
+      lastLogin: string;
+      createdAt: string;
       status: string;
     }>;
     total: number;
@@ -1858,11 +1890,11 @@ class APIClient {
 
   // Run compliance check
   async runComplianceCheck(checkType: string = "all"): Promise<{
-    check_type: string;
+    checkType: string;
     passed: number;
     failed: number;
     total: number;
-    compliance_rate: number;
+    complianceRate: number;
     checks: Array<{
       name: string;
       passed: boolean;
@@ -1870,7 +1902,7 @@ class APIClient {
   }> {
     return this.request("/api/v1/compliance/check", {
       method: "POST",
-      body: JSON.stringify({ check_type: checkType }),
+      body: JSON.stringify({ checkType: checkType }),
     });
   }
 
@@ -1878,16 +1910,16 @@ class APIClient {
   async getDataRetention(): Promise<{
     policies: Array<{
       id: string;
-      data_type: string;
-      retention_period_days: number;
+      dataType: string;
+      retentionPeriodDays: number;
       description: string;
-      auto_delete: boolean;
-      created_at: string;
+      autoDelete: boolean;
+      createdAt: string;
     }>;
-    storage_metrics: {
-      total_records: number;
-      oldest_record_date: string;
-      deletion_candidates: number;
+    storageMetrics: {
+      totalRecords: number;
+      oldestRecordDate: string;
+      deletionCandidates: number;
     };
   }> {
     return this.request("/api/v1/compliance/data-retention");
@@ -1901,15 +1933,15 @@ class APIClient {
     violations: Array<{
       id: string;
       framework: string;
-      violation_type: string;
+      violationType: string;
       severity: string;
       description: string;
-      affected_resource: string;
-      detected_at: string;
+      affectedResource: string;
+      detectedAt: string;
       remediated: boolean;
-      remediation_notes?: string;
-      remediated_by?: string;
-      remediated_at?: string;
+      remediationNotes?: string;
+      remediatedBy?: string;
+      remediatedAt?: string;
     }>;
     total: number;
     filters: {
@@ -1936,14 +1968,14 @@ class APIClient {
     remediationDate?: string
   ): Promise<{
     message: string;
-    violation_id: string;
-    remediated_at: string;
+    violationId: string;
+    remediatedAt: string;
   }> {
     return this.request(`/api/v1/compliance/remediate/${violationId}`, {
       method: "POST",
       body: JSON.stringify({
-        remediation_notes: remediationNotes,
-        remediation_date: remediationDate,
+        remediationNotes: remediationNotes,
+        remediationDate: remediationDate,
       }),
     });
   }
@@ -1951,14 +1983,14 @@ class APIClient {
   // Resolve alert
   async resolveAlert(
     id: string,
-    resolution_notes: string
+    resolutionNotes: string
   ): Promise<{
     success: boolean;
     message: string;
   }> {
     return this.request(`/api/v1/admin/alerts/${id}/resolve`, {
       method: "POST",
-      body: JSON.stringify({ resolution_notes }),
+      body: JSON.stringify({ resolutionNotes }),
     });
   }
 
@@ -1970,11 +2002,11 @@ class APIClient {
     logs: Array<{
       id: string;
       action: string;
-      performed_by: string;
-      performed_by_email: string;
+      performedBy: string;
+      performedByEmail: string;
       timestamp: string;
       details: string;
-      ip_address?: string;
+      ipAddress?: string;
     }>;
     total: number;
   }> {

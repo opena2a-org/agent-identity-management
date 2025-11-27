@@ -111,8 +111,8 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"server_name":  server.Name,
-			"server_url":   server.URL,
+			"serverName":  server.Name,
+			"serverUrl":   server.URL,
 			"auth_method":  c.Locals("auth_method"), // Ed25519 or JWT
 		},
 	)
@@ -139,7 +139,7 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"mcp_servers": servers,
+		"mcpServers": servers,
 		"total":       len(servers),
 	})
 }
@@ -240,7 +240,7 @@ func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"server_name": server.Name,
+			"serverName": server.Name,
 		},
 	)
 
@@ -363,16 +363,16 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"server_name":  server.Name,
-			"trust_score":  server.TrustScore,
+			"serverName":  server.Name,
+			"trustScore":  server.TrustScore,
 			"challenge":    challenge,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"verified":         true,
-		"trust_score":      server.TrustScore,
-		"verified_at":      server.LastVerifiedAt,
+		"trustScore":      server.TrustScore,
+		"verifiedAt":      server.LastVerifiedAt,
 		"challenge":        challenge,
 		"verification_url": server.VerificationURL,
 	})
@@ -444,7 +444,7 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message":   "Public key added successfully",
-		"server_id": serverID,
+		"serverId": serverID,
 		"key_type":  req.KeyType,
 	})
 }
@@ -606,8 +606,8 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 		agentSummaries = append(agentSummaries, fiber.Map{
 			"id":           agent.ID,
 			"name":         agent.Name,
-			"display_name": agent.DisplayName,
-			"agent_type":   agent.AgentType,
+			"displayName": agent.DisplayName,
+			"agentType":   agent.AgentType,
 			"status":       agent.Status,
 		})
 	}

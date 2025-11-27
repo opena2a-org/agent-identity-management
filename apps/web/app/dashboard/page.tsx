@@ -37,42 +37,42 @@ import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 
 interface DashboardStats {
-  // Backend returns these exact fields (snake_case from Go JSON tags)
+  // Backend returns these exact fields (camelCase from Go JSON tags)
   // Agent metrics
-  total_agents: number;
-  verified_agents: number;
-  pending_agents: number;
-  verification_rate: number;
-  avg_trust_score: number;
+  totalAgents: number;
+  verifiedAgents: number;
+  pendingAgents: number;
+  verificationRate: number;
+  avgTrustScore: number;
 
   // MCP Server metrics
-  total_mcp_servers: number;
-  active_mcp_servers: number;
+  totalMcpServers: number;
+  activeMcpServers: number;
 
   // User metrics
-  total_users: number;
-  active_users: number;
+  totalUsers: number;
+  activeUsers: number;
 
   // Security metrics
-  active_alerts: number;
-  critical_alerts: number;
-  security_incidents: number;
+  activeAlerts: number;
+  criticalAlerts: number;
+  securityIncidents: number;
 
   // Organization
-  organization_id: string;
+  organizationId: string;
 }
 
 interface TrustScoreTrend {
   date: string;
-  week_start?: string; // Only for weekly data
-  avg_score: number;
-  agent_count: number;
+  weekStart?: string; // Only for weekly data
+  avgScore: number;
+  agentCount: number;
 }
 
 interface TrustScoreTrendsData {
   period: string;
-  current_average: number;
-  data_type: "weekly" | "daily";
+  currentAverage: number;
+  dataType: "weekly" | "daily";
   trends: TrustScoreTrend[];
 }
 
@@ -82,12 +82,12 @@ interface VerificationActivityData {
     month: string;
     verified: number;
     pending: number;
-    month_year: string;
+    monthYear: string;
   }>;
-  current_stats: {
-    total_verified: number;
-    total_pending: number;
-    total_agents: number;
+  currentStats: {
+    totalVerified: number;
+    totalPending: number;
+    totalAgents: number;
   };
 }
 
@@ -154,9 +154,9 @@ function ErrorDisplay({
 interface AuditLog {
   id: string;
   action: string;
-  resource_type: string;
-  resource_id: string;
-  user_id: string;
+  resourceType: string;
+  resourceId: string;
+  userId: string;
   metadata: any;
   timestamp: string;
 }
@@ -189,7 +189,7 @@ function DashboardContent() {
         setUserRole((payload.role as UserRole) || "viewer");
         // Extract user ID and email from JWT
         setCurrentUser({
-          id: payload.sub || payload.user_id || "",
+          id: payload.sub || payload.userId || "",
           email: payload.email || "",
         });
       } catch (e) {
@@ -257,9 +257,9 @@ function DashboardContent() {
         if (log.action === "view") return false;
 
         // Also exclude automated system actions that aren't interesting
-        if (log.resource_type === "dashboard_stats") return false;
+        if (log.resourceType === "dashboard_stats") return false;
         if (
-          log.resource_type === "organization_settings" &&
+          log.resourceType === "organization_settings" &&
           log.action === "view"
         )
           return false;
@@ -327,7 +327,7 @@ function DashboardContent() {
   // Helper function to format audit log event name with entity details
   const formatEventName = (log: AuditLog): string => {
     const action = log.action.charAt(0).toUpperCase() + log.action.slice(1);
-    const resource = log.resource_type.replace(/_/g, " ");
+    const resource = log.resourceType.replace(/_/g, " ");
 
     // Extract entity name from metadata for more meaningful display
     let entityName = "";
@@ -364,7 +364,7 @@ function DashboardContent() {
       return `Suspended ${resource}${entityDisplay}`;
     } else if (log.action === "acknowledge") {
       return `Acknowledged ${resource}${entityDisplay}`;
-    } else if (log.resource_type === "agent_action") {
+    } else if (log.resourceType === "agent_action") {
       // For agent actions, use the action name as the event
       return action.replace(/_/g, " ");
     }
@@ -389,21 +389,21 @@ function DashboardContent() {
         return log.metadata.user_email;
       }
       // If we have display_name in metadata
-      if (log.metadata.display_name) {
-        return log.metadata.display_name;
+      if (log.metadata.displayName) {
+        return log.metadata.displayName;
       }
     }
 
     // Check if this is the current user and show their email
-    if (log.user_id && currentUser) {
-      if (log.user_id === currentUser.id) {
+    if (log.userId && currentUser) {
+      if (log.userId === currentUser.id) {
         return currentUser.email;
       }
     }
 
     // Fallback: show user ID if available
-    if (log.user_id) {
-      const shortId = log.user_id.split("-")[0];
+    if (log.userId) {
+      const shortId = log.userId.split("-")[0];
       return `User ${shortId}`;
     }
 
@@ -413,20 +413,20 @@ function DashboardContent() {
 
   // Helper function to categorize the event type
   const getEventType = (log: AuditLog): string => {
-    if (log.resource_type.includes("agent")) {
+    if (log.resourceType.includes("agent")) {
       return "Agent Management";
-    } else if (log.resource_type.includes("mcp")) {
+    } else if (log.resourceType.includes("mcp")) {
       return "MCP Servers";
-    } else if (log.resource_type.includes("auth") || log.action === "login") {
+    } else if (log.resourceType.includes("auth") || log.action === "login") {
       return "Authentication";
     } else if (
-      log.resource_type.includes("alert") ||
-      log.resource_type.includes("security")
+      log.resourceType.includes("alert") ||
+      log.resourceType.includes("security")
     ) {
       return "Security";
-    } else if (log.resource_type.includes("api_key")) {
+    } else if (log.resourceType.includes("api_key")) {
       return "API Keys";
-    } else if (log.resource_type.includes("user")) {
+    } else if (log.resourceType.includes("user")) {
       return "User Management";
     } else if (log.action === "view") {
       return "View";
@@ -459,20 +459,20 @@ function DashboardContent() {
   const allStats = [
     {
       name: "Total Agents",
-      value: data?.total_agents?.toLocaleString() || 0,
+      value: data?.totalAgents?.toLocaleString() || 0,
       icon: Users,
       permission: "canViewAgentStats" as const,
     },
     {
       name: "Verified Agents",
-      value: data?.verified_agents?.toLocaleString() || 0,
+      value: data?.verifiedAgents?.toLocaleString() || 0,
       icon: CheckCircle,
       permission: "canViewAgentStats" as const,
     },
     {
       name: "Trust Score Average",
-      value: data?.avg_trust_score
-        ? `${(data.avg_trust_score * 100).toFixed(0)}%`
+      value: data?.avgTrustScore
+        ? `${(data.avgTrustScore * 100).toFixed(0)}%`
         : "0%",
       icon: TrendingUp,
       permission: "canViewTrustScore" as const,
@@ -614,11 +614,11 @@ function DashboardContent() {
               )}
             </div>
             {/* Show activity stats */}
-            {verificationActivity && verificationActivity.current_stats && (
+            {verificationActivity && verificationActivity.currentStats && (
               <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                Total: {verificationActivity.current_stats.total_agents} agents
-                • Verified: {verificationActivity.current_stats.total_verified}{" "}
-                • Pending: {verificationActivity.current_stats.total_pending}
+                Total: {verificationActivity.currentStats.totalAgents} agents
+                • Verified: {verificationActivity.currentStats.totalVerified}{" "}
+                • Pending: {verificationActivity.currentStats.totalPending}
               </div>
             )}
           </div>
@@ -642,7 +642,7 @@ function DashboardContent() {
                   Total Agents
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.total_agents}
+                  {data?.totalAgents}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -650,7 +650,7 @@ function DashboardContent() {
                   Verified
                 </span>
                 <span className="text-sm font-medium text-green-600">
-                  {data?.verified_agents}
+                  {data?.verifiedAgents}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -658,7 +658,7 @@ function DashboardContent() {
                   Pending
                 </span>
                 <span className="text-sm font-medium text-yellow-600">
-                  {data?.pending_agents}
+                  {data?.pendingAgents}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -666,7 +666,7 @@ function DashboardContent() {
                   Verification Rate
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.verification_rate?.toFixed(1)}%
+                  {data?.verificationRate?.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -686,7 +686,7 @@ function DashboardContent() {
                   Active Alerts
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.active_alerts}
+                  {data?.activeAlerts}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -694,7 +694,7 @@ function DashboardContent() {
                   Critical
                 </span>
                 <span className="text-sm font-medium text-red-600">
-                  {data?.critical_alerts}
+                  {data?.criticalAlerts}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -702,7 +702,7 @@ function DashboardContent() {
                   Incidents
                 </span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.security_incidents}
+                  {data?.securityIncidents}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -738,7 +738,7 @@ function DashboardContent() {
                     Total Users
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.total_users}
+                    {data?.totalUsers}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -746,7 +746,7 @@ function DashboardContent() {
                     Active Users
                   </span>
                   <span className="text-sm font-medium text-green-600">
-                    {data?.active_users}
+                    {data?.activeUsers}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -754,7 +754,7 @@ function DashboardContent() {
                     MCP Servers
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.total_mcp_servers}
+                    {data?.totalMcpServers}
                   </span>
                 </div>
               </>
@@ -766,7 +766,7 @@ function DashboardContent() {
                     Total MCP Servers
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data.total_mcp_servers}
+                    {data.totalMcpServers}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -774,7 +774,7 @@ function DashboardContent() {
                     Active MCP Servers
                   </span>
                   <span className="text-sm font-medium text-green-600">
-                    {data.active_mcp_servers}
+                    {data.activeMcpServers}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -782,7 +782,7 @@ function DashboardContent() {
                     Total Agents
                   </span>
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.total_agents}
+                    {data?.totalAgents}
                   </span>
                 </div>
               </>
@@ -795,8 +795,8 @@ function DashboardContent() {
               </span>
               <span className="text-sm font-medium text-green-600">
                 {permissions.canViewUserStats
-                  ? data?.active_mcp_servers
-                  : data?.verified_agents}
+                  ? data?.activeMcpServers
+                  : data?.verifiedAgents}
               </span>
             </div>
           </div>
@@ -887,8 +887,8 @@ function DashboardContent() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={log.resource_id}>
-                          {log.resource_id ? `${log.resource_id.substring(0, 8)}...` : 'N/A'}
+                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={log.resourceId}>
+                          {log.resourceId ? `${log.resourceId.substring(0, 8)}...` : 'N/A'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

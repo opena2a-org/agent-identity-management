@@ -12,12 +12,12 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface Violation {
   id: string;
-  attempted_capability: string;
+  attemptedCapability: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'warning' | 'info'; // Support legacy values
-  trust_score_impact: number;
-  is_blocked: boolean;
-  source_ip?: string;
-  created_at: string;
+  trustScoreImpact: number;
+  isBlocked: boolean;
+  sourceIp?: string;
+  createdAt: string;
 }
 
 interface ViolationsTabProps {
@@ -55,12 +55,12 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
     const csv = [
       ['Timestamp', 'Capability', 'Severity', 'Trust Impact', 'Blocked', 'Source IP'],
       ...violations.map(v => [
-        v.created_at,
-        v.attempted_capability,
+        v.createdAt,
+        v.attemptedCapability,
         v.severity,
-        v.trust_score_impact.toString(),
-        v.is_blocked ? 'Yes' : 'No',
-        v.source_ip || 'N/A'
+        v.trustScoreImpact.toString(),
+        v.isBlocked ? 'Yes' : 'No',
+        v.sourceIp || 'N/A'
       ])
     ].map(row => row.join(',')).join('\n');
 
@@ -115,26 +115,26 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
             {violations.map((violation) => (
               <TableRow key={violation.id}>
                 <TableCell className="text-sm">
-                  {formatDistanceToNow(new Date(violation.created_at), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(violation.createdAt), { addSuffix: true })}
                 </TableCell>
                 <TableCell className="font-mono text-sm">
-                  {violation.attempted_capability}
+                  {violation.attemptedCapability}
                 </TableCell>
                 <TableCell>
                   <ViolationSeverityBadge severity={violation.severity} />
                 </TableCell>
                 <TableCell className="text-sm">
-                  <span className={violation.trust_score_impact < 0 ? 'text-red-600' : 'text-green-600'}>
-                    {violation.trust_score_impact > 0 ? '+' : ''}{violation.trust_score_impact}
+                  <span className={violation.trustScoreImpact < 0 ? 'text-red-600' : 'text-green-600'}>
+                    {violation.trustScoreImpact > 0 ? '+' : ''}{violation.trustScoreImpact}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={violation.is_blocked ? 'destructive' : 'secondary'}>
-                    {violation.is_blocked ? 'Blocked' : 'Allowed'}
+                  <Badge variant={violation.isBlocked ? 'destructive' : 'secondary'}>
+                    {violation.isBlocked ? 'Blocked' : 'Allowed'}
                   </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">
-                  {violation.source_ip || 'N/A'}
+                  {violation.sourceIp || 'N/A'}
                 </TableCell>
               </TableRow>
             ))}

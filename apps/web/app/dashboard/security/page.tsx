@@ -33,17 +33,17 @@ import { AuthGuard } from "@/components/auth-guard";
 
 interface SecurityThreat {
   id: string;
-  target_id: string; // Agent or MCP server ID
-  target_name?: string; // Agent or MCP server name (optional, populated by backend)
-  threat_type: string;
+  targetId: string; // Agent or MCP server ID
+  targetName?: string; // Agent or MCP server name (optional, populated by backend)
+  threatType: string;
   severity: "low" | "medium" | "high" | "critical";
   description: string;
-  is_blocked: boolean;
-  created_at: string;
-  resolved_at?: string;
+  isBlocked: boolean;
+  createdAt: string;
+  resolvedAt?: string;
   // Additional fields for enhanced detail view
   source?: string;
-  target_type?: string;
+  targetType?: string;
   title?: string;
 }
 
@@ -52,7 +52,7 @@ interface SecurityIncident {
   title: string;
   severity: "low" | "medium" | "high" | "critical";
   status: "open" | "investigating" | "resolved";
-  created_at: string;
+  createdAt: string;
 }
 
 function StatCard({ stat }: { stat: any }) {
@@ -537,7 +537,7 @@ export default function SecurityPage() {
                 >
                   <td className="px-4 py-3">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
-                      {threat?.threat_type}
+                      {threat?.threatType}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                       {threat?.description}
@@ -546,10 +546,10 @@ export default function SecurityPage() {
                   <td className="px-4 py-3">
                     <div
                       className="text-sm text-gray-900 dark:text-gray-100 truncate"
-                      title={threat?.target_name || threat?.target_id}
+                      title={threat?.targetName || threat?.targetId}
                     >
-                      {threat?.target_name ||
-                        `ID: ${threat?.target_id?.substring(0, 8)}...`}
+                      {threat?.targetName ||
+                        `ID: ${threat?.targetId?.substring(0, 8)}...`}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -557,12 +557,12 @@ export default function SecurityPage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <StatusBadge
-                      status={threat?.is_blocked ? "resolved" : "active"}
+                      status={threat?.isBlocked ? "resolved" : "active"}
                     />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {threat?.created_at && formatDateTime(threat.created_at)}
+                      {threat?.createdAt && formatDateTime(threat.createdAt)}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -769,7 +769,7 @@ export default function SecurityPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDateTime(incident.created_at)}
+                      {formatDateTime(incident.createdAt)}
                     </div>
                   </td>
                 </tr>

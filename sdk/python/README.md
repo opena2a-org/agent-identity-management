@@ -1,12 +1,29 @@
 # AIM Python SDK
 
-**production-ready AI Agent Security - One line of code. Complete protection.**
+**Production-ready AI Agent Security - One line of code. Complete protection.**
 
-production-ready cryptographic verification with zero configuration.
+Production-ready cryptographic verification with zero configuration.
 
-## Quick Start - Zero Configuration 🚀
+---
 
-### Radical Simplicity Meets Enterprise Security
+## See It Work in 60 Seconds!
+
+```bash
+# After downloading and extracting the SDK:
+cd aim-sdk-python
+pip install -e .
+python demo_agent.py
+```
+
+Open your AIM dashboard side-by-side and watch it update in real-time as you trigger actions!
+
+**Dashboard URL:** http://localhost:3000/dashboard/agents
+
+---
+
+## Quick Start - Zero Configuration
+
+### One Line. Complete Security.
 
 ```python
 from aim_sdk import secure
@@ -32,12 +49,26 @@ agent = secure("my-agent", api_key="aim_abc123")
 
 ## Installation
 
-**Download SDK from Dashboard (Only Method)**
+### Step 1: Download SDK from Dashboard
 1. Log in to AIM at http://localhost:3000 (or your AIM instance)
-2. Go to Settings → SDK Download
-3. Click "Download SDK" → Includes pre-configured credentials
-4. Extract the downloaded SDK
-5. You're ready to go!
+2. Go to **Settings → SDK Download**
+3. Click **"Download SDK"** → Includes pre-configured credentials
+
+### Step 2: Extract to Your Projects Folder
+```bash
+# Extract anywhere you keep your projects
+cd ~/projects  # or ~/dev, ~/Desktop, etc.
+unzip ~/Downloads/aim-sdk-python.zip
+cd aim-sdk-python
+pip install -e .
+```
+
+### Step 3: Run the Demo Agent!
+```bash
+python demo_agent.py
+```
+
+The demo agent is an interactive menu that lets you trigger different actions (weather checks, product searches, user lookups, etc.) and watch your AIM dashboard update in real-time.
 
 **Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials and authentication tokens.
 
@@ -171,6 +202,45 @@ agent = secure("my-agent")  # ✅ Can use all detected capabilities immediately
 # Later, need new capability? Admin must approve
 client.capabilities.request("delete_data", reason="Cleanup feature")
 ```
+
+### Request Additional Capabilities
+
+Use `request_capability()` to request capabilities that weren't detected during registration:
+
+```python
+# Request a new capability (requires admin approval)
+result = agent.request_capability(
+    capability_type="write_database",
+    reason="Need to update user preferences"
+)
+
+if result["status"] == "pending":
+    print(f"Request {result['id']} submitted - awaiting admin approval")
+elif result["status"] == "approved":
+    print("Capability granted!")
+```
+
+## MCP Server Registration
+
+### Register MCP Servers Programmatically
+
+Use `register_mcp()` to register MCP servers your agent connects to:
+
+```python
+# Register an MCP server
+mcp_result = agent.register_mcp(
+    server_name="my-database-server",
+    server_url="http://localhost:3001",
+    capabilities=["read", "write", "delete"]
+)
+
+print(f"MCP Server registered: {mcp_result['id']}")
+```
+
+This is useful when:
+- Auto-detection doesn't find your MCP servers
+- You're connecting to dynamically provisioned MCP servers
+- You want to pre-register servers before connecting
 
 ## Credential Storage
 

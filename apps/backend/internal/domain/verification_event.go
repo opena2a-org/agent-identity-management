@@ -126,7 +126,9 @@ type VerificationEventRepository interface {
 	GetByAgent(agentID uuid.UUID, limit, offset int) ([]*VerificationEvent, int, error)
 	GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*VerificationEvent, int, error)
 	GetRecentEvents(orgID uuid.UUID, minutes int) ([]*VerificationEvent, error)
+	GetPendingVerifications(orgID uuid.UUID) ([]*VerificationEvent, error)
 	GetStatistics(orgID uuid.UUID, startTime, endTime time.Time) (*VerificationStatistics, error)
+	GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*AgentVerificationStatistics, error)
 	UpdateResult(id uuid.UUID, result VerificationResult, reason *string, metadata map[string]interface{}) error
 	Delete(id uuid.UUID) error
 }
@@ -147,4 +149,16 @@ type VerificationStatistics struct {
 	ProtocolDistribution    map[string]int `json:"protocolDistribution"`
 	TypeDistribution        map[string]int `json:"typeDistribution"`
 	InitiatorDistribution   map[string]int `json:"initiatorDistribution"`
+}
+
+// AgentVerificationStatistics represents per-agent verification metrics for trust scoring
+type AgentVerificationStatistics struct {
+	AgentID            uuid.UUID `json:"agentId"`
+	TotalVerifications int       `json:"totalVerifications"`
+	SuccessCount       int       `json:"successCount"`
+	FailedCount        int       `json:"failedCount"`
+	SuccessRate        float64   `json:"successRate"` // 0.0-1.0
+	AvgDurationMs      float64   `json:"avgDurationMs"`
+	AvgConfidence      float64   `json:"avgConfidence"`
+	LastVerification   time.Time `json:"lastVerification"`
 }

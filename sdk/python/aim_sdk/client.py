@@ -905,6 +905,356 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"SDK integration report failed: {e}")
 
+    # ==========================================================================
+    # Agent Management Methods
+    # These methods allow authenticated users to manage agents programmatically
+    # Consistent with Generic SDK feature set
+    # ==========================================================================
+
+    def create_new_agent(
+        self,
+        name: str,
+        display_name: Optional[str] = None,
+        description: Optional[str] = None,
+        agent_type: str = "ai_agent",
+        version: Optional[str] = None,
+        repository_url: Optional[str] = None,
+        documentation_url: Optional[str] = None,
+        capabilities: Optional[List[str]] = None,
+        talks_to: Optional[List[str]] = None
+    ) -> Dict:
+        """
+        Create/register a new agent through an authenticated client.
+
+        This method allows an authenticated user (via OAuth or API key) to create
+        a new agent programmatically. The agent will be associated with the user's
+        organization.
+
+        This is the "Generic SDK" way to register agents - use this when you need
+        to create agents on behalf of others or automate agent provisioning.
+
+        Args:
+            name: Unique name/identifier for the agent (required)
+            display_name: Human-readable display name (defaults to name)
+            description: Agent description (defaults to auto-generated)
+            agent_type: Type of agent - "ai_agent" or "mcp_server" (default: "ai_agent")
+            version: Agent version (e.g., "1.0.0")
+            repository_url: GitHub/GitLab repository URL
+            documentation_url: Documentation URL
+            capabilities: List of capabilities the agent has
+            talks_to: List of MCP server names the agent communicates with
+
+        Returns:
+            Dict containing the newly created agent details:
+            - id: str - Agent ID (UUID)
+            - name: str - Agent name
+            - display_name: str - Display name
+            - description: str - Description
+            - agent_type: str - Agent type
+            - status: str - Verification status
+            - trust_score: float - Initial trust score
+            - public_key: str - Agent's public key (for verification)
+            - private_key: str - Agent's private key (STORE SECURELY!)
+            - organization_id: str - Organization ID
+            - created_at: str - ISO timestamp
+
+        Example:
+            # Using OAuth credentials (SDK download mode)
+            client = AIMClient(agent_id="admin-agent", aim_url="https://aim.example.com", ...)
+
+            # Create a new agent
+            new_agent = client.create_new_agent(
+                name="my-new-agent",
+                display_name="My New Agent",
+                description="An agent for processing data",
+                capabilities=["read_database", "write_files"]
+            )
+
+            print(f"Created agent: {new_agent['id']}")
+            print(f"Store these credentials securely!")
+            print(f"  Public Key: {new_agent['public_key']}")
+            print(f"  Private Key: {new_agent['private_key']}")
+
+        Raises:
+            ConfigurationError: If name is missing or invalid
+            AuthenticationError: If authentication fails
+            VerificationError: If agent creation fails
+        """
+        # Validate required parameters
+        if not name or not isinstance(name, str):
+            raise ConfigurationError("name is required and must be a non-empty string")
+
+        # Generate Ed25519 keypair for the new agent
+        from nacl.signing import SigningKey
+        from nacl.encoding import Base64Encoder
+
+        signing_key = SigningKey.generate()
+        private_key_bytes = bytes(signing_key)  # 32-byte seed
+        public_key_bytes = signing_key.verify_key.encode()  # 32-byte public key
+
+        # For Go compatibility, create 64-byte private key (seed + public key)
+        private_key_full = private_key_bytes + public_key_bytes
+        private_key_b64 = base64.b64encode(private_key_full).decode('utf-8')
+        public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
+
+        # Prepare registration payload
+        registration_data = {
+            "name": name,
+            "display_name": display_name or name,
+            "description": description or f"Agent {name} created via AIM SDK",
+            "agent_type": agent_type,
+            "public_key": public_key_b64
+        }
+
+        if version:
+            registration_data["version"] = version
+        if repository_url:
+            registration_data["repository_url"] = repository_url
+        if documentation_url:
+            registration_data["documentation_url"] = documentation_url
+        if capabilities:
+            registration_data["capabilities"] = capabilities
+        if talks_to:
+            registration_data["talks_to"] = talks_to
+
+        try:
+            # Use authenticated endpoint
+            result = self._make_request(
+                method="POST",
+                endpoint="/api/v1/agents",
+                data=registration_data
+            )
+
+            # Add the private key to the result (backend doesn't store it)
+            if result:
+                result["private_key"] = private_key_b64
+                result["public_key"] = public_key_b64
+
+                # Normalize agent_id field
+                if "id" in result and "agent_id" not in result:
+                    result["agent_id"] = result["id"]
+
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Agent creation failed: {e}")
+
+    def list_agents(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        status: Optional[str] = None,
+        agent_type: Optional[str] = None
+    ) -> Dict:
+        """
+        List agents in the user's organization.
+
+        Args:
+            limit: Maximum number of agents to return (default: 50, max: 100)
+            offset: Pagination offset (default: 0)
+            status: Filter by status ("pending", "verified", "denied")
+            agent_type: Filter by agent type ("ai_agent", "mcp_server")
+
+        Returns:
+            Dict containing:
+            - agents: List[Dict] - List of agent objects
+            - total: int - Total number of agents
+            - limit: int - Items per page
+            - offset: int - Current offset
+
+        Example:
+            result = client.list_agents(limit=10)
+            for agent in result["agents"]:
+                print(f"{agent['name']}: {agent['status']} (trust: {agent['trust_score']})")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        # Build query params
+        params = []
+        params.append(f"limit={min(limit, 100)}")
+        params.append(f"offset={offset}")
+        if status:
+            params.append(f"status={status}")
+        if agent_type:
+            params.append(f"agent_type={agent_type}")
+
+        query_string = "&".join(params)
+
+        try:
+            result = self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents?{query_string}"
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to list agents: {e}")
+
+    def get_agent_details(
+        self,
+        agent_id: Optional[str] = None
+    ) -> Dict:
+        """
+        Get details of a specific agent.
+
+        Args:
+            agent_id: Agent ID to fetch (defaults to current agent)
+
+        Returns:
+            Dict containing full agent details:
+            - id: str - Agent ID
+            - name: str - Agent name
+            - display_name: str - Display name
+            - description: str - Description
+            - agent_type: str - Agent type
+            - status: str - Verification status
+            - trust_score: float - Current trust score
+            - capabilities: List[str] - Granted capabilities
+            - talks_to: List[str] - MCP servers the agent talks to
+            - organization_id: str - Organization ID
+            - created_at: str - ISO timestamp
+            - updated_at: str - ISO timestamp
+
+        Example:
+            # Get current agent details
+            my_agent = client.get_agent_details()
+            print(f"Trust Score: {my_agent['trust_score']}")
+
+            # Get another agent's details
+            other_agent = client.get_agent_details("uuid-of-other-agent")
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            result = self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents/{target_agent_id}"
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to get agent details: {e}")
+
+    def update_agent(
+        self,
+        agent_id: Optional[str] = None,
+        display_name: Optional[str] = None,
+        description: Optional[str] = None,
+        version: Optional[str] = None,
+        repository_url: Optional[str] = None,
+        documentation_url: Optional[str] = None
+    ) -> Dict:
+        """
+        Update an agent's details.
+
+        Args:
+            agent_id: Agent ID to update (defaults to current agent)
+            display_name: New display name
+            description: New description
+            version: New version
+            repository_url: New repository URL
+            documentation_url: New documentation URL
+
+        Returns:
+            Dict containing updated agent details
+
+        Example:
+            # Update current agent
+            updated = client.update_agent(
+                display_name="My Updated Agent",
+                version="2.0.0"
+            )
+
+        Raises:
+            ConfigurationError: If no updates provided
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        # Build update payload
+        update_data = {}
+        if display_name is not None:
+            update_data["display_name"] = display_name
+        if description is not None:
+            update_data["description"] = description
+        if version is not None:
+            update_data["version"] = version
+        if repository_url is not None:
+            update_data["repository_url"] = repository_url
+        if documentation_url is not None:
+            update_data["documentation_url"] = documentation_url
+
+        if not update_data:
+            raise ConfigurationError("At least one field must be provided for update")
+
+        try:
+            result = self._make_request(
+                method="PUT",
+                endpoint=f"/api/v1/agents/{target_agent_id}",
+                data=update_data
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to update agent: {e}")
+
+    def delete_agent(
+        self,
+        agent_id: str
+    ) -> Dict:
+        """
+        Delete/deactivate an agent (soft delete).
+
+        WARNING: This action cannot be easily undone. The agent will be marked
+        as deleted and will no longer be able to authenticate or perform actions.
+
+        Args:
+            agent_id: Agent ID to delete (required, cannot delete current agent)
+
+        Returns:
+            Dict containing:
+            - success: bool
+            - message: str
+
+        Example:
+            result = client.delete_agent("uuid-of-agent-to-delete")
+            print(result["message"])
+
+        Raises:
+            ConfigurationError: If trying to delete current agent
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        if agent_id == self.agent_id:
+            raise ConfigurationError("Cannot delete the currently authenticated agent")
+
+        try:
+            result = self._make_request(
+                method="DELETE",
+                endpoint=f"/api/v1/agents/{agent_id}"
+            )
+            return result or {"success": True, "message": "Agent deleted successfully"}
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to delete agent: {e}")
+
     def perform_action(
         self,
         action_type: str,
@@ -1501,20 +1851,12 @@ def _register_via_oauth(
     registration_data["public_key"] = public_key_b64
     print(f"✅ Keypair generated")
 
-    # Initialize OAuth token manager with SDK credentials path
-    # OAuthTokenManager expects a file path, not the credentials dict
-    # Check for .aim directory (not plaintext file - it might be encrypted!)
-    from pathlib import Path
-    sdk_dir = Path.cwd() / ".aim"
-
-    if not sdk_dir.exists():
-        # Fall back to home directory
-        sdk_dir = Path.home() / ".aim"
-
-    # OAuthTokenManager will handle finding encrypted or plaintext credentials
-    sdk_creds_path = sdk_dir / "credentials.json"
-
-    token_manager = OAuthTokenManager(str(sdk_creds_path))
+    # Initialize OAuth token manager - let it discover credentials automatically
+    # OAuthTokenManager._discover_credentials_path() checks:
+    # 1. Home directory (~/.aim/credentials.json)
+    # 2. SDK package directory (for downloaded SDKs with embedded credentials)
+    # If SDK credentials exist, they're auto-copied to home directory
+    token_manager = OAuthTokenManager()  # Auto-discover credentials
     access_token = token_manager.get_access_token()
 
     if not access_token:

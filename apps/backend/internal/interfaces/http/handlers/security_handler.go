@@ -204,7 +204,7 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 			"verified":   verifiedAgents,
 			"suspended":  suspendedAgents,
 			"pending":    pendingAgents,
-			"low_trust":  lowTrustAgents,
+			"lowTrust":  lowTrustAgents,
 		},
 	})
 }
@@ -244,9 +244,9 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"alerts":              alerts,
 		"total":               total,
-		"all_count":           allCount,
-		"acknowledged_count":  acknowledgedCount,
-		"unacknowledged_count": unacknowledgedCount,
+		"allCount":           allCount,
+		"acknowledgedCount":  acknowledgedCount,
+		"unacknowledgedCount": unacknowledgedCount,
 		"limit":               limit,
 		"offset":              offset,
 	})

@@ -48,7 +48,8 @@ export default function SecurityPoliciesPage() {
       }
 
       const data = await response.json();
-      setPolicies(data.policies || []);
+      // API returns array directly, not wrapped in { policies: [...] }
+      setPolicies(Array.isArray(data) ? data : (data.policies || []));
       setError(null);
     } catch (err) {
       console.error('Error fetching security policies:', err);

@@ -600,6 +600,22 @@ func (r *SecurityRepository) CreateSecurityScan(scan *domain.SecurityScanResult)
 	return nil
 }
 
+// CountOpenIncidents returns the count of open and investigating security incidents
+func (r *SecurityRepository) CountOpenIncidents(orgID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM security_incidents
+		WHERE organization_id = $1 AND status IN ('open', 'investigating')
+	`, orgID).Scan(&count)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to count open incidents: %w", err)
+	}
+
+	return count, nil
+}
+
 func (r *SecurityRepository) GetSecurityScan(scanID uuid.UUID) (*domain.SecurityScanResult, error) {
 	query := `
 		SELECT

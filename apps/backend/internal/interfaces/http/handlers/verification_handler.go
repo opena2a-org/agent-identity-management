@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 type VerificationHandler struct {
 	agentService             *application.AgentService
 	auditService             *application.AuditService
+	alertService             *application.AlertService
 	trustService             *application.TrustCalculator
 	verificationEventService *application.VerificationEventService
 }
@@ -27,12 +29,14 @@ type VerificationHandler struct {
 func NewVerificationHandler(
 	agentService *application.AgentService,
 	auditService *application.AuditService,
+	alertService *application.AlertService,
 	trustService *application.TrustCalculator,
 	verificationEventService *application.VerificationEventService,
 ) *VerificationHandler {
 	return &VerificationHandler{
 		agentService:             agentService,
 		auditService:             auditService,
+		alertService:             alertService,
 		trustService:             trustService,
 		verificationEventService: verificationEventService,
 	}
@@ -137,16 +141,33 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification ID
 	verificationID := uuid.New()
 
-	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert if agent doesn't have permission
-	// This check should run REGARDLESS of approval status - we want to track ALL unauthorized attempts
+	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert based on risk level
+	// Low-risk actions: No alerts needed, just tracking (better UX for demos)
+	// Medium/High-risk actions: Alert if action is denied or lacks capability
 	shouldCreateAlert := false
 	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
 	if err != nil {
 		fmt.Printf("⚠️  Error checking capability: %v\n", err)
 	} else if !hasCapability {
-		// Agent is attempting an action without proper capability - CREATE ALERT
-		shouldCreateAlert = true
-		fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting unauthorized action: %s\n", agent.Name, req.ActionType)
+		// Determine if this action warrants an alert based on risk level and approval status
+		// Low-risk actions approved by trust score: No alert (good UX for demos)
+		// Medium-risk actions without capability: Alert only if denied
+		// High-risk actions without capability: Always alert
+		isLowRisk := isLowRiskAction(req.ActionType)
+		isDenied := status == "denied"
+
+		if isDenied {
+			// Always alert on denied actions
+			shouldCreateAlert = true
+			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.ActionType)
+		} else if !isLowRisk && req.RiskLevel != "low" {
+			// Alert for medium/high risk actions without capability (even if approved)
+			shouldCreateAlert = true
+			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.ActionType)
+		} else {
+			// Low-risk approved actions: Just log, no alert
+			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.ActionType)
+		}
 	}
 
 	// Create audit log entry
@@ -161,7 +182,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
 			"verification_id": verificationID.String(),
-			"trust_score":     trustScore,
+			"trustScore":     trustScore,
 			"auto_approved":   status == "approved",
 			"action_type":     req.ActionType,
 			"resource":        req.Resource,
@@ -182,23 +203,42 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
-		// Determine severity based on action type and context
-		severity := h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+		// Determine alert type and messaging based on action type
+		var alertTitle, alertDescription string
+		var alertType domain.AlertType
+		var severity domain.AlertSeverity
 
-		alertTitle := fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
-		alertDescription := fmt.Sprintf(
-			"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-				"This action was logged but allowed for monitoring purposes. "+
-				"Trust Score: %.2f. Verification ID: %s",
-			agent.Name, agent.ID.String(), req.ActionType, req.Resource,
-			trustScore, verificationID.String(),
-		)
+		if isDemoHighRiskAction(req.ActionType) {
+			// Demo high-risk actions get informational monitoring alerts (not scary breach alerts)
+			alertType = domain.AlertUnusualActivity // Info-level, not breach
+			severity = domain.AlertSeverityInfo
+			alertTitle = fmt.Sprintf("High-Risk Action Monitored: %s", agent.Name)
+			alertDescription = fmt.Sprintf(
+				"Agent '%s' performed high-risk action '%s' on resource '%s'. "+
+					"This action was approved (trust score: %.2f) and logged for monitoring. "+
+					"Verification ID: %s. Consider granting explicit capability for production use.",
+				agent.Name, req.ActionType, req.Resource,
+				trustScore, verificationID.String(),
+			)
+		} else {
+			// Real security concern - create breach alert
+			alertType = domain.AlertSecurityBreach
+			severity = h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
+			alertDescription = fmt.Sprintf(
+				"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
+					"This action was logged but allowed for monitoring purposes. "+
+					"Trust Score: %.2f. Verification ID: %s",
+				agent.Name, agent.ID.String(), req.ActionType, req.Resource,
+				trustScore, verificationID.String(),
+			)
+		}
 
 		alert := &domain.Alert{
 			ID:             uuid.New(),
 			OrganizationID: agent.OrganizationID,
-			AlertType:      domain.AlertSecurityBreach,
-			Severity:       severity, // ← Dynamic severity based on operation
+			AlertType:      alertType,
+			Severity:       severity,
 			Title:          alertTitle,
 			Description:    alertDescription,
 			ResourceType:   "agent",
@@ -214,12 +254,13 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
 		}
 
-		// 📝 CREATE VIOLATION RECORD for dashboard tracking
-		// This ensures the Violations tab shows all capability violations from SDK actions
-		if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
-		} else {
-			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
+		// 📝 CREATE VIOLATION RECORD for dashboard tracking (only for real violations, not demo actions)
+		if !isDemoHighRiskAction(req.ActionType) {
+			if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+			} else {
+				fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
+			}
 		}
 	}
 
@@ -262,7 +303,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		"action_type":     req.ActionType,
 		"resource":        req.Resource,
 		"context":         req.Context,
-		"trust_score":     trustScore,
+		"trustScore":     trustScore,
 		"auto_approved":   status == "approved",
 	}
 	if status == "denied" {
@@ -311,6 +352,26 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			event.ID, event.OrganizationID, *event.AgentID)
 		// Use the actual database ID from the created event
 		verificationID = event.ID
+	}
+
+	// ============================================================================
+	// UNUSUAL ACCESS PATTERN DETECTION
+	// Run anomaly detection after each verification to catch suspicious behavior
+	// ============================================================================
+	if h.alertService != nil {
+		// Capture values needed for async operation - don't use c.Context() in goroutine
+		// because the request context becomes invalid after the response is sent
+		orgID := agent.OrganizationID
+		agentIDCopy := agentID
+		go func() {
+			// Run async to not slow down verification response
+			// Use background context since request context may be cancelled
+			ctx := context.Background()
+			_, err := h.alertService.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
+			if err != nil {
+				fmt.Printf("⚠️ Unusual access pattern detection failed: %v\n", err)
+			}
+		}()
 	}
 
 	// Build response
@@ -504,6 +565,41 @@ func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64
 	return 0.8
 }
 
+// isLowRiskAction checks if an action is considered low-risk (read-only, informational)
+// Low-risk actions don't generate security alerts when approved by trust score alone
+func isLowRiskAction(actionType string) bool {
+	lowRiskActions := map[string]bool{
+		// Read-only database operations
+		"read_database":     true,
+		"read_file":         true,
+		"query_api":         true,
+		// Demo-friendly actions (low and medium risk from demo_agent.py)
+		"check_weather":     true,
+		"search_products":   true,
+		"get_user_profile":  true,  // Medium in demo but really just a read
+		"query_orders":      true,  // Medium in demo but really just a read
+		// General read operations
+		"fetch_data":        true,
+		"list_items":        true,
+		"get_status":        true,
+		"search":            true,
+		"lookup":            true,
+		"view":              true,
+		"read":              true,
+	}
+	return lowRiskActions[actionType]
+}
+
+// isDemoHighRiskAction checks if this is a high-risk demo action that should
+// generate informational alerts (not security breach alerts) to demonstrate monitoring
+func isDemoHighRiskAction(actionType string) bool {
+	demoHighRisk := map[string]bool{
+		"send_notification": true,
+		"process_refund":    true,
+	}
+	return demoHighRisk[actionType]
+}
+
 // determineVerificationStatus determines if action should be auto-approved
 func (h *VerificationHandler) determineVerificationStatus(
 	agent *domain.Agent,
@@ -515,15 +611,77 @@ func (h *VerificationHandler) determineVerificationStatus(
 		MinTrustForLowRisk    = 0.3 // 30%
 		MinTrustForMediumRisk = 0.5 // 50%
 		MinTrustForHighRisk   = 0.7 // 70%
+		MinTrustForCritical   = 0.9 // 90% - Critical actions require very high trust OR manual approval
 	)
 
-	// Determine required trust based on action type
+	// Define critical actions that ALWAYS require manual approval regardless of trust score
+	criticalActions := map[string]bool{
+		"delete_production_data":    true,
+		"drop_database":             true,
+		"execute_shell_command":     true,
+		"access_sensitive_data":     true,
+		"modify_security_policy":    true,
+		"grant_admin_access":        true,
+		"revoke_all_permissions":    true,
+		"export_all_data":           true,
+		"system_shutdown":           true,
+		"modify_authentication":     true,
+	}
+
+	// Define high-risk actions that require approval below certain trust thresholds
+	highRiskActions := map[string]bool{
+		"delete_data":        true,
+		"delete_file":        true,
+		"execute_command":    true,
+		"admin_action":       true,
+		"modify_permissions": true,
+		"create_admin_user":  true,
+		"access_audit_logs":  true,
+		"modify_config":      true,
+	}
+
+	// ============================================================================
+	// CRITICAL ACTION BLOCKING
+	// These actions ALWAYS require manual admin approval regardless of trust score
+	// ============================================================================
+	if criticalActions[actionType] {
+		fmt.Printf("🔴 CRITICAL ACTION BLOCKED: %s requires manual admin approval\n", actionType)
+		return "pending", fmt.Sprintf("Critical action '%s' requires manual admin approval", actionType)
+	}
+
+	// ============================================================================
+	// HIGH-RISK ACTION EVALUATION
+	// High-risk actions with low trust score require manual approval
+	// ============================================================================
+	if highRiskActions[actionType] && trustScore < MinTrustForCritical {
+		if trustScore < MinTrustForHighRisk {
+			// Very low trust - deny outright
+			return "denied", fmt.Sprintf("Trust score %.2f below required %.2f for high-risk action %s", trustScore, MinTrustForHighRisk, actionType)
+		}
+		// Medium-high trust but not high enough for auto-approval - require manual review
+		fmt.Printf("⚠️ HIGH-RISK ACTION PENDING: %s with trust score %.2f requires review\n", actionType, trustScore)
+		return "pending", fmt.Sprintf("High-risk action '%s' with trust score %.2f requires admin review (auto-approve threshold: %.2f)", actionType, trustScore, MinTrustForCritical)
+	}
+
+	// ============================================================================
+	// STANDARD ACTION EVALUATION
+	// Normal actions evaluated purely on trust score thresholds
+	// ============================================================================
 	var requiredTrust float64
 	switch actionType {
-	case "read_database", "read_file", "query_api":
+	// Low-risk actions: read-only, informational, no side effects
+	case "read_database", "read_file", "query_api",
+		"check_weather", "search_products", "get_user_profile", "query_orders",
+		"fetch_data", "list_items", "get_status", "search", "lookup":
 		requiredTrust = MinTrustForLowRisk
+	// Demo high-risk actions: Allow at medium threshold for demo UX
+	// These create info alerts but are auto-approved to show monitoring value
+	case "send_notification", "process_refund":
+		requiredTrust = MinTrustForMediumRisk
+	// High-risk actions: destructive or privileged operations
 	case "delete_data", "delete_file", "execute_command", "admin_action":
 		requiredTrust = MinTrustForHighRisk
+	// Medium-risk: default for unknown actions that may have side effects
 	default:
 		requiredTrust = MinTrustForMediumRisk
 	}
@@ -806,4 +964,301 @@ func (h *VerificationHandler) calculateVerificationConfidence(agent *domain.Agen
 	}
 
 	return confidence
+}
+
+// ============================================================================
+// ADMIN VERIFICATION APPROVAL ENDPOINTS
+// These enable the require_approval decorator in the SDK
+// ============================================================================
+
+// PendingVerificationResponse represents a pending verification for admin review
+type PendingVerificationResponse struct {
+	ID            string                 `json:"id"`
+	AgentID       string                 `json:"agent_id"`
+	AgentName     string                 `json:"agent_name"`
+	ActionType    string                 `json:"action_type"`
+	Resource      string                 `json:"resource"`
+	Context       map[string]interface{} `json:"context"`
+	RiskLevel     string                 `json:"risk_level"`
+	TrustScore    float64                `json:"trust_score"`
+	Status        string                 `json:"status"`
+	RequestedAt   time.Time              `json:"requested_at"`
+	ExpiresAt     time.Time              `json:"expires_at"`
+}
+
+// ListPendingVerifications returns all pending verifications awaiting admin approval
+// @Summary List pending verifications
+// @Description Get all verification requests awaiting admin approval
+// @Tags admin,verifications
+// @Produce json
+// @Success 200 {array} PendingVerificationResponse "List of pending verifications"
+// @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/admin/verifications/pending [get]
+func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
+	// Get organization ID from context (set by auth middleware)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization context not found",
+		})
+	}
+
+	// Get pending verifications from service
+	events, err := h.verificationEventService.GetPendingVerifications(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get pending verifications: %v", err),
+		})
+	}
+
+	// Build response
+	var response []PendingVerificationResponse
+	for _, event := range events {
+		agentName := ""
+		if event.InitiatorName != nil {
+			agentName = *event.InitiatorName
+		}
+
+		actionType := ""
+		if event.Action != nil {
+			actionType = *event.Action
+		}
+
+		resource := ""
+		if event.ResourceType != nil {
+			resource = *event.ResourceType
+		}
+
+		riskLevel := "medium"
+		if event.Metadata != nil {
+			if rl, ok := event.Metadata["risk_level"].(string); ok {
+				riskLevel = rl
+			}
+			// Also check inside context
+			if ctx, ok := event.Metadata["context"].(map[string]interface{}); ok {
+				if rl, ok := ctx["risk_level"].(string); ok {
+					riskLevel = rl
+				}
+			}
+		}
+
+		agentIDStr := ""
+		if event.AgentID != nil {
+			agentIDStr = event.AgentID.String()
+		}
+
+		response = append(response, PendingVerificationResponse{
+			ID:          event.ID.String(),
+			AgentID:     agentIDStr,
+			AgentName:   agentName,
+			ActionType:  actionType,
+			Resource:    resource,
+			Context:     event.Metadata,
+			RiskLevel:   riskLevel,
+			TrustScore:  event.TrustScore,
+			Status:      string(event.Status),
+			RequestedAt: event.CreatedAt,
+			ExpiresAt:   event.CreatedAt.Add(1 * time.Hour), // Default 1 hour expiry
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}
+
+// ApproveVerificationRequest represents the request body for approving a verification
+type ApproveVerificationRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// ApproveVerification approves a pending verification request
+// @Summary Approve verification
+// @Description Approve a pending verification request, allowing the agent action to proceed
+// @Tags admin,verifications
+// @Accept json
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Param request body ApproveVerificationRequest false "Approval details"
+// @Success 200 {object} map[string]interface{} "Verification approved"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/admin/verifications/{id}/approve [post]
+func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
+	verificationID := c.Params("id")
+	if verificationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verification_id is required",
+		})
+	}
+
+	// Parse UUID
+	vid, err := uuid.Parse(verificationID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verification_id format",
+		})
+	}
+
+	// Parse optional request body
+	var req ApproveVerificationRequest
+	_ = c.Bind().JSON(&req) // Ignore error - body is optional
+
+	// Get admin user info from context
+	userID, _ := c.Locals("user_id").(uuid.UUID)
+	userName := "admin"
+	if name, ok := c.Locals("user_name").(string); ok {
+		userName = name
+	}
+
+	// Update verification to approved status
+	result := domain.VerificationResultVerified
+	metadata := map[string]interface{}{
+		"approved_by":      userName,
+		"approved_by_id":   userID.String(),
+		"approved_at":      time.Now().Format(time.RFC3339),
+		"approval_reason":  req.Reason,
+		"manual_approval":  true,
+	}
+
+	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, nil, metadata)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or update failed",
+		})
+	}
+
+	// Create audit log
+	orgID, _ := c.Locals("organization_id").(uuid.UUID)
+	auditEntry := &domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: orgID,
+		UserID:         userID,
+		Action:         domain.AuditActionUpdate,
+		ResourceType:   "verification",
+		ResourceID:     vid,
+		IPAddress:      c.IP(),
+		UserAgent:      c.Get("User-Agent"),
+		Metadata: map[string]interface{}{
+			"action":           "approve_verification",
+			"verification_id":  vid.String(),
+			"approval_reason":  req.Reason,
+		},
+		Timestamp: time.Now(),
+	}
+	_ = h.auditService.Log(c.Context(), auditEntry)
+
+	fmt.Printf("✅ Verification %s APPROVED by %s\n", vid.String(), userName)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"id":          vid.String(),
+		"status":      "approved",
+		"approved_by": userName,
+		"approved_at": time.Now().Format(time.RFC3339),
+		"message":     "Verification approved - agent action can now proceed",
+	})
+}
+
+// DenyVerificationRequest represents the request body for denying a verification
+type DenyVerificationRequest struct {
+	Reason string `json:"reason" validate:"required"`
+}
+
+// DenyVerification denies a pending verification request
+// @Summary Deny verification
+// @Description Deny a pending verification request, blocking the agent action
+// @Tags admin,verifications
+// @Accept json
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Param request body DenyVerificationRequest true "Denial details"
+// @Success 200 {object} map[string]interface{} "Verification denied"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/admin/verifications/{id}/deny [post]
+func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
+	verificationID := c.Params("id")
+	if verificationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verification_id is required",
+		})
+	}
+
+	// Parse UUID
+	vid, err := uuid.Parse(verificationID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verification_id format",
+		})
+	}
+
+	// Parse request body
+	var req DenyVerificationRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Reason == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "reason is required when denying a verification",
+		})
+	}
+
+	// Get admin user info from context
+	userID, _ := c.Locals("user_id").(uuid.UUID)
+	userName := "admin"
+	if name, ok := c.Locals("user_name").(string); ok {
+		userName = name
+	}
+
+	// Update verification to denied status
+	result := domain.VerificationResultDenied
+	metadata := map[string]interface{}{
+		"denied_by":      userName,
+		"denied_by_id":   userID.String(),
+		"denied_at":      time.Now().Format(time.RFC3339),
+		"denial_reason":  req.Reason,
+		"manual_denial":  true,
+	}
+
+	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, &req.Reason, metadata)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or update failed",
+		})
+	}
+
+	// Create audit log
+	orgID, _ := c.Locals("organization_id").(uuid.UUID)
+	auditEntry := &domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: orgID,
+		UserID:         userID,
+		Action:         domain.AuditActionUpdate,
+		ResourceType:   "verification",
+		ResourceID:     vid,
+		IPAddress:      c.IP(),
+		UserAgent:      c.Get("User-Agent"),
+		Metadata: map[string]interface{}{
+			"action":          "deny_verification",
+			"verification_id": vid.String(),
+			"denial_reason":   req.Reason,
+		},
+		Timestamp: time.Now(),
+	}
+	_ = h.auditService.Log(c.Context(), auditEntry)
+
+	fmt.Printf("❌ Verification %s DENIED by %s: %s\n", vid.String(), userName, req.Reason)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"id":           vid.String(),
+		"status":       "denied",
+		"denied_by":    userName,
+		"denied_at":    time.Now().Format(time.RFC3339),
+		"denial_reason": req.Reason,
+		"message":      "Verification denied - agent action blocked",
+	})
 }

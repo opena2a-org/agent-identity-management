@@ -68,7 +68,7 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
     setRotating(true);
     try {
       const response = await api.rotateAgentCredentials(agentId);
-      setNewApiKey(response.api_key);
+      setNewApiKey(response.apiKey);
       setShowNewKeyDialog(true);
       setShowRotateConfirm(false);
 

@@ -1,7 +1,7 @@
 """
 AIM Python SDK - One-line agent registration and automatic identity verification
 
-production-ready identity and capability management for AI agents.
+Production-ready identity and capability management for AI agents.
 
 This SDK provides seamless identity verification for AI agents registered with AIM.
 All cryptographic signing and verification is handled automatically.
@@ -29,6 +29,31 @@ Manual Registration:
     @client.perform_action("read_database", resource="users_table")
     def get_user_data(user_id):
         return database.query("SELECT * FROM users WHERE id = ?", user_id)
+
+Agent Management (Generic SDK Pattern):
+    # Create agents programmatically through an authenticated client
+    from aim_sdk import AIMClient
+
+    client = AIMClient(agent_id="admin-agent", aim_url="https://aim.example.com", ...)
+
+    # Create a new agent
+    new_agent = client.create_new_agent(
+        name="my-new-agent",
+        display_name="My New Agent",
+        description="An agent for processing data",
+        capabilities=["read_database", "write_files"]
+    )
+    print(f"Created: {new_agent['id']}")
+
+    # List all agents
+    agents = client.list_agents()
+    for agent in agents["agents"]:
+        print(f"{agent['name']}: {agent['status']}")
+
+    # Get/update/delete agents
+    details = client.get_agent_details(agent_id)
+    updated = client.update_agent(display_name="New Name")
+    client.delete_agent(agent_id)
 """
 
 from .client import AIMClient, register_agent

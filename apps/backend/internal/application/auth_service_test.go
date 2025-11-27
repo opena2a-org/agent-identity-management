@@ -84,6 +84,11 @@ func (m *MockUserRepository) Delete(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error) {
+	args := m.Called(orgID, withinMinutes)
+	return args.Int(0), args.Error(1)
+}
+
 // MockOrganizationRepository for testing
 type MockOrganizationRepository struct {
 	mock.Mock

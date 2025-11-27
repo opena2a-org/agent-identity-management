@@ -301,15 +301,13 @@ class CapabilityDetector:
         return None
 
     def _get_capabilities_config_path(self) -> Optional[pathlib.Path]:
-        """Get path to .aim/capabilities.json config file"""
+        """Get path to .aim/capabilities.json config file
+
+        Always uses home directory (~/.aim/) for config - never project directory.
+        This ensures configs are user-specific and not accidentally committed to version control.
+        """
         home = pathlib.Path.home()
         config_path = home / ".aim" / "capabilities.json"
-
-        # Also check for project-local config
-        local_config = pathlib.Path.cwd() / ".aim" / "capabilities.json"
-        if local_config.exists():
-            return local_config
-
         return config_path if config_path.exists() else None
 
 

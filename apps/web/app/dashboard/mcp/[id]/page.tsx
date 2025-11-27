@@ -51,65 +51,65 @@ interface MCPServer {
   url: string;
   description?: string;
   status: "active" | "inactive" | "verified" | "pending";
-  public_key?: string;
-  key_type?: string;
-  last_verified_at?: string;
-  created_at: string;
-  updated_at?: string;
-  trust_score?: number;
-  capability_count?: number;
-  organization_id: string;
+  publicKey?: string;
+  keyType?: string;
+  lastVerifiedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  trustScore?: number;
+  capabilityCount?: number;
+  organizationId: string;
   capabilities?: string[]; // Array of capability type strings like ["tools", "prompts", "resources"]
 
   // ✅ NEW: Agent Attestation fields
-  verification_method?: string; // "agent_attestation", "api_key", or "manual"
-  attestation_count?: number;
-  confidence_score?: number; // 0-100
-  last_attested_at?: string;
+  verificationMethod?: string; // "agent_attestation", "api_key", or "manual"
+  attestationCount?: number;
+  confidenceScore?: number; // 0-100
+  lastAttestedAt?: string;
 }
 
 // Detailed capability information from mcp_server_capabilities table
 interface Capability {
   id: string;
-  mcp_server_id: string;
+  mcpServerId: string;
   name: string;
   type: "tool" | "resource" | "prompt";
   description: string;
   schema: any;
-  detected_at: string;
-  last_verified_at?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  detectedAt: string;
+  lastVerifiedAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Attestation information
 interface Attestation {
   id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_trust_score: number;
-  verified_at: string;
-  expires_at: string;
-  capabilities_confirmed: string[];
-  connection_latency_ms: number;
-  health_check_passed: boolean;
-  is_valid: boolean;
-  attestation_type: string; // "sdk" or "manual"
-  attested_by: string; // Agent name or User name
-  attester_type: string; // "agent" or "user"
-  signature_verified: boolean;
-  sdk_version?: string;
-  connection_successful: boolean;
-  agent_owner_name?: string;
-  agent_owner_id?: string;
+  agentId: string;
+  agentName: string;
+  agentTrustScore: number;
+  verifiedAt: string;
+  expiresAt: string;
+  capabilitiesConfirmed: string[];
+  connectionLatencyMs: number;
+  healthCheckPassed: boolean;
+  isValid: boolean;
+  attestationType: string; // "sdk" or "manual"
+  attestedBy: string; // Agent name or User name
+  attesterType: string; // "agent" or "user"
+  signatureVerified: boolean;
+  sdkVersion?: string;
+  connectionSuccessful: boolean;
+  agentOwnerName?: string;
+  agentOwnerId?: string;
 }
 
 interface Agent {
   id: string;
   name: string;
-  display_name: string;
-  agent_type: string;
+  displayName: string;
+  agentType: string;
 }
 
 export default function MCPServerDetailsPage({
@@ -417,14 +417,14 @@ export default function MCPServerDetailsPage({
                   </Badge>
                   <Badge
                     className={
-                      server.verification_method === "agent_attestation"
-                        ? getConfidenceColor(server.confidence_score ?? 0)
-                        : getTrustColor(server.trust_score ?? 0)
+                      server.verificationMethod === "agent_attestation"
+                        ? getConfidenceColor(server.confidenceScore ?? 0)
+                        : getTrustColor(server.trustScore ?? 0)
                     }
                   >
-                    {server.verification_method === "agent_attestation"
-                      ? `Confidence: ${(server.confidence_score ?? 0).toFixed(1)}%`
-                      : `Trust: ${(server.trust_score ?? 0).toFixed(1)}%`}
+                    {server.verificationMethod === "agent_attestation"
+                      ? `Confidence: ${(server.confidenceScore ?? 0).toFixed(1)}%`
+                      : `Trust: ${(server.trustScore ?? 0).toFixed(1)}%`}
                   </Badge>
                 </div>
               </div>
@@ -471,7 +471,7 @@ export default function MCPServerDetailsPage({
         <Separator />
 
         {/* HERO: Confidence Score Card */}
-        {server.verification_method === "agent_attestation" ? (
+        {server.verificationMethod === "agent_attestation" ? (
           <Card className="border-blue-200 dark:border-blue-700">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -484,27 +484,27 @@ export default function MCPServerDetailsPage({
                       Confidence Score
                     </CardTitle>
                     <CardDescription className="text-sm">
-                      Verified by {server.attestation_count || 0} agent attestation
-                      {server.attestation_count !== 1 ? "s" : ""}
+                      Verified by {server.attestationCount || 0} agent attestation
+                      {server.attestationCount !== 1 ? "s" : ""}
                     </CardDescription>
                   </div>
                 </div>
                 <div className="text-right">
                   <div
                     className={`text-4xl font-bold ${
-                      getConfidenceColor(server.confidence_score ?? 0).split(" ")[0]
+                      getConfidenceColor(server.confidenceScore ?? 0).split(" ")[0]
                     }`}
                   >
-                    {(server.confidence_score ?? 0).toFixed(1)}%
+                    {(server.confidenceScore ?? 0).toFixed(1)}%
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {(server.attestation_count ?? 0) === 0
+                    {(server.attestationCount ?? 0) === 0
                       ? "No attestations yet"
-                      : (server.confidence_score ?? 0) >= 80
+                      : (server.confidenceScore ?? 0) >= 80
                         ? "High confidence"
-                        : (server.confidence_score ?? 0) >= 60
+                        : (server.confidenceScore ?? 0) >= 60
                           ? "Medium confidence"
-                          : (server.confidence_score ?? 0) >= 40
+                          : (server.confidenceScore ?? 0) >= 40
                             ? "Low confidence"
                             : "Needs more attestations"}
                   </p>
@@ -516,16 +516,16 @@ export default function MCPServerDetailsPage({
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="h-4 w-4" />
                   <span>
-                    {server.attestation_count || 0} attestation
-                    {server.attestation_count !== 1 ? "s" : ""}
+                    {server.attestationCount || 0} attestation
+                    {server.attestationCount !== 1 ? "s" : ""}
                   </span>
                 </div>
-                {server.last_attested_at && (
+                {server.lastAttestedAt && (
                   <>
                     <span>•</span>
                     <span>
                       Last verified:{" "}
-                      {new Date(server.last_attested_at).toLocaleDateString()}
+                      {new Date(server.lastAttestedAt).toLocaleDateString()}
                     </span>
                   </>
                 )}
@@ -570,15 +570,15 @@ export default function MCPServerDetailsPage({
                 <div className="text-right">
                   <div
                     className={`text-4xl font-bold ${
-                      getTrustColor(server.trust_score ?? 0).split(" ")[0]
+                      getTrustColor(server.trustScore ?? 0).split(" ")[0]
                     }`}
                   >
-                    {(server.trust_score ?? 0).toFixed(1)}%
+                    {(server.trustScore ?? 0).toFixed(1)}%
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {(server.trust_score ?? 0) >= 80
+                    {(server.trustScore ?? 0) >= 80
                       ? "High trust"
-                      : (server.trust_score ?? 0) >= 60
+                      : (server.trustScore ?? 0) >= 60
                         ? "Medium trust"
                         : "Low trust"}
                   </p>
@@ -630,8 +630,8 @@ export default function MCPServerDetailsPage({
                 {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
               </Badge>
               <p className="text-xs text-muted-foreground mt-2">
-                {server.last_verified_at
-                  ? `Verified ${new Date(server.last_verified_at).toLocaleDateString()}`
+                {server.lastVerifiedAt
+                  ? `Verified ${new Date(server.lastVerifiedAt).toLocaleDateString()}`
                   : "Not yet verified"}
               </p>
             </CardContent>
@@ -754,10 +754,10 @@ export default function MCPServerDetailsPage({
                         </div>
                         <div className="flex-1">
                           <h4 className="font-medium">
-                            {agent.display_name || agent.name}
+                            {agent.displayName || agent.name}
                           </h4>
                           <p className="text-sm text-muted-foreground">
-                            {agent.agent_type}
+                            {agent.agentType}
                           </p>
                         </div>
                         <ExternalLink className="h-4 w-4 text-muted-foreground" />
@@ -795,27 +795,27 @@ export default function MCPServerDetailsPage({
                         {/* Header */}
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            {attestation.attester_type === "agent" ? (
+                            {attestation.attesterType === "agent" ? (
                               <Bot className="h-5 w-5 text-blue-600" />
                             ) : (
                               <User className="h-5 w-5 text-purple-600" />
                             )}
                             <div>
                               <p className="font-medium">
-                                {attestation.attested_by}
-                                {attestation.attester_type === "agent" && attestation.agent_owner_name && (
+                                {attestation.attestedBy}
+                                {attestation.attesterType === "agent" && attestation.agentOwnerName && (
                                   <span className="ml-1 font-normal text-sm text-muted-foreground">
-                                    (owned by {attestation.agent_owner_name})
+                                    (owned by {attestation.agentOwnerName})
                                   </span>
                                 )}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {attestation.attester_type === "agent" ? "Agent" : "User"} • {attestation.attestation_type === "sdk" ? "SDK" : "Manual"}
+                                {attestation.attesterType === "agent" ? "Agent" : "User"} • {attestation.attestationType === "sdk" ? "SDK" : "Manual"}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            {attestation.is_valid ? (
+                            {attestation.isValid ? (
                               <Badge variant="default" className="bg-green-600">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 Valid
@@ -831,32 +831,32 @@ export default function MCPServerDetailsPage({
                           <div>
                             <span className="text-muted-foreground">Verified:</span>
                             <span className="ml-2">
-                              {new Date(attestation.verified_at).toLocaleString()}
+                              {new Date(attestation.verifiedAt).toLocaleString()}
                             </span>
                           </div>
-                          {attestation.attestation_type === "sdk" && attestation.sdk_version && (
+                          {attestation.attestationType === "sdk" && attestation.sdkVersion && (
                             <div>
                               <span className="text-muted-foreground">SDK:</span>
-                              <span className="ml-2">{attestation.sdk_version}</span>
+                              <span className="ml-2">{attestation.sdkVersion}</span>
                             </div>
                           )}
                         </div>
 
                         {/* Status Badges */}
                         <div className="flex flex-wrap gap-2">
-                          {attestation.signature_verified && (
+                          {attestation.signatureVerified && (
                             <Badge variant="outline" className="text-xs">
                               <Shield className="h-3 w-3 mr-1" />
                               Signature Verified
                             </Badge>
                           )}
-                          {attestation.connection_successful && (
+                          {attestation.connectionSuccessful && (
                             <Badge variant="outline" className="text-xs">
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Connection OK
                             </Badge>
                           )}
-                          {attestation.health_check_passed && (
+                          {attestation.healthCheckPassed && (
                             <Badge variant="outline" className="text-xs">
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Health Check Passed
@@ -865,13 +865,13 @@ export default function MCPServerDetailsPage({
                         </div>
 
                         {/* Capabilities */}
-                        {attestation.capabilities_confirmed && attestation.capabilities_confirmed.length > 0 && (
+                        {attestation.capabilitiesConfirmed && attestation.capabilitiesConfirmed.length > 0 && (
                           <div>
                             <p className="text-sm text-muted-foreground mb-2">
-                              Capabilities Verified ({attestation.capabilities_confirmed.length}):
+                              Capabilities Verified ({attestation.capabilitiesConfirmed.length}):
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {attestation.capabilities_confirmed.map((cap, idx) => (
+                              {attestation.capabilitiesConfirmed.map((cap, idx) => (
                                 <Badge key={idx} variant="secondary" className="text-xs">
                                   {cap}
                                 </Badge>
@@ -958,28 +958,28 @@ export default function MCPServerDetailsPage({
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
                     <span className="text-sm font-medium text-muted-foreground">
-                      {server.verification_method === "agent_attestation"
+                      {server.verificationMethod === "agent_attestation"
                         ? "Confidence Score:"
                         : "Trust Score:"}
                     </span>
                     <span className="col-span-2 text-sm">
                       <Badge
                         className={
-                          server.verification_method === "agent_attestation"
-                            ? getConfidenceColor(server.confidence_score ?? 0)
-                            : getTrustColor(server.trust_score ?? 0)
+                          server.verificationMethod === "agent_attestation"
+                            ? getConfidenceColor(server.confidenceScore ?? 0)
+                            : getTrustColor(server.trustScore ?? 0)
                         }
                       >
-                        {server.verification_method === "agent_attestation"
-                          ? (server.confidence_score ?? 0).toFixed(1)
-                          : (server.trust_score ?? 0).toFixed(1)}%
+                        {server.verificationMethod === "agent_attestation"
+                          ? (server.confidenceScore ?? 0).toFixed(1)
+                          : (server.trustScore ?? 0).toFixed(1)}%
                       </Badge>
                     </span>
                   </div>
                   <Separator />
 
                   {/* ✅ NEW: Attestation Info Card */}
-                  {server.verification_method === "agent_attestation" && (
+                  {server.verificationMethod === "agent_attestation" && (
                     <>
                       <div className="col-span-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                         <div className="flex items-start gap-3">
@@ -991,22 +991,22 @@ export default function MCPServerDetailsPage({
                             <div className="grid grid-cols-2 gap-3 text-sm">
                               <div>
                                 <span className="text-blue-700 dark:text-blue-300 font-medium">
-                                  {server.attestation_count || 0}
+                                  {server.attestationCount || 0}
                                 </span>
                                 <span className="text-blue-600 dark:text-blue-400 ml-1">
-                                  {server.attestation_count === 1
+                                  {server.attestationCount === 1
                                     ? "attestation"
                                     : "attestations"}
                                 </span>
                               </div>
-                              {server.last_attested_at && (
+                              {server.lastAttestedAt && (
                                 <div>
                                   <span className="text-blue-700 dark:text-blue-300 font-medium">
                                     Last attested:
                                   </span>
                                   <span className="text-blue-600 dark:text-blue-400 ml-1">
                                     {new Date(
-                                      server.last_attested_at
+                                      server.lastAttestedAt
                                     ).toLocaleDateString()}
                                   </span>
                                 </div>
@@ -1014,8 +1014,8 @@ export default function MCPServerDetailsPage({
                             </div>
                             <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
                               This MCP server's identity is cryptographically
-                              verified by {server.attestation_count || 0} verified
-                              agent{server.attestation_count !== 1 ? "s" : ""} with
+                              verified by {server.attestationCount || 0} verified
+                              agent{server.attestationCount !== 1 ? "s" : ""} with
                               Ed25519 signatures.
                             </p>
                           </div>
@@ -1024,27 +1024,27 @@ export default function MCPServerDetailsPage({
                       <Separator />
                     </>
                   )}
-                  {server.key_type && (
+                  {server.keyType && (
                     <>
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm font-medium text-muted-foreground">
                           Key Type:
                         </span>
                         <span className="col-span-2 text-sm">
-                          {server.key_type}
+                          {server.keyType}
                         </span>
                       </div>
                       <Separator />
                     </>
                   )}
-                  {server.last_verified_at && (
+                  {server.lastVerifiedAt && (
                     <>
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm font-medium text-muted-foreground">
                           Last Verified:
                         </span>
                         <span className="col-span-2 text-sm">
-                          {new Date(server.last_verified_at).toLocaleString()}
+                          {new Date(server.lastVerifiedAt).toLocaleString()}
                         </span>
                       </div>
                       <Separator />
@@ -1055,10 +1055,10 @@ export default function MCPServerDetailsPage({
                       Created:
                     </span>
                     <span className="col-span-2 text-sm">
-                      {new Date(server.created_at).toLocaleString()}
+                      {new Date(server.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  {server.updated_at && (
+                  {server.updatedAt && (
                     <>
                       <Separator />
                       <div className="grid grid-cols-3 items-center gap-4">
@@ -1066,7 +1066,7 @@ export default function MCPServerDetailsPage({
                           Last Updated:
                         </span>
                         <span className="col-span-2 text-sm">
-                          {new Date(server.updated_at).toLocaleString()}
+                          {new Date(server.updatedAt).toLocaleString()}
                         </span>
                       </div>
                     </>
@@ -1077,7 +1077,7 @@ export default function MCPServerDetailsPage({
                       Organization ID:
                     </span>
                     <span className="col-span-2 text-sm font-mono">
-                      {server.organization_id}
+                      {server.organizationId}
                     </span>
                   </div>
                 </div>

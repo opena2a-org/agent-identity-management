@@ -28,10 +28,10 @@ interface MCPServer {
     | "verified"
     | "suspended"
     | "revoked"
-  is_verified?: boolean
+  isVerified?: boolean
   description?: string
-  last_verified_at?: string
-  created_at: string
+  lastVerifiedAt?: string
+  createdAt: string
 }
 
 interface MCPServerSelectorProps {
@@ -93,7 +93,7 @@ export function MCPServerSelector({
     setError(null)
     try {
       const response = await api.listMCPServers(100, 0) // limit, offset
-      setMCPServers(response.mcp_servers || [])
+      setMCPServers(response.mcpServers || [])
     } catch (err: any) {
       console.error('Failed to fetch MCP servers:', err)
       setError('Failed to load MCP servers')
@@ -135,7 +135,7 @@ export function MCPServerSelector({
 
     try {
       await api.addMCPServersToAgent(agentId, {
-        mcp_server_ids: Array.from(selectedServers),
+        mcpServerIds: Array.from(selectedServers),
       })
 
       // Close dialog and notify parent

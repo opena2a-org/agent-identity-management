@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -182,8 +183,8 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"server_name":  server.Name,
-			"server_url":   server.URL,
+			"serverName":  server.Name,
+			"serverUrl":   server.URL,
 			"registered_by_agent": agent.Name,
 		},
 	)
@@ -271,7 +272,7 @@ func (h *PublicMCPHandler) ListMCPServersForAgent(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"mcp_servers": servers,
+		"mcpServers": servers,
 		"total":       len(servers),
 	})
 }
@@ -378,19 +379,19 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	}
 
 	// Check if MCP server name/ID is in agent's talks_to list
-	// TODO: Re-enable when TalksTo field is added to Agent struct
-	isAuthorized := true // Temporarily allow all MCP server access
-	/* Commented out until TalksTo field exists on Agent
-	if agent.TalksTo != nil {
+	isAuthorized := false
+	if len(agent.TalksTo) == 0 {
+		// If no TalksTo configured, allow all MCP servers (backwards compatibility)
+		isAuthorized = true
+	} else {
 		for _, allowedServer := range agent.TalksTo {
 			// Match by name (case-insensitive) or ID
-			if allowedServer == mcpServer.Name || allowedServer == serverID.String() {
+			if strings.EqualFold(allowedServer, mcpServer.Name) || allowedServer == serverID.String() {
 				isAuthorized = true
 				break
 			}
 		}
 	}
-	*/
 
 	// If NOT authorized, create alert and reject
 	if !isAuthorized {
@@ -398,7 +399,7 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		// (In future, this would use AlertService)
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":              "Agent not authorized to access this MCP server",
-			"agent_id":           agentID.String(),
+			"agentId":           agentID.String(),
 			"mcp_server_id":      serverID.String(),
 			"mcp_server_name":    mcpServer.Name,
 			"violation_type":     "unauthorized_mcp_access",
@@ -415,7 +416,7 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		"status":             "approved",
 		"mcp_server_id":      serverID.String(),
 		"mcp_server_name":    mcpServer.Name,
-		"agent_id":           agentID.String(),
+		"agentId":           agentID.String(),
 		"action_type":        req.ActionType,
 		"timestamp":          req.Timestamp,
 		"trust_score_impact": 0.5,

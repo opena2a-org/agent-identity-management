@@ -54,16 +54,16 @@ const (
 
 // AuditLog represents a logged action
 type AuditLog struct {
-	ID             uuid.UUID   `json:"id"`
-	OrganizationID uuid.UUID   `json:"organization_id"`
-	UserID         uuid.UUID   `json:"user_id"`
-	Action         AuditAction `json:"action"`
-	ResourceType   string      `json:"resource_type"` // agent, api_key, user, etc.
-	ResourceID     uuid.UUID   `json:"resource_id"`
-	IPAddress      string      `json:"ip_address"`
-	UserAgent      string      `json:"user_agent"`
+	ID             uuid.UUID              `json:"id"`
+	OrganizationID uuid.UUID              `json:"organizationId"`
+	UserID         uuid.UUID              `json:"userId"`
+	Action         AuditAction            `json:"action"`
+	ResourceType   string                 `json:"resourceType"` // agent, api_key, user, etc.
+	ResourceID     uuid.UUID              `json:"resourceId"`
+	IPAddress      string                 `json:"ipAddress"`
+	UserAgent      string                 `json:"userAgent"`
 	Metadata       map[string]interface{} `json:"metadata"`
-	Timestamp      time.Time   `json:"timestamp"`
+	Timestamp      time.Time              `json:"timestamp"`
 }
 
 // AuditLogRepository defines the interface for audit log persistence

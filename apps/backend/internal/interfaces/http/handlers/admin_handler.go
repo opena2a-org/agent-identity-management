@@ -21,6 +21,7 @@ type AdminHandler struct {
 	auditService        *application.AuditService
 	alertService        *application.AlertService
 	registrationService *application.RegistrationService
+	securityService     *application.SecurityService
 }
 
 func NewAdminHandler(
@@ -31,6 +32,7 @@ func NewAdminHandler(
 	auditService *application.AuditService,
 	alertService *application.AlertService,
 	registrationService *application.RegistrationService,
+	securityService *application.SecurityService,
 ) *AdminHandler {
 	return &AdminHandler{
 		authService:         authService,
@@ -40,6 +42,7 @@ func NewAdminHandler(
 		auditService:        auditService,
 		alertService:        alertService,
 		registrationService: registrationService,
+		securityService:     securityService,
 	}
 }
 
@@ -97,12 +100,12 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		Name                  string     `json:"name"`
 		Role                  string     `json:"role"`
 		Status                string     `json:"status"`
-		CreatedAt             time.Time  `json:"created_at"`
+		CreatedAt             time.Time  `json:"createdAt"`
 		Provider              string     `json:"provider,omitempty"`
-		LastLoginAt           *time.Time `json:"last_login_at,omitempty"`
-		RequestedAt           *time.Time `json:"requested_at,omitempty"`
-		PictureURL            *string    `json:"picture_url,omitempty"`
-		IsRegistrationRequest bool       `json:"is_registration_request"`
+		LastLoginAt           *time.Time `json:"lastLoginAt,omitempty"`
+		RequestedAt           *time.Time `json:"requestedAt,omitempty"`
+		PictureURL            *string    `json:"pictureUrl,omitempty"`
+		IsRegistrationRequest bool       `json:"isRegistrationRequest"`
 	}
 
 	var allUsers []UserWithStatus
@@ -135,18 +138,18 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		}
 
 		allUsers = append(allUsers, UserWithStatus{
-			ID:                    req.ID,
-			Email:                 req.Email,
-			Name:                  fullName,
-			Role:                  "pending",
-			Status:                "pending_approval",
-			CreatedAt:             req.CreatedAt,
-			Provider:              func() string {
-			if req.OAuthProvider != nil {
-				return string(*req.OAuthProvider)
-			}
-			return "manual"
-		}(),
+			ID:        req.ID,
+			Email:     req.Email,
+			Name:      fullName,
+			Role:      "pending",
+			Status:    "pending_approval",
+			CreatedAt: req.CreatedAt,
+			Provider: func() string {
+				if req.OAuthProvider != nil {
+					return string(*req.OAuthProvider)
+				}
+				return "manual"
+			}(),
 			RequestedAt:           &req.RequestedAt,
 			PictureURL:            req.ProfilePictureURL,
 			IsRegistrationRequest: true,
@@ -164,17 +167,17 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_users":           len(users),
-			"pending_registrations": len(pendingRequests),
-			"total_combined":        len(allUsers),
+			"totalUsers":            len(users),
+			"pendingRegistrations":  len(pendingRequests),
+			"totalCombined":         len(allUsers),
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"users":                 allUsers,
-		"total":                 len(allUsers),
-		"approved_users":        len(users),
-		"pending_registrations": len(pendingRequests),
+		"users":                allUsers,
+		"total":                len(allUsers),
+		"approvedUsers":        len(users),
+		"pendingRegistrations": len(pendingRequests),
 	})
 }
 
@@ -648,7 +651,6 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		status,
 		limit,
 		offset,
-		
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -694,13 +696,13 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"alerts":             alerts,
-		"total":              total,
-		"all_count":          allCount,
-		"acknowledged_count": acknowledgedCount,
-		"unacknowledged_count": unacknowledgedCount,
-		"limit":              limit,
-		"offset":             offset,
+		"alerts":               alerts,
+		"total":                total,
+		"allCount":            allCount,
+		"acknowledgedCount":   acknowledgedCount,
+		"unacknowledgedCount": unacknowledgedCount,
+		"limit":                limit,
+		"offset":               offset,
 	})
 }
 
@@ -735,6 +737,65 @@ func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
 	)
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// BulkAcknowledgeAlerts acknowledges multiple alerts at once
+func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// If user_id supplied, ensure it matches authenticated user
+	if req.UserID != "" {
+		bodyUserID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Invalid user ID: %s", req.UserID),
+			})
+		}
+		if bodyUserID != userID {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "User ID mismatch",
+			})
+		}
+	}
+
+	ackCount, err := h.alertService.BulkAcknowledgeAlerts(c.Context(), orgID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit with metadata
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionAcknowledge,
+		"alert",
+		uuid.Nil,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"bulk_acknowledge_scope": "all_alerts",
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":           fmt.Sprintf("Acknowledged %d alerts", ackCount),
+		"acknowledgedCount": ackCount,
+		"bulkAcknowledged":  ackCount > 0,
+	})
 }
 
 // ResolveAlert marks an alert as resolved
@@ -862,6 +923,22 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		verificationRate = float64(verifiedAgents) / float64(len(agents)) * 100
 	}
 
+	// Get security incidents count
+	securityIncidents := 0
+	if h.securityService != nil {
+		incidentCount, err := h.securityService.CountOpenIncidents(c.Context(), orgID)
+		if err == nil {
+			securityIncidents = incidentCount
+		}
+	}
+
+	// Get active users count (users who logged in within the last 60 minutes)
+	activeUsers := len(users) // Default to total users if count fails
+	activeUserCount, err := h.authService.CountActiveUsers(c.Context(), orgID, 60)
+	if err == nil {
+		activeUsers = activeUserCount
+	}
+
 	// Log audit with dashboard metrics
 	h.auditService.LogAction(
 		c.Context(),
@@ -873,38 +950,38 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_agents":      len(agents),
-			"verified_agents":   verifiedAgents,
-			"total_mcp_servers": len(mcpServersList),
-			"total_users":       len(users),
-			"active_alerts":     total,
-			"critical_alerts":   criticalAlerts,
+			"totalAgents":      len(agents),
+			"verifiedAgents":   verifiedAgents,
+			"totalMcpServers": len(mcpServersList),
+			"totalUsers":       len(users),
+			"activeAlerts":     total,
+			"criticalAlerts":   criticalAlerts,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		// Agent metrics
-		"total_agents":      len(agents),
-		"verified_agents":   verifiedAgents,
-		"pending_agents":    pendingAgents,
-		"verification_rate": verificationRate,
-		"avg_trust_score":   avgTrustScore,
+		"totalAgents":      len(agents),
+		"verifiedAgents":   verifiedAgents,
+		"pendingAgents":    pendingAgents,
+		"verificationRate": verificationRate,
+		"avgTrustScore":   avgTrustScore,
 
 		// MCP Server metrics
-		"total_mcp_servers":  len(mcpServersList),
-		"active_mcp_servers": activeMCPServers,
+		"totalMcpServers":  len(mcpServersList),
+		"activeMcpServers": activeMCPServers,
 
 		// User metrics
-		"total_users":  len(users),
-		"active_users": len(users), // TODO: track last_active_at
+		"totalUsers":  len(users),
+		"activeUsers": activeUsers,
 
 		// Security metrics
-		"active_alerts":      total,
-		"critical_alerts":    criticalAlerts,
-		"security_incidents": 0, // TODO: add incidents tracking
+		"activeAlerts":      total,
+		"criticalAlerts":    criticalAlerts,
+		"securityIncidents": securityIncidents,
 
 		// Organization
-		"organization_id": orgID,
+		"organizationId": orgID,
 	})
 }
 
@@ -931,7 +1008,7 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"total_pending": len(users),
+			"totalPending": len(users),
 		},
 	)
 
@@ -1164,20 +1241,20 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"organization_name": org.Name,
-			"plan_type":         org.PlanType,
-			"is_active":         org.IsActive,
+			"organizationName": org.Name,
+			"planType":         org.PlanType,
+			"isActive":         org.IsActive,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"id":         org.ID,
-		"name":       org.Name,
-		"domain":     org.Domain,
-		"plan_type":  org.PlanType,
-		"max_agents": org.MaxAgents,
-		"max_users":  org.MaxUsers,
-		"is_active":  org.IsActive,
+		"id":        org.ID,
+		"name":      org.Name,
+		"domain":    org.Domain,
+		"planType":  org.PlanType,
+		"maxAgents": org.MaxAgents,
+		"maxUsers":  org.MaxUsers,
+		"isActive":  org.IsActive,
 	})
 }
 
@@ -1207,9 +1284,9 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"all_count":           allCount,
-		"acknowledged_count":  acknowledgedCount,
-		"unacknowledged_count": unacknowledgedCount,
+		"allCount":            allCount,
+		"acknowledgedCount":   acknowledgedCount,
+		"unacknowledgedCount": unacknowledgedCount,
 	})
 }
 

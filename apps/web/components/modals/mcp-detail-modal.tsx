@@ -23,36 +23,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface MCPCapability {
   id: string;
-  mcp_server_id: string;
+  mcpServerId: string;
   name: string;
   type: "tool" | "resource" | "prompt";
   description: string;
   schema: any;
-  detected_at: string;
-  last_verified_at?: string;
-  is_active: boolean;
+  detectedAt: string;
+  lastVerifiedAt?: string;
+  isActive: boolean;
 }
 
 interface Attestation {
   id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_trust_score: number;
-  verified_at: string;
-  expires_at: string;
-  capabilities_confirmed: string[];
-  connection_latency_ms: number;
-  health_check_passed: boolean;
-  is_valid: boolean;
+  agentId: string;
+  agentName: string;
+  agentTrustScore: number;
+  verifiedAt: string;
+  expiresAt: string;
+  capabilitiesConfirmed: string[];
+  connectionLatencyMs: number;
+  healthCheckPassed: boolean;
+  isValid: boolean;
   // New metadata fields
-  attestation_type: string; // "sdk" or "manual"
-  attested_by: string; // Agent name or User name
-  attester_type: string; // "agent" or "user"
-  signature_verified: boolean;
-  sdk_version?: string;
-  connection_successful: boolean;
-  agent_owner_name?: string; // Name of user who owns the agent (for SDK attestations)
-  agent_owner_id?: string; // ID of user who owns the agent (for SDK attestations)
+  attestationType: string; // "sdk" or "manual"
+  attestedBy: string; // Agent name or User name
+  attesterType: string; // "agent" or "user"
+  signatureVerified: boolean;
+  sdkVersion?: string;
+  connectionSuccessful: boolean;
+  agentOwnerName?: string; // Name of user who owns the agent (for SDK attestations)
+  agentOwnerId?: string; // ID of user who owns the agent (for SDK attestations)
 }
 
 interface MCPServer {
@@ -67,20 +67,20 @@ interface MCPServer {
     | "verified"
     | "suspended"
     | "revoked";
-  public_key?: string;
-  key_type?: string;
-  last_verified_at?: string;
-  created_at: string;
-  trust_score?: number;
-  capability_count?: number;
+  publicKey?: string;
+  keyType?: string;
+  lastVerifiedAt?: string;
+  createdAt: string;
+  trustScore?: number;
+  capabilityCount?: number;
   capabilities?: MCPCapability[]; // List of capabilities this MCP provides
-  talks_to?: string[]; // List of agents that communicate with this MCP
+  talksTo?: string[]; // List of agents that communicate with this MCP
 
   // ✅ NEW: Agent Attestation fields
-  verification_method?: string; // "agent_attestation", "api_key", or "manual"
-  attestation_count?: number; // Number of agent attestations
-  confidence_score?: number; // Calculated confidence (0-100) based on attestations
-  last_attested_at?: string; // Most recent attestation timestamp
+  verificationMethod?: string; // "agent_attestation", "api_key", or "manual"
+  attestationCount?: number; // Number of agent attestations
+  confidenceScore?: number; // Calculated confidence (0-100) based on attestations
+  lastAttestedAt?: string; // Most recent attestation timestamp
 }
 
 interface MCPDetailModalProps {
@@ -104,7 +104,7 @@ export function MCPDetailModal({
 
   // Fetch detailed attestations when modal opens and MCP has attestations
   useEffect(() => {
-    if (isOpen && mcp && mcp.verification_method === "agent_attestation" && mcp.attestation_count && mcp.attestation_count > 0) {
+    if (isOpen && mcp && mcp.verificationMethod === "agent_attestation" && mcp.attestationCount && mcp.attestationCount > 0) {
       fetchAttestations();
     }
   }, [isOpen, mcp]);
@@ -198,9 +198,9 @@ export function MCPDetailModal({
   };
 
   const handleDownloadKey = () => {
-    if (!mcp?.public_key) return;
+    if (!mcp?.publicKey) return;
 
-    const blob = new Blob([mcp.public_key], { type: "text/plain" });
+    const blob = new Blob([mcp.publicKey], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -276,20 +276,20 @@ export function MCPDetailModal({
             </div>
             <div>
               <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
-                {mcp.verification_method === "agent_attestation"
+                {mcp.verificationMethod === "agent_attestation"
                   ? "Confidence Score"
                   : "Trust Score"}
               </span>
               <span
                 className={`text-2xl font-bold ${
-                  mcp.verification_method === "agent_attestation"
-                    ? getConfidenceScoreColor(mcp.confidence_score || 0)
-                    : getTrustScoreColor(mcp.trust_score || 0)
+                  mcp.verificationMethod === "agent_attestation"
+                    ? getConfidenceScoreColor(mcp.confidenceScore || 0)
+                    : getTrustScoreColor(mcp.trustScore || 0)
                 }`}
               >
-                {mcp.verification_method === "agent_attestation"
-                  ? (mcp.confidence_score || 0).toFixed(1)
-                  : (mcp.trust_score || 0).toFixed(1)}
+                {mcp.verificationMethod === "agent_attestation"
+                  ? (mcp.confidenceScore || 0).toFixed(1)
+                  : (mcp.trustScore || 0).toFixed(1)}
                 %
               </span>
             </div>
@@ -304,7 +304,7 @@ export function MCPDetailModal({
           </div>
 
           {/* Agent Attestation Info (if using agent attestation) */}
-          {mcp.verification_method === "agent_attestation" && (
+          {mcp.verificationMethod === "agent_attestation" && (
             <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
@@ -335,26 +335,26 @@ export function MCPDetailModal({
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-blue-700 dark:text-blue-300 font-medium">
-                        {mcp.attestation_count || 0}
+                        {mcp.attestationCount || 0}
                       </span>
                       <span className="text-blue-600 dark:text-blue-400 ml-1">
-                        {mcp.attestation_count === 1 ? "attestation" : "attestations"}
+                        {mcp.attestationCount === 1 ? "attestation" : "attestations"}
                       </span>
                     </div>
-                    {mcp.last_attested_at && (
+                    {mcp.lastAttestedAt && (
                       <div>
                         <span className="text-blue-700 dark:text-blue-300 font-medium">
                           Last attested:
                         </span>
                         <span className="text-blue-600 dark:text-blue-400 ml-1">
-                          {formatDateTime(mcp.last_attested_at)}
+                          {formatDateTime(mcp.lastAttestedAt)}
                         </span>
                       </div>
                     )}
                   </div>
                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    This MCP server's identity is verified by {mcp.attestation_count || 0} attestation
-                    {mcp.attestation_count !== 1 ? "s" : ""} from agents and users.
+                    This MCP server's identity is verified by {mcp.attestationCount || 0} attestation
+                    {mcp.attestationCount !== 1 ? "s" : ""} from agents and users.
                   </p>
 
                   {/* Detailed Attestations List */}
@@ -370,27 +370,27 @@ export function MCPDetailModal({
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              {att.attester_type === "agent" ? (
+                              {att.attesterType === "agent" ? (
                                 <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                               ) : (
                                 <User className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
                               )}
                               <div>
                                 <p className="font-medium text-blue-900 dark:text-blue-100">
-                                  {att.attested_by}
-                                  {att.attester_type === "agent" && att.agent_owner_name && (
+                                  {att.attestedBy}
+                                  {att.attesterType === "agent" && att.agentOwnerName && (
                                     <span className="ml-1 font-normal text-xs text-blue-700 dark:text-blue-300">
-                                      (owned by {att.agent_owner_name})
+                                      (owned by {att.agentOwnerName})
                                     </span>
                                   )}
                                 </p>
                                 <p className="text-blue-600 dark:text-blue-400">
-                                  {att.attester_type === "agent" ? "Agent" : "User"} • {att.attestation_type === "sdk" ? "SDK" : "Manual"}
+                                  {att.attesterType === "agent" ? "Agent" : "User"} • {att.attestationType === "sdk" ? "SDK" : "Manual"}
                                 </p>
                               </div>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              {att.is_valid ? (
+                              {att.isValid ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs">
                                   <CheckCircle className="h-3 w-3" />
                                   Valid
@@ -407,33 +407,33 @@ export function MCPDetailModal({
                             <div>
                               <span className="text-blue-700 dark:text-blue-300">Verified:</span>
                               <span className="ml-1 text-blue-600 dark:text-blue-400">
-                                {formatDateTime(att.verified_at)}
+                                {formatDateTime(att.verifiedAt)}
                               </span>
                             </div>
-                            {att.attestation_type === "sdk" && att.sdk_version && (
+                            {att.attestationType === "sdk" && att.sdkVersion && (
                               <div>
                                 <span className="text-blue-700 dark:text-blue-300">SDK:</span>
                                 <span className="ml-1 text-blue-600 dark:text-blue-400">
-                                  {att.sdk_version}
+                                  {att.sdkVersion}
                                 </span>
                               </div>
                             )}
                           </div>
 
                           <div className="flex flex-wrap gap-2">
-                            {att.signature_verified && (
+                            {att.signatureVerified && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
                                 <Shield className="h-3 w-3" />
                                 Signature Verified
                               </span>
                             )}
-                            {att.connection_successful && (
+                            {att.connectionSuccessful && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs">
                                 <CheckCircle className="h-3 w-3" />
                                 Connection OK
                               </span>
                             )}
-                            {att.health_check_passed && (
+                            {att.healthCheckPassed && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs">
                                 <CheckCircle className="h-3 w-3" />
                                 Health Check Passed
@@ -441,13 +441,13 @@ export function MCPDetailModal({
                             )}
                           </div>
 
-                          {att.capabilities_confirmed && att.capabilities_confirmed.length > 0 && (
+                          {att.capabilitiesConfirmed && att.capabilitiesConfirmed.length > 0 && (
                             <div>
                               <p className="text-blue-700 dark:text-blue-300 mb-1">
-                                Capabilities Verified ({att.capabilities_confirmed.length}):
+                                Capabilities Verified ({att.capabilitiesConfirmed.length}):
                               </p>
                               <div className="flex flex-wrap gap-1">
-                                {att.capabilities_confirmed.map((cap, idx) => (
+                                {att.capabilitiesConfirmed.map((cap, idx) => (
                                   <span
                                     key={idx}
                                     className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs"
@@ -554,9 +554,9 @@ export function MCPDetailModal({
               </svg>
               Talks To (Agents)
             </h3>
-            {mcp.talks_to && mcp.talks_to.length > 0 ? (
+            {mcp.talksTo && mcp.talksTo.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {mcp.talks_to.map((agent, index) => (
+                {mcp.talksTo.map((agent, index) => (
                   <div
                     key={index}
                     className="px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md text-sm font-medium text-green-900 dark:text-green-100"
@@ -608,7 +608,7 @@ export function MCPDetailModal({
                 Created
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100">
-                {formatDateTime(mcp.created_at)}
+                {formatDateTime(mcp.createdAt)}
               </p>
             </div>
 
@@ -618,15 +618,15 @@ export function MCPDetailModal({
                 Last Updated
               </h3>
               <p className="text-sm text-gray-900 dark:text-gray-100">
-                {mcp.last_verified_at
-                  ? formatDateTime(mcp.last_verified_at)
+                {mcp.lastVerifiedAt
+                  ? formatDateTime(mcp.lastVerifiedAt)
                   : "Never"}
               </p>
             </div>
           </div>
 
           {/* Cryptographic Identity Section */}
-          {mcp.public_key && (
+          {mcp.publicKey && (
             <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -642,7 +642,7 @@ export function MCPDetailModal({
                       Public Key Fingerprint (SHA-256)
                     </h4>
                     <p className="text-xs text-gray-900 dark:text-gray-100 font-mono bg-white dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700 break-all">
-                      {calculateFingerprint(mcp.public_key)}
+                      {calculateFingerprint(mcp.publicKey)}
                     </p>
                   </div>
 
@@ -651,7 +651,7 @@ export function MCPDetailModal({
                       Key Type
                     </h4>
                     <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                      {mcp.key_type || "RSA-2048"}
+                      {mcp.keyType || "RSA-2048"}
                     </p>
                   </div>
                 </div>
@@ -662,7 +662,7 @@ export function MCPDetailModal({
                   </h4>
                   <div className="relative">
                     <pre className="text-xs text-gray-900 dark:text-gray-100 font-mono bg-white dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto max-h-32">
-                      {mcp.public_key}
+                      {mcp.publicKey}
                     </pre>
                     <button
                       onClick={handleDownloadKey}
@@ -704,11 +704,11 @@ export function MCPDetailModal({
                         MCP server registered
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatDateTime(mcp.created_at)}
+                        {formatDateTime(mcp.createdAt)}
                       </p>
                     </div>
                   </div>
-                  {mcp.last_verified_at && (
+                  {mcp.lastVerifiedAt && (
                     <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                       <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       <div className="flex-1">
@@ -716,7 +716,7 @@ export function MCPDetailModal({
                           Last activity
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDateTime(mcp.last_verified_at)}
+                            {formatDateTime(mcp.lastVerifiedAt)}
                         </p>
                       </div>
                     </div>

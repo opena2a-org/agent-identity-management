@@ -13,12 +13,13 @@ import (
 // TrustCalculator implements domain.TrustScoreCalculator
 // Implements 8-factor trust scoring algorithm (see documentation)
 type TrustCalculator struct {
-	trustScoreRepo   domain.TrustScoreRepository
-	apiKeyRepo       domain.APIKeyRepository
-	auditRepo        domain.AuditLogRepository
-	capabilityRepo   domain.CapabilityRepository
-	agentRepo        domain.AgentRepository
-	alertRepo        domain.AlertRepository
+	trustScoreRepo         domain.TrustScoreRepository
+	apiKeyRepo             domain.APIKeyRepository
+	auditRepo              domain.AuditLogRepository
+	capabilityRepo         domain.CapabilityRepository
+	agentRepo              domain.AgentRepository
+	alertRepo              domain.AlertRepository
+	verificationEventRepo  domain.VerificationEventRepository
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -37,6 +38,27 @@ func NewTrustCalculator(
 		capabilityRepo:   capabilityRepo,
 		agentRepo:        agentRepo,
 		alertRepo:        alertRepo,
+	}
+}
+
+// NewTrustCalculatorWithVerification creates a new trust calculator with verification event repo
+func NewTrustCalculatorWithVerification(
+	trustScoreRepo domain.TrustScoreRepository,
+	apiKeyRepo domain.APIKeyRepository,
+	auditRepo domain.AuditLogRepository,
+	capabilityRepo domain.CapabilityRepository,
+	agentRepo domain.AgentRepository,
+	alertRepo domain.AlertRepository,
+	verificationEventRepo domain.VerificationEventRepository,
+) *TrustCalculator {
+	return &TrustCalculator{
+		trustScoreRepo:         trustScoreRepo,
+		apiKeyRepo:             apiKeyRepo,
+		auditRepo:              auditRepo,
+		capabilityRepo:         capabilityRepo,
+		agentRepo:              agentRepo,
+		alertRepo:              alertRepo,
+		verificationEventRepo:  verificationEventRepo,
 	}
 }
 
@@ -138,8 +160,35 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 // Factor 1: Verification Status (25% weight)
 // Measures percentage of actions successfully verified with Ed25519 signatures
 func (c *TrustCalculator) calculateVerificationStatus(agent *domain.Agent) float64 {
-	// TODO: Query agent_actions table for verification statistics
-	// For MVP: Use agent verification status as proxy
+	// Try to query real verification statistics from verification_events table
+	if c.verificationEventRepo != nil {
+		endTime := time.Now()
+		startTime := endTime.AddDate(0, 0, -30) // Last 30 days
+
+		stats, err := c.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+		if err == nil && stats.TotalVerifications > 0 {
+			// Use real success rate from verification events
+			// Blend with agent status for a more nuanced score
+			verificationScore := stats.SuccessRate
+
+			// Apply status modifier
+			statusModifier := 1.0
+			switch agent.Status {
+			case domain.AgentStatusVerified:
+				statusModifier = 1.0
+			case domain.AgentStatusPending:
+				statusModifier = 0.7
+			case domain.AgentStatusSuspended:
+				statusModifier = 0.3
+			case domain.AgentStatusRevoked:
+				statusModifier = 0.0
+			}
+
+			return verificationScore * statusModifier
+		}
+	}
+
+	// Fallback: Use agent verification status as proxy
 	switch agent.Status {
 	case domain.AgentStatusVerified:
 		return 1.0
@@ -157,9 +206,30 @@ func (c *TrustCalculator) calculateVerificationStatus(agent *domain.Agent) float
 // Factor 2: Uptime & Availability (15% weight)
 // Measures how often agent responds to health checks
 func (c *TrustCalculator) calculateUptime(agent *domain.Agent) float64 {
-	// TODO: Query agent_health_checks table
-	// Calculate: successful_health_checks / total_health_checks
-	// For MVP: Return baseline based on agent status
+	// Try to calculate uptime from verification event response times
+	if c.verificationEventRepo != nil {
+		endTime := time.Now()
+		startTime := endTime.AddDate(0, 0, -30) // Last 30 days
+
+		stats, err := c.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+		if err == nil && stats.TotalVerifications > 0 {
+			// Use verification success rate as proxy for availability
+			// If agent is responding to verifications, it's available
+			uptime := stats.SuccessRate
+
+			// Boost score if there are recent verifications (agent is active)
+			if time.Since(stats.LastVerification) < 24*time.Hour {
+				uptime = math.Min(1.0, uptime+0.1)
+			} else if time.Since(stats.LastVerification) > 7*24*time.Hour {
+				// Penalize if no recent activity
+				uptime = uptime * 0.8
+			}
+
+			return uptime
+		}
+	}
+
+	// Fallback: Return baseline based on agent status
 	if agent.Status == domain.AgentStatusVerified {
 		return 0.98 // Assume 98% uptime for verified agents
 	} else if agent.Status == domain.AgentStatusPending {
@@ -171,23 +241,64 @@ func (c *TrustCalculator) calculateUptime(agent *domain.Agent) float64 {
 // Factor 3: Action Success Rate (15% weight)
 // Measures percentage of actions that complete successfully
 func (c *TrustCalculator) calculateSuccessRate(agent *domain.Agent) float64 {
-	// TODO: Query agent_actions table
-	// Calculate: successful_actions / total_actions
-	// For MVP: Return baseline score
-	return 0.95 // Assume 95% success rate
+	// Query verification events for action success rate
+	if c.verificationEventRepo != nil {
+		endTime := time.Now()
+		startTime := endTime.AddDate(0, 0, -30) // Last 30 days
+
+		stats, err := c.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+		if err == nil && stats.TotalVerifications > 0 {
+			// Return actual success rate from verification events
+			return stats.SuccessRate
+		}
+	}
+
+	// Fallback: Return baseline score based on status
+	switch agent.Status {
+	case domain.AgentStatusVerified:
+		return 0.95
+	case domain.AgentStatusPending:
+		return 0.80
+	default:
+		return 0.70
+	}
 }
 
 // Factor 4: Security Alerts (15% weight)
 // Measures active security alerts by severity
 func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
-	// TODO: Query alerts table for agent-specific alerts
-	// Implementation from documentation:
-	// - Critical alerts: score = 0.0
-	// - High alerts: score = 0.50
-	// - Medium alerts: score = 0.75
-	// - Low/no alerts: score = 1.0
+	// Query alerts table for agent-specific unacknowledged alerts
+	if c.alertRepo != nil {
+		alerts, err := c.alertRepo.GetUnacknowledgedByResourceID(agent.ID)
+		if err == nil && len(alerts) > 0 {
+			// Count by severity
+			criticalCount := 0
+			highCount := 0
+			warningCount := 0
 
-	// For MVP: Check capability violations as proxy for security alerts
+			for _, alert := range alerts {
+				switch alert.Severity {
+				case domain.AlertSeverityCritical:
+					criticalCount++
+				case domain.AlertSeverityHigh:
+					highCount++
+				case domain.AlertSeverityWarning:
+					warningCount++
+				}
+			}
+
+			// Apply scoring logic from documentation
+			if criticalCount > 0 {
+				return 0.0
+			} else if highCount > 0 {
+				return 0.50
+			} else if warningCount > 0 {
+				return 0.75
+			}
+		}
+	}
+
+	// Also check capability violations as additional security signal
 	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
 	if err != nil || len(violations) == 0 {
 		return 1.0 // No violations = perfect security score
@@ -276,12 +387,11 @@ func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) float64 {
 
 // calculateConfidence determines confidence level based on available data
 func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors) float64 {
-	// Count available data points
+	// Count available data points (each real data source adds confidence)
 	dataPoints := 0.0
 	total := 8.0 // 8 factors
 
-	// Each factor that's not at baseline counts as a data point
-	// For MVP, we have limited data, so confidence will be lower
+	// Base data points from agent properties
 	if agent.Status != "" {
 		dataPoints++
 	}
@@ -292,9 +402,40 @@ func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *doma
 		dataPoints++ // Agent has some history
 	}
 
-	// TODO: Increment dataPoints when we have actual operational metrics
+	// Check if we have real verification event data
+	if c.verificationEventRepo != nil {
+		endTime := time.Now()
+		startTime := endTime.AddDate(0, 0, -30)
 
-	return dataPoints / total
+		stats, err := c.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+		if err == nil && stats.TotalVerifications > 0 {
+			// Real verification data available - higher confidence
+			dataPoints += 3 // Covers verification, uptime, and success rate factors
+
+			// Even higher confidence if significant sample size
+			if stats.TotalVerifications >= 10 {
+				dataPoints += 0.5
+			}
+			if stats.TotalVerifications >= 50 {
+				dataPoints += 0.5
+			}
+		}
+	}
+
+	// Check if we have real alert data
+	if c.alertRepo != nil {
+		alerts, err := c.alertRepo.GetByResourceID(agent.ID, 100, 0)
+		if err == nil {
+			// Having alert data (even if empty) increases confidence
+			dataPoints++
+			if len(alerts) > 0 {
+				dataPoints += 0.5 // More data = more confidence in the score
+			}
+		}
+	}
+
+	confidence := dataPoints / total
+	return math.Min(1.0, confidence) // Cap at 1.0
 }
 
 // CalculateTrustScore calculates and stores trust score for an agent

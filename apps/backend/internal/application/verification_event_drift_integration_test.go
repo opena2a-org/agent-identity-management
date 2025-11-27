@@ -79,6 +79,22 @@ func (m *MockVerificationEventRepository) UpdateResult(id uuid.UUID, result doma
 	return args.Error(0)
 }
 
+func (m *MockVerificationEventRepository) GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*domain.AgentVerificationStatistics, error) {
+	args := m.Called(agentID, startTime, endTime)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.AgentVerificationStatistics), args.Error(1)
+}
+
+func (m *MockVerificationEventRepository) GetPendingVerifications(orgID uuid.UUID) ([]*domain.VerificationEvent, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Error(1)
+}
+
 // TestVerificationEventWithDriftDetection tests the complete flow of verification event creation with drift detection
 func TestVerificationEventWithDriftDetection(t *testing.T) {
 	// Setup

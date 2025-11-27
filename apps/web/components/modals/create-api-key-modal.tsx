@@ -22,8 +22,8 @@ interface CreateAPIKeyModalProps {
 
 interface FormData {
   name: string;
-  agent_id: string;
-  expires_in: string;
+  agentId: string;
+  expiresIn: string;
 }
 
 export function CreateAPIKeyModal({
@@ -41,8 +41,8 @@ export function CreateAPIKeyModal({
 
   const [formData, setFormData] = useState<FormData>({
     name: "",
-    agent_id: "",
-    expires_in: "90",
+    agentId: "",
+    expiresIn: "90",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -54,8 +54,8 @@ export function CreateAPIKeyModal({
       newErrors.name = "API key name is required";
     }
 
-    if (!formData.agent_id) {
-      newErrors.agent_id = "Please select an agent";
+    if (!formData.agentId) {
+      newErrors.agentId = "Please select an agent";
     }
 
     setErrors(newErrors);
@@ -73,15 +73,15 @@ export function CreateAPIKeyModal({
     setError(null);
 
     try {
-      const result = await api.createAPIKey(formData.agent_id, formData.name);
+      const result = await api.createAPIKey(formData.agentId, formData.name);
       console.log("API Key creation result:", result);
 
-      if (!result.api_key) {
+      if (!result.apiKey) {
         console.error("No API key in response:", result);
         throw new Error("API key not returned from server");
       }
 
-      setApiKey(result.api_key);
+      setApiKey(result.apiKey);
       setSuccess(true);
       onSuccess?.(result);
     } catch (err) {
@@ -103,8 +103,8 @@ export function CreateAPIKeyModal({
   const resetForm = () => {
     setFormData({
       name: "",
-      agent_id: "",
-      expires_in: "90",
+      agentId: "",
+      expiresIn: "90",
     });
     setErrors({});
     setError(null);
@@ -125,7 +125,7 @@ export function CreateAPIKeyModal({
   const isFormDirty = () => {
     // If API key is already created, no confirmation needed
     if (success) return false;
-    return formData.name.trim() !== "" || formData.agent_id !== "";
+    return formData.name.trim() !== "" || formData.agentId !== "";
   };
 
   // Handle click on overlay (outside modal)
@@ -151,7 +151,7 @@ export function CreateAPIKeyModal({
   };
 
   const getExpirationDate = () => {
-    const days = parseInt(formData.expires_in);
+    const days = parseInt(formData.expiresIn);
     if (days === 0) return "Never";
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -325,12 +325,12 @@ export function CreateAPIKeyModal({
                   Agent <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.agent_id}
+                  value={formData.agentId}
                   onChange={(e) =>
-                    setFormData({ ...formData, agent_id: e.target.value })
+                    setFormData({ ...formData, agentId: e.target.value })
                   }
                   className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
-                    errors.agent_id
+                    errors.agentId
                       ? "border-red-500"
                       : "border-gray-200 dark:border-gray-700"
                   }`}
@@ -339,12 +339,12 @@ export function CreateAPIKeyModal({
                   <option value="">Select an agent...</option>
                   {agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
-                      {agent.display_name} ({agent.name})
+                      {agent.displayName} ({agent.name})
                     </option>
                   ))}
                 </select>
-                {errors.agent_id && (
-                  <p className="mt-1 text-xs text-red-500">{errors.agent_id}</p>
+                {errors.agentId && (
+                  <p className="mt-1 text-xs text-red-500">{errors.agentId}</p>
                 )}
               </div>
 
@@ -354,9 +354,9 @@ export function CreateAPIKeyModal({
                   Expiration
                 </label>
                 <select
-                  value={formData.expires_in}
+                  value={formData.expiresIn}
                   onChange={(e) =>
-                    setFormData({ ...formData, expires_in: e.target.value })
+                    setFormData({ ...formData, expiresIn: e.target.value })
                   }
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   disabled={loading}

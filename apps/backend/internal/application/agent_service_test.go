@@ -72,6 +72,14 @@ func (m *AgentServiceMockTrustScoreRepository) GetHistory(agentID uuid.UUID, lim
 	return args.Get(0).([]*domain.TrustScore), args.Error(1)
 }
 
+func (m *AgentServiceMockTrustScoreRepository) GetHistoryAuditTrail(agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {
+	args := m.Called(agentID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TrustScoreHistoryEntry), args.Error(1)
+}
+
 // AgentServiceMockSecurityPolicyRepository for testing
 type AgentServiceMockSecurityPolicyRepository struct {
 	mock.Mock
@@ -275,8 +283,19 @@ func TestAgentService_UpdateTrustScore_Success(t *testing.T) {
 	service := &AgentService{agentRepo: mockAgentRepo}
 
 	agentID := uuid.New()
+	orgID := uuid.New()
 	newScore := 0.75
 
+	// Agent with previous score slightly higher (no significant drop)
+	existingAgent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		DisplayName:    "Test Agent",
+		TrustScore:     0.80, // Only 0.05 drop - not significant
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(existingAgent, nil)
 	mockAgentRepo.On("UpdateTrustScore", agentID, newScore).Return(nil)
 
 	ctx := context.Background()
@@ -314,10 +333,20 @@ func TestAgentService_UpdateTrustScore_InvalidScore(t *testing.T) {
 func TestAgentService_VerifyAction_Success(t *testing.T) {
 	mockAgentRepo := new(MockAgentRepository)
 	mockCapabilityRepo := new(MockCapabilityRepository)
+	mockPolicyRepo := new(AgentServiceMockSecurityPolicyRepository)
+	mockAlertRepo := new(MockAlertRepository)
+
+	// Create policy service with no active policies (will bypass policy checks)
+	policyService := &SecurityPolicyService{
+		policyRepo: mockPolicyRepo,
+		alertRepo:  mockAlertRepo,
+	}
 
 	service := &AgentService{
 		agentRepo:      mockAgentRepo,
 		capabilityRepo: mockCapabilityRepo,
+		policyService:  policyService,
+		alertRepo:      mockAlertRepo,
 	}
 
 	agent := createTestAgentForService()
@@ -334,6 +363,10 @@ func TestAgentService_VerifyAction_Success(t *testing.T) {
 		},
 	}
 	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agent.ID).Return(capabilities, nil)
+
+	// Mock policy repo to return empty policies (no blocking)
+	mockPolicyRepo.On("GetActiveByOrganization", agent.OrganizationID).Return([]*domain.SecurityPolicy{}, nil).Maybe()
+	mockPolicyRepo.On("GetByType", agent.OrganizationID, mock.Anything).Return([]*domain.SecurityPolicy{}, nil).Maybe()
 
 	ctx := context.Background()
 	allowed, reason, auditID, err := service.VerifyAction(ctx, agent.ID, "file:read", "/test.txt", nil)
@@ -412,10 +445,19 @@ func TestAgentService_VerifyAction_NoCapabilities(t *testing.T) {
 func TestAgentService_VerifyAction_WildcardCapability(t *testing.T) {
 	mockAgentRepo := new(MockAgentRepository)
 	mockCapabilityRepo := new(MockCapabilityRepository)
+	mockPolicyRepo := new(AgentServiceMockSecurityPolicyRepository)
+	mockAlertRepo := new(MockAlertRepository)
+
+	policyService := &SecurityPolicyService{
+		policyRepo: mockPolicyRepo,
+		alertRepo:  mockAlertRepo,
+	}
 
 	service := &AgentService{
 		agentRepo:      mockAgentRepo,
 		capabilityRepo: mockCapabilityRepo,
+		policyService:  policyService,
+		alertRepo:      mockAlertRepo,
 	}
 
 	agent := createTestAgentForService()
@@ -427,8 +469,12 @@ func TestAgentService_VerifyAction_WildcardCapability(t *testing.T) {
 	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agent.ID).
 		Return(capabilities, nil).Times(2)
 
+	// Mock policy repo to return empty policies (no blocking)
+	mockPolicyRepo.On("GetActiveByOrganization", agent.OrganizationID).Return([]*domain.SecurityPolicy{}, nil).Maybe()
+	mockPolicyRepo.On("GetByType", agent.OrganizationID, mock.Anything).Return([]*domain.SecurityPolicy{}, nil).Maybe()
+
 	ctx := context.Background()
-	
+
 	// Test wildcard matches read
 	allowed, _, _, err := service.VerifyAction(ctx, agent.ID, "file:read", "/test.txt", nil)
 	assert.NoError(t, err)

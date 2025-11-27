@@ -847,3 +847,174 @@ func (r *VerificationEventRepositorySimple) Delete(id uuid.UUID) error {
 	_, err := r.db.Exec(query, id)
 	return err
 }
+
+// GetPendingVerifications retrieves all pending verification events for an organization
+func (r *VerificationEventRepositorySimple) GetPendingVerifications(orgID uuid.UUID) ([]*domain.VerificationEvent, error) {
+	query := `
+		SELECT id, organization_id, agent_id, agent_name, protocol, verification_type,
+			status, result, signature, message_hash, nonce, public_key,
+			confidence, trust_score, duration_ms, error_code, error_reason,
+			initiator_type, initiator_id, initiator_name, initiator_ip,
+			action, resource_type, resource_id, location,
+			started_at, completed_at, created_at, details, metadata
+		FROM verification_events
+		WHERE organization_id = $1
+		AND status = 'pending'
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*domain.VerificationEvent
+	for rows.Next() {
+		event := &domain.VerificationEvent{}
+		var agentID uuid.NullUUID
+		var agentName sql.NullString
+		var resultStr, signature, messageHash, nonce, publicKey, errorCode, errorReason sql.NullString
+		var initiatorType sql.NullString
+		var initiatorID uuid.NullUUID
+		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
+		var completedAt sql.NullTime
+		var metadataJSON []byte
+
+		err := rows.Scan(
+			&event.ID, &event.OrganizationID, &agentID, &agentName,
+			&event.Protocol, &event.VerificationType, &event.Status, &resultStr,
+			&signature, &messageHash, &nonce, &publicKey,
+			&event.Confidence, &event.TrustScore, &event.DurationMs, &errorCode,
+			&errorReason, &initiatorType, &initiatorID, &initiatorName,
+			&initiatorIP, &action, &resourceType, &resourceID,
+			&location, &event.StartedAt, &completedAt, &event.CreatedAt,
+			&details, &metadataJSON,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert nullable fields
+		if agentID.Valid {
+			event.AgentID = &agentID.UUID
+		}
+		if agentName.Valid {
+			event.AgentName = &agentName.String
+		}
+		if initiatorType.Valid {
+			event.InitiatorType = domain.InitiatorType(initiatorType.String)
+		} else {
+			event.InitiatorType = domain.InitiatorTypeSystem
+		}
+		if resultStr.Valid {
+			result := domain.VerificationResult(resultStr.String)
+			event.Result = &result
+		}
+		if signature.Valid {
+			event.Signature = &signature.String
+		}
+		if messageHash.Valid {
+			event.MessageHash = &messageHash.String
+		}
+		if nonce.Valid {
+			event.Nonce = &nonce.String
+		}
+		if publicKey.Valid {
+			event.PublicKey = &publicKey.String
+		}
+		if errorCode.Valid {
+			event.ErrorCode = &errorCode.String
+		}
+		if errorReason.Valid {
+			event.ErrorReason = &errorReason.String
+		}
+		if initiatorID.Valid {
+			event.InitiatorID = &initiatorID.UUID
+		}
+		if initiatorName.Valid {
+			event.InitiatorName = &initiatorName.String
+		}
+		if initiatorIP.Valid {
+			event.InitiatorIP = &initiatorIP.String
+		}
+		if action.Valid {
+			event.Action = &action.String
+		}
+		if resourceType.Valid {
+			event.ResourceType = &resourceType.String
+		}
+		if resourceID.Valid {
+			event.ResourceID = &resourceID.String
+		}
+		if location.Valid {
+			event.Location = &location.String
+		}
+		if completedAt.Valid {
+			event.CompletedAt = &completedAt.Time
+		}
+		if details.Valid {
+			event.Details = &details.String
+		}
+		if len(metadataJSON) > 0 {
+			json.Unmarshal(metadataJSON, &event.Metadata)
+		}
+
+		events = append(events, event)
+	}
+
+	return events, rows.Err()
+}
+
+// GetAgentStatistics calculates per-agent verification statistics for trust scoring
+func (r *VerificationEventRepositorySimple) GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*domain.AgentVerificationStatistics, error) {
+	query := `
+		SELECT
+			COUNT(*) as total,
+			COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success_count,
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed_count,
+			COALESCE(AVG(duration_ms), 0) as avg_duration,
+			COALESCE(AVG(confidence), 0) as avg_confidence,
+			COALESCE(MAX(created_at), NOW()) as last_verification
+		FROM verification_events
+		WHERE agent_id = $1
+		AND created_at BETWEEN $2 AND $3`
+
+	var total, successCount, failedCount int
+	var avgDuration, avgConfidence sql.NullFloat64
+	var lastVerification time.Time
+
+	err := r.db.QueryRow(query, agentID, startTime, endTime).Scan(
+		&total, &successCount, &failedCount,
+		&avgDuration, &avgConfidence, &lastVerification,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate success rate
+	successRate := 0.0
+	if total > 0 {
+		successRate = float64(successCount) / float64(total)
+	}
+
+	// Convert nullable values
+	avgDurationVal := 0.0
+	if avgDuration.Valid {
+		avgDurationVal = avgDuration.Float64
+	}
+	avgConfidenceVal := 0.0
+	if avgConfidence.Valid {
+		avgConfidenceVal = avgConfidence.Float64
+	}
+
+	return &domain.AgentVerificationStatistics{
+		AgentID:            agentID,
+		TotalVerifications: total,
+		SuccessCount:       successCount,
+		FailedCount:        failedCount,
+		SuccessRate:        successRate,
+		AvgDurationMs:      avgDurationVal,
+		AvgConfidence:      avgConfidenceVal,
+		LastVerification:   lastVerification,
+	}, nil
+}

@@ -109,9 +109,9 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"detections_processed": response.DetectionsProcessed,
-			"new_mcps":            len(response.NewMCPs),
-			"existing_mcps":       len(response.ExistingMCPs),
+			"detectionsProcessed": response.DetectionsProcessed,
+			"newMcps":            len(response.NewMCPs),
+			"existingMcps":       len(response.ExistingMCPs),
 		},
 	)
 
@@ -236,11 +236,11 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 
 	// Log audit with security alert details if present
 	auditData := map[string]interface{}{
-		"detected_at":       req.DetectedAt,
-		"risk_level":        req.RiskAssessment.RiskLevel,
-		"risk_score":        req.RiskAssessment.OverallRiskScore,
-		"trust_impact":      req.RiskAssessment.TrustScoreImpact,
-		"security_alerts":   len(req.RiskAssessment.Alerts),
+		"detectedAt":       req.DetectedAt,
+		"riskLevel":        req.RiskAssessment.RiskLevel,
+		"riskScore":        req.RiskAssessment.OverallRiskScore,
+		"trustImpact":      req.RiskAssessment.TrustScoreImpact,
+		"securityAlerts":   len(req.RiskAssessment.Alerts),
 	}
 
 	// Add critical alerts to audit log

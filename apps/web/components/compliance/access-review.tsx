@@ -22,8 +22,8 @@ interface User {
   email: string;
   name: string;
   role: string;
-  last_login: string;
-  created_at: string;
+  lastLogin: string;
+  createdAt: string;
   status: string;
 }
 
@@ -202,7 +202,7 @@ export function AccessReview() {
                   users.filter(
                     (u) =>
                       Math.floor(
-                        (Date.now() - new Date(u.last_login).getTime()) / (1000 * 60 * 60 * 24)
+                        (Date.now() - new Date(u.lastLogin).getTime()) / (1000 * 60 * 60 * 24)
                       ) > 30
                   ).length
                 }
@@ -218,7 +218,7 @@ export function AccessReview() {
                   users.filter(
                     (u) =>
                       Math.floor(
-                        (Date.now() - new Date(u.last_login).getTime()) / (1000 * 60 * 60 * 24)
+                        (Date.now() - new Date(u.lastLogin).getTime()) / (1000 * 60 * 60 * 24)
                       ) > 90
                   ).length
                 }
@@ -247,7 +247,7 @@ export function AccessReview() {
             </TableHeader>
             <TableBody>
               {users.map((user) => {
-                const activityStatus = getActivityStatus(user.last_login);
+                const activityStatus = getActivityStatus(user.lastLogin);
                 return (
                   <TableRow key={user.id}>
                     <TableCell>
@@ -261,7 +261,7 @@ export function AccessReview() {
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
                         <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span>{formatDistanceToNow(new Date(user.last_login), { addSuffix: true })}</span>
+                        <span>{formatDistanceToNow(new Date(user.lastLogin), { addSuffix: true })}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -272,7 +272,7 @@ export function AccessReview() {
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
-                        <span>{new Date(user.created_at).toLocaleDateString()}</span>
+                        <span>{new Date(user.createdAt).toLocaleDateString()}</span>
                       </div>
                     </TableCell>
                   </TableRow>

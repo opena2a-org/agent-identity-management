@@ -21,6 +21,7 @@ import { api, Agent } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { useMemo } from "react";
 
 interface RegisterAgentModalProps {
   isOpen: boolean;
@@ -32,14 +33,14 @@ interface RegisterAgentModalProps {
 
 interface FormData {
   name: string;
-  display_name: string;
+  displayName: string;
   description: string;
-  agent_type: "ai_agent" | "mcp_server";
+  agentType: "ai_agent" | "mcp_server";
   version: string;
-  certificate_url: string;
-  repository_url: string;
-  documentation_url: string;
-  talks_to: string[]; // MCP server IDs/names
+  certificateUrl: string;
+  repositoryUrl: string;
+  documentationUrl: string;
+  talksTo: string[]; // MCP server IDs/names
   capabilities: string[]; // Capability strings
 }
 
@@ -79,14 +80,14 @@ export function RegisterAgentModal({
   const [loadingKeys, setLoadingKeys] = useState(false);
   const createEmptyFormData = (): FormData => ({
     name: "",
-    display_name: "",
+    displayName: "",
     description: "",
-    agent_type: "ai_agent",
+    agentType: "ai_agent",
     version: "1.0.0",
-    certificate_url: "",
-    repository_url: "",
-    documentation_url: "",
-    talks_to: [],
+    certificateUrl: "",
+    repositoryUrl: "",
+    documentationUrl: "",
+    talksTo: [],
     capabilities: [],
   });
   const [formData, setFormData] = useState<FormData>(createEmptyFormData());
@@ -121,14 +122,14 @@ export function RegisterAgentModal({
     if (isOpen && editMode && initialData) {
       const mapped: FormData = {
         name: initialData.name || "",
-        display_name: initialData.display_name || "",
+        displayName: initialData.displayName || "",
         description: initialData.description || "",
-        agent_type: initialData.agent_type || "ai_agent",
+        agentType: initialData.agentType || "ai_agent",
         version: initialData.version || "1.0.0",
-        certificate_url: (initialData as any).certificate_url || "",
-        repository_url: (initialData as any).repository_url || "",
-        documentation_url: (initialData as any).documentation_url || "",
-        talks_to: (initialData as any).talks_to || [],
+        certificateUrl: (initialData as any).certificateUrl || "",
+        repositoryUrl: (initialData as any).repositoryUrl || "",
+        documentationUrl: (initialData as any).documentationUrl || "",
+        talksTo: (initialData as any).talksTo || [],
         capabilities: (initialData as any).capabilities || [],
       };
       setFormData(mapped);
@@ -151,8 +152,8 @@ export function RegisterAgentModal({
         "Agent name must be lowercase alphanumeric with dashes/underscores";
     }
 
-    if (!formData.display_name.trim()) {
-      newErrors.display_name = "Display name is required";
+    if (!formData.displayName.trim()) {
+      newErrors.displayName = "Display name is required";
     }
 
     if (!formData.version.trim()) {
@@ -164,19 +165,19 @@ export function RegisterAgentModal({
     // Validate URLs if provided
     const urlPattern = /^https?:\/\/.+/;
     if (
-      formData.certificate_url &&
-      !urlPattern.test(formData.certificate_url)
+      formData.certificateUrl &&
+      !urlPattern.test(formData.certificateUrl)
     ) {
-      newErrors.certificate_url = "Must be a valid HTTP(S) URL";
+      newErrors.certificateUrl = "Must be a valid HTTP(S) URL";
     }
-    if (formData.repository_url && !urlPattern.test(formData.repository_url)) {
-      newErrors.repository_url = "Must be a valid HTTP(S) URL";
+    if (formData.repositoryUrl && !urlPattern.test(formData.repositoryUrl)) {
+      newErrors.repositoryUrl = "Must be a valid HTTP(S) URL";
     }
     if (
-      formData.documentation_url &&
-      !urlPattern.test(formData.documentation_url)
+      formData.documentationUrl &&
+      !urlPattern.test(formData.documentationUrl)
     ) {
-      newErrors.documentation_url = "Must be a valid HTTP(S) URL";
+      newErrors.documentationUrl = "Must be a valid HTTP(S) URL";
     }
 
     setErrors(newErrors);
@@ -185,7 +186,7 @@ export function RegisterAgentModal({
         if (newErrors.name && nameRef.current) {
           nameRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           nameRef.current.focus();
-        } else if (newErrors.display_name && displayNameRef.current) {
+        } else if (newErrors.displayName && displayNameRef.current) {
           displayNameRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           displayNameRef.current.focus();
         } else if (newErrors.description && descriptionRef.current) {
@@ -194,13 +195,13 @@ export function RegisterAgentModal({
         } else if (newErrors.version && versionRef.current) {
           versionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           versionRef.current.focus();
-        } else if (newErrors.certificate_url && certificateUrlRef.current) {
+        } else if (newErrors.certificateUrl && certificateUrlRef.current) {
           certificateUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           certificateUrlRef.current.focus();
-        } else if (newErrors.repository_url && repositoryUrlRef.current) {
+        } else if (newErrors.repositoryUrl && repositoryUrlRef.current) {
           repositoryUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           repositoryUrlRef.current.focus();
-        } else if (newErrors.documentation_url && documentationUrlRef.current) {
+        } else if (newErrors.documentationUrl && documentationUrlRef.current) {
           documentationUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           documentationUrlRef.current.focus();
         }
@@ -223,24 +224,24 @@ export function RegisterAgentModal({
       // Send snake_case to match backend JSON tags
       const agentData: any = {
         name: formData.name,
-        display_name: formData.display_name,
+        displayName: formData.displayName,
         description: formData.description,
-        agent_type: formData.agent_type,
+        agentType: formData.agentType,
         version: formData.version,
       };
 
       // Add optional fields only if they have values
-      if (formData.certificate_url) {
-        agentData.certificate_url = formData.certificate_url;
+      if (formData.certificateUrl) {
+        agentData.certificateUrl = formData.certificateUrl;
       }
-      if (formData.repository_url) {
-        agentData.repository_url = formData.repository_url;
+      if (formData.repositoryUrl) {
+        agentData.repositoryUrl = formData.repositoryUrl;
       }
-      if (formData.documentation_url) {
-        agentData.documentation_url = formData.documentation_url;
+      if (formData.documentationUrl) {
+        agentData.documentationUrl = formData.documentationUrl;
       }
-      if (formData.talks_to.length > 0) {
-        agentData.talks_to = formData.talks_to;
+      if (formData.talksTo.length > 0) {
+        agentData.talksTo = formData.talksTo;
       }
       agentData.capabilities = formData.capabilities;
 
@@ -254,7 +255,7 @@ export function RegisterAgentModal({
 
       if (editMode) {
         toast.success("Agent updated successfully", {
-          description: `${result.display_name || result.name} has been updated.`,
+          description: `${result.displayName || result.name} has been updated.`,
         });
         setTimeout(() => {
           onSuccess?.(result);
@@ -263,7 +264,7 @@ export function RegisterAgentModal({
         }, 1200);
       } else {
         toast.success("Agent created successfully", {
-          description: `${result.display_name || result.name} is ready to integrate.`,
+          description: `${result.displayName || result.name} is ready to integrate.`,
         });
       }
     } catch (err) {
@@ -410,6 +411,16 @@ export function RegisterAgentModal({
     }
   };
 
+  const mergedCapabilities = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...(CAPABILITY_OPTIONS || []),
+        ...((initialFormData?.capabilities as string[]) || []),
+        ...(formData.capabilities || []),
+      ])
+    );
+  }, [initialFormData?.capabilities, formData.capabilities]);
+
   const toggleCapability = (capability: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -421,10 +432,10 @@ export function RegisterAgentModal({
 
   const addMcpServer = () => {
     const trimmed = newMcpServer.trim();
-    if (trimmed && !formData.talks_to.includes(trimmed)) {
+    if (trimmed && !formData.talksTo.includes(trimmed)) {
       setFormData((prev) => ({
         ...prev,
-        talks_to: [...prev.talks_to, trimmed],
+        talksTo: [...prev.talksTo, trimmed],
       }));
       setNewMcpServer("");
     }
@@ -433,7 +444,7 @@ export function RegisterAgentModal({
   const removeMcpServer = (server: string) => {
     setFormData((prev) => ({
       ...prev,
-      talks_to: prev.talks_to.filter((s) => s !== server),
+      talksTo: prev.talksTo.filter((s) => s !== server),
     }));
   };
 
@@ -845,20 +856,20 @@ export function RegisterAgentModal({
                   <input
                     ref={displayNameRef}
                     type="text"
-                    value={formData.display_name}
+                    value={formData.displayName}
                     onChange={(e) =>
-                      setFormData({ ...formData, display_name: e.target.value })
+                      setFormData({ ...formData, displayName: e.target.value })
                     }
                     placeholder="e.g., Claude AI Assistant"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.display_name
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.displayName
                       ? "border-red-500"
                       : "border-gray-200 dark:border-gray-700"
                       }`}
                     disabled={loading || success}
                   />
-                  {errors.display_name && (
+                  {errors.displayName && (
                     <p className="mt-1 text-xs text-red-500">
-                      {errors.display_name}
+                      {errors.displayName}
                     </p>
                   )}
                 </div>
@@ -888,11 +899,11 @@ export function RegisterAgentModal({
                       Agent Type <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={formData.agent_type}
+                      value={formData.agentType}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          agent_type: e.target.value as
+                          agentType: e.target.value as
                             | "ai_agent"
                             | "mcp_server",
                         })
@@ -946,23 +957,23 @@ export function RegisterAgentModal({
                   <input
                     ref={certificateUrlRef}
                     type="url"
-                    value={formData.certificate_url}
+                    value={formData.certificateUrl}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        certificate_url: e.target.value,
+                        certificateUrl: e.target.value,
                       })
                     }
                     placeholder="https://example.com/certs/agent-cert.pem"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.certificate_url
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.certificateUrl
                       ? "border-red-500"
                       : "border-gray-200 dark:border-gray-700"
                       }`}
                     disabled={loading || success}
                   />
-                  {errors.certificate_url && (
+                  {errors.certificateUrl && (
                     <p className="mt-1 text-xs text-red-500">
-                      {errors.certificate_url}
+                      {errors.certificateUrl}
                     </p>
                   )}
                 </div>
@@ -975,23 +986,23 @@ export function RegisterAgentModal({
                   <input
                     ref={repositoryUrlRef}
                     type="url"
-                    value={formData.repository_url}
+                    value={formData.repositoryUrl}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        repository_url: e.target.value,
+                        repositoryUrl: e.target.value,
                       })
                     }
                     placeholder="https://github.com/yourusername/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.repository_url
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.repositoryUrl
                       ? "border-red-500"
                       : "border-gray-200 dark:border-gray-700"
                       }`}
                     disabled={loading || success}
                   />
-                  {errors.repository_url && (
+                  {errors.repositoryUrl && (
                     <p className="mt-1 text-xs text-red-500">
-                      {errors.repository_url}
+                      {errors.repositoryUrl}
                     </p>
                   )}
                 </div>
@@ -1004,23 +1015,23 @@ export function RegisterAgentModal({
                   <input
                     ref={documentationUrlRef}
                     type="url"
-                    value={formData.documentation_url}
+                    value={formData.documentationUrl}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        documentation_url: e.target.value,
+                        documentationUrl: e.target.value,
                       })
                     }
                     placeholder="https://docs.example.com/agents/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.documentation_url
+                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.documentationUrl
                       ? "border-red-500"
                       : "border-gray-200 dark:border-gray-700"
                       }`}
                     disabled={loading || success}
                   />
-                  {errors.documentation_url && (
+                  {errors.documentationUrl && (
                     <p className="mt-1 text-xs text-red-500">
-                      {errors.documentation_url}
+                      {errors.documentationUrl}
                     </p>
                   )}
                 </div>
@@ -1036,7 +1047,7 @@ export function RegisterAgentModal({
                   actions the agent can perform.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {CAPABILITY_OPTIONS.map((capability) => (
+                  {mergedCapabilities.map((capability) => (
                     <label
                       key={capability}
                       className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -1093,9 +1104,9 @@ export function RegisterAgentModal({
                 </div>
 
                 {/* MCP Servers List */}
-                {formData.talks_to.length > 0 && (
+                {formData.talksTo.length > 0 && (
                   <div className="space-y-2">
-                    {formData.talks_to.map((server) => (
+                    {formData.talksTo.map((server) => (
                       <div
                         key={server}
                         className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"

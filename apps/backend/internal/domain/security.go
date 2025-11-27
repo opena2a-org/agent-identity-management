@@ -41,51 +41,51 @@ const (
 
 // Threat represents a detected security threat
 type Threat struct {
-	ID             uuid.UUID  `json:"id"`
-	OrganizationID uuid.UUID  `json:"organization_id"`
-	ThreatType     ThreatType `json:"threat_type"`
+	ID             uuid.UUID     `json:"id"`
+	OrganizationID uuid.UUID     `json:"organizationId"`
+	ThreatType     ThreatType    `json:"threatType"`
 	Severity       AlertSeverity `json:"severity"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description"`
-	Source         string     `json:"source"` // IP address, agent ID, etc.
-	TargetType     string     `json:"target_type"` // "agent", "user", "api_key"
-	TargetID       uuid.UUID  `json:"target_id"`
-	TargetName     *string    `json:"target_name"` // Agent or MCP server name (joined from agents/mcp_servers table)
-	IsBlocked      bool       `json:"is_blocked"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ResolvedAt     *time.Time `json:"resolved_at"`
+	Title          string        `json:"title"`
+	Description    string        `json:"description"`
+	Source         string        `json:"source"`     // IP address, agent ID, etc.
+	TargetType     string        `json:"targetType"` // "agent", "user", "api_key"
+	TargetID       uuid.UUID     `json:"targetId"`
+	TargetName     *string       `json:"targetName"` // Agent or MCP server name (joined from agents/mcp_servers table)
+	IsBlocked      bool          `json:"isBlocked"`
+	CreatedAt      time.Time     `json:"createdAt"`
+	ResolvedAt     *time.Time    `json:"resolvedAt"`
 }
 
 // Anomaly represents a detected anomaly
 type Anomaly struct {
-	ID             uuid.UUID   `json:"id"`
-	OrganizationID uuid.UUID   `json:"organization_id"`
-	AnomalyType    AnomalyType `json:"anomaly_type"`
+	ID             uuid.UUID     `json:"id"`
+	OrganizationID uuid.UUID     `json:"organizationId"`
+	AnomalyType    AnomalyType   `json:"anomalyType"`
 	Severity       AlertSeverity `json:"severity"`
-	Title          string      `json:"title"`
-	Description    string      `json:"description"`
-	ResourceType   string      `json:"resource_type"`
-	ResourceID     uuid.UUID   `json:"resource_id"`
-	Confidence     float64     `json:"confidence"` // 0-100
-	CreatedAt      time.Time   `json:"created_at"`
+	Title          string        `json:"title"`
+	Description    string        `json:"description"`
+	ResourceType   string        `json:"resourceType"`
+	ResourceID     uuid.UUID     `json:"resourceId"`
+	Confidence     float64       `json:"confidence"` // 0-100
+	CreatedAt      time.Time     `json:"createdAt"`
 }
 
 // SecurityIncident represents a security incident
 type SecurityIncident struct {
-	ID             uuid.UUID      `json:"id"`
-	OrganizationID uuid.UUID      `json:"organization_id"`
-	IncidentType   string         `json:"incident_type"`
-	Status         IncidentStatus `json:"status"`
-	Severity       AlertSeverity  `json:"severity"`
-	Title          string         `json:"title"`
-	Description    string         `json:"description"`
-	AffectedResources []string    `json:"affected_resources"`
-	AssignedTo     *uuid.UUID     `json:"assigned_to"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	ResolvedAt     *time.Time     `json:"resolved_at"`
-	ResolvedBy     *uuid.UUID     `json:"resolved_by"`
-	ResolutionNotes string        `json:"resolution_notes"`
+	ID                uuid.UUID      `json:"id"`
+	OrganizationID    uuid.UUID      `json:"organizationId"`
+	IncidentType      string         `json:"incidentType"`
+	Status            IncidentStatus `json:"status"`
+	Severity          AlertSeverity  `json:"severity"`
+	Title             string         `json:"title"`
+	Description       string         `json:"description"`
+	AffectedResources []string       `json:"affectedResources"`
+	AssignedTo        *uuid.UUID     `json:"assignedTo"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	UpdatedAt         time.Time      `json:"updatedAt"`
+	ResolvedAt        *time.Time     `json:"resolvedAt"`
+	ResolvedBy        *uuid.UUID     `json:"resolvedBy"`
+	ResolutionNotes   string         `json:"resolutionNotes"`
 }
 
 // ThreatTrendData represents threat count by date
@@ -102,30 +102,30 @@ type SeverityDistribution struct {
 
 // SecurityMetrics represents overall security metrics
 type SecurityMetrics struct {
-	TotalThreats          int                     `json:"total_threats"`
-	ActiveThreats         int                     `json:"active_threats"`
-	BlockedThreats        int                     `json:"blocked_threats"`
-	TotalAnomalies        int                     `json:"total_anomalies"`
-	HighSeverityCount     int                     `json:"high_severity_count"`
-	OpenIncidents         int                     `json:"open_incidents"`
-	AverageTrustScore     float64                 `json:"average_trust_score"`
-	SecurityScore         float64                 `json:"security_score"` // 0-100
-	ThreatTrend           []ThreatTrendData       `json:"threat_trend"`
-	SeverityDistribution  []SeverityDistribution  `json:"severity_distribution"`
+	TotalThreats         int                    `json:"totalThreats"`
+	ActiveThreats        int                    `json:"activeThreats"`
+	BlockedThreats       int                    `json:"blockedThreats"`
+	TotalAnomalies       int                    `json:"totalAnomalies"`
+	HighSeverityCount    int                    `json:"highSeverityCount"`
+	OpenIncidents        int                    `json:"openIncidents"`
+	AverageTrustScore    float64                `json:"averageTrustScore"`
+	SecurityScore        float64                `json:"securityScore"` // 0-100
+	ThreatTrend          []ThreatTrendData      `json:"threatTrend"`
+	SeverityDistribution []SeverityDistribution `json:"severityDistribution"`
 }
 
 // SecurityScanResult represents the result of a security scan
 type SecurityScanResult struct {
-	ScanID            uuid.UUID  `json:"scan_id"`
-	OrganizationID    uuid.UUID  `json:"organization_id"`
-	ScanType          string     `json:"scan_type"`
-	Status            string     `json:"status"`
-	ThreatsFound      int        `json:"threats_found"`
-	AnomaliesFound    int        `json:"anomalies_found"`
-	VulnerabilitiesFound int     `json:"vulnerabilities_found"`
-	SecurityScore     float64    `json:"security_score"`
-	StartedAt         time.Time  `json:"started_at"`
-	CompletedAt       *time.Time `json:"completed_at"`
+	ScanID               uuid.UUID  `json:"scanId"`
+	OrganizationID       uuid.UUID  `json:"organizationId"`
+	ScanType             string     `json:"scanType"`
+	Status               string     `json:"status"`
+	ThreatsFound         int        `json:"threatsFound"`
+	AnomaliesFound       int        `json:"anomaliesFound"`
+	VulnerabilitiesFound int        `json:"vulnerabilitiesFound"`
+	SecurityScore        float64    `json:"securityScore"`
+	StartedAt            time.Time  `json:"startedAt"`
+	CompletedAt          *time.Time `json:"completedAt"`
 }
 
 // SecurityRepository defines the interface for security persistence

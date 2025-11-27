@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -76,6 +77,11 @@ func (m *MockAgentRepository) MarkAsCompromised(agentID uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockAgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
+	args := m.Called(ctx, agentID)
+	return args.Error(0)
+}
+
 // MockAlertRepository mocks the AlertRepository interface
 type MockAlertRepository struct {
 	mock.Mock
@@ -118,6 +124,45 @@ func (m *MockAlertRepository) Acknowledge(id, userID uuid.UUID) error {
 func (m *MockAlertRepository) Delete(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)
+}
+
+func (m *MockAlertRepository) CountByOrganization(orgID uuid.UUID) (int, error) {
+	args := m.Called(orgID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockAlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	args := m.Called(resourceID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*domain.Alert, error) {
+	args := m.Called(resourceID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status string, limit, offset int) ([]*domain.Alert, error) {
+	args := m.Called(orgID, status, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) CountByOrganizationFiltered(orgID uuid.UUID, status string) (int, error) {
+	args := m.Called(orgID, status)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockAlertRepository) BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error) {
+	args := m.Called(orgID, userID)
+	return args.Int(0), args.Error(1)
 }
 
 func TestDetectDrift_NoDrift(t *testing.T) {

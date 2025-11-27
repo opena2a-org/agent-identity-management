@@ -65,13 +65,13 @@ interface TrustScoreBreakdown {
 
 interface TrustScoreHistoryEntry {
   timestamp: string;
-  trust_score: number;
+  trustScore: number;
   reason: string;
-  changed_by: string;
+  changedBy: string;
 }
 
 interface TrustScoreHistory {
-  agent_id: string;
+  agentId: string;
   history: TrustScoreHistoryEntry[];
 }
 
@@ -369,10 +369,10 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
                     <LineChart
                       data={history.history.map(entry => ({
                         timestamp: new Date(entry.timestamp).toLocaleDateString(),
-                        score: (entry.trust_score * 100).toFixed(1),
+                        score: (entry.trustScore * 100).toFixed(1),
                         fullTimestamp: new Date(entry.timestamp).toLocaleString(),
                         reason: entry.reason,
-                        changedBy: entry.changed_by,
+                        changedBy: entry.changedBy,
                       }))}
                       margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                     >
@@ -449,15 +449,15 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
                               {new Date(entry.timestamp).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`text-sm font-semibold ${getScoreColor(entry.trust_score)}`}>
-                                {(entry.trust_score * 100).toFixed(1)}%
+                              <span className={`text-sm font-semibold ${getScoreColor(entry.trustScore)}`}>
+                                {(entry.trustScore * 100).toFixed(1)}%
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                               {entry.reason}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                              {entry.changed_by}
+                              {entry.changedBy}
                             </td>
                           </tr>
                         ))}

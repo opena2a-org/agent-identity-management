@@ -45,23 +45,23 @@ interface WebhookDetailModalProps {
 
 interface WebhookDetail {
   id: string;
-  organization_id: string;
+  organizationId: string;
   name: string;
   url: string;
   events: string[];
-  is_active: boolean;
+  isActive: boolean;
   secret: string;
-  created_at: string;
-  last_triggered_at?: string;
-  success_count: number;
-  failure_count: number;
+  createdAt: string;
+  lastTriggeredAt?: string;
+  successCount: number;
+  failureCount: number;
   deliveries: Array<{
     id: string;
     event: string;
     status: 'success' | 'failure';
-    response_code: number;
+    responseCode: number;
     timestamp: string;
-    error_message?: string;
+    errorMessage?: string;
   }>;
 }
 
@@ -119,9 +119,9 @@ export function WebhookDetailModal({
 
   const getSuccessRate = () => {
     if (!webhook) return 0;
-    const total = webhook.success_count + webhook.failure_count;
+    const total = webhook.successCount + webhook.failureCount;
     if (total === 0) return 0;
-    return (webhook.success_count / total) * 100;
+    return (webhook.successCount / total) * 100;
   };
 
   if (loading) {
@@ -191,7 +191,7 @@ export function WebhookDetailModal({
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Status</div>
-                    {webhook.is_active ? (
+                    {webhook.isActive ? (
                       <Badge className="bg-green-100 text-green-800 border-green-200">
                         Active
                       </Badge>
@@ -210,14 +210,14 @@ export function WebhookDetailModal({
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Successful Deliveries</div>
                     <div className="text-2xl font-bold text-green-600">
-                      {webhook.success_count}
+                      {webhook.successCount}
                     </div>
                   </div>
 
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Failed Deliveries</div>
                     <div className="text-2xl font-bold text-red-600">
-                      {webhook.failure_count}
+                      {webhook.failureCount}
                     </div>
                   </div>
                 </div>
@@ -279,17 +279,17 @@ export function WebhookDetailModal({
                 <div className="space-y-2">
                   <Label>Created</Label>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(webhook.created_at).toLocaleString()} (
-                    {formatDistanceToNow(new Date(webhook.created_at), { addSuffix: true })})
+                    {new Date(webhook.createdAt).toLocaleString()} (
+                    {formatDistanceToNow(new Date(webhook.createdAt), { addSuffix: true })})
                   </p>
                 </div>
 
-                {webhook.last_triggered_at && (
+                {webhook.lastTriggeredAt && (
                   <div className="space-y-2">
                     <Label>Last Triggered</Label>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(webhook.last_triggered_at).toLocaleString()} (
-                      {formatDistanceToNow(new Date(webhook.last_triggered_at), {
+                      {new Date(webhook.lastTriggeredAt).toLocaleString()} (
+                      {formatDistanceToNow(new Date(webhook.lastTriggeredAt), {
                         addSuffix: true,
                       })}
                       )
@@ -385,12 +385,12 @@ export function WebhookDetailModal({
                           <TableCell>
                             <span
                               className={`font-mono text-sm ${
-                                delivery.response_code >= 200 && delivery.response_code < 300
+                                delivery.responseCode >= 200 && delivery.responseCode < 300
                                   ? 'text-green-600'
                                   : 'text-red-600'
                               }`}
                             >
-                              {delivery.response_code}
+                              {delivery.responseCode}
                             </span>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">

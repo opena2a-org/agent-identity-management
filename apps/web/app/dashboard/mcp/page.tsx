@@ -37,24 +37,24 @@ interface MCPServer {
     | "verified"
     | "suspended"
     | "revoked";
-  public_key?: string;
-  key_type?: string;
-  last_verified_at?: string;
-  created_at: string;
-  trust_score?: number;
-  capability_count?: number;
+  publicKey?: string;
+  keyType?: string;
+  lastVerifiedAt?: string;
+  createdAt: string;
+  trustScore?: number;
+  capabilityCount?: number;
   capabilities?: Array<{
     id: string;
-    mcp_server_id: string;
+    mcpServerId: string;
     name: string;
     type: "tool" | "resource" | "prompt";
     description: string;
     schema: any;
-    detected_at: string;
-    last_verified_at?: string;
-    is_active: boolean;
+    detectedAt: string;
+    lastVerifiedAt?: string;
+    isActive: boolean;
   }>;
-  talks_to?: string[];
+  talksTo?: string[];
 }
 
 function StatCard({ stat }: { stat: any }) {
@@ -289,7 +289,7 @@ export default function MCPServersPage() {
       setLoading(true);
       setError(null);
       const data = await api.listMCPServers();
-      setMcpServers(data.mcp_servers || []);
+      setMcpServers(data.mcpServers || []);
     } catch (err) {
       console.error("Failed to fetch MCP servers:", err);
       const errorMessage = getErrorMessage(err, {
@@ -311,15 +311,15 @@ export default function MCPServersPage() {
     total: mcpServers.length,
     active: mcpServers.filter((s) => s.status === "active").length,
     avgTrustScore:
-      mcpServers.reduce((sum, s) => sum + (s.trust_score || 0), 0) /
+      mcpServers.reduce((sum, s) => sum + (s.trustScore || 0), 0) /
       mcpServers.length,
     lastActivity: mcpServers
-      .filter((s) => s.last_verified_at)
+      .filter((s) => s.lastVerifiedAt)
       .sort(
         (a, b) =>
-          new Date(b.last_verified_at!).getTime() -
-          new Date(a.last_verified_at!).getTime()
-      )[0]?.last_verified_at,
+          new Date(b.lastVerifiedAt!).getTime() -
+          new Date(a.lastVerifiedAt!).getTime()
+      )[0]?.lastVerifiedAt,
   };
 
   const statCards = [
@@ -565,11 +565,11 @@ export default function MCPServersPage() {
                     <StatusBadge status={server?.status} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {server?.last_verified_at ? (
+                    {server?.lastVerifiedAt ? (
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <span className="text-sm text-gray-900 dark:text-gray-100">
-                          {formatRelativeTime(server.last_verified_at)}
+                          {formatRelativeTime(server.lastVerifiedAt)}
                         </span>
                       </div>
                     ) : (

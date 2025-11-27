@@ -554,14 +554,50 @@ func (s *MCPService) VerifyMCPAction(
 		reason = "MCP server not verified"
 	}
 
-	// 4. Audit log
+	// 4. Audit log via verification event
 	auditID = uuid.New()
-	// TODO: Implement proper audit logging
-	// This should create an audit log entry tracking:
-	// - Which MCP server performed what action
-	// - The target resource/service
-	// - The decision (allowed/denied)
-	// - Timestamp and metadata
+
+	// Create verification event for MCP action audit trail
+	now := time.Now()
+	eventStatus := domain.VerificationEventStatusSuccess
+	var eventResult *domain.VerificationResult
+	if allowed {
+		result := domain.VerificationResultVerified
+		eventResult = &result
+	} else {
+		eventStatus = domain.VerificationEventStatusFailed
+		result := domain.VerificationResultDenied
+		eventResult = &result
+	}
+
+	verificationEvent := &domain.VerificationEvent{
+		ID:               auditID,
+		OrganizationID:   mcp.OrganizationID,
+		MCPServerID:      &mcpID,
+		MCPServerName:    &mcp.Name,
+		Protocol:         domain.VerificationProtocolMCP,
+		VerificationType: domain.VerificationTypeCapability,
+		Status:           eventStatus,
+		Result:           eventResult,
+		Confidence:       1.0,
+		TrustScore:       mcp.TrustScore,
+		InitiatorType:    domain.InitiatorTypeSystem,
+		Action:           &actionType,
+		ResourceType:     &targetService,
+		ResourceID:       &resource,
+		StartedAt:        now,
+		Details:          &reason,
+		Metadata:         metadata,
+		CreatedAt:        now,
+	}
+
+	// Non-blocking - don't fail the action if audit fails
+	go func() {
+		if err := s.verificationEventRepo.Create(verificationEvent); err != nil {
+			// Log error but don't fail the action
+			fmt.Printf("Warning: Failed to create MCP action audit log: %v\n", err)
+		}
+	}()
 
 	return allowed, reason, auditID, nil
 }

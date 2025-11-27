@@ -20,9 +20,9 @@ interface TrustTrendsProps {
 
 interface TrustTrend {
   date: string;
-  avg_score: number;  // ✅ FIXED: Backend returns avg_score, not avg_trust_score
-  agent_count: number;
-  scores_by_range: {
+  avgScore: number;
+  agentCount: number;
+  scoresByRange: {
     excellent: number;
     good: number;
     fair: number;
@@ -34,9 +34,9 @@ interface TrustTrendsData {
   period: string;
   trends: TrustTrend[];
   summary: {
-    overall_avg: number;
-    trend_direction: "up" | "down" | "stable";
-    change_percentage: number;
+    overallAvg: number;
+    trendDirection: "up" | "down" | "stable";
+    changePercentage: number;
   };
 }
 
@@ -67,7 +67,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
   const getTrendIcon = () => {
     if (!data) return null;
 
-    switch (data.summary.trend_direction) {
+    switch (data.summary.trendDirection) {
       case 'up':
         return <TrendingUp className="h-5 w-5 text-green-600" />;
       case 'down':
@@ -80,7 +80,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
   const getTrendColor = () => {
     if (!data) return 'text-gray-600';
 
-    switch (data.summary.trend_direction) {
+    switch (data.summary.trendDirection) {
       case 'up':
         return 'text-green-600';
       case 'down':
@@ -166,7 +166,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {(data.summary.overall_avg * 100).toFixed(1)}%
+                    {(data.summary.overallAvg * 100).toFixed(1)}%
                   </div>
                 </dd>
               </dl>
@@ -187,8 +187,8 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className={`text-2xl font-semibold ${getTrendColor()}`}>
-                    {data.summary.change_percentage > 0 ? '+' : ''}
-                    {data.summary.change_percentage.toFixed(1)}%
+                    {data.summary.changePercentage > 0 ? '+' : ''}
+                    {data.summary.changePercentage.toFixed(1)}%
                   </div>
                 </dd>
               </dl>
@@ -249,7 +249,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
             {/* Excellent */}
             <div className="text-center">
               <div className="text-3xl font-bold text-green-600">
-                {data.trends[data.trends.length - 1].scores_by_range.excellent}
+                {data.trends[data.trends.length - 1].scoresByRange.excellent}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Excellent
@@ -262,7 +262,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
             {/* Good */}
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600">
-                {data.trends[data.trends.length - 1].scores_by_range.good}
+                {data.trends[data.trends.length - 1].scoresByRange.good}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Good
@@ -275,7 +275,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
             {/* Fair */}
             <div className="text-center">
               <div className="text-3xl font-bold text-yellow-600">
-                {data.trends[data.trends.length - 1].scores_by_range.fair}
+                {data.trends[data.trends.length - 1].scoresByRange.fair}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Fair
@@ -288,7 +288,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
             {/* Poor */}
             <div className="text-center">
               <div className="text-3xl font-bold text-red-600">
-                {data.trends[data.trends.length - 1].scores_by_range.poor}
+                {data.trends[data.trends.length - 1].scoresByRange.poor}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Poor

@@ -71,8 +71,8 @@ func (h *APIKeyHandler) ListAPIKeys(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"api_keys": apiKeys,
-		"total":    len(apiKeys),
+		"apiKeys": apiKeys,
+		"total":   len(apiKeys),
 	})
 }
 
@@ -138,18 +138,18 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"key_name": req.Name,
-			"agent_id": agentID.String(),
+			"keyName": req.Name,
+			"agentId": agentID.String(),
 		},
 	)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":         apiKey.ID,
-		"api_key":    plainKey, // Only returned once!
-		"name":       apiKey.Name,
-		"agent_id":   apiKey.AgentID,
-		"expires_at": apiKey.ExpiresAt,
-		"created_at": apiKey.CreatedAt,
+		"id":        apiKey.ID,
+		"apiKey":    plainKey, // Only returned once!
+		"name":      apiKey.Name,
+		"agentId":   apiKey.AgentID,
+		"expiresAt": apiKey.ExpiresAt,
+		"createdAt": apiKey.CreatedAt,
 	})
 }
 

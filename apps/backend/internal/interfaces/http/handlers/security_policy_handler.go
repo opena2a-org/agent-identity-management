@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
@@ -34,13 +36,18 @@ func (h *SecurityPolicyHandler) ListPolicies(c fiber.Ctx) error {
 		})
 	}
 
+	// 🔍 DEBUG: Log the organization ID being queried
+	fmt.Printf("🔍 DEBUG ListPolicies: Querying policies for org_id=%s\n", orgID)
+
 	policies, err := h.policyService.ListPolicies(c.Context(), orgID)
 	if err != nil {
+		fmt.Printf("❌ DEBUG ListPolicies: Error fetching policies: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve policies",
 		})
 	}
 
+	fmt.Printf("✅ DEBUG ListPolicies: Found %d policies for org_id=%s\n", len(policies), orgID)
 	return c.JSON(policies)
 }
 
@@ -67,12 +74,12 @@ func (h *SecurityPolicyHandler) GetPolicy(c fiber.Ctx) error {
 type CreatePolicyRequest struct {
 	Name              string                   `json:"name" validate:"required"`
 	Description       string                   `json:"description"`
-	PolicyType        domain.PolicyType        `json:"policy_type" validate:"required"`
-	EnforcementAction domain.EnforcementAction `json:"enforcement_action" validate:"required"`
-	SeverityThreshold domain.AlertSeverity     `json:"severity_threshold" validate:"required"`
+	PolicyType        domain.PolicyType        `json:"policyType" validate:"required"`
+	EnforcementAction domain.EnforcementAction `json:"enforcementAction" validate:"required"`
+	SeverityThreshold domain.AlertSeverity     `json:"severityThreshold" validate:"required"`
 	Rules             map[string]interface{}   `json:"rules"`
-	AppliesTo         string                   `json:"applies_to" validate:"required"`
-	IsEnabled         bool                     `json:"is_enabled"`
+	AppliesTo         string                   `json:"appliesTo" validate:"required"`
+	IsEnabled         bool                     `json:"isEnabled"`
 	Priority          int                      `json:"priority" validate:"required"`
 }
 

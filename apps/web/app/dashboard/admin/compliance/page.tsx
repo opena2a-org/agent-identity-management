@@ -49,17 +49,17 @@ import { Label } from "@/components/ui/label";
 
 // Backend response structure
 interface ComplianceStatus {
-  compliance_level: string;
-  total_agents: number;
-  verified_agents: number;
-  verification_rate: number; // Already in percentage (0-100)
-  average_trust_score: number; // Already in percentage (0-100)
-  recent_audit_count: number;
+  complianceLevel: string;
+  totalAgents: number;
+  verifiedAgents: number;
+  verificationRate: number; // Already in percentage (0-100)
+  averageTrustScore: number; // Already in percentage (0-100)
+  recentAuditCount: number;
 }
 
 interface ComplianceMetrics {
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
   interval: string;
   metrics: {
     period: {
@@ -67,13 +67,13 @@ interface ComplianceMetrics {
       end: string;
       interval: string;
     };
-    agent_verification_trend: Array<{
+    agentVerificationTrend: Array<{
       date: string;
       verified: number;
     }>;
-    trust_score_trend: Array<{
+    trustScoreTrend: Array<{
       date: string;
-      avg_score: number;
+      avgScore: number;
     }>;
   };
 }
@@ -83,8 +83,8 @@ interface AccessReviewUser {
   email: string;
   name: string;
   role: string;
-  last_login: string;
-  created_at: string;
+  lastLogin: string;
+  createdAt: string;
   status: string;
 }
 
@@ -93,8 +93,8 @@ interface CheckResult {
   passed: boolean;
   details?: string;
   count?: number;
-  action_url?: string;
-  affected_items?: Array<{
+  actionUrl?: string;
+  affectedItems?: Array<{
     id: string;
     name: string;
     score?: number;
@@ -376,8 +376,8 @@ export default function CompliancePage() {
   }
 
   // Compliance score (backend returns 0-100 scale already)
-  const complianceScore = status?.average_trust_score
-    ? Math.round(status.average_trust_score)
+  const complianceScore = status?.averageTrustScore
+    ? Math.round(status.averageTrustScore)
     : 0;
 
   const stats = [
@@ -389,18 +389,18 @@ export default function CompliancePage() {
     },
     {
       name: "Audit Logs",
-      value: status?.recent_audit_count?.toLocaleString() || "0",
+      value: status?.recentAuditCount?.toLocaleString() || "0",
       icon: FileText,
     },
     {
       name: "Verified Agents",
-      value: `${status?.verified_agents || 0} / ${status?.total_agents || 0}`,
+      value: `${status?.verifiedAgents || 0} / ${status?.totalAgents || 0}`,
       icon: CheckCircle,
     },
     {
       name: "Verification Rate",
-      value: status?.verification_rate
-        ? `${Math.round(status.verification_rate)}%`
+      value: status?.verificationRate
+        ? `${Math.round(status.verificationRate)}%`
         : "0%",
       icon: TrendingUp,
     },
@@ -456,9 +456,9 @@ export default function CompliancePage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={
-                metrics?.metrics?.trust_score_trend?.map((d) => ({
+                metrics?.metrics?.trustScoreTrend?.map((d) => ({
                   date: d.date,
-                  score: Math.round(d.avg_score * 100), // Convert 0-1 to 0-100
+                  score: Math.round(d.avgScore * 100), // Convert 0-1 to 0-100
                 })) || []
               }
             >
@@ -543,9 +543,9 @@ export default function CompliancePage() {
                         ? "Check passed successfully"
                         : "Check failed - requires attention")}
                   </p>
-                  {result.action_url && !result.passed && (
+                  {result.actionUrl && !result.passed && (
                     <a
-                      href={result.action_url}
+                      href={result.actionUrl}
                       className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                     >
                       View affected items →
@@ -613,12 +613,12 @@ export default function CompliancePage() {
                     <StatusBadge status={user.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {user.last_login
-                      ? formatDateTime(user.last_login)
+                    {user.lastLogin
+                      ? formatDateTime(user.lastLogin)
                       : "Never"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {formatDateTime(user.created_at)}
+                    {formatDateTime(user.createdAt)}
                   </td>
                 </tr>
               ))}

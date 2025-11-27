@@ -422,12 +422,90 @@ func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, 
 		return fmt.Errorf("trust score must be between 0.0 and 9.999")
 	}
 
+	// Get agent to check previous score and for alert creation
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent: %w", err)
+	}
+
+	previousScore := agent.TrustScore
+
 	// Update trust score in database
 	if err := s.agentRepo.UpdateTrustScore(agentID, newScore); err != nil {
 		return fmt.Errorf("failed to update trust score: %w", err)
 	}
 
+	// Check for significant trust score drop and create alert if needed
+	s.checkAndCreateTrustScoreDropAlert(ctx, agent, previousScore, newScore)
+
 	return nil
+}
+
+// checkAndCreateTrustScoreDropAlert checks for significant trust score drops and creates alerts
+func (s *AgentService) checkAndCreateTrustScoreDropAlert(ctx context.Context, agent *domain.Agent, previousScore, currentScore float64) {
+	// Configuration thresholds
+	const (
+		significantDropThreshold = 0.1  // 10% drop triggers warning
+		criticalDropThreshold    = 0.2  // 20% drop triggers critical
+		lowScoreThreshold        = 0.5  // 50% trust score threshold
+	)
+
+	// Calculate drop
+	if previousScore <= 0 {
+		return // No meaningful comparison
+	}
+
+	drop := previousScore - currentScore
+	if drop <= 0 {
+		return // Score increased or stayed the same
+	}
+
+	dropPercentage := drop / previousScore
+
+	var alert *domain.Alert
+	agentName := agent.DisplayName
+	if agentName == "" {
+		agentName = agent.Name
+	}
+
+	// Critical drop (>20% OR score dropped below 50%)
+	if dropPercentage >= criticalDropThreshold || (drop > 0 && currentScore < lowScoreThreshold) {
+		alert = &domain.Alert{
+			OrganizationID: agent.OrganizationID,
+			AlertType:      domain.AlertTrustScoreDrop,
+			Severity:       domain.AlertSeverityCritical,
+			Title:          fmt.Sprintf("Critical Trust Score Drop for '%s'", agentName),
+			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). This may indicate a security issue or policy violation.", previousScore*100, currentScore*100, drop*100),
+			ResourceType:   "agent",
+			ResourceID:     agent.ID,
+		}
+	} else if dropPercentage >= significantDropThreshold {
+		// Significant drop (>10%)
+		alert = &domain.Alert{
+			OrganizationID: agent.OrganizationID,
+			AlertType:      domain.AlertTrustScoreDrop,
+			Severity:       domain.AlertSeverityWarning,
+			Title:          fmt.Sprintf("Trust Score Drop Detected for '%s'", agentName),
+			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). Monitor this agent's behavior.", previousScore*100, currentScore*100, drop*100),
+			ResourceType:   "agent",
+			ResourceID:     agent.ID,
+		}
+	}
+
+	if alert == nil {
+		return // No significant drop
+	}
+
+	// Check for existing unacknowledged alert to avoid duplicates
+	existing, _ := s.alertRepo.GetUnacknowledged(agent.OrganizationID)
+	for _, a := range existing {
+		if a.ResourceID == agent.ID && a.AlertType == domain.AlertTrustScoreDrop {
+			return // Alert already exists
+		}
+	}
+
+	// Create the alert
+	s.alertRepo.Create(alert)
 }
 
 // CreateSecurityAlert creates a security alert in the database
@@ -746,13 +824,76 @@ func (s *AgentService) LogActionResult(
 	errorMsg string,
 	result map[string]interface{},
 ) error {
-	// TODO: Implement proper audit logging
-	// For now, we'll just return nil
-	// In production, this should:
-	// 1. Verify the audit ID exists
-	// 2. Update the audit log with the action result
-	// 3. Track success/failure metrics
-	// 4. Alert on repeated failures
+	// Fetch agent for context
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	// Determine verification status
+	var eventStatus domain.VerificationEventStatus
+	if success {
+		eventStatus = domain.VerificationEventStatusSuccess
+	} else {
+		eventStatus = domain.VerificationEventStatusFailed
+	}
+
+	// Build metadata with result details
+	metadata := make(map[string]interface{})
+	if result != nil {
+		for k, v := range result {
+			metadata[k] = v
+		}
+	}
+	if errorMsg != "" {
+		metadata["error"] = errorMsg
+	}
+	metadata["audit_id"] = auditID.String()
+
+	// Create the verification event for audit trail
+	if s.verificationEventService != nil {
+		_, err := s.verificationEventService.LogVerificationEvent(
+			ctx,
+			agent.OrganizationID,
+			agentID,
+			domain.VerificationProtocolA2A,
+			domain.VerificationTypeCapability,
+			eventStatus,
+			0, // durationMs not tracked for action results
+			domain.InitiatorTypeAgent,
+			&agentID,
+			metadata,
+		)
+		if err != nil {
+			// Log but don't fail - audit logging shouldn't break business logic
+			fmt.Printf("Warning: Failed to record action result audit log: %v\n", err)
+		}
+	}
+
+	// Track repeated failures and potentially create alerts
+	if !success && s.alertRepo != nil {
+		// Check for repeated failures pattern
+		// This could trigger an alert if many consecutive failures occur
+		// For now, we only alert on explicitly flagged issues in the result
+		if shouldAlert, ok := result["create_alert"].(bool); ok && shouldAlert {
+			alertDesc := fmt.Sprintf("Agent %s experienced action failure: %s", agent.Name, errorMsg)
+			alert := &domain.Alert{
+				ID:             uuid.New(),
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertUnusualActivity,
+				Severity:       domain.AlertSeverityWarning,
+				Title:          "Agent Action Failed",
+				Description:    alertDesc,
+				ResourceType:   "agent",
+				ResourceID:     agentID,
+				IsAcknowledged: false,
+				CreatedAt:      time.Now(),
+			}
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("Warning: Failed to create action failure alert: %v\n", err)
+			}
+		}
+	}
 
 	return nil
 }

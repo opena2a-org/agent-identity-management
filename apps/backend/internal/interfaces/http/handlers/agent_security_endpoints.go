@@ -57,21 +57,21 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name": agent.Name,
+			"agentName": agent.Name,
 		},
 	)
 
 	// Return key vault information
 	return c.JSON(fiber.Map{
-		"agent_id":                 agentID.String(),
-		"agent_name":               agent.Name,
-		"public_key":               agent.PublicKey,
-		"key_algorithm":            agent.KeyAlgorithm,
-		"certificate_url":          agent.CertificateURL,
-		"key_created_at":           agent.KeyCreatedAt,
-		"key_expires_at":           agent.KeyExpiresAt,
+		"agentId":                 agentID.String(),
+		"agentName":               agent.Name,
+		"publicKey":               agent.PublicKey,
+		"keyAlgorithm":            agent.KeyAlgorithm,
+		"certificateUrl":          agent.CertificateURL,
+		"keyCreatedAt":           agent.KeyCreatedAt,
+		"keyExpiresAt":           agent.KeyExpiresAt,
 		"key_rotation_grace_until": agent.KeyRotationGraceUntil,
-		"rotation_count":           agent.RotationCount,
+		"rotationCount":           agent.RotationCount,
 		"has_previous_public_key":  agent.PreviousPublicKey != nil,
 	})
 }
@@ -160,7 +160,7 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agent_name":       agent.Name,
+			"agentName":       agent.Name,
 			"results_returned": len(logs),
 			"limit":            limit,
 			"offset":           offset,
@@ -168,8 +168,8 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"agent_id":   agentID.String(),
-		"agent_name": agent.Name,
+		"agentId":   agentID.String(),
+		"agentName": agent.Name,
 		"logs":       logs,
 		"total":      total,
 		"limit":      limit,

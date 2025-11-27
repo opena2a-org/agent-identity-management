@@ -233,6 +233,11 @@ func (s *VerificationEventService) DeleteVerificationEvent(ctx context.Context, 
 	return s.eventRepo.Delete(id)
 }
 
+// GetPendingVerifications retrieves all pending verification requests awaiting approval
+func (s *VerificationEventService) GetPendingVerifications(ctx context.Context, orgID uuid.UUID) ([]*domain.VerificationEvent, error) {
+	return s.eventRepo.GetPendingVerifications(orgID)
+}
+
 // CreateVerificationEventRequest represents a request to create a verification event
 type CreateVerificationEventRequest struct {
 	OrganizationID   uuid.UUID
