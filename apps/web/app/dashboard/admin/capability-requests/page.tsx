@@ -48,18 +48,18 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface CapabilityRequest {
   id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_display_name: string;
-  capability_type: string;
+  agentId: string;
+  agentName: string;
+  agentDisplayName: string;
+  capabilityType: string;
   reason: string;
   status: "pending" | "approved" | "rejected";
-  requested_by: string;
-  requested_by_email: string;
-  reviewed_by?: string;
-  reviewed_by_email?: string;
-  requested_at: string;
-  reviewed_at?: string;
+  requestedBy: string;
+  requestedByEmail: string;
+  reviewedBy?: string;
+  reviewedByEmail?: string;
+  requestedAt: string;
+  reviewedAt?: string;
 }
 
 const statusColors = {
@@ -161,14 +161,14 @@ export default function CapabilityRequestsPage() {
         eventEmitter.emit(Events.CAPABILITY_REQUEST_APPROVED);
         setFeedback({
           type: "success",
-          message: `Capability request for ${pendingAction.request.agent_display_name} approved.`,
+          message: `Capability request for ${pendingAction.request.agentDisplayName} approved.`,
         });
       } else {
         await api.rejectCapabilityRequest(pendingAction.request.id);
         eventEmitter.emit(Events.CAPABILITY_REQUEST_REJECTED);
         setFeedback({
           type: "success",
-          message: `Capability request for ${pendingAction.request.agent_display_name} rejected.`,
+          message: `Capability request for ${pendingAction.request.agentDisplayName} rejected.`,
         });
       }
 
@@ -187,17 +187,12 @@ export default function CapabilityRequestsPage() {
   };
 
   const filteredRequests = requests.filter((request) => {
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      request.agent_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.agent_display_name
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      request.capability_type
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      request.requested_by_email
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+      (request.agentName || "").toLowerCase().includes(query) ||
+      (request.agentDisplayName || "").toLowerCase().includes(query) ||
+      (request.capabilityType || "").toLowerCase().includes(query) ||
+      (request.requestedByEmail || "").toLowerCase().includes(query);
 
     const matchesStatus =
       filterStatus === "all" || request.status === filterStatus;
@@ -402,10 +397,10 @@ export default function CapabilityRequestsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-medium">
-                            {request.agent_display_name}
+                            {request.agentDisplayName}
                           </p>
                           <Badge variant="outline" className="text-xs">
-                            {request.agent_name}
+                            {request.agentName}
                           </Badge>
                           <Badge
                             className={`text-xs ${statusColors[request.status]}`}
@@ -417,27 +412,27 @@ export default function CapabilityRequestsPage() {
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-sm font-mono bg-muted px-2 py-0.5 rounded">
-                            {request.capability_type}
+                            {request.capabilityType}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           <strong>Reason:</strong> {request.reason}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Requested by {request.requested_by_email} •{" "}
-                          {formatDate(request.requested_at)}
+                          Requested by {request.requestedByEmail} •{" "}
+                          {formatDate(request.requestedAt)}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-4">
-                      {request.reviewed_at && !isPending && (
+                      {request.reviewedAt && !isPending && (
                         <div className="text-right text-xs text-muted-foreground">
                           <p>Reviewed by</p>
                           <p className="font-medium">
-                            {request.reviewed_by_email}
+                            {request.reviewedByEmail}
                           </p>
-                          <p>{formatDate(request.reviewed_at)}</p>
+                          <p>{formatDate(request.reviewedAt)}</p>
                         </div>
                       )}
 
@@ -507,8 +502,8 @@ export default function CapabilityRequestsPage() {
                       {pendingAction.type === "approve" ? "approve" : "reject"}
                     </strong>{" "}
                     the capability request by{" "}
-                    <strong>{pendingAction.request.agent_display_name}</strong> for the
-                    capability (<strong>{pendingAction.request.capability_type}</strong>)
+                    <strong>{pendingAction.request.agentDisplayName}</strong> for the
+                    capability (<strong>{pendingAction.request.capabilityType}</strong>)
                     . This action cannot be undone.
                   </>
                 ) : (

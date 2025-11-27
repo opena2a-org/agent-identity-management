@@ -24,6 +24,13 @@ interface ViolationsTabProps {
   agentId: string;
 }
 
+const safeFormatTimestamp = (timestamp?: string) => {
+  if (!timestamp) return 'Unknown';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return 'Unknown';
+  return formatDistanceToNow(date, { addSuffix: true });
+};
+
 export function ViolationsTab({ agentId }: ViolationsTabProps) {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [total, setTotal] = useState(0);
@@ -31,11 +38,22 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
   const [page, setPage] = useState(1);
   const limit = 10;
 
+  const normalizeViolation = (raw: any): Violation => ({
+    id: raw.id,
+    attemptedCapability: raw.attemptedCapability ?? raw.attempted_capability ?? 'unknown_capability',
+    severity: raw.severity ?? 'info',
+    trustScoreImpact: raw.trustScoreImpact ?? raw.trust_score_impact ?? 0,
+    isBlocked: raw.isBlocked ?? raw.is_blocked ?? false,
+    sourceIp: raw.sourceIp ?? raw.source_ip,
+    createdAt: raw.createdAt ?? raw.created_at ?? '',
+  });
+
   const fetchViolations = async () => {
     setLoading(true);
     try {
       const response = await api.getAgentViolations(agentId, limit, (page - 1) * limit);
-      setViolations(response.violations || []);
+      const normalized = (response.violations || []).map(normalizeViolation);
+      setViolations(normalized);
       setTotal(response.total || 0);
     } catch (error) {
       console.error('Failed to fetch violations:', error);
@@ -115,7 +133,7 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
             {violations.map((violation) => (
               <TableRow key={violation.id}>
                 <TableCell className="text-sm">
-                  {formatDistanceToNow(new Date(violation.createdAt), { addSuffix: true })}
+                  {safeFormatTimestamp(violation.createdAt)}
                 </TableCell>
                 <TableCell className="font-mono text-sm">
                   {violation.attemptedCapability}
