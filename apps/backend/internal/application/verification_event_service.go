@@ -11,9 +11,9 @@ import (
 
 // VerificationEventService handles verification event business logic
 type VerificationEventService struct {
-	eventRepo         domain.VerificationEventRepository
-	agentRepo         domain.AgentRepository
-	driftDetection    *DriftDetectionService
+	eventRepo      domain.VerificationEventRepository
+	agentRepo      domain.AgentRepository
+	driftDetection *DriftDetectionService
 }
 
 // NewVerificationEventService creates a new verification event service
@@ -238,6 +238,15 @@ func (s *VerificationEventService) GetPendingVerifications(ctx context.Context, 
 	return s.eventRepo.GetPendingVerifications(orgID)
 }
 
+// SearchVerifications returns paginated verification events for admin workflows
+func (s *VerificationEventService) SearchVerifications(
+	ctx context.Context,
+	orgID uuid.UUID,
+	params domain.VerificationQueryParams,
+) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error) {
+	return s.eventRepo.SearchAdminVerifications(orgID, params)
+}
+
 // CreateVerificationEventRequest represents a request to create a verification event
 type CreateVerificationEventRequest struct {
 	OrganizationID   uuid.UUID
@@ -268,7 +277,6 @@ type CreateVerificationEventRequest struct {
 	Metadata         map[string]interface{}
 
 	// Configuration Drift Detection (WHO and WHAT)
-	CurrentMCPServers    []string // Runtime: MCP servers being communicated with
-	CurrentCapabilities  []string // Runtime: Capabilities being used
+	CurrentMCPServers   []string // Runtime: MCP servers being communicated with
+	CurrentCapabilities []string // Runtime: Capabilities being used
 }
-

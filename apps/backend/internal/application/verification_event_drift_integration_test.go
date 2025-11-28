@@ -95,6 +95,18 @@ func (m *MockVerificationEventRepository) GetPendingVerifications(orgID uuid.UUI
 	return args.Get(0).([]*domain.VerificationEvent), args.Error(1)
 }
 
+func (m *MockVerificationEventRepository) SearchAdminVerifications(orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error) {
+	args := m.Called(orgID, params)
+	if args.Get(0) == nil {
+		return nil, 0, nil, args.Error(3)
+	}
+	var counts *domain.VerificationStatusCounts
+	if args.Get(2) != nil {
+		counts = args.Get(2).(*domain.VerificationStatusCounts)
+	}
+	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), counts, args.Error(3)
+}
+
 // TestVerificationEventWithDriftDetection tests the complete flow of verification event creation with drift detection
 func TestVerificationEventWithDriftDetection(t *testing.T) {
 	// Setup

@@ -14,14 +14,14 @@ import (
 
 // AgentService handles agent business logic
 type AgentService struct {
-	agentRepo              domain.AgentRepository
-	trustCalc              domain.TrustScoreCalculator
-	trustScoreRepo         domain.TrustScoreRepository
-	keyVault               *crypto.KeyVault                  // ✅ For secure private key storage
-	alertRepo              domain.AlertRepository             // ✅ For creating security alerts
-	policyService          *SecurityPolicyService             // ✅ For policy-based enforcement
-	capabilityRepo         domain.CapabilityRepository        // ✅ For checking agent capabilities
-	verificationEventService *VerificationEventService        // ✅ For creating verification events
+	agentRepo                domain.AgentRepository
+	trustCalc                domain.TrustScoreCalculator
+	trustScoreRepo           domain.TrustScoreRepository
+	keyVault                 *crypto.KeyVault            // ✅ For secure private key storage
+	alertRepo                domain.AlertRepository      // ✅ For creating security alerts
+	policyService            *SecurityPolicyService      // ✅ For policy-based enforcement
+	capabilityRepo           domain.CapabilityRepository // ✅ For checking agent capabilities
+	verificationEventService *VerificationEventService   // ✅ For creating verification events
 }
 
 // NewAgentService creates a new agent service
@@ -30,19 +30,19 @@ func NewAgentService(
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
 	keyVault *crypto.KeyVault,
-	alertRepo domain.AlertRepository,               // ✅ NEW: AlertRepository for security alerts
-	policyService *SecurityPolicyService,           // ✅ NEW: Security Policy Service
-	capabilityRepo domain.CapabilityRepository,     // ✅ NEW: CapabilityRepository for capability checks
+	alertRepo domain.AlertRepository, // ✅ NEW: AlertRepository for security alerts
+	policyService *SecurityPolicyService, // ✅ NEW: Security Policy Service
+	capabilityRepo domain.CapabilityRepository, // ✅ NEW: CapabilityRepository for capability checks
 	verificationEventService *VerificationEventService, // ✅ NEW: For creating verification events
 ) *AgentService {
 	return &AgentService{
-		agentRepo:              agentRepo,
-		trustCalc:              trustCalc,
-		trustScoreRepo:         trustScoreRepo,
-		keyVault:               keyVault,
-		alertRepo:              alertRepo,
-		policyService:          policyService,
-		capabilityRepo:         capabilityRepo,
+		agentRepo:                agentRepo,
+		trustCalc:                trustCalc,
+		trustScoreRepo:           trustScoreRepo,
+		keyVault:                 keyVault,
+		alertRepo:                alertRepo,
+		policyService:            policyService,
+		capabilityRepo:           capabilityRepo,
 		verificationEventService: verificationEventService,
 	}
 }
@@ -50,16 +50,16 @@ func NewAgentService(
 // CreateAgentRequest represents agent creation request
 type CreateAgentRequest struct {
 	Name             string           `json:"name"`
-	DisplayName      string           `json:"display_name"`
+	DisplayName      string           `json:"displayName"`
 	Description      string           `json:"description"`
-	AgentType        domain.AgentType `json:"agent_type"`
+	AgentType        domain.AgentType `json:"agentType"`
 	Version          string           `json:"version"`
-	PublicKey        string           `json:"public_key,omitempty"`  // ✅ OPTIONAL: SDK can provide its own public key
-	CertificateURL   string   `json:"certificate_url"`
-	RepositoryURL    string   `json:"repository_url"`
-	DocumentationURL string   `json:"documentation_url"`
-	TalksTo          []string `json:"talks_to,omitempty"`        // MCP servers this agent communicates with
-	Capabilities     []string `json:"capabilities,omitempty"`    // Agent capabilities
+	PublicKey        string           `json:"publicKey,omitempty"` // ✅ OPTIONAL: SDK can provide its own public key
+	CertificateURL   string           `json:"certificateUrl"`
+	RepositoryURL    string           `json:"repositoryUrl"`
+	DocumentationURL string           `json:"documentationUrl"`
+	TalksTo          []string         `json:"talksTo,omitempty"`      // MCP servers this agent communicates with
+	Capabilities     []string         `json:"capabilities,omitempty"` // Agent capabilities
 }
 
 // CreateAgent creates a new agent
@@ -108,21 +108,21 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	// Create agent with keys (SDK-provided or auto-generated)
 	agent := &domain.Agent{
-		OrganizationID:      orgID,
-		Name:                req.Name,
-		DisplayName:         req.DisplayName,
-		Description:         req.Description,
-		AgentType:           req.AgentType,
-		Version:             req.Version,
-		PublicKey:           &publicKeyBase64,      // ✅ Stored for verification (SDK-provided or generated)
-		KeyAlgorithm:        keyAlgorithm,          // ✅ "Ed25519"
-		CertificateURL:      req.CertificateURL,
-		RepositoryURL:       req.RepositoryURL,
-		DocumentationURL:    req.DocumentationURL,
-		TalksTo:             req.TalksTo,           // MCP servers this agent communicates with
-		Capabilities:        req.Capabilities,      // ✅ Store detected capabilities from SDK
-		Status:              domain.AgentStatusPending,
-		CreatedBy:           userID,
+		OrganizationID:   orgID,
+		Name:             req.Name,
+		DisplayName:      req.DisplayName,
+		Description:      req.Description,
+		AgentType:        req.AgentType,
+		Version:          req.Version,
+		PublicKey:        &publicKeyBase64, // ✅ Stored for verification (SDK-provided or generated)
+		KeyAlgorithm:     keyAlgorithm,     // ✅ "Ed25519"
+		CertificateURL:   req.CertificateURL,
+		RepositoryURL:    req.RepositoryURL,
+		DocumentationURL: req.DocumentationURL,
+		TalksTo:          req.TalksTo,      // MCP servers this agent communicates with
+		Capabilities:     req.Capabilities, // ✅ Store detected capabilities from SDK
+		Status:           domain.AgentStatusPending,
+		CreatedBy:        userID,
 	}
 
 	// Only set encrypted private key if we generated it server-side
@@ -292,61 +292,61 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.TalksTo != nil {
 		agent.TalksTo = req.TalksTo
 	}
-	
+
 	if err := s.agentRepo.Update(agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 
 	if req.Capabilities != nil && len(req.Capabilities) > 0 {
-        // Get current capabilities
-        currentCaps, err := s.capabilityRepo.GetCapabilitiesByAgentID(id)
-        if err != nil {
-            fmt.Printf("⚠️  Warning: failed to get current capabilities: %v\n", err)
-        }
+		// Get current capabilities
+		currentCaps, err := s.capabilityRepo.GetCapabilitiesByAgentID(id)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: failed to get current capabilities: %v\n", err)
+		}
 
-        // Build map of current capability types
-        currentCapTypes := make(map[string]*domain.AgentCapability)
-        for _, cap := range currentCaps {
-            if cap.RevokedAt == nil {
-                currentCapTypes[cap.CapabilityType] = cap
-            }
-        }
+		// Build map of current capability types
+		currentCapTypes := make(map[string]*domain.AgentCapability)
+		for _, cap := range currentCaps {
+			if cap.RevokedAt == nil {
+				currentCapTypes[cap.CapabilityType] = cap
+			}
+		}
 
-        // Build map of requested capability types
-        requestedCapTypes := make(map[string]bool)
-        for _, capType := range req.Capabilities {
-            requestedCapTypes[capType] = true
-        }
+		// Build map of requested capability types
+		requestedCapTypes := make(map[string]bool)
+		for _, capType := range req.Capabilities {
+			requestedCapTypes[capType] = true
+		}
 
-        // Add new capabilities that don't exist
-        for _, capType := range req.Capabilities {
-            if _, exists := currentCapTypes[capType]; !exists {
-                capabilityRecord := &domain.AgentCapability{
-                    AgentID:        id,
-                    CapabilityType: capType,
-                    GrantedBy:      &agent.CreatedBy, // Use agent creator as granter
-                    GrantedAt:      time.Now(),
-                }
-                if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
-                    fmt.Printf("⚠️  Warning: failed to add capability '%s': %v\n", capType, err)
-                } else {
-                    fmt.Printf("✅ Added capability '%s' to agent %s\n", capType, agent.Name)
-                }
-            }
-        }
+		// Add new capabilities that don't exist
+		for _, capType := range req.Capabilities {
+			if _, exists := currentCapTypes[capType]; !exists {
+				capabilityRecord := &domain.AgentCapability{
+					AgentID:        id,
+					CapabilityType: capType,
+					GrantedBy:      &agent.CreatedBy, // Use agent creator as granter
+					GrantedAt:      time.Now(),
+				}
+				if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
+					fmt.Printf("⚠️  Warning: failed to add capability '%s': %v\n", capType, err)
+				} else {
+					fmt.Printf("✅ Added capability '%s' to agent %s\n", capType, agent.Name)
+				}
+			}
+		}
 
-        // Revoke capabilities that are no longer in the request
-        for capType, cap := range currentCapTypes {
-            if !requestedCapTypes[capType] {
-                now := time.Now()
-                if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
-                    fmt.Printf("⚠️  Warning: failed to revoke capability '%s': %v\n", capType, err)
-                } else {
-                    fmt.Printf("🗑️  Revoked capability '%s' from agent %s\n", capType, agent.Name)
-                }
-            }
-        }
-    }
+		// Revoke capabilities that are no longer in the request
+		for capType, cap := range currentCapTypes {
+			if !requestedCapTypes[capType] {
+				now := time.Now()
+				if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
+					fmt.Printf("⚠️  Warning: failed to revoke capability '%s': %v\n", capType, err)
+				} else {
+					fmt.Printf("🗑️  Revoked capability '%s' from agent %s\n", capType, agent.Name)
+				}
+			}
+		}
+	}
 	// Recalculate trust score
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
@@ -445,9 +445,9 @@ func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, 
 func (s *AgentService) checkAndCreateTrustScoreDropAlert(ctx context.Context, agent *domain.Agent, previousScore, currentScore float64) {
 	// Configuration thresholds
 	const (
-		significantDropThreshold = 0.1  // 10% drop triggers warning
-		criticalDropThreshold    = 0.2  // 20% drop triggers critical
-		lowScoreThreshold        = 0.5  // 50% trust score threshold
+		significantDropThreshold = 0.1 // 10% drop triggers warning
+		criticalDropThreshold    = 0.2 // 20% drop triggers critical
+		lowScoreThreshold        = 0.5 // 50% trust score threshold
 	)
 
 	// Calculate drop
@@ -624,8 +624,8 @@ func (s *AgentService) VerifyAction(
 			alertTitle := fmt.Sprintf("Capability Violation Detected: %s", agent.DisplayName)
 			alertDescription := fmt.Sprintf(
 				"Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). "+
-				"This matches the attack pattern of CVE-2025-32711 (EchoLeak). "+
-				"Security Policy '%s' enforcement: %s. Audit ID: %s",
+					"This matches the attack pattern of CVE-2025-32711 (EchoLeak). "+
+					"Security Policy '%s' enforcement: %s. Audit ID: %s",
 				agent.DisplayName, actionType, capabilityTypes, policyName,
 				map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[shouldBlock],
 				auditID.String(),
@@ -926,10 +926,10 @@ func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUI
 
 // AddMCPServersRequest represents request to add MCP servers to agent's talks_to list
 type AddMCPServersRequest struct {
-	MCPServerIDs   []string               `json:"mcp_server_ids"`   // MCP server IDs or names
-	DetectedMethod string                 `json:"detected_method"`  // "manual", "auto_sdk", "auto_config", "cli"
-	Confidence     float64                `json:"confidence"`       // Detection confidence (0-100)
-	Metadata       map[string]interface{} `json:"metadata"`         // Additional context
+	MCPServerIDs   []string               `json:"mcp_server_ids"`  // MCP server IDs or names
+	DetectedMethod string                 `json:"detected_method"` // "manual", "auto_sdk", "auto_config", "cli"
+	Confidence     float64                `json:"confidence"`      // Detection confidence (0-100)
+	Metadata       map[string]interface{} `json:"metadata"`        // Additional context
 }
 
 // MCPServerDetail represents detailed MCP server information
@@ -1107,9 +1107,9 @@ func (s *AgentService) GetAgentMCPServers(
 
 // DetectMCPServersRequest represents request to auto-detect MCP servers from config
 type DetectMCPServersRequest struct {
-	ConfigPath   string `json:"config_path"`    // Path to Claude Desktop config file
-	AutoRegister bool   `json:"auto_register"`  // Whether to auto-register discovered MCPs
-	DryRun       bool   `json:"dry_run"`        // Preview changes without applying
+	ConfigPath   string `json:"config_path"`   // Path to Claude Desktop config file
+	AutoRegister bool   `json:"auto_register"` // Whether to auto-register discovered MCPs
+	DryRun       bool   `json:"dry_run"`       // Preview changes without applying
 }
 
 // DetectedMCPServer represents an MCP server detected from config
@@ -1125,12 +1125,12 @@ type DetectedMCPServer struct {
 
 // DetectMCPServersResult represents the result of auto-detection
 type DetectMCPServersResult struct {
-	DetectedServers  []DetectedMCPServer `json:"detected_servers"`
-	RegisteredCount  int                 `json:"registered_count"`
-	MappedCount      int                 `json:"mapped_count"`
-	TotalTalksTo     int                 `json:"total_talks_to"`
-	DryRun           bool                `json:"dry_run"`
-	ErrorsEncountered []string           `json:"errors_encountered,omitempty"`
+	DetectedServers   []DetectedMCPServer `json:"detected_servers"`
+	RegisteredCount   int                 `json:"registered_count"`
+	MappedCount       int                 `json:"mapped_count"`
+	TotalTalksTo      int                 `json:"total_talks_to"`
+	DryRun            bool                `json:"dry_run"`
+	ErrorsEncountered []string            `json:"errors_encountered,omitempty"`
 }
 
 // DetectMCPServersFromConfig auto-detects MCP servers from Claude Desktop config
@@ -1264,7 +1264,7 @@ func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMC
 
 // GetAgentByName retrieves an agent by name within an organization
 func (s *AgentService) GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error) {
-return s.agentRepo.GetByName(orgID, name)
+	return s.agentRepo.GetByName(orgID, name)
 }
 
 // SuspendAgent suspends an agent by setting its status to suspended
@@ -1460,7 +1460,7 @@ func (s *AgentService) createPolicyAlert(
 	alertTitle := fmt.Sprintf("%s: %s", alertType, agent.DisplayName)
 	alertDescription := fmt.Sprintf(
 		"Agent '%s' triggered security policy '%s'. %s. "+
-		"Enforcement: %s. Audit ID: %s",
+			"Enforcement: %s. Audit ID: %s",
 		agent.DisplayName, policyName, description,
 		map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[isBlocked],
 		auditID.String(),
@@ -1515,7 +1515,7 @@ func (s *AgentService) CreateCapabilityViolation(
 
 	// Map alert severity to violation severity (frontend expects: low, medium, high, critical)
 	violationSeverity := "low" // Default
-	trustImpact := -5         // Default for low severity
+	trustImpact := -5          // Default for low severity
 
 	switch severity {
 	case "critical":

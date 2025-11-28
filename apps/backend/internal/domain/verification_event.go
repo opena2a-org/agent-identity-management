@@ -102,11 +102,11 @@ type VerificationEvent struct {
 	Location     *string `json:"location,omitempty"`
 
 	// Configuration Drift Detection (WHO and WHAT)
-	CurrentMCPServers    []string `json:"currentMcpServers,omitempty"`    // Runtime: MCP servers being communicated with
-	CurrentCapabilities  []string `json:"currentCapabilities,omitempty"`  // Runtime: Capabilities being used
-	DriftDetected        bool     `json:"driftDetected"`                  // Whether configuration drift was detected
-	MCPServerDrift       []string `json:"mcpServerDrift,omitempty"`       // Unregistered MCP servers detected
-	CapabilityDrift      []string `json:"capabilityDrift,omitempty"`      // Undeclared capabilities detected
+	CurrentMCPServers   []string `json:"currentMcpServers,omitempty"`   // Runtime: MCP servers being communicated with
+	CurrentCapabilities []string `json:"currentCapabilities,omitempty"` // Runtime: Capabilities being used
+	DriftDetected       bool     `json:"driftDetected"`                 // Whether configuration drift was detected
+	MCPServerDrift      []string `json:"mcpServerDrift,omitempty"`      // Unregistered MCP servers detected
+	CapabilityDrift     []string `json:"capabilityDrift,omitempty"`     // Undeclared capabilities detected
 
 	// Timestamps
 	StartedAt   time.Time  `json:"startedAt"`
@@ -118,6 +118,23 @@ type VerificationEvent struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// VerificationQueryParams defines filters for admin verification queries
+type VerificationQueryParams struct {
+	Status      string
+	RiskLevel   string
+	Search      string
+	SearchField string
+	Limit       int
+	Offset      int
+}
+
+// VerificationStatusCounts represents counts per verification status bucket
+type VerificationStatusCounts struct {
+	Pending  int `json:"pending"`
+	Approved int `json:"approved"`
+	Denied   int `json:"denied"`
+}
+
 // VerificationEventRepository defines the interface for verification event storage
 type VerificationEventRepository interface {
 	Create(event *VerificationEvent) error
@@ -127,6 +144,7 @@ type VerificationEventRepository interface {
 	GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*VerificationEvent, int, error)
 	GetRecentEvents(orgID uuid.UUID, minutes int) ([]*VerificationEvent, error)
 	GetPendingVerifications(orgID uuid.UUID) ([]*VerificationEvent, error)
+	SearchAdminVerifications(orgID uuid.UUID, params VerificationQueryParams) ([]*VerificationEvent, int, *VerificationStatusCounts, error)
 	GetStatistics(orgID uuid.UUID, startTime, endTime time.Time) (*VerificationStatistics, error)
 	GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*AgentVerificationStatistics, error)
 	UpdateResult(id uuid.UUID, result VerificationResult, reason *string, metadata map[string]interface{}) error
@@ -135,20 +153,20 @@ type VerificationEventRepository interface {
 
 // VerificationStatistics represents aggregated verification metrics
 type VerificationStatistics struct {
-	TotalVerifications      int            `json:"totalVerifications"`
-	SuccessCount            int            `json:"successCount"`
-	FailedCount             int            `json:"failedCount"`
-	PendingCount            int            `json:"pendingCount"`
-	TimeoutCount            int            `json:"timeoutCount"`
-	SuccessRate             float64        `json:"successRate"`
-	AvgDurationMs           float64        `json:"avgDurationMs"`
-	AvgConfidence           float64        `json:"avgConfidence"`
-	AvgTrustScore           float64        `json:"avgTrustScore"`
-	VerificationsPerMinute  float64        `json:"verificationsPerMinute"`
-	UniqueAgentsVerified    int            `json:"uniqueAgentsVerified"`
-	ProtocolDistribution    map[string]int `json:"protocolDistribution"`
-	TypeDistribution        map[string]int `json:"typeDistribution"`
-	InitiatorDistribution   map[string]int `json:"initiatorDistribution"`
+	TotalVerifications     int            `json:"totalVerifications"`
+	SuccessCount           int            `json:"successCount"`
+	FailedCount            int            `json:"failedCount"`
+	PendingCount           int            `json:"pendingCount"`
+	TimeoutCount           int            `json:"timeoutCount"`
+	SuccessRate            float64        `json:"successRate"`
+	AvgDurationMs          float64        `json:"avgDurationMs"`
+	AvgConfidence          float64        `json:"avgConfidence"`
+	AvgTrustScore          float64        `json:"avgTrustScore"`
+	VerificationsPerMinute float64        `json:"verificationsPerMinute"`
+	UniqueAgentsVerified   int            `json:"uniqueAgentsVerified"`
+	ProtocolDistribution   map[string]int `json:"protocolDistribution"`
+	TypeDistribution       map[string]int `json:"typeDistribution"`
+	InitiatorDistribution  map[string]int `json:"initiatorDistribution"`
 }
 
 // AgentVerificationStatistics represents per-agent verification metrics for trust scoring

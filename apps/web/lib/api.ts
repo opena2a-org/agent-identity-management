@@ -876,6 +876,20 @@ class APIClient {
     }
   }
 
+  async getPendingVerificationCount(): Promise<number> {
+    try {
+      const response = await this.getPendingVerifications({
+        page: 1,
+        pageSize: 1,
+        status: "pending",
+      });
+      return response?.status_counts?.pending ?? 0;
+    } catch (error) {
+      console.error("Failed to fetch pending verification count:", error);
+      return 0;
+    }
+  }
+
   // Dashboard stats - Viewer-accessible analytics endpoint
   async getDashboardStats(): Promise<{
     // Agent metrics
@@ -1149,6 +1163,67 @@ class APIClient {
   async denyVerification(id: string): Promise<any> {
     return this.request(`/api/v1/verifications/${id}/deny`, {
       method: "POST",
+    });
+  }
+
+  async getPendingVerifications(params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    risk?: string;
+    search?: string;
+    searchField?: string;
+  }): Promise<{
+    verifications: Array<{
+      id: string;
+      agent_id: string;
+      agent_name: string;
+      action_type: string;
+      resource: string;
+      context: Record<string, any>;
+      risk_level: string;
+      trust_score: number;
+      status: string;
+      requested_at: string;
+      expires_at: string;
+    }>;
+    pagination: {
+      page: number;
+      page_size: number;
+      total: number;
+      total_pages: number;
+    };
+    status_counts: {
+      pending: number;
+      approved: number;
+      denied: number;
+    };
+  }> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("page_size", String(params.pageSize));
+    if (params?.status) query.set("status", params.status);
+    if (params?.risk) query.set("risk", params.risk);
+    if (params?.search) query.set("search", params.search);
+    if (params?.searchField) query.set("search_field", params.searchField);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.request(`/api/v1/admin/verifications/pending${suffix}`);
+  }
+
+  async approvePendingVerification(
+    id: string,
+    reason?: string
+  ): Promise<any> {
+    return this.request(`/api/v1/admin/verifications/${id}/approve`, {
+      method: "POST",
+      body: reason ? JSON.stringify({ reason }) : undefined,
+    });
+  }
+
+  async denyPendingVerification(id: string, reason: string): Promise<any> {
+    return this.request(`/api/v1/admin/verifications/${id}/deny`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     });
   }
 
