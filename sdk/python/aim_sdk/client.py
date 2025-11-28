@@ -1582,8 +1582,8 @@ def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
         "public_key": credentials["public_key"],
         "private_key": credentials["private_key"],
         "aim_url": credentials["aim_url"],
-        "status": credentials["status"],
-        "trust_score": credentials["trust_score"],
+        "status": credentials.get("status", "pending"),
+        "trust_score": credentials.get("trust_score", 1.0),  # Default to 100% for new agents
         "registered_at": datetime.now(timezone.utc).isoformat()
     }
 
