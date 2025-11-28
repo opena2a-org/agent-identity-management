@@ -392,9 +392,16 @@ class AIMClient:
                     error_detail = response.text
                 raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
-            # Handle forbidden errors
+            # Handle forbidden errors (403) - this is a DENIED action, not auth failure
+            # The backend returns denial reason in the JSON body
             if response.status_code == 403:
-                raise AuthenticationError("Forbidden - insufficient permissions")
+                try:
+                    error_result = response.json()
+                    # Backend uses camelCase: denialReason (not denial_reason)
+                    reason = error_result.get("denialReason") or error_result.get("denial_reason", "Action denied by policy")
+                    raise ActionDeniedError(f"Action denied: {reason}")
+                except (ValueError, KeyError):
+                    raise ActionDeniedError("Action denied - insufficient permissions or capability violation")
 
             response.raise_for_status()
             result = response.json()
@@ -407,13 +414,14 @@ class AIMClient:
                 return {
                     "verified": True,
                     "verification_id": verification_id,
-                    "approved_by": result.get("approved_by"),
-                    "expires_at": result.get("expires_at")
+                    "approved_by": result.get("approvedBy") or result.get("approved_by"),
+                    "expires_at": result.get("expiresAt") or result.get("expires_at")
                 }
 
             # If denied, raise error
             if status == "denied":
-                reason = result.get("denial_reason", "Action denied by policy")
+                # Backend uses camelCase: denialReason
+                reason = result.get("denialReason") or result.get("denial_reason", "Action denied by policy")
                 raise ActionDeniedError(f"Action denied: {reason}")
 
             # If pending, poll for result

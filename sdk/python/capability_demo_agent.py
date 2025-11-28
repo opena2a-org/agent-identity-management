@@ -57,7 +57,17 @@ except ImportError:
 
 # Global variables
 agent = None
-trust_score = 100  # Track locally for display
+# Initial trust score for NEW PENDING agents based on 8-factor algorithm:
+# - Verification Status (25%): pending = 0.30 → 0.075
+# - Uptime (15%): baseline = 0.75 → 0.1125
+# - Success Rate (15%): baseline = 0.80 → 0.12
+# - Security Alerts (15%): no alerts = 1.0 → 0.15
+# - Compliance (10%): default = 1.0 → 0.10
+# - Age <7 days (10%): new = 0.30 → 0.03
+# - Drift Detection (5%): default = 1.0 → 0.05
+# - User Feedback (5%): default = 0.75 → 0.0375
+# TOTAL: ~68% for new pending agents, ~90% for verified agents
+trust_score = 68  # Accurate initial score for pending agents
 
 
 def register_agent():
@@ -79,7 +89,14 @@ def register_agent():
         print("Connected!")
         print(f"  Agent ID: {agent.agent_id}")
         print(f"  Capabilities: api:call (weather APIs only)")
-        print(f"  Trust Score: 100%")
+        print(f"  Status: pending (awaiting verification)")
+        print()
+        print("  Trust Score: 68% (8-factor algorithm)")
+        print("    Why not 100%? New agents start with baseline scores:")
+        print("    - Pending status (not yet verified): -17%")
+        print("    - New agent (<7 days history): -7%")
+        print("    - No user feedback yet: -1%")
+        print("    Trust score increases as agent builds positive history")
         print()
         print("=" * 70)
         print()
