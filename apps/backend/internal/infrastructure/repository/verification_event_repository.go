@@ -980,7 +980,6 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 
 	filters := []string{"organization_id = $1"}
 	args := []interface{}{orgID}
-	argIdx := 2
 
 	// Status filter mapping UI buckets to DB values
 	switch strings.ToLower(params.Status) {
@@ -994,38 +993,33 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 
 	if params.RiskLevel != "" && strings.ToLower(params.RiskLevel) != "all" {
 		risk := strings.ToLower(params.RiskLevel)
-		clause := fmt.Sprintf("((LOWER(metadata ->> 'risk_level') = $%d) OR (LOWER(metadata -> 'context' ->> 'risk_level') = $%d))", argIdx, argIdx)
-		filters = append(filters, clause)
+		placeholderIdx := len(args) + 1
+		filters = append(filters, fmt.Sprintf("((LOWER(metadata ->> 'risk_level') = $%d) OR (LOWER(metadata -> 'context' ->> 'risk_level') = $%d))", placeholderIdx, placeholderIdx))
 		args = append(args, risk)
-		argIdx++
 	}
 
 	if params.Search != "" {
 		searchTerm := "%" + strings.ToLower(params.Search) + "%"
 		switch strings.ToLower(params.SearchField) {
 		case "agent":
-			clause := fmt.Sprintf("LOWER(COALESCE(agent_name, '')) LIKE $%d", argIdx)
-			filters = append(filters, clause)
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(agent_name, '')) LIKE $%d", placeholderIdx))
 			args = append(args, searchTerm)
-			argIdx++
 		case "action":
-			clause := fmt.Sprintf("LOWER(COALESCE(action, '')) LIKE $%d", argIdx)
-			filters = append(filters, clause)
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(action, '')) LIKE $%d", placeholderIdx))
 			args = append(args, searchTerm)
-			argIdx++
 		case "resource":
-			clause := fmt.Sprintf("LOWER(COALESCE(resource_type, '')) LIKE $%d", argIdx)
-			filters = append(filters, clause)
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(resource_type, '')) LIKE $%d", placeholderIdx))
 			args = append(args, searchTerm)
-			argIdx++
 		default:
-			clause := fmt.Sprintf(
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf(
 				"(LOWER(COALESCE(agent_name, '')) LIKE $%d OR LOWER(COALESCE(action, '')) LIKE $%d OR LOWER(COALESCE(resource_type, '')) LIKE $%d)",
-				argIdx, argIdx+1, argIdx+2,
-			)
-			filters = append(filters, clause)
+				placeholderIdx, placeholderIdx+1, placeholderIdx+2,
+			))
 			args = append(args, searchTerm, searchTerm, searchTerm)
-			argIdx += 3
 		}
 	}
 
@@ -1056,8 +1050,9 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 		return nil, 0, nil, err
 	}
 
-	limitIdx := argIdx
-	offsetIdx := argIdx + 1
+	// Add LIMIT and OFFSET parameters
+	limitPlaceholder := len(args) + 1
+	offsetPlaceholder := len(args) + 2
 	args = append(args, params.Limit, params.Offset)
 
 	query := fmt.Sprintf(`
@@ -1071,7 +1066,7 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 		WHERE %s
 		ORDER BY created_at DESC
 		LIMIT $%d OFFSET $%d
-	`, whereClause, limitIdx, offsetIdx)
+	`, whereClause, limitPlaceholder, offsetPlaceholder)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {

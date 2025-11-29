@@ -7,18 +7,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
 	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a/identity/backend/internal/infrastructure/utils"
 	"github.com/opena2a/identity/backend/internal/sdkgen"
 )
 
 type AgentHandler struct {
-	agentService              *application.AgentService
-	mcpService                *application.MCPService
-	auditService              *application.AuditService
-	apiKeyService             *application.APIKeyService
-	trustScoreHandler         *TrustScoreHandler
-	alertService              *application.AlertService
-	verificationEventService  *application.VerificationEventService
-	capabilityService         *application.CapabilityService
+	agentService             *application.AgentService
+	mcpService               *application.MCPService
+	auditService             *application.AuditService
+	apiKeyService            *application.APIKeyService
+	trustScoreHandler        *TrustScoreHandler
+	alertService             *application.AlertService
+	verificationEventService *application.VerificationEventService
+	capabilityService        *application.CapabilityService
 }
 
 func NewAgentHandler(
@@ -44,51 +45,49 @@ func NewAgentHandler(
 }
 
 func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fiber.Map {
-    // Fetch capabilities from agent_capabilities table
-    capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
-    if err != nil {
-        // Log error but don't fail - return empty capabilities
-        capabilities = []*domain.AgentCapability{}
-    }
+	// Fetch capabilities from agent_capabilities table
+	capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
+	if err != nil {
+		// Log error but don't fail - return empty capabilities
+		capabilities = []*domain.AgentCapability{}
+	}
 
-    // Extract capability types as simple string array (frontend compatible)
-    capabilityTypes := make([]string, 0, len(capabilities))
-    for _, cap := range capabilities {
-        capabilityTypes = append(capabilityTypes, cap.CapabilityType)
-    }
+	// Extract capability types as simple string array (frontend compatible)
+	capabilityTypes := make([]string, 0, len(capabilities))
+	for _, cap := range capabilities {
+		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
+	}
 
-    // Return flat response with all agent fields + capabilities (camelCase for frontend)
-    return fiber.Map{
-        "id":                       agent.ID,
-        "organizationId":           agent.OrganizationID,
-        "name":                     agent.Name,
-        "displayName":              agent.DisplayName,
-        "description":              agent.Description,
-        "agentType":                agent.AgentType,
-        "status":                   agent.Status,
-        "version":                  agent.Version,
-        "publicKey":                agent.PublicKey,
-        "trustScore":               agent.TrustScore,
-        "verifiedAt":               agent.VerifiedAt,
-        "createdAt":                agent.CreatedAt,
-        "updatedAt":                agent.UpdatedAt,
-        "talksTo":                  agent.TalksTo,
-        "capabilities":             capabilityTypes,
-        "capabilityViolationCount": agent.CapabilityViolationCount,
-        "isCompromised":            agent.IsCompromised,
-        "certificateUrl":           agent.CertificateURL,
-        "repositoryUrl":            agent.RepositoryURL,
-        "documentationUrl":         agent.DocumentationURL,
-        "keyAlgorithm":             agent.KeyAlgorithm,
-        "createdBy":                agent.CreatedBy,
-        "lastActive":               agent.LastActive,
-        "keyCreatedAt":             agent.KeyCreatedAt,
-        "keyExpiresAt":             agent.KeyExpiresAt,
-        "rotationCount":            agent.RotationCount,
-    }
+	// Return flat response with all agent fields + capabilities (camelCase for frontend)
+	return fiber.Map{
+		"id":                       agent.ID,
+		"organizationId":           agent.OrganizationID,
+		"name":                     agent.Name,
+		"displayName":              agent.DisplayName,
+		"description":              agent.Description,
+		"agentType":                agent.AgentType,
+		"status":                   agent.Status,
+		"version":                  agent.Version,
+		"publicKey":                agent.PublicKey,
+		"trustScore":               agent.TrustScore,
+		"verifiedAt":               agent.VerifiedAt,
+		"createdAt":                agent.CreatedAt,
+		"updatedAt":                agent.UpdatedAt,
+		"talksTo":                  agent.TalksTo,
+		"capabilities":             capabilityTypes,
+		"capabilityViolationCount": agent.CapabilityViolationCount,
+		"isCompromised":            agent.IsCompromised,
+		"certificateUrl":           agent.CertificateURL,
+		"repositoryUrl":            agent.RepositoryURL,
+		"documentationUrl":         agent.DocumentationURL,
+		"keyAlgorithm":             agent.KeyAlgorithm,
+		"createdBy":                agent.CreatedBy,
+		"lastActive":               agent.LastActive,
+		"keyCreatedAt":             agent.KeyCreatedAt,
+		"keyExpiresAt":             agent.KeyExpiresAt,
+		"rotationCount":            agent.RotationCount,
+	}
 }
-
-
 
 // ListAgents returns all agents for the organization
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
@@ -116,7 +115,8 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req application.CreateAgentRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	// Use flexible JSON unmarshaling to accept both camelCase and snake_case
+	if err := utils.UnmarshalFlexibleJSON(c.Body(), &req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
@@ -189,7 +189,8 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 	}
 
 	var req application.CreateAgentRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	// Use flexible JSON unmarshaling to accept both camelCase and snake_case
+	if err := utils.UnmarshalFlexibleJSON(c.Body(), &req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
@@ -329,7 +330,7 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"verified":    true,
+		"verified":   true,
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
 	})
@@ -673,7 +674,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"language":   language,
+			"language":  language,
 			"agentName": agent.Name,
 		},
 	)
@@ -859,7 +860,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":       fmt.Sprintf("Successfully added %d MCP server(s)", len(addedServers)),
-		"talksTo":      updatedAgent.TalksTo,
+		"talksTo":       updatedAgent.TalksTo,
 		"added_servers": addedServers,
 		"total_count":   len(updatedAgent.TalksTo),
 	})
@@ -937,7 +938,7 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":     "Successfully removed MCP server",
-		"talksTo":    updatedAgent.TalksTo,
+		"talksTo":     updatedAgent.TalksTo,
 		"total_count": len(updatedAgent.TalksTo),
 	})
 }
@@ -992,7 +993,7 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 		"agentId":   agentID.String(),
 		"agentName": agent.Name,
 		"talksTo":   agent.TalksTo,
-		"total":      len(agent.TalksTo),
+		"total":     len(agent.TalksTo),
 	})
 }
 
@@ -1151,27 +1152,27 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"success": true,
 		"agent": fiber.Map{
-			"id":                         agent.ID,
-			"organizationId":            agent.OrganizationID,
-			"name":                       agent.Name,
-			"displayName":               agent.DisplayName,
-			"description":                agent.Description,
-			"agentType":                 agent.AgentType,
-			"status":                     agent.Status,
-			"version":                    agent.Version,
-			"publicKey":                 agent.PublicKey,
-			"trustScore":                agent.TrustScore,
-			"verifiedAt":                agent.VerifiedAt,
-			"createdAt":                 agent.CreatedAt,
-			"updatedAt":                 agent.UpdatedAt,
-			"keyAlgorithm":              agent.KeyAlgorithm,
+			"id":                       agent.ID,
+			"organizationId":           agent.OrganizationID,
+			"name":                     agent.Name,
+			"displayName":              agent.DisplayName,
+			"description":              agent.Description,
+			"agentType":                agent.AgentType,
+			"status":                   agent.Status,
+			"version":                  agent.Version,
+			"publicKey":                agent.PublicKey,
+			"trustScore":               agent.TrustScore,
+			"verifiedAt":               agent.VerifiedAt,
+			"createdAt":                agent.CreatedAt,
+			"updatedAt":                agent.UpdatedAt,
+			"keyAlgorithm":             agent.KeyAlgorithm,
 			"keyCreatedAt":             agent.KeyCreatedAt,
 			"keyExpiresAt":             agent.KeyExpiresAt,
-			"rotationCount":             agent.RotationCount,
-			"talksTo":                   agent.TalksTo,
-			"capabilities":               capabilities,
+			"rotationCount":            agent.RotationCount,
+			"talksTo":                  agent.TalksTo,
+			"capabilities":             capabilities,
 			"capabilityViolationCount": agent.CapabilityViolationCount,
-			"isCompromised":             agent.IsCompromised,
+			"isCompromised":            agent.IsCompromised,
 		},
 	})
 }
@@ -1288,21 +1289,21 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName":      agent.Name,
+			"agentName":     agent.Name,
 			"oldTrustScore": agent.TrustScore,
 			"newTrustScore": req.Score,
-			"reason":          req.Reason,
-			"action":          "manual_override",
+			"reason":        req.Reason,
+			"action":        "manual_override",
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"success":     true,
+		"success":    true,
 		"agentId":    agentID,
 		"agentName":  updatedAgent.Name,
 		"trustScore": updatedAgent.TrustScore,
 		"updatedAt":  updatedAgent.UpdatedAt,
-		"message":     "Trust score updated successfully",
+		"message":    "Trust score updated successfully",
 	})
 }
 
@@ -1381,19 +1382,19 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":      "suspend",
+			"action":     "suspend",
 			"agentName":  agent.Name,
-			"status":      agent.Status,
+			"status":     agent.Status,
 			"trustScore": agent.TrustScore,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"success":     true,
-		"message":     "Agent suspended successfully",
-		"status":      agent.Status,
+		"success":    true,
+		"message":    "Agent suspended successfully",
+		"status":     agent.Status,
 		"trustScore": agent.TrustScore,
-		"agent":       agent,
+		"agent":      agent,
 	})
 }
 
@@ -1452,20 +1453,20 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":      "reactivate",
+			"action":     "reactivate",
 			"agentName":  agent.Name,
-			"status":      agent.Status,
+			"status":     agent.Status,
 			"trustScore": agent.TrustScore,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"success":     true,
-		"message":     "Agent reactivated successfully",
-		"status":      agent.Status,
+		"success":    true,
+		"message":    "Agent reactivated successfully",
+		"status":     agent.Status,
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
-		"agent":       agent,
+		"agent":      agent,
 	})
 }
 
@@ -1525,23 +1526,23 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":         "rotate_credentials",
+			"action":        "rotate_credentials",
 			"agentName":     agent.Name,
 			"rotationCount": agent.RotationCount,
-			"keyCreatedAt": agent.KeyCreatedAt,
-			"keyExpiresAt": agent.KeyExpiresAt,
+			"keyCreatedAt":  agent.KeyCreatedAt,
+			"keyExpiresAt":  agent.KeyExpiresAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"success":             true,
 		"message":             "Credentials rotated successfully",
-		"publicKey":          publicKey,
+		"publicKey":           publicKey,
 		"private_key":         privateKey, // ⚠️ SENSITIVE: Only returned once during rotation
 		"previous_public_key": agent.PreviousPublicKey,
-		"rotationCount":      agent.RotationCount,
-		"keyCreatedAt":      agent.KeyCreatedAt,
-		"keyExpiresAt":      agent.KeyExpiresAt,
+		"rotationCount":       agent.RotationCount,
+		"keyCreatedAt":        agent.KeyCreatedAt,
+		"keyExpiresAt":        agent.KeyExpiresAt,
 		"warning":             "Store the private key securely. It will not be shown again.",
 	})
 }
@@ -1619,20 +1620,20 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":         "update_public_key",
+			"action":        "update_public_key",
 			"agentName":     agent.Name,
 			"rotationCount": agent.RotationCount,
-			"keyCreatedAt": agent.KeyCreatedAt,
+			"keyCreatedAt":  agent.KeyCreatedAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
 		"success":             true,
 		"message":             "Public key updated successfully",
-		"publicKey":          agent.PublicKey,
+		"publicKey":           agent.PublicKey,
 		"previous_public_key": agent.PreviousPublicKey,
-		"rotationCount":      agent.RotationCount,
-		"keyCreatedAt":      agent.KeyCreatedAt,
-		"keyExpiresAt":      agent.KeyExpiresAt,
+		"rotationCount":       agent.RotationCount,
+		"keyCreatedAt":        agent.KeyCreatedAt,
+		"keyExpiresAt":        agent.KeyExpiresAt,
 	})
 }
