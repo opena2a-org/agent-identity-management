@@ -392,16 +392,9 @@ class AIMClient:
                     error_detail = response.text
                 raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
-            # Handle forbidden errors (403) - this is a DENIED action, not auth failure
-            # The backend returns denial reason in the JSON body
+            # Handle forbidden errors
             if response.status_code == 403:
-                try:
-                    error_result = response.json()
-                    # Backend uses camelCase: denialReason (not denial_reason)
-                    reason = error_result.get("denialReason") or error_result.get("denial_reason", "Action denied by policy")
-                    raise ActionDeniedError(f"Action denied: {reason}")
-                except (ValueError, KeyError):
-                    raise ActionDeniedError("Action denied - insufficient permissions or capability violation")
+                raise AuthenticationError("Forbidden - insufficient permissions")
 
             # Handle 404 - endpoint not found (server may not be running or endpoint doesn't exist)
             if response.status_code == 404:
@@ -443,14 +436,13 @@ class AIMClient:
                 return {
                     "verified": True,
                     "verification_id": verification_id,
-                    "approved_by": result.get("approvedBy") or result.get("approved_by"),
-                    "expires_at": result.get("expiresAt") or result.get("expires_at")
+                    "approved_by": result.get("approved_by"),
+                    "expires_at": result.get("expires_at")
                 }
 
             # If denied, raise error
             if status == "denied":
-                # Backend uses camelCase: denialReason
-                reason = result.get("denialReason") or result.get("denial_reason", "Action denied by policy")
+                reason = result.get("denial_reason", "Action denied by policy")
                 raise ActionDeniedError(f"Action denied: {reason}")
 
             # If pending, poll for result
@@ -1784,8 +1776,8 @@ def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
         "public_key": credentials["public_key"],
         "private_key": credentials["private_key"],
         "aim_url": credentials["aim_url"],
-        "status": credentials.get("status", "pending"),
-        "trust_score": credentials.get("trust_score", 1.0),  # Default to 100% for new agents
+        "status": credentials.get("status", "unknown"),
+        "trust_score": credentials.get("trust_score"),
         "registered_at": datetime.now(timezone.utc).isoformat()
     }
 
