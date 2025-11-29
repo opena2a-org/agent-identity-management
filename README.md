@@ -129,25 +129,15 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 - Capability mapping and access control
 - Real-time connection monitoring
 
-**Trust Scoring (8-Factor Algorithm)**
-
-Trust scores are calculated using a weighted algorithm:
-
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| **Verification Status** | 25% | Ed25519 signature verification success rate |
-| **Uptime & Availability** | 15% | Health check responsiveness over time |
-| **Action Success Rate** | 15% | Percentage of actions completing successfully |
-| **Security Alerts** | 15% | Active alerts by severity (critical=0%, high=50%) |
-| **Compliance Score** | 10% | SOC 2, HIPAA, GDPR adherence |
-| **Age & History** | 10% | Operating time (<7d=30%, 7-30d=50%, 30-90d=75%, 90+d=100%) |
-| **Drift Detection** | 5% | Behavioral pattern changes |
-| **User Feedback** | 5% | Explicit user ratings |
-
-**Initial Trust Scores:**
-- New **pending** agents: ~68% (verification not yet complete, no history)
-- New **verified** agents: ~90% (verified status boosts score)
-- Trust increases as agents build positive history and pass verifications
+**Trust Scoring (8 Factors)**
+1. **Agent History** — Past behavior and reliability
+2. **MCP Attestation** — Verified server connections
+3. **Action Risk Level** — Severity of requested actions
+4. **Capability Violations** — Attempts to exceed permissions
+5. **Frequency Analysis** — Unusual activity patterns
+6. **Temporal Patterns** — Time-based behavior analysis
+7. **Geographic Signals** — Location-based risk assessment
+8. **Community Feedback** — Peer validation and reporting
 
 **Compliance & Audit**
 - Complete audit trail for every agent action

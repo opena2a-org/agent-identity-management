@@ -412,9 +412,8 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
         Credentials dict or None if not found
     """
     # Build list of credential paths to check
-    credentials_paths = [
-        Path.home() / ".aim" / "credentials.json"
-    ]
+    home_credentials_path = Path.home() / ".aim" / "credentials.json"
+    credentials_paths = [home_credentials_path]
 
     # Also check SDK package directory for downloaded SDKs
     try:
@@ -433,6 +432,12 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
                 storage = SecureCredentialStorage(str(credentials_path))
                 credentials = storage.load_credentials()
                 if credentials:
+                    _persist_credentials_to_home(
+                        credentials,
+                        credentials_path,
+                        home_credentials_path,
+                        use_secure_storage
+                    )
                     return credentials
             except Exception as e:
                 # Continue to next path
@@ -442,10 +447,51 @@ def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, 
         if credentials_path.exists():
             try:
                 with open(credentials_path, 'r') as f:
-                    return json.load(f)
+                    credentials = json.load(f)
+                    _persist_credentials_to_home(
+                        credentials,
+                        credentials_path,
+                        home_credentials_path,
+                        use_secure_storage
+                    )
+                    return credentials
             except Exception as e:
                 # Continue to next path
                 pass
 
     # No credentials found in any location
     return None
+
+
+def _persist_credentials_to_home(
+    credentials: Dict[str, Any],
+    source_path: Path,
+    home_credentials_path: Path,
+    use_secure_storage: bool
+) -> None:
+    """
+    Ensure credentials are stored under the user's home directory (encrypted or plaintext).
+    """
+    try:
+        source_path = Path(source_path)
+        if source_path == home_credentials_path:
+            return
+
+        home_credentials_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if use_secure_storage and SECURE_STORAGE_AVAILABLE:
+            try:
+                storage = SecureCredentialStorage(str(home_credentials_path))
+                storage.save_credentials(credentials)
+                return
+            except Exception:
+                pass
+
+        # Plaintext fallback
+        with open(home_credentials_path, 'w') as f:
+            json.dump(credentials, f, indent=2)
+        os.chmod(home_credentials_path, 0o600)
+
+    except Exception:
+        # Best-effort only; ignore failures so caller can still use in-memory creds
+        pass

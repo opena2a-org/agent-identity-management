@@ -146,6 +146,12 @@ const navigationBase: NavSection[] = [
         roles: ["admin", "manager"], // Managers can view alerts
       },
       {
+        name: "Verification Approvals",
+        href: "/dashboard/admin/verifications",
+        icon: CheckCircle,
+        roles: ["admin"], // Admin-only manual approvals
+      },
+      {
         name: "Capability Requests",
         href: "/dashboard/admin/capability-requests",
         icon: CheckSquare,
@@ -183,6 +189,7 @@ export function Sidebar() {
   const [alertCount, setAlertCount] = useState<number>(0);
   const [capabilityRequestCount, setCapabilityRequestCount] =
     useState<number>(0);
+  const [verificationCount, setVerificationCount] = useState<number>(0);
   const [navigation, setNavigation] = useState<NavSection[]>([]);
 
   useEffect(() => {
@@ -251,7 +258,7 @@ export function Sidebar() {
   }, [user?.role]);
 
   useEffect(() => {
-    // Fetch alert count and capability request count
+    // Fetch alert count, capability request count, and verification approvals
     const fetchCounts = async () => {
       try {
         // Fetch alert count (for admin and manager)
@@ -265,6 +272,10 @@ export function Sidebar() {
           const capabilityCountData =
             await api.getPendingCapabilityRequestsCount();
           setCapabilityRequestCount(capabilityCountData);
+
+          const pendingVerificationCount =
+            await api.getPendingVerificationCount();
+          setVerificationCount(pendingVerificationCount);
         }
 
         // Update navigation with badges
@@ -283,11 +294,20 @@ export function Sidebar() {
               ) {
                 return { ...item, badge: capabilityRequestCount };
               }
+              // Update Verification Approvals badge
+              if (
+                item.name === "Verification Approvals" &&
+                verificationCount > 0
+              ) {
+                return { ...item, badge: verificationCount };
+              }
               // Remove badges when count is 0
               if (
                 (item.name === "Alerts" && alertCount === 0) ||
                 (item.name === "Capability Requests" &&
-                  capabilityRequestCount === 0)
+                  capabilityRequestCount === 0) ||
+                (item.name === "Verification Approvals" &&
+                  verificationCount === 0)
               ) {
                 const { badge, ...itemWithoutBadge } = item;
                 return itemWithoutBadge;
@@ -301,11 +321,27 @@ export function Sidebar() {
       }
     };
 
+    const fetchVerificationCount = async () => {
+      if (user?.role !== "admin") return;
+      try {
+        const count = await api.getPendingVerificationCount();
+        setVerificationCount(count);
+      } catch (error) {
+        console.log("Failed to fetch verification count:", error);
+      }
+    };
+
     // Only fetch if user has permission
     if (user?.role && user.role !== "viewer") {
       fetchCounts();
       // Refresh counts every 30 seconds
       const interval = setInterval(fetchCounts, 30000);
+      let verificationInterval: NodeJS.Timeout | undefined;
+      if (user?.role === "admin") {
+        fetchVerificationCount();
+        // Refresh verification count every 1 minute (60 seconds)
+        verificationInterval = setInterval(fetchVerificationCount, 60000);
+      }
 
       // Listen for real-time events
       const unsubscribeAlertAck = eventEmitter.on(
@@ -324,16 +360,29 @@ export function Sidebar() {
         Events.CAPABILITY_REQUEST_REJECTED,
         fetchCounts
       );
+      const unsubscribeVerificationApproved = eventEmitter.on(
+        Events.VERIFICATION_APPROVED,
+        fetchVerificationCount
+      );
+      const unsubscribeVerificationDenied = eventEmitter.on(
+        Events.VERIFICATION_DENIED,
+        fetchVerificationCount
+      );
 
       return () => {
         clearInterval(interval);
+        if (verificationInterval) {
+          clearInterval(verificationInterval);
+        }
         unsubscribeAlertAck();
         unsubscribeAlertResolved();
         unsubscribeCapabilityApproved();
         unsubscribeCapabilityRejected();
+        unsubscribeVerificationApproved();
+        unsubscribeVerificationDenied();
       };
     }
-  }, [user?.role, alertCount, capabilityRequestCount]);
+  }, [user?.role, alertCount, capabilityRequestCount, verificationCount]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -473,10 +522,9 @@ export function Sidebar() {
                         onClick={() => setMobileOpen(false)}
                         className={`
                           flex items-center gap-3 px-3 py-2 rounded-lg transition-all
-                          ${
-                            active
-                              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          ${active
+                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                           }
                           ${collapsed ? "justify-center" : ""}
                         `}

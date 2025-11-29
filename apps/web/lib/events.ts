@@ -50,4 +50,6 @@ export const Events = {
   ALERT_RESOLVED: "alert:resolved",
   CAPABILITY_REQUEST_APPROVED: "capability-request:approved",
   CAPABILITY_REQUEST_REJECTED: "capability-request:rejected",
+  VERIFICATION_APPROVED: "verification:approved",
+  VERIFICATION_DENIED: "verification:denied",
 } as const;

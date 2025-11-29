@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -963,6 +964,210 @@ func (r *VerificationEventRepositorySimple) GetPendingVerifications(orgID uuid.U
 	}
 
 	return events, rows.Err()
+}
+
+// SearchAdminVerifications returns paginated verification events with filtering for admin UI
+func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
+	orgID uuid.UUID,
+	params domain.VerificationQueryParams,
+) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error) {
+	if params.Limit <= 0 {
+		params.Limit = 10
+	}
+	if params.Offset < 0 {
+		params.Offset = 0
+	}
+
+	filters := []string{"organization_id = $1"}
+	args := []interface{}{orgID}
+
+	// Status filter mapping UI buckets to DB values
+	switch strings.ToLower(params.Status) {
+	case "pending":
+		filters = append(filters, "status = 'pending'")
+	case "approved":
+		filters = append(filters, "status = 'success'")
+	case "denied":
+		filters = append(filters, "status = 'failed'")
+	}
+
+	if params.RiskLevel != "" && strings.ToLower(params.RiskLevel) != "all" {
+		risk := strings.ToLower(params.RiskLevel)
+		placeholderIdx := len(args) + 1
+		filters = append(filters, fmt.Sprintf("((LOWER(metadata ->> 'risk_level') = $%d) OR (LOWER(metadata -> 'context' ->> 'risk_level') = $%d))", placeholderIdx, placeholderIdx))
+		args = append(args, risk)
+	}
+
+	if params.Search != "" {
+		searchTerm := "%" + strings.ToLower(params.Search) + "%"
+		switch strings.ToLower(params.SearchField) {
+		case "agent":
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(agent_name, '')) LIKE $%d", placeholderIdx))
+			args = append(args, searchTerm)
+		case "action":
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(action, '')) LIKE $%d", placeholderIdx))
+			args = append(args, searchTerm)
+		case "resource":
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf("LOWER(COALESCE(resource_type, '')) LIKE $%d", placeholderIdx))
+			args = append(args, searchTerm)
+		default:
+			placeholderIdx := len(args) + 1
+			filters = append(filters, fmt.Sprintf(
+				"(LOWER(COALESCE(agent_name, '')) LIKE $%d OR LOWER(COALESCE(action, '')) LIKE $%d OR LOWER(COALESCE(resource_type, '')) LIKE $%d)",
+				placeholderIdx, placeholderIdx+1, placeholderIdx+2,
+			))
+			args = append(args, searchTerm, searchTerm, searchTerm)
+		}
+	}
+
+	whereClause := strings.Join(filters, " AND ")
+
+	// Total count for current filters
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM verification_events WHERE %s`, whereClause)
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, nil, err
+	}
+
+	// Global status counts for header stats (not filtered by search/status)
+	statusCounts := &domain.VerificationStatusCounts{}
+	statusCountQuery := `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+			COUNT(*) FILTER (WHERE status = 'success') AS approved,
+			COUNT(*) FILTER (WHERE status = 'failed') AS denied
+		FROM verification_events
+		WHERE organization_id = $1
+	`
+	if err := r.db.QueryRow(statusCountQuery, orgID).Scan(
+		&statusCounts.Pending,
+		&statusCounts.Approved,
+		&statusCounts.Denied,
+	); err != nil {
+		return nil, 0, nil, err
+	}
+
+	// Add LIMIT and OFFSET parameters
+	limitPlaceholder := len(args) + 1
+	offsetPlaceholder := len(args) + 2
+	args = append(args, params.Limit, params.Offset)
+
+	query := fmt.Sprintf(`
+		SELECT id, organization_id, agent_id, agent_name, protocol, verification_type,
+			status, result, signature, message_hash, nonce, public_key,
+			confidence, trust_score, duration_ms, error_code, error_reason,
+			initiator_type, initiator_id, initiator_name, initiator_ip,
+			action, resource_type, resource_id, location,
+			started_at, completed_at, created_at, details, metadata
+		FROM verification_events
+		WHERE %s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, limitPlaceholder, offsetPlaceholder)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	defer rows.Close()
+
+	var events []*domain.VerificationEvent
+	for rows.Next() {
+		event := &domain.VerificationEvent{}
+		var agentID uuid.NullUUID
+		var agentName sql.NullString
+		var resultStr, signature, messageHash, nonce, publicKey, errorCode, errorReason sql.NullString
+		var initiatorType sql.NullString
+		var initiatorID uuid.NullUUID
+		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
+		var completedAt sql.NullTime
+		var metadataJSON []byte
+
+		err := rows.Scan(
+			&event.ID, &event.OrganizationID, &agentID, &agentName,
+			&event.Protocol, &event.VerificationType, &event.Status, &resultStr,
+			&signature, &messageHash, &nonce, &publicKey,
+			&event.Confidence, &event.TrustScore, &event.DurationMs, &errorCode,
+			&errorReason, &initiatorType, &initiatorID, &initiatorName,
+			&initiatorIP, &action, &resourceType, &resourceID,
+			&location, &event.StartedAt, &completedAt, &event.CreatedAt,
+			&details, &metadataJSON,
+		)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+
+		if agentID.Valid {
+			event.AgentID = &agentID.UUID
+		}
+		if agentName.Valid {
+			event.AgentName = &agentName.String
+		}
+		if initiatorType.Valid {
+			event.InitiatorType = domain.InitiatorType(initiatorType.String)
+		} else {
+			event.InitiatorType = domain.InitiatorTypeSystem
+		}
+		if resultStr.Valid {
+			result := domain.VerificationResult(resultStr.String)
+			event.Result = &result
+		}
+		if signature.Valid {
+			event.Signature = &signature.String
+		}
+		if messageHash.Valid {
+			event.MessageHash = &messageHash.String
+		}
+		if nonce.Valid {
+			event.Nonce = &nonce.String
+		}
+		if publicKey.Valid {
+			event.PublicKey = &publicKey.String
+		}
+		if errorCode.Valid {
+			event.ErrorCode = &errorCode.String
+		}
+		if errorReason.Valid {
+			event.ErrorReason = &errorReason.String
+		}
+		if initiatorID.Valid {
+			event.InitiatorID = &initiatorID.UUID
+		}
+		if initiatorName.Valid {
+			event.InitiatorName = &initiatorName.String
+		}
+		if initiatorIP.Valid {
+			event.InitiatorIP = &initiatorIP.String
+		}
+		if action.Valid {
+			event.Action = &action.String
+		}
+		if resourceType.Valid {
+			event.ResourceType = &resourceType.String
+		}
+		if resourceID.Valid {
+			event.ResourceID = &resourceID.String
+		}
+		if location.Valid {
+			event.Location = &location.String
+		}
+		if completedAt.Valid {
+			event.CompletedAt = &completedAt.Time
+		}
+		if details.Valid {
+			event.Details = &details.String
+		}
+		if len(metadataJSON) > 0 {
+			json.Unmarshal(metadataJSON, &event.Metadata)
+		}
+
+		events = append(events, event)
+	}
+
+	return events, total, statusCounts, rows.Err()
 }
 
 // GetAgentStatistics calculates per-agent verification statistics for trust scoring

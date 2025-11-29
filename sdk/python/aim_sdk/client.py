@@ -392,16 +392,38 @@ class AIMClient:
                     error_detail = response.text
                 raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
-            # Handle forbidden errors (403) - this is a DENIED action, not auth failure
-            # The backend returns denial reason in the JSON body
+            # Handle forbidden errors
             if response.status_code == 403:
+                raise AuthenticationError("Forbidden - insufficient permissions")
+
+            # Handle 404 - endpoint not found (server may not be running or endpoint doesn't exist)
+            if response.status_code == 404:
+                print(f" Warning: AIM verification endpoint not found (404). Server may not be running.")
+                print(f"   Returning default 'pending' status. Action will be treated as requiring approval.")
+                return {
+                    "verified": False,
+                    "verification_id": None,
+                    "status": "pending",
+                    "error": "Endpoint not found - server may not be available"
+                }
+
+            # Handle other HTTP errors gracefully
+            if response.status_code >= 400:
+                error_msg = f"HTTP {response.status_code} error"
                 try:
-                    error_result = response.json()
-                    # Backend uses camelCase: denialReason (not denial_reason)
-                    reason = error_result.get("denialReason") or error_result.get("denial_reason", "Action denied by policy")
-                    raise ActionDeniedError(f"Action denied: {reason}")
-                except (ValueError, KeyError):
-                    raise ActionDeniedError("Action denied - insufficient permissions or capability violation")
+                    error_detail = response.json().get("error", response.text)
+                    error_msg = f"{error_msg}: {error_detail}"
+                except:
+                    error_msg = f"{error_msg}: {response.text[:200]}"
+                
+                print(f" Warning: Verification request failed: {error_msg}")
+                print(f"   Returning default 'pending' status.")
+                return {
+                    "verified": False,
+                    "verification_id": None,
+                    "status": "pending",
+                    "error": error_msg
+                }
 
             response.raise_for_status()
             result = response.json()
@@ -414,14 +436,13 @@ class AIMClient:
                 return {
                     "verified": True,
                     "verification_id": verification_id,
-                    "approved_by": result.get("approvedBy") or result.get("approved_by"),
-                    "expires_at": result.get("expiresAt") or result.get("expires_at")
+                    "approved_by": result.get("approved_by"),
+                    "expires_at": result.get("expires_at")
                 }
 
             # If denied, raise error
             if status == "denied":
-                # Backend uses camelCase: denialReason
-                reason = result.get("denialReason") or result.get("denial_reason", "Action denied by policy")
+                reason = result.get("denial_reason", "Action denied by policy")
                 raise ActionDeniedError(f"Action denied: {reason}")
 
             # If pending, poll for result
@@ -432,8 +453,36 @@ class AIMClient:
 
         except (AuthenticationError, ActionDeniedError):
             raise
+        except requests.exceptions.RequestException as e:
+            # Handle network errors (connection refused, timeout, etc.)
+            print(f" Warning: Network error during verification: {type(e).__name__}: {str(e)}")
+            print(f"   Returning default 'pending' status. Action will be treated as requiring approval.")
+            return {
+                "verified": False,
+                "verification_id": None,
+                "status": "pending",
+                "error": f"Network error: {type(e).__name__}: {str(e)}"
+            }
+        except json.JSONDecodeError as e:
+            # Handle JSON parsing errors
+            print(f"  Warning: Invalid JSON response from server: {str(e)}")
+            print(f"   Returning default 'pending' status.")
+            return {
+                "verified": False,
+                "verification_id": None,
+                "status": "pending",
+                "error": f"JSON decode error: {str(e)}"
+            }
         except Exception as e:
-            raise VerificationError(f"Verification request failed: {e}")
+            # Catch all other exceptions
+            print(f"  Warning: Unexpected error during verification: {type(e).__name__}: {str(e)}")
+            print(f"   Returning default 'pending' status.")
+            return {
+                "verified": False,
+                "verification_id": None,
+                "status": "pending",
+                "error": f"Unexpected error: {type(e).__name__}: {str(e)}"
+            }
 
     def _wait_for_approval(self, verification_id: str, timeout_seconds: int) -> Dict:
         """
@@ -493,6 +542,25 @@ class AIMClient:
                 if response.status_code == 403:
                     raise AuthenticationError("Forbidden - insufficient permissions")
 
+                # Handle 404 - endpoint not found
+                if response.status_code == 404:
+                    print(f" Warning: Verification endpoint not found (404). Cannot poll for approval.")
+                    raise VerificationError("Verification endpoint not available - cannot complete approval process")
+
+                # Handle other HTTP errors
+                if response.status_code >= 400:
+                    error_msg = f"HTTP {response.status_code} error"
+                    try:
+                        error_detail = response.json().get("error", response.text)
+                        error_msg = f"{error_msg}: {error_detail}"
+                    except:
+                        error_msg = f"{error_msg}: {response.text[:200]}"
+                    # Continue polling on transient errors, but log the issue
+                    print(f" Warning: Error polling verification status: {error_msg}")
+                    time.sleep(poll_interval)
+                    poll_interval = min(poll_interval * 1.5, 10)
+                    continue
+
                 response.raise_for_status()
                 result = response.json()
 
@@ -514,11 +582,23 @@ class AIMClient:
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)  # Exponential backoff up to 10s
 
-            except (AuthenticationError, ActionDeniedError):
+            except (AuthenticationError, ActionDeniedError, VerificationError):
                 raise
-            except Exception as e:
-                # Continue polling on transient errors
+            except requests.exceptions.RequestException as e:
+                # Handle network errors - continue polling on transient network issues
+                print(f"  Warning: Network error while polling: {type(e).__name__}: {str(e)}")
                 time.sleep(poll_interval)
+                poll_interval = min(poll_interval * 1.5, 10)
+            except json.JSONDecodeError as e:
+                # Handle JSON parsing errors - continue polling
+                print(f"  Warning: Invalid JSON response while polling: {str(e)}")
+                time.sleep(poll_interval)
+                poll_interval = min(poll_interval * 1.5, 10)
+            except Exception as e:
+                # Continue polling on any other transient errors
+                print(f"  Warning: Unexpected error while polling: {type(e).__name__}: {str(e)}")
+                time.sleep(poll_interval)
+                poll_interval = min(poll_interval * 1.5, 10)
 
         raise VerificationError(f"Verification timeout after {timeout_seconds} seconds")
 
@@ -1008,22 +1088,22 @@ class AIMClient:
         # Prepare registration payload
         registration_data = {
             "name": name,
-            "display_name": display_name or name,
+            "displayName": display_name or name,
             "description": description or f"Agent {name} created via AIM SDK",
-            "agent_type": agent_type,
-            "public_key": public_key_b64
+            "agentType": agent_type,
+            "publicKey": public_key_b64
         }
 
         if version:
             registration_data["version"] = version
         if repository_url:
-            registration_data["repository_url"] = repository_url
+            registration_data["repositoryUrl"] = repository_url
         if documentation_url:
-            registration_data["documentation_url"] = documentation_url
+            registration_data["documentationUrl"] = documentation_url
         if capabilities:
             registration_data["capabilities"] = capabilities
         if talks_to:
-            registration_data["talks_to"] = talks_to
+            registration_data["talksTo"] = talks_to
 
         try:
             # Use authenticated endpoint
@@ -1036,7 +1116,15 @@ class AIMClient:
             # Add the private key to the result (backend doesn't store it)
             if result:
                 result["private_key"] = private_key_b64
-                result["public_key"] = public_key_b64
+                
+                # CRITICAL: Use the backend's public key (what's in database), not what we generated
+                # The backend's public key is the source of truth since it's stored in the database
+                backend_pub_key = result.get('public_key') or result.get('publicKey')
+                if backend_pub_key:
+                    result["public_key"] = backend_pub_key
+                else:
+                    # Fallback: use generated key if backend didn't return one
+                    result["public_key"] = public_key_b64
 
                 # Normalize agent_id field
                 if "id" in result and "agent_id" not in result:
@@ -1390,17 +1478,49 @@ class AIMClient:
                     context["kwargs"] = str(kwargs)
 
                 # Request verification
-                verification_result = self.verify_action(
-                    action_type=action,
-                    resource=resource,
-                    context=context,
-                    timeout_seconds=300
-                )
+                try:
+                    verification_result = self.verify_action(
+                        action_type=action,
+                        resource=resource,
+                        context=context,
+                        timeout_seconds=300
+                    )
+                except Exception as e:
+                    # Handle any exceptions during verification
+                    print(f"  Warning: Verification request failed: {type(e).__name__}: {str(e)}")
+                    print(f"   Action '{action}' cannot proceed without verification.")
+                    print(f"   Returning error result instead of raising exception.")
+                    return {
+                        "error": True,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "action": action,
+                        "status": "verification_failed"
+                    }
+
+                # Check if verification result has an error
+                if verification_result.get("error"):
+                    error_msg = verification_result.get("error", "Unknown verification error")
+                    print(f"  Warning: Verification returned error: {error_msg}")
+                    print(f"   Action '{action}' cannot proceed without successful verification.")
+                    return {
+                        "error": True,
+                        "error_type": "VerificationError",
+                        "error_message": error_msg,
+                        "action": action,
+                        "status": "verification_failed"
+                    }
 
                 if not verification_result.get("verified", False):
-                    raise ActionDeniedError(
-                        f"Action '{action}' denied: {verification_result.get('reason', 'Unknown reason')}"
-                    )
+                    reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
+                    print(f" Warning: Action '{action}' not verified: {reason}")
+                    return {
+                        "error": True,
+                        "error_type": "ActionDenied",
+                        "error_message": f"Action '{action}' denied: {reason}",
+                        "action": action,
+                        "status": "denied"
+                    }
 
                 verification_id = verification_result.get("verification_id")
 
@@ -1408,23 +1528,40 @@ class AIMClient:
                     # Execute the function
                     result = func(*args, **kwargs)
 
-                    # Log success
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=True,
-                        result_summary=f"Action '{action}' completed successfully"
-                    )
+                    # Log success (handle errors in logging gracefully)
+                    try:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=True,
+                            result_summary=f"Action '{action}' completed successfully"
+                        )
+                    except Exception as log_error:
+                        # Don't fail the function if logging fails
+                        print(f" Warning: Failed to log action result: {str(log_error)}")
 
                     return result
 
                 except Exception as e:
-                    # Log failure
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=False,
-                        error_message=str(e)
-                    )
-                    raise
+                    # Log failure (handle errors in logging gracefully)
+                    try:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=False,
+                            error_message=str(e)
+                        )
+                    except Exception as log_error:
+                        # Don't fail if logging fails
+                        print(f"  Warning: Failed to log action failure: {str(log_error)}")
+                    
+                    # Return error result instead of raising
+                    print(f" Error executing action '{action}': {type(e).__name__}: {str(e)}")
+                    return {
+                        "error": True,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "action": action,
+                        "status": "execution_failed"
+                    }
 
             return wrapper
         return decorator
@@ -1481,7 +1618,7 @@ class AIMClient:
                     "requires_approval": True,
                     "function_name": func.__name__,
                     "module": func.__module__,
-                    "warning": f"⚠️  CRITICAL: This action requires human approval!"
+                    "warning": f" CRITICAL: This action requires human approval!"
                 }
 
                 # Add args/kwargs to context
@@ -1496,17 +1633,49 @@ class AIMClient:
                 print(f"   Timeout: {timeout_seconds} seconds")
 
                 # Request verification with extended timeout
-                verification_result = self.verify_action(
-                    action_type=action,
-                    resource=resource,
-                    context=context,
-                    timeout_seconds=timeout_seconds
-                )
+                try:
+                    verification_result = self.verify_action(
+                        action_type=action,
+                        resource=resource,
+                        context=context,
+                        timeout_seconds=timeout_seconds
+                    )
+                except Exception as e:
+                    # Handle any exceptions during verification
+                    print(f" Warning: Verification request failed: {type(e).__name__}: {str(e)}")
+                    print(f"   Action '{action}' cannot proceed without verification.")
+                    print(f"   Returning error result instead of raising exception.")
+                    return {
+                        "error": True,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "action": action,
+                        "status": "verification_failed"
+                    }
+
+                # Check if verification result has an error
+                if verification_result.get("error"):
+                    error_msg = verification_result.get("error", "Unknown verification error")
+                    print(f" Warning: Verification returned error: {error_msg}")
+                    print(f"   Action '{action}' cannot proceed without successful verification.")
+                    return {
+                        "error": True,
+                        "error_type": "VerificationError",
+                        "error_message": error_msg,
+                        "action": action,
+                        "status": "verification_failed"
+                    }
 
                 if not verification_result.get("verified", False):
-                    raise ActionDeniedError(
-                        f"❌ Action '{action}' DENIED by admin: {verification_result.get('reason', 'Unknown reason')}"
-                    )
+                    reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
+                    print(f" Action '{action}' DENIED or not verified: {reason}")
+                    return {
+                        "error": True,
+                        "error_type": "ActionDenied",
+                        "error_message": f"Action '{action}' DENIED: {reason}",
+                        "action": action,
+                        "status": "denied"
+                    }
 
                 print(f"✅ Action '{action}' APPROVED by admin")
                 verification_id = verification_result.get("verification_id")
@@ -1515,23 +1684,40 @@ class AIMClient:
                     # Execute the function
                     result = func(*args, **kwargs)
 
-                    # Log success
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=True,
-                        result_summary=f"Action '{action}' completed successfully"
-                    )
+                    # Log success (handle errors in logging gracefully)
+                    try:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=True,
+                            result_summary=f"Action '{action}' completed successfully"
+                        )
+                    except Exception as log_error:
+                        # Don't fail the function if logging fails
+                        print(f"  Warning: Failed to log action result: {str(log_error)}")
 
                     return result
 
                 except Exception as e:
-                    # Log failure
-                    self.log_action_result(
-                        verification_id=verification_id,
-                        success=False,
-                        error_message=str(e)
-                    )
-                    raise
+                    # Log failure (handle errors in logging gracefully)
+                    try:
+                        self.log_action_result(
+                            verification_id=verification_id,
+                            success=False,
+                            error_message=str(e)
+                        )
+                    except Exception as log_error:
+                        # Don't fail if logging fails
+                        print(f"  Warning: Failed to log action failure: {str(log_error)}")
+                    
+                    # Return error result instead of raising
+                    print(f" Error executing action '{action}': {type(e).__name__}: {str(e)}")
+                    return {
+                        "error": True,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "action": action,
+                        "status": "execution_failed"
+                    }
 
             return wrapper
         return decorator
@@ -1590,8 +1776,8 @@ def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
         "public_key": credentials["public_key"],
         "private_key": credentials["private_key"],
         "aim_url": credentials["aim_url"],
-        "status": credentials.get("status", "pending"),
-        "trust_score": credentials.get("trust_score", 1.0),  # Default to 100% for new agents
+        "status": credentials.get("status", "unknown"),
+        "trust_score": credentials.get("trust_score"),
         "registered_at": datetime.now(timezone.utc).isoformat()
     }
 
@@ -1743,7 +1929,7 @@ def register_agent(
         if not aim_url:
             raise ConfigurationError("aim_url not found in SDK credentials")
 
-        print(f"🔐 SDK Mode: Using embedded OAuth credentials")
+      
 
     elif api_key:
         # MANUAL MODE: Use API key
@@ -1763,7 +1949,7 @@ def register_agent(
 
     # 3. Auto-detect capabilities and MCPs (unless manually specified)
     if auto_detect:
-        print(f"🔍 Auto-detecting agent capabilities and MCP servers...")
+       
 
         # Auto-detect capabilities (unless manually provided)
         if not capabilities:
@@ -1790,21 +1976,21 @@ def register_agent(
     # 4. Prepare registration request
     registration_data = {
         "name": name,
-        "display_name": display_name or name,
+        "displayName": display_name or name,
         "description": description or f"Agent {name} registered via AIM SDK",
-        "agent_type": agent_type
+        "agentType": agent_type
     }
 
     if version:
         registration_data["version"] = version
     if repository_url:
-        registration_data["repository_url"] = repository_url
+        registration_data["repositoryUrl"] = repository_url
     if documentation_url:
-        registration_data["documentation_url"] = documentation_url
+        registration_data["documentationUrl"] = documentation_url
     if organization_domain:
-        registration_data["organization_domain"] = organization_domain
+        registration_data["organizationDomain"] = organization_domain
     if talks_to:
-        registration_data["talks_to"] = talks_to
+        registration_data["talksTo"] = talks_to
     if capabilities:
         registration_data["capabilities"] = capabilities
 
@@ -1847,7 +2033,7 @@ def _register_via_oauth(
 ) -> AIMClient:
     """Register agent using OAuth token from SDK credentials"""
     # Generate Ed25519 keypair client-side (for OAuth mode)
-    print(f"🔐 Generating Ed25519 keypair...")
+    
     signing_key = SigningKey.generate()
     private_key_bytes = bytes(signing_key) + bytes(signing_key.verify_key)  # 64 bytes (seed + public)
     public_key_bytes = bytes(signing_key.verify_key)
@@ -1855,9 +2041,9 @@ def _register_via_oauth(
     private_key_b64 = base64.b64encode(private_key_bytes).decode('utf-8')
     public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
 
-    # Add public key to registration data
-    registration_data["public_key"] = public_key_b64
-    print(f"✅ Keypair generated")
+    # Add public key to registration data (use camelCase)
+    registration_data["publicKey"] = public_key_b64
+
 
     # Initialize OAuth token manager - let it discover credentials automatically
     # OAuthTokenManager._discover_credentials_path() checks:
@@ -1900,7 +2086,16 @@ def _register_via_oauth(
 
     # Add client-side generated private key to credentials (backend doesn't send it back)
     credentials["private_key"] = private_key_b64
-    credentials["public_key"] = public_key_b64  # Ensure public key matches what we sent
+    
+    # CRITICAL: Use the backend's public key (what's in database), not what we generated
+    # The backend's public key is the source of truth since it's stored in the database
+    backend_pub_key = credentials.get('public_key') or credentials.get('publicKey')
+    if backend_pub_key:
+        credentials["public_key"] = backend_pub_key
+    else:
+        # Fallback: use generated key if backend didn't return one
+        credentials["public_key"] = public_key_b64
+    
     credentials["aim_url"] = aim_url  # Ensure URL is in response
 
     # Add OAuth tokens to credentials so they can be used for future API calls
@@ -1996,11 +2191,4 @@ def _register_via_api_key(
 
 def _print_registration_success(credentials: Dict[str, Any]):
     """Print success message after registration"""
-    print(f"\n🎉 Agent registered successfully!")
-    print(f"   Agent ID: {credentials['agent_id']}")
-    print(f"   Name: {credentials['name']}")
-    print(f"   Status: {credentials['status']}")
-    print(f"   Trust Score: {credentials.get('trust_score', 'N/A')}")
-    print(f"   Message: {credentials.get('message', 'Agent created')}")
-    print(f"\n   ⚠️  Credentials saved to: {_get_credentials_path()}")
-    print(f"   🔐 Private key will NOT be retrievable again - keep it safe!\n")
+    
