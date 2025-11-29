@@ -60,10 +60,10 @@ type VerificationRequest struct {
 type VerificationResponse struct {
 	ID           string    `json:"id"`
 	Status       string    `json:"status"` // "approved", "denied", "pending"
-	ApprovedBy   string    `json:"approved_by,omitempty"`
-	ExpiresAt    time.Time `json:"expires_at,omitempty"`
-	DenialReason string    `json:"denial_reason,omitempty"`
-	TrustScore   float64   `json:"trust_score"`
+	ApprovedBy   string    `json:"approvedBy,omitempty"`
+	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
+	DenialReason string    `json:"denialReason,omitempty"`
+	TrustScore   float64   `json:"trustScore"`
 }
 
 // CreateVerification handles POST /api/v1/verifications
@@ -143,33 +143,34 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification ID
 	verificationID := uuid.New()
 
-	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert based on risk level
-	// Low-risk actions: No alerts needed, just tracking (better UX for demos)
-	// Medium/High-risk actions: Alert if action is denied or lacks capability
+	// ✅ CAPABILITY-BASED ACCESS CONTROL (CBAC) - EchoLeak Prevention
+	// This is the CORE defense mechanism against CVE-2025-32711 (EchoLeak)
+	// Actions MUST match granted capabilities - trust score alone is NOT sufficient
 	shouldCreateAlert := false
 	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
 	if err != nil {
 		fmt.Printf("⚠️  Error checking capability: %v\n", err)
-	} else if !hasCapability {
-		// Determine if this action warrants an alert based on risk level and approval status
-		// Low-risk actions approved by trust score: No alert (good UX for demos)
-		// Medium-risk actions without capability: Alert only if denied
-		// High-risk actions without capability: Always alert
-		isLowRisk := isLowRiskAction(req.ActionType)
-		isDenied := status == "denied"
+		// On error, fail secure - deny the action
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"id":            uuid.New().String(),
+			"status":        "denied",
+			"denialReason": fmt.Sprintf("Capability check failed: %v", err),
+			"trustScore":   trustScore,
+		})
+	}
 
-		if isDenied {
-			// Always alert on denied actions
-			shouldCreateAlert = true
-			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.ActionType)
-		} else if !isLowRisk && req.RiskLevel != "low" {
-			// Alert for medium/high risk actions without capability (even if approved)
-			shouldCreateAlert = true
-			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.ActionType)
-		} else {
-			// Low-risk approved actions: Just log, no alert
-			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.ActionType)
-		}
+	// ✅ CRITICAL: If agent lacks capability, DENY the action regardless of trust score
+	// This prevents EchoLeak-style attacks where prompt injection tricks agents
+	// into performing unauthorized actions (e.g., bulk email access, data exfiltration)
+	if !hasCapability {
+		fmt.Printf("🛡️  CAPABILITY VIOLATION BLOCKED: Agent %s attempted '%s' without capability\n", agent.Name, req.ActionType)
+
+		// Always create alert for capability violations (this is a security event)
+		shouldCreateAlert = true
+
+		// Override status to denied - capability check trumps trust score
+		status = "denied"
+		denialReason = fmt.Sprintf("Capability violation: Agent does not have '%s' capability. EchoLeak prevention active.", req.ActionType)
 	}
 
 	// Create audit log entry
@@ -1007,6 +1008,17 @@ type PendingVerificationListResponse struct {
 		TotalPages int `json:"total_pages"`
 	} `json:"pagination"`
 	StatusCounts domain.VerificationStatusCounts `json:"status_counts"`
+	ID            string                 `json:"id"`
+	AgentID       string                 `json:"agentId"`
+	AgentName     string                 `json:"agentName"`
+	ActionType    string                 `json:"actionType"`
+	Resource      string                 `json:"resource"`
+	Context       map[string]interface{} `json:"context"`
+	RiskLevel     string                 `json:"riskLevel"`
+	TrustScore    float64                `json:"trustScore"`
+	Status        string                 `json:"status"`
+	RequestedAt   time.Time              `json:"requestedAt"`
+	ExpiresAt     time.Time              `json:"expiresAt"`
 }
 
 // ListPendingVerifications returns all pending verifications awaiting admin approval
