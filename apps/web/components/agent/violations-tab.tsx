@@ -20,6 +20,27 @@ interface Violation {
   createdAt: string;
 }
 
+// Raw API response interface - handles both camelCase and snake_case from backend
+interface RawViolationResponse {
+  id: string;
+  attemptedCapability?: string;
+  attempted_capability?: string;
+  severity?: Violation['severity'];
+  trustScoreImpact?: number;
+  trust_score_impact?: number;
+  isBlocked?: boolean;
+  is_blocked?: boolean;
+  sourceIp?: string;
+  source_ip?: string;
+  createdAt?: string;
+  created_at?: string;
+}
+
+// Default fallback values
+const UNKNOWN_CAPABILITY = 'unknown_capability';
+const DEFAULT_SEVERITY: Violation['severity'] = 'info';
+const DEFAULT_TRUST_IMPACT = 0;
+
 interface ViolationsTabProps {
   agentId: string;
 }
@@ -38,11 +59,11 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  const normalizeViolation = (raw: any): Violation => ({
+  const normalizeViolation = (raw: RawViolationResponse): Violation => ({
     id: raw.id,
-    attemptedCapability: raw.attemptedCapability ?? raw.attempted_capability ?? 'unknown_capability',
-    severity: raw.severity ?? 'info',
-    trustScoreImpact: raw.trustScoreImpact ?? raw.trust_score_impact ?? 0,
+    attemptedCapability: raw.attemptedCapability ?? raw.attempted_capability ?? UNKNOWN_CAPABILITY,
+    severity: raw.severity ?? DEFAULT_SEVERITY,
+    trustScoreImpact: raw.trustScoreImpact ?? raw.trust_score_impact ?? DEFAULT_TRUST_IMPACT,
     isBlocked: raw.isBlocked ?? raw.is_blocked ?? false,
     sourceIp: raw.sourceIp ?? raw.source_ip,
     createdAt: raw.createdAt ?? raw.created_at ?? '',
