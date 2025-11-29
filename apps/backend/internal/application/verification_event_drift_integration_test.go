@@ -245,3 +245,195 @@ func TestVerificationEventWithDriftDetection(t *testing.T) {
 		mockEventRepo.AssertExpectations(t)
 	})
 }
+
+// TestSearchAdminVerifications tests the SearchVerifications service method
+func TestSearchAdminVerifications(t *testing.T) {
+	// Setup
+	mockEventRepo := new(MockVerificationEventRepository)
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+
+	driftService := NewDriftDetectionService(mockAgentRepo, mockAlertRepo)
+	verificationService := NewVerificationEventService(
+		mockEventRepo,
+		mockAgentRepo,
+		driftService,
+	)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	sampleEvents := []*domain.VerificationEvent{
+		{
+			ID:             uuid.New(),
+			OrganizationID: orgID,
+			AgentID:        &agentID,
+			Status:         domain.VerificationEventStatusPending,
+			StartedAt:      time.Now(),
+		},
+		{
+			ID:             uuid.New(),
+			OrganizationID: orgID,
+			AgentID:        &agentID,
+			Status:         domain.VerificationEventStatusSuccess,
+			StartedAt:      time.Now().Add(-1 * time.Hour),
+		},
+	}
+
+	sampleCounts := &domain.VerificationStatusCounts{
+		Pending:  5,
+		Approved: 10,
+		Denied:   2,
+	}
+
+	t.Run("returns paginated results with status counts", func(t *testing.T) {
+		params := domain.VerificationQueryParams{
+			Limit:  10,
+			Offset: 0,
+		}
+
+		mockEventRepo.On("SearchAdminVerifications", orgID, params).
+			Return(sampleEvents, 2, sampleCounts, nil).Once()
+
+		events, total, counts, err := verificationService.SearchVerifications(
+			context.Background(),
+			orgID,
+			params,
+		)
+
+		assert.NoError(t, err)
+		assert.Len(t, events, 2)
+		assert.Equal(t, 2, total)
+		assert.NotNil(t, counts)
+		assert.Equal(t, 5, counts.Pending)
+		assert.Equal(t, 10, counts.Approved)
+		assert.Equal(t, 2, counts.Denied)
+		mockEventRepo.AssertExpectations(t)
+	})
+
+	t.Run("filters by pending status", func(t *testing.T) {
+		mockEventRepo := new(MockVerificationEventRepository)
+		verificationService := NewVerificationEventService(
+			mockEventRepo,
+			mockAgentRepo,
+			driftService,
+		)
+
+		params := domain.VerificationQueryParams{
+			Status: "pending",
+			Limit:  10,
+			Offset: 0,
+		}
+
+		pendingOnly := []*domain.VerificationEvent{sampleEvents[0]}
+
+		mockEventRepo.On("SearchAdminVerifications", orgID, params).
+			Return(pendingOnly, 1, sampleCounts, nil).Once()
+
+		events, total, _, err := verificationService.SearchVerifications(
+			context.Background(),
+			orgID,
+			params,
+		)
+
+		assert.NoError(t, err)
+		assert.Len(t, events, 1)
+		assert.Equal(t, 1, total)
+		assert.Equal(t, domain.VerificationEventStatusPending, events[0].Status)
+		mockEventRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles search query", func(t *testing.T) {
+		mockEventRepo := new(MockVerificationEventRepository)
+		verificationService := NewVerificationEventService(
+			mockEventRepo,
+			mockAgentRepo,
+			driftService,
+		)
+
+		params := domain.VerificationQueryParams{
+			Search: "test-agent",
+			Limit:  10,
+			Offset: 0,
+		}
+
+		mockEventRepo.On("SearchAdminVerifications", orgID, params).
+			Return(sampleEvents, 2, sampleCounts, nil).Once()
+
+		events, _, _, err := verificationService.SearchVerifications(
+			context.Background(),
+			orgID,
+			params,
+		)
+
+		assert.NoError(t, err)
+		assert.NotEmpty(t, events)
+		mockEventRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles risk level filter", func(t *testing.T) {
+		mockEventRepo := new(MockVerificationEventRepository)
+		verificationService := NewVerificationEventService(
+			mockEventRepo,
+			mockAgentRepo,
+			driftService,
+		)
+
+		params := domain.VerificationQueryParams{
+			RiskLevel: "high",
+			Limit:     10,
+			Offset:    0,
+		}
+
+		mockEventRepo.On("SearchAdminVerifications", orgID, params).
+			Return([]*domain.VerificationEvent{}, 0, sampleCounts, nil).Once()
+
+		events, total, _, err := verificationService.SearchVerifications(
+			context.Background(),
+			orgID,
+			params,
+		)
+
+		assert.NoError(t, err)
+		assert.Empty(t, events)
+		assert.Equal(t, 0, total)
+		mockEventRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles empty results", func(t *testing.T) {
+		mockEventRepo := new(MockVerificationEventRepository)
+		verificationService := NewVerificationEventService(
+			mockEventRepo,
+			mockAgentRepo,
+			driftService,
+		)
+
+		params := domain.VerificationQueryParams{
+			Status: "denied",
+			Limit:  10,
+			Offset: 0,
+		}
+
+		emptyCounts := &domain.VerificationStatusCounts{
+			Pending:  0,
+			Approved: 0,
+			Denied:   0,
+		}
+
+		mockEventRepo.On("SearchAdminVerifications", orgID, params).
+			Return([]*domain.VerificationEvent{}, 0, emptyCounts, nil).Once()
+
+		events, total, counts, err := verificationService.SearchVerifications(
+			context.Background(),
+			orgID,
+			params,
+		)
+
+		assert.NoError(t, err)
+		assert.Empty(t, events)
+		assert.Equal(t, 0, total)
+		assert.NotNil(t, counts)
+		assert.Equal(t, 0, counts.Pending)
+		mockEventRepo.AssertExpectations(t)
+	})
+}

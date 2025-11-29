@@ -7,8 +7,7 @@ Complete REST API reference for AIM (Agent Identity Management).
 ## 📋 Table of Contents
 
 1. [Base URL](#base-url)
-2. [Request Format](#request-format)
-3. [Authentication](#authentication)
+2. [Authentication](#authentication)
 3. [API Endpoints](#api-endpoints)
    - [Authentication](#authentication-endpoints)
    - [Agents](#agents-endpoints)
@@ -34,36 +33,6 @@ Production:  https://api.yourdomain.com
 ```
 
 All API endpoints are prefixed with `/api/v1` unless otherwise noted.
-
----
-
-## Request Format
-
-AIM supports flexible JSON field naming for all API requests. You can use either **camelCase** (standard for JavaScript/Go) or **snake_case** (standard for Python/Ruby).
-
-**Example:**
-
-Both of these requests are valid and handled identically:
-
-**camelCase (JavaScript/TypeScript):**
-```json
-{
-  "displayName": "My Agent",
-  "agentType": "ai_agent",
-  "publicKey": "..."
-}
-```
-
-**snake_case (Python/Ruby):**
-```json
-{
-  "display_name": "My Agent",
-  "agent_type": "ai_agent",
-  "public_key": "..."
-}
-```
-
-**Note:** API responses currently use **camelCase** by default.
 
 ---
 
