@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Production-grade identity, verification, and security management for autonomous AI agents and MCP servers**
+**Open-source identity, verification, and security management for autonomous AI agents and MCP servers**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
@@ -117,82 +117,16 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 
 ## 🎯 Key Features
 
-**Agent Identity Management**
-- Ed25519 cryptographic signing for all agent communications
-- Automatic key generation and rotation
-- Secure credential storage using OS keyrings
-- Agent registration and verification workflows
+| Feature | Description |
+|---------|-------------|
+| **Agent Identity** | Ed25519 cryptographic signing, automatic key rotation, secure credential storage |
+| **MCP Attestation** | Cryptographic verification, auto-detection from Claude Desktop, capability mapping |
+| **Trust Scoring** | Dynamic trust scores (~68% pending, ~90% verified), history-based adjustments |
+| **Compliance & Audit** | Complete audit trails, automated policy enforcement, real-time reporting |
+| **Security Monitoring** | ML anomaly detection, real-time alerts, bulk alert management, drift detection |
+| **Security Policies** | 6 policy types: unusual activity, config drift, access control, capability violations, trust monitoring, data exfiltration prevention |
 
-**MCP Server Attestation**
-- Cryptographic verification of MCP servers
-- Automatic detection from Claude Desktop config
-- Capability mapping and access control
-- Real-time connection monitoring
-
-**Trust Scoring (8-Factor Weighted Algorithm)**
-
-Trust scores are calculated using a weighted algorithm:
-
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| **Verification Status** | 25% | Ed25519 signature verification success rate |
-| **Uptime & Availability** | 15% | Health check responsiveness over time |
-| **Action Success Rate** | 15% | Percentage of actions completing successfully |
-| **Security Alerts** | 15% | Active alerts by severity (critical=0%, high=50%) |
-| **Compliance Score** | 10% | SOC 2, HIPAA, GDPR adherence |
-| **Age & History** | 10% | Operating time (<7d=30%, 7-30d=50%, 30-90d=75%, 90+d=100%) |
-| **Drift Detection** | 5% | Behavioral pattern changes from baseline |
-| **User Feedback** | 5% | Explicit user ratings and reports |
-
-**Initial Trust Scores:**
-- New **pending** agents: ~68% (verification not yet complete, limited history)
-- New **verified** agents: ~90% (verified status boosts score significantly)
-- Trust increases as agents build positive history and pass verifications
-
-**Compliance & Audit**
-- Complete audit trail for every agent action
-- Automated security policy enforcement
-- Real-time compliance reporting
-
-**Security Monitoring**
-- Behavioral anomaly detection using ML
-- Real-time threat alerts and notifications
-- Automatic policy enforcement
-- Security dashboard with metrics
-- **Bulk alert management** — Acknowledge all alerts at once
-- **Configuration drift detection** — Detect unauthorized MCP server connections
-
-**Advanced Security Policies** (6 Policy Types)
-
-1. **Unusual Activity Detection**
-   - API rate spike detection with configurable thresholds
-   - Off-hours access monitoring (detect logins outside business hours)
-   - Unusual access pattern detection (tracking diverse resource access)
-
-2. **Configuration Drift Monitoring**
-   - Capability change detection (alerts on permission modifications)
-   - Public key rotation tracking with approval requirements
-   - Permission escalation detection for dangerous capabilities
-
-3. **Unauthorized Access Control**
-   - IP-based restrictions with whitelist and wildcard support
-   - Time-based access control (day-of-week and hour restrictions)
-   - Resource-level and action-level access control with pattern matching
-
-4. **Capability Violation Detection**
-   - Real-time monitoring of capability boundary violations
-   - Automatic alerts when agents attempt unauthorized actions
-   - Tracking and reporting of violation patterns
-
-5. **Trust Score Monitoring**
-   - Low trust score threshold alerts
-   - Automatic action restrictions for low-trust agents
-   - Trust score trend analysis and notifications
-
-6. **Data Exfiltration Prevention**
-   - Detection of unusual data access patterns
-   - Volume-based transfer monitoring
-   - Sensitive resource access alerts
+📚 **Full documentation:** [opena2a.org/docs](https://opena2a.org/docs)
 
 ---
 
@@ -227,6 +161,14 @@ git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 docker compose up -d
 ```
+
+**Default Admin Credentials:**
+| Field | Value |
+|-------|-------|
+| Email | `admin@opena2a.org` |
+| Password | `AIM2025!Secure` |
+
+> ⚠️ You will be prompted to change the password on first login.
 
 ### Kubernetes
 
