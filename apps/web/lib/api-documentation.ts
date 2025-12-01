@@ -476,7 +476,7 @@ export const apiDocumentation: EndpointCategory[] = [
   {
     category: "Agent Lifecycle Management",
     description:
-      "Complete agent CRUD operations, verification, suspension, and credential management",
+      "Agent CRUD operations. Agents are auto-verified on creation (~90% trust). Admins can suspend/reactivate.",
     icon: "Bot",
     endpoints: [
       {
@@ -519,7 +519,7 @@ export const apiDocumentation: EndpointCategory[] = [
             },
             trustScore: {
               type: "number",
-              description: "Initial trust score (50.0)",
+              description: "Initial trust score (~90% for auto-verified agents)",
             },
           },
         },
@@ -552,7 +552,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/agents",
         description:
-          "Create new agent. Auto-generates Ed25519 keypair and assigns initial trust score.",
+          "Create new agent. Auto-verified with ~90% trust score. Auto-generates Ed25519 keypair.",
         summary: "Create agent",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
@@ -624,8 +624,8 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "POST",
         path: "/api/v1/agents/:id/verify",
-        description: "Manually verify agent identity. Manager-only operation.",
-        summary: "Verify agent",
+        description: "Re-verify agent (e.g., after suspension). Agents are auto-verified on creation.",
+        summary: "Re-verify agent",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         roleRequired: "manager",
@@ -2794,7 +2794,7 @@ export const apiDocumentation: EndpointCategory[] = [
           properties: {
             agentId: { type: "string", description: "Agent ID" },
             name: { type: "string", description: "Agent name" },
-            trustScore: { type: "number", description: "Initial trust score" },
+            trustScore: { type: "number", description: "Initial trust score (~90%)" },
           },
         },
         example: `{
