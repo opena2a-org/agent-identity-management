@@ -78,29 +78,35 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
-	// If this is a tracked SDK token, revoke the old one and track usage
+	// If this is a tracked SDK token, track usage and create new token entry
+	// NOTE: We do NOT revoke old tokens on rotation - this allows multiple SDK instances
+	// to work independently (like GitHub, Google, etc. handle device sessions)
+	// Old tokens expire naturally after 90 days
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
 		oldTokenHash := hex.EncodeToString(hasher.Sum(nil))
 
-		// CRITICAL: Get old token info BEFORE revoking (for creating new token entry)
-		oldToken, err := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
+		// Get old token info for creating new token entry
+		oldToken, _ := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
 
-		// Record usage
+		// Record usage on the old token (updates last_used_at, usage_count)
 		ipAddress := c.IP()
 		_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
 
-		// Revoke the old token to prevent reuse (security: token rotation)
-		err = h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "Token rotated")
-		if err != nil {
-			// Log error but don't fail the request (new tokens already issued)
-			_ = err
-		}
+		// IMPORTANT: We do NOT revoke the old token anymore!
+		// This was causing issues with multiple SDK instances:
+		// - SDK A downloads → Token A
+		// - SDK B downloads → Token B
+		// - SDK A refreshes → Old behavior: Token A revoked, Token A' created
+		// - SDK B refreshes → Token B is still valid, Token B' created
+		// - Now both A' and B' work independently!
+		//
+		// Old tokens will expire naturally after 90 days.
+		// For security, we still track token lineage via metadata.
 
-		// CRITICAL: Save the new rotated SDK token to database
-		// Use old token info (retrieved before revocation) to create new tracking entry
-		if err == nil && oldToken != nil {
+		// Save the new rotated SDK token to database
+		if oldToken != nil {
 			// Get new token ID from rotated refresh token
 			newTokenID, err := h.jwtService.GetTokenID(newRefreshToken)
 			if err == nil && newTokenID != "" {
@@ -113,7 +119,15 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 				newIPAddress := c.IP()
 				userAgent := c.Get("User-Agent")
 
-				// Create new SDK token entry
+				// Get rotation count from old token metadata
+				rotationCount := 1
+				if oldToken.Metadata != nil {
+					if count, ok := oldToken.Metadata["rotationCount"].(float64); ok {
+						rotationCount = int(count) + 1
+					}
+				}
+
+				// Create new SDK token entry (old token remains valid until expiry)
 				newSDKToken := &domain.SDKToken{
 					ID:                uuid.New(),
 					UserID:            oldToken.UserID,
@@ -127,9 +141,10 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					CreatedAt:         time.Now(),
 					ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
 					Metadata: map[string]interface{}{
-						"source":         "token_rotation",
-						"rotated_from":   tokenID,
-						"rotationCount": 1,
+						"source":        "token_rotation",
+						"rotated_from":  tokenID,
+						"rotationCount": rotationCount,
+						"parent_token":  oldToken.ID.String(), // Track token lineage
 					},
 				}
 
