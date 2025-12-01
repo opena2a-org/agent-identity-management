@@ -59,7 +59,7 @@ function LoginPageContent() {
         password: formData.password,
       });
 
-      // Check if user must change password (enterprise security requirement)
+      // Check if user must change password (security policy requirement)
       if (response.requiresPasswordChange || response.user?.forcePasswordChange) {
         toast.info("You must change your password before continuing.");
         // Store user info temporarily for password change flow

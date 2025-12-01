@@ -445,7 +445,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/public/change-password",
         description:
-          "Forced password change on first login. Enterprise security requirement.",
+          "Forced password change on first login. Security policy requirement.",
         summary: "Forced password change",
         auth: "Temporary Token",
         requiresAuth: false,

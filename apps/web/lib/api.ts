@@ -69,7 +69,6 @@ export interface Agent {
 export interface Organization {
   id: string;
   name: string;
-  plan: "community" | "pro" | "enterprise";
   maxAgents: number;
   isActive: boolean;
   createdAt: string;

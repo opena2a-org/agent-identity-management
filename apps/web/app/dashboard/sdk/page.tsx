@@ -232,7 +232,7 @@ export default function SDKDownloadPage() {
                 <code className="text-sm text-green-400 font-mono">
                   from aim_sdk import secure<br />
                   <br />
-                  # ONE LINE - Enterprise security enabled!<br />
+                  # ONE LINE - Security enabled!<br />
                   agent = secure(&quot;my-agent&quot;)<br />
                   <br />
                   # Add security to any function with a decorator<br />

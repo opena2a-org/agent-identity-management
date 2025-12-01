@@ -151,7 +151,7 @@ func main() {
             <CardTitle className="text-2xl">Secure Your Agent with 1 Line of Code</CardTitle>
           </div>
           <CardDescription className="text-base">
-            production-ready security with zero-configuration setup
+            Secure by default with zero-configuration setup
           </CardDescription>
         </CardHeader>
         <CardContent>

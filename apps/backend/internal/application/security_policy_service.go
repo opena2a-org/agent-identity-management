@@ -114,14 +114,14 @@ func (s *SecurityPolicyService) policyAppliesToAgent(policy *domain.SecurityPoli
 
 // CreateDefaultPolicies creates default security policies for a new organization
 func (s *SecurityPolicyService) CreateDefaultPolicies(ctx context.Context, orgID, userID uuid.UUID) error {
-	// Default Policy 1: Alert on Capability Violations (HIGH priority)
-	// NOTE: Default is alert-only. Admins can enable blocking with explicit confirmation.
+	// Default Policy 1: Block and Alert on Capability Violations (HIGH priority)
+	// SECURITY: Default is to BLOCK unauthorized actions - this prevents attacks like EchoLeak (CVE-2025-32711)
 	capabilityViolationPolicy := &domain.SecurityPolicy{
 		OrganizationID:    orgID,
-		Name:              "Monitor Capability Violations",
-		Description:       "Generate alerts on any capability violations (e.g., EchoLeak attacks). This monitors unauthorized actions that exceed an agent's registered capabilities. Admins can enable blocking mode to prevent these actions.",
+		Name:              "Block Capability Violations",
+		Description:       "Block and alert on any capability violations (e.g., EchoLeak attacks). This prevents unauthorized actions that exceed an agent's registered capabilities. This is the secure default - admins can change to alert-only mode if needed.",
 		PolicyType:        domain.PolicyTypeCapabilityViolation,
-		EnforcementAction: domain.EnforcementAlertOnly,
+		EnforcementAction: domain.EnforcementBlockAndAlert,
 		SeverityThreshold: domain.AlertSeverityHigh,
 		Rules: map[string]interface{}{
 			"attack_patterns": []string{"echoleak", "bulk_access", "data_exfiltration"},

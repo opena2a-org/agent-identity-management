@@ -11,7 +11,7 @@ type Organization struct {
 	ID        uuid.UUID              `json:"id"`
 	Name      string                 `json:"name"`
 	Domain    string                 `json:"domain"`
-	PlanType  string                 `json:"planType"` // free, pro, enterprise
+	PlanType  string                 `json:"-"` // internal use only, not exposed via API
 	MaxAgents int                    `json:"maxAgents"`
 	MaxUsers  int                    `json:"maxUsers"`
 	IsActive  bool                   `json:"isActive"`

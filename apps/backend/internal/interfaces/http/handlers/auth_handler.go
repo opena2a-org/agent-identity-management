@@ -213,7 +213,6 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"id":         org.ID,
 		"name":       org.Name,
-		"plan":       org.PlanType,
 		"max_agents": org.MaxAgents,
 		"isActive":  org.IsActive,
 		"createdAt": org.CreatedAt,

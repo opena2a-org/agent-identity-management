@@ -1242,7 +1242,6 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"organizationName": org.Name,
-			"planType":         org.PlanType,
 			"isActive":         org.IsActive,
 		},
 	)
@@ -1251,7 +1250,6 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		"id":        org.ID,
 		"name":      org.Name,
 		"domain":    org.Domain,
-		"planType":  org.PlanType,
 		"maxAgents": org.MaxAgents,
 		"maxUsers":  org.MaxUsers,
 		"isActive":  org.IsActive,

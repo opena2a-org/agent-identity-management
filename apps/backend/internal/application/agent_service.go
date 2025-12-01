@@ -676,6 +676,27 @@ func (s *AgentService) VerifyAction(
 				agent.Name, actionType, shouldBlock)
 		}
 
+		// ✅ APPLY TRUST SCORE IMPACT directly from violation
+		// The trust_score_impact is a percentage to subtract (e.g., -10 means subtract 10%)
+		// This provides immediate, cumulative impact from violations
+		impactPercent := float64(violation.TrustScoreImpact) / 100.0 // Convert -10 to -0.10
+		newScore := agent.TrustScore + impactPercent                 // Subtract (impact is negative)
+
+		// Ensure score stays within bounds [0, 1]
+		if newScore < 0 {
+			newScore = 0
+		} else if newScore > 1 {
+			newScore = 1
+		}
+
+		// Update agent's trust score in database
+		if err := s.agentRepo.UpdateTrustScore(agentID, newScore); err != nil {
+			fmt.Printf("⚠️  Warning: failed to update agent trust score: %v\n", err)
+		} else {
+			fmt.Printf("✅ Trust score updated after violation: %.2f%% → %.2f%% (impact: %d%%) for agent %s\n",
+				agent.TrustScore*100, newScore*100, violation.TrustScoreImpact, agent.Name)
+		}
+
 		// Return enforcement decision from policy
 		if shouldBlock {
 			return false, fmt.Sprintf(

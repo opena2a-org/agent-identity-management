@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Bot,
@@ -12,7 +12,6 @@ import {
   Trash2,
   CheckCircle,
   Loader2,
-  Download,
   KeyRound,
   Tag,
   Ban,
@@ -33,7 +32,6 @@ import { AutoDetectButton } from "@/components/agents/auto-detect-button";
 import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
-import { downloadSDK } from "@/lib/agent-sdk";
 import { api, Agent } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
@@ -75,7 +73,11 @@ export default function AgentDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [agentId, setAgentId] = useState<string | null>(null);
+
+  // URL-based tab persistence
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'connections');
   const [agent, setAgent] = useState<Agent | null>(null);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [allMCPServers, setAllMCPServers] = useState<MCPServer[]>([]);
@@ -91,7 +93,6 @@ export default function AgentDetailsPage({
   const [reactivating, setReactivating] = useState(false);
   const [rotatingCreds, setRotatingCreds] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [downloadingSDK, setDownloadingSDK] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [showRotateCredsConfirm, setShowRotateCredsConfirm] = useState(false);
@@ -196,6 +197,14 @@ export default function AgentDetailsPage({
     setRefreshKey((prev) => prev + 1);
   };
 
+  // Handle tab change with URL update
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
+
   const canEdit = ["admin", "manager", "member"].includes(userRole);
   const canManage = ["admin", "manager"].includes(userRole);
 
@@ -267,22 +276,6 @@ export default function AgentDetailsPage({
     } finally {
       setRotatingCreds(false);
       setShowRotateCredsConfirm(false);
-    }
-  };
-
-  // Handle SDK download
-  const handleDownloadSDK = async () => {
-    if (!agentId || !agent) return;
-    
-    setDownloadingSDK(true);
-    try {
-      console.log("Starting SDK download for agent:", agentId, agent.name);
-      await downloadSDK(agentId, agent.name, 'python');
-    } catch (error) {
-      console.error('Failed to download SDK:', error);
-      alert('Failed to download SDK. Please try again.');
-    } finally {
-      setDownloadingSDK(false);
     }
   };
 
@@ -472,27 +465,6 @@ export default function AgentDetailsPage({
               onSelectionComplete={handleRefresh}
               variant="outline"
             />
-            <Button
-              variant="outline"
-              onClick={handleDownloadSDK}
-              disabled={downloadingSDK}
-            >
-              {downloadingSDK ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Downloading...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-1" /> Download SDK
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/dashboard/sdk-tokens`)}
-            >
-              <KeyRound className="h-4 w-4 mr-1" /> Get Credentials
-            </Button>
             {canEdit && (
               <Button variant="outline" onClick={() => setShowEditModal(true)}>
                 <Edit className="h-4 w-4 mr-1" /> Edit
@@ -661,7 +633,7 @@ export default function AgentDetailsPage({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="connections" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="connections">
             <ExternalLink className="h-4 w-4 mr-2" />

@@ -27,7 +27,7 @@ export function SDKTestResults() {
   return (
     <div className="mt-8 mb-8">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">✅ Production Verified - Python SDK</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">✅ Fully Tested - Python SDK</h2>
         <p className="text-gray-600">
           Comprehensive test suite with 100% pass rate. Results verified on October 19, 2025.
         </p>
@@ -117,7 +117,7 @@ export function SDKTestResults() {
           <div className="flex items-start gap-4">
             <CheckCircle className="h-8 w-8 text-green-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">🎉 Production Ready</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">🎉 Ready to Use</h3>
               <p className="text-gray-700 mb-4">
                 The Python SDK has achieved 100% test coverage with all 40 tests passing. It includes
                 complete feature parity with Ed25519 signing, OAuth integration, MCP auto-detection,

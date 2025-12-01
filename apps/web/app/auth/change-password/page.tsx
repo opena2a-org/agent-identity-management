@@ -157,7 +157,7 @@ export default function ChangePasswordPage() {
             Change Your Password
           </h1>
           <p className="text-gray-600">
-            Enterprise security requires you to set a new password
+            Security policy requires you to set a new password
           </p>
         </div>
 
@@ -335,7 +335,7 @@ export default function ChangePasswordPage() {
             <div className="flex gap-3">
               <Shield className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-orange-900">
-                <p className="font-medium mb-1">Enterprise Security</p>
+                <p className="font-medium mb-1">Security Notice</p>
                 <p className="text-orange-700">
                   Your new password must be strong and different from your current password. After changing, you'll be redirected to login with your new credentials.
                 </p>

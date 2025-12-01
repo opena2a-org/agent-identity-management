@@ -137,8 +137,33 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Calculate trust score for this action
 	trustScore := h.calculateActionTrustScore(agent, req.ActionType, req.Resource)
 
-	// Determine auto-approval based on trust score and action type
-	status, denialReason := h.determineVerificationStatus(agent, req.ActionType, trustScore)
+	// ============================================================================
+	// ✅ CRITICAL: Use AgentService.VerifyAction for PROPER capability-based access control
+	// This enforces the security policies configured in the dashboard
+	// The old determineVerificationStatus() only checked trust scores, not capabilities!
+	// ============================================================================
+	allowed, denialReason, auditIDFromVerify, err := h.agentService.VerifyAction(
+		c.Context(),
+		agentID,
+		req.ActionType,
+		req.Resource,
+		req.Context,
+	)
+
+	var status string
+	if err != nil {
+		// Error during verification - deny by default for security
+		fmt.Printf("⚠️  VerifyAction error: %v\n", err)
+		status = "denied"
+		if denialReason == "" {
+			denialReason = fmt.Sprintf("Verification error: %v", err)
+		}
+	} else if allowed {
+		status = "approved"
+	} else {
+		status = "denied"
+	}
+	_ = auditIDFromVerify // Audit ID already created by VerifyAction
 
 	// Create verification ID
 	verificationID := uuid.New()
@@ -256,14 +281,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
 		}
 
-		// 📝 CREATE VIOLATION RECORD for dashboard tracking (only for real violations, not demo actions)
-		if !isDemoHighRiskAction(req.ActionType) {
-			if err := h.agentService.CreateCapabilityViolation(c.Context(), agentID, req.ActionType, req.Resource, string(severity), req.Context); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
-			} else {
-				fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s\n", agent.Name, req.ActionType)
-			}
-		}
+		// NOTE: Violation record is already created by VerifyAction() with correct is_blocked and severity
+		// Do NOT create a duplicate here - it was causing dashboard to show incorrect data
 	}
 
 	// ✅ Create verification event for dashboard visibility
