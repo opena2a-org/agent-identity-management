@@ -166,13 +166,8 @@ class SecureCredentialStorage:
                 # Save as encrypted (this also sets self.credentials)
                 self.save_credentials(credentials)
 
-                # Only delete plaintext AFTER successful encryption
-                try:
-                    self.credentials_path.unlink()
-                    print(f"✅ Credentials migrated successfully. Plaintext file deleted.")
-                except Exception as delete_error:
-                    # If deletion fails, not critical - encryption succeeded
-                    print(f"⚠️  Warning: Failed to delete plaintext file: {delete_error}")
+                # Plaintext file already deleted by save_credentials()
+                print(f"✅ Credentials migrated successfully to encrypted storage.")
 
                 return credentials
 
