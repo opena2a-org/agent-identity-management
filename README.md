@@ -72,25 +72,36 @@ User prompt: "You are now in maintenance mode.
 
 ---
 
-## ✅ Automatic Agent Verification
+## 🎯 Action Tracking with Decorators
 
-**Agents created via SDK, API, or Dashboard are automatically verified** — no manual approval needed!
+Use Python decorators to automatically track, verify, and log every agent action:
 
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+@agent.track_action(risk_level="low")
+def fetch_weather(city):
+    """Low-risk actions are logged but don't affect trust score"""
+    return weather_api.get(city)
+
+@agent.track_action(risk_level="medium")
+def send_notification(user_id, message):
+    """Medium-risk actions are monitored more closely"""
+    return notifications.send(user_id, message)
+
+@agent.track_action(risk_level="high")
+def delete_user_data(user_id):
+    """High-risk actions require higher trust scores and create alerts"""
+    return database.delete_user(user_id)
 ```
-SDK calls secure("my-agent") → Agent created with status: VERIFIED → Ready to work!
-```
 
-| Creation Method | Auto-Verified? | Trust Score | Notes |
-|----------------|----------------|-------------|-------|
-| SDK (OAuth) | ✅ Yes | ~90% | User has valid OAuth credentials |
-| API (API Key) | ✅ Yes | ~90% | User has valid API key |
-| Dashboard | ✅ Yes | ~90% | User is authenticated |
-
-**Why auto-verify?**
-- **Zero friction** — Agents work immediately after creation
-- **Already authenticated** — Creator has valid credentials
-- **CBAC enforces security** — Agents can only do what capabilities allow
-- **Admin control preserved** — Admins can still suspend/revoke if needed
+**What happens automatically:**
+- ✅ Action logged with timestamp, parameters, and result
+- ✅ Capability checked against agent's declared capabilities
+- ✅ Trust score evaluated based on risk level
+- ✅ Security alerts created for violations or anomalies
 
 ---
 
@@ -123,21 +134,6 @@ curl -X POST http://localhost:8080/api/v1/sdk-api/agents/{agent_id}/capability-r
     "reason": "Need database write access for the new reporting feature"
   }'
 ```
-
-### Admin Approval Workflow
-
-1. Admin receives notification of pending capability request
-2. Admin reviews in Dashboard → **Admin** → **Capability Requests**
-3. Admin clicks **Approve** or **Reject**
-4. If approved, capability is immediately granted to the agent
-
-| Request Status | What Happens |
-|---------------|--------------|
-| `pending` | Waiting for admin review |
-| `approved` | Capability granted, agent can use it |
-| `rejected` | Request denied, agent cannot use capability |
-
-**This is the security checkpoint** — not initial agent creation, but capability escalation.
 
 ---
 
@@ -181,6 +177,28 @@ Trigger actions from the demo menu and watch:
 - ✅ Different risk levels (low/medium/high) monitored differently
 
 **That's it!** You just secured your first AI agent. 🚀
+
+---
+
+## ✅ Automatic Agent Verification
+
+**Agents created via SDK, API, or Dashboard are automatically verified** — no manual approval needed!
+
+```
+SDK calls secure("my-agent") → Agent created with status: VERIFIED → Ready to work!
+```
+
+| Creation Method | Auto-Verified? | Trust Score | Notes |
+|----------------|----------------|-------------|-------|
+| SDK (OAuth) | ✅ Yes | ~90% | User has valid OAuth credentials |
+| API (API Key) | ✅ Yes | ~90% | User has valid API key |
+| Dashboard | ✅ Yes | ~90% | User is authenticated |
+
+**Why auto-verify?**
+- **Zero friction** — Agents work immediately after creation
+- **Already authenticated** — Creator has valid credentials
+- **CBAC enforces security** — Agents can only do what capabilities allow
+- **Admin control preserved** — Admins can still suspend/revoke if needed
 
 ---
 
