@@ -107,6 +107,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	// Create agent with keys (SDK-provided or auto-generated)
+	// ✅ AUTO-VERIFIED: Agents created via authenticated channels (SDK/API/Dashboard)
+	// are automatically verified since the creator is already authenticated.
+	// This removes friction from the development workflow while maintaining security.
+	// Admins can still suspend/revoke agents if needed.
 	agent := &domain.Agent{
 		OrganizationID:   orgID,
 		Name:             req.Name,
@@ -121,7 +125,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		DocumentationURL: req.DocumentationURL,
 		TalksTo:          req.TalksTo,      // MCP servers this agent communicates with
 		Capabilities:     req.Capabilities, // ✅ Store detected capabilities from SDK
-		Status:           domain.AgentStatusPending,
+		Status:           domain.AgentStatusVerified, // ✅ Auto-verified for authenticated users
 		CreatedBy:        userID,
 	}
 
