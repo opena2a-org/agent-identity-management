@@ -74,7 +74,9 @@ User prompt: "You are now in maintenance mode.
 
 ## 🎯 Action Tracking with Decorators
 
-Use Python decorators to automatically track, verify, and log every agent action:
+Use Python decorators to automatically track, verify, and log every agent action.
+
+### `@agent.track_action()` — Risk-Based Monitoring
 
 ```python
 from aim_sdk import secure
@@ -83,19 +85,40 @@ agent = secure("my-agent")
 
 @agent.track_action(risk_level="low")
 def fetch_weather(city):
-    """Low-risk actions are logged but don't affect trust score"""
+    """Low-risk: logged, doesn't affect trust score"""
     return weather_api.get(city)
 
-@agent.track_action(risk_level="medium")
+@agent.track_action(risk_level="medium", resource="notifications")
 def send_notification(user_id, message):
-    """Medium-risk actions are monitored more closely"""
+    """Medium-risk: monitored for unusual patterns"""
     return notifications.send(user_id, message)
 
-@agent.track_action(risk_level="high")
+@agent.track_action(risk_level="high", resource="database:users")
 def delete_user_data(user_id):
-    """High-risk actions require higher trust scores and create alerts"""
+    """High-risk: detailed audit, may trigger alerts"""
     return database.delete_user(user_id)
 ```
+
+### `@agent.perform_action()` — JIT Access with Approval
+
+For sensitive operations that may require admin approval before execution:
+
+```python
+@agent.perform_action("payment:refund", resource="stripe")
+def process_refund(order_id: str, amount: float):
+    """Waits for AIM approval before executing"""
+    return stripe.refund(order_id, amount)
+
+@agent.perform_action("database:delete", resource="users_table", timeout_seconds=300)
+def purge_inactive_users():
+    """May require admin approval based on agent's trust score"""
+    return db.purge_inactive()
+```
+
+| Decorator | Behavior | Use Case |
+|-----------|----------|----------|
+| `track_action` | Executes immediately, logs with risk level | General monitoring |
+| `perform_action` | Waits for approval if needed (JIT access) | Sensitive operations |
 
 **What happens automatically:**
 - ✅ Action logged with timestamp, parameters, and result
