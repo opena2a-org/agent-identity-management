@@ -69,25 +69,51 @@ class OAuthTokenManager:
         """Intelligently discover credentials location with auto-copy for downloaded SDKs."""
         import shutil
         home_creds = Path.home() / ".aim" / "credentials.json"
-        if home_creds.exists():
-            return home_creds
+        home_encrypted = Path.home() / ".aim" / "credentials.encrypted"
+
+        # Check if SDK package has credentials (fresh download)
+        sdk_creds = None
         try:
             import aim_sdk
             sdk_package_root = Path(aim_sdk.__file__).parent.parent
             sdk_creds = sdk_package_root / ".aim" / "credentials.json"
-            if sdk_creds.exists():
+            if not sdk_creds.exists():
+                sdk_creds = None
+        except:
+            pass
+
+        # If SDK package has credentials, check if they're different from home
+        if sdk_creds:
+            should_install = False
+            if not home_creds.exists():
+                should_install = True
+            else:
+                # Compare token IDs - if different, new SDK was downloaded
+                try:
+                    with open(sdk_creds, 'r') as f:
+                        sdk_data = json.load(f)
+                    with open(home_creds, 'r') as f:
+                        home_data = json.load(f)
+                    sdk_token_id = sdk_data.get('sdk_token_id')
+                    home_token_id = home_data.get('sdk_token_id')
+                    if sdk_token_id and sdk_token_id != home_token_id:
+                        should_install = True
+                except:
+                    pass
+
+            if should_install:
                 try:
                     home_creds.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy(sdk_creds, home_creds)
                     os.chmod(home_creds, 0o600)
+                    # Clear old encrypted credentials - they have stale tokens
+                    if home_encrypted.exists():
+                        home_encrypted.unlink()
                     print(f"✅ SDK credentials installed to {home_creds}")
-                    return home_creds
-                except Exception as e:
+                except Exception:
                     return sdk_creds
-        except:
-            pass
-        # Always use home directory for credentials - never project directory
-        # This ensures credentials are user-specific and not accidentally committed to version control
+
+        # Always use home directory for credentials
         return home_creds
 
     def _credentials_exist(self) -> bool:
