@@ -30,7 +30,7 @@ agent = register_agent(
 print("\n✅ Agent ready! Now let's perform some verified actions...\n")
 
 # Example 1: Simple database read
-@agent.perform_action("read_database", resource="users_table")
+@agent.perform_action("db:read", resource="users_table")  # namespace:action format
 def get_user_count():
     """
     This function is automatically verified by AIM before execution.
@@ -42,7 +42,7 @@ def get_user_count():
 
 # Example 2: Sensitive operation with context
 @agent.perform_action(
-    "modify_config",
+    "config:modify",  # namespace:action format
     resource="system_settings",
     context={"reason": "Update email notifications", "requested_by": "admin"}
 )
@@ -56,7 +56,7 @@ def update_notification_settings(enabled: bool):
 
 # Example 3: High-risk data deletion
 @agent.perform_action(
-    "delete_data",
+    "data:delete",  # namespace:action format
     resource="test_data"
 )
 def cleanup_test_data():

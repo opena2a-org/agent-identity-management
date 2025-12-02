@@ -46,8 +46,8 @@ import os
 # Initialize AIM (auto-registers if needed)
 agent = secure("copilot-agent")
 
-# Wrap your Copilot function with AIM verification
-@aim_verify(agent, action_type="copilot_action", risk_level="medium")
+# Wrap your Copilot function with AIM verification (namespace:action format)
+@aim_verify(agent, action_type="email:read", risk_level="medium")
 def copilot_read_email(email_id: str):
     """Copilot reads an email via Microsoft Graph API"""
     # Your Microsoft Graph API call here
@@ -75,7 +75,7 @@ agent = secure("github-copilot-reviewer")
 # Initialize GitHub client
 github = Github(os.getenv("GITHUB_TOKEN"))
 
-@aim_verify(agent, action_type="code_review", risk_level="low")
+@aim_verify(agent, action_type="github:review", risk_level="low")  # namespace:action format
 def review_pull_request(repo_name: str, pr_number: int):
     """
     GitHub Copilot reviews a pull request and provides feedback.
@@ -227,7 +227,7 @@ agent = secure(
     aim_url=os.getenv("AIM_URL")
 )
 
-@aim_verify(aim_client, action_type="llm_chat", risk_level="medium")
+@aim_verify(aim_client, action_type="ai:chat", risk_level="medium")  # namespace:action format
 def copilot_chat(user_message: str, conversation_history: list = None):
     """
     Azure OpenAI Copilot processes user chat messages.
@@ -276,7 +276,7 @@ agent = secure(
     aim_url=os.getenv("AIM_URL")
 )
 
-@aim_verify(aim_client, action_type="workflow_trigger", risk_level="high")
+@aim_verify(aim_client, action_type="workflow:trigger", risk_level="high")  # namespace:action format
 def trigger_power_automate_flow(flow_id: str, inputs: dict):
     """
     Copilot triggers a Power Automate flow.
@@ -328,7 +328,7 @@ export AZURE_TENANT_ID="..."
 # Production configuration
 os.environ['AIM_STRICT_MODE'] = 'true'  # Block execution if verification fails
 
-@aim_verify(aim_client, action_type="sensitive_action", risk_level="critical")
+@aim_verify(aim_client, action_type="file:delete", risk_level="critical")  # namespace:action format
 def delete_sharepoint_files(site_id: str, file_ids: list):
     # This will be blocked if AIM verification fails
     pass

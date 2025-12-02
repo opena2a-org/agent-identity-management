@@ -425,3 +425,172 @@ func (r *CapabilityRepositoryPostgres) scanViolations(rows *sql.Rows) []*domain.
 
 	return violations
 }
+
+// ListCapabilityDefinitions returns all capability definitions (core + org-specific)
+func (r *CapabilityRepositoryPostgres) ListCapabilityDefinitions(orgID *uuid.UUID) ([]*domain.CapabilityDefinition, error) {
+	query := `
+		SELECT id, namespace, action, capability_type, risk_level, display_name,
+			   description, category, organization_id, created_at, updated_at
+		FROM capability_definitions
+		WHERE organization_id IS NULL
+		   OR organization_id = $1
+		ORDER BY capability_type DESC, namespace, action
+	`
+
+	rows, err := r.db.Query(query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var definitions []*domain.CapabilityDefinition
+	for rows.Next() {
+		def, err := r.scanCapabilityDefinition(rows)
+		if err != nil {
+			return nil, err
+		}
+		definitions = append(definitions, def)
+	}
+
+	return definitions, nil
+}
+
+// GetCapabilityDefinition retrieves a specific capability definition
+func (r *CapabilityRepositoryPostgres) GetCapabilityDefinition(namespace, action string, orgID *uuid.UUID) (*domain.CapabilityDefinition, error) {
+	query := `
+		SELECT id, namespace, action, capability_type, risk_level, display_name,
+			   description, category, organization_id, created_at, updated_at
+		FROM capability_definitions
+		WHERE namespace = $1 AND action = $2
+		  AND (organization_id IS NULL OR organization_id = $3)
+		ORDER BY organization_id NULLS LAST
+		LIMIT 1
+	`
+
+	row := r.db.QueryRow(query, namespace, action, orgID)
+
+	var def domain.CapabilityDefinition
+	var description, category sql.NullString
+	var organizationID uuid.NullUUID
+
+	err := row.Scan(
+		&def.ID,
+		&def.Namespace,
+		&def.Action,
+		&def.CapabilityType,
+		&def.RiskLevel,
+		&def.DisplayName,
+		&description,
+		&category,
+		&organizationID,
+		&def.CreatedAt,
+		&def.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if description.Valid {
+		def.Description = description.String
+	}
+	if category.Valid {
+		def.Category = category.String
+	}
+	if organizationID.Valid {
+		def.OrganizationID = &organizationID.UUID
+	}
+
+	return &def, nil
+}
+
+// CreateCapabilityDefinition creates a new capability definition
+func (r *CapabilityRepositoryPostgres) CreateCapabilityDefinition(def *domain.CapabilityDefinition) error {
+	query := `
+		INSERT INTO capability_definitions (
+			id, namespace, action, capability_type, risk_level, display_name,
+			description, category, organization_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (namespace, action, organization_id) DO NOTHING
+	`
+
+	def.ID = uuid.New()
+	def.CreatedAt = time.Now()
+	def.UpdatedAt = time.Now()
+
+	_, err := r.db.Exec(query,
+		def.ID,
+		def.Namespace,
+		def.Action,
+		def.CapabilityType,
+		def.RiskLevel,
+		def.DisplayName,
+		def.Description,
+		def.Category,
+		def.OrganizationID,
+		def.CreatedAt,
+		def.UpdatedAt,
+	)
+
+	return err
+}
+
+// UpdateCapabilityDefinition updates an existing capability definition
+func (r *CapabilityRepositoryPostgres) UpdateCapabilityDefinition(def *domain.CapabilityDefinition) error {
+	query := `
+		UPDATE capability_definitions
+		SET risk_level = $1, display_name = $2, description = $3,
+			category = $4, updated_at = $5
+		WHERE id = $6
+	`
+
+	def.UpdatedAt = time.Now()
+
+	_, err := r.db.Exec(query,
+		def.RiskLevel,
+		def.DisplayName,
+		def.Description,
+		def.Category,
+		def.UpdatedAt,
+		def.ID,
+	)
+
+	return err
+}
+
+// Helper function to scan a capability definition row
+func (r *CapabilityRepositoryPostgres) scanCapabilityDefinition(rows *sql.Rows) (*domain.CapabilityDefinition, error) {
+	var def domain.CapabilityDefinition
+	var description, category sql.NullString
+	var organizationID uuid.NullUUID
+
+	err := rows.Scan(
+		&def.ID,
+		&def.Namespace,
+		&def.Action,
+		&def.CapabilityType,
+		&def.RiskLevel,
+		&def.DisplayName,
+		&description,
+		&category,
+		&organizationID,
+		&def.CreatedAt,
+		&def.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if description.Valid {
+		def.Description = description.String
+	}
+	if category.Valid {
+		def.Category = category.String
+	}
+	if organizationID.Valid {
+		def.OrganizationID = &organizationID.UUID
+	}
+
+	return &def, nil
+}

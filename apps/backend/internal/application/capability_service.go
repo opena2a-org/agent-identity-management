@@ -381,90 +381,105 @@ func (s *CapabilityService) GetAgentCapabilities(
 
 // CapabilityDefinition represents a capability type available in the system
 type CapabilityDefinition struct {
-	Type        string `json:"type"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	RiskLevel   string `json:"riskLevel"`
+	Type           string `json:"type"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Category       string `json:"category"`
+	RiskLevel      string `json:"riskLevel"`
+	CapabilityType string `json:"capabilityType,omitempty"` // "core" or "custom"
 }
 
-// ListCapabilities lists all available capability types in the system
+// ListCapabilitiesResponse is the response for listing capabilities
+type ListCapabilitiesResponse struct {
+	Capabilities       []CapabilityDefinition `json:"capabilities"`
+	ReservedNamespaces []string               `json:"reservedNamespaces"`
+	ValidationPattern  string                 `json:"validationPattern"`
+}
+
+// ListCapabilities lists all available capability types from the database
 func (s *CapabilityService) ListCapabilities(ctx context.Context, orgID uuid.UUID) ([]CapabilityDefinition, error) {
-	// Return the standard set of capabilities available in AIM
-	capabilities := []CapabilityDefinition{
-		{
-			Type:        domain.CapabilityFileRead,
-			Name:        "File Read",
-			Description: "Read files from the file system",
-			Category:    "file_system",
-			RiskLevel:   "low",
-		},
-		{
-			Type:        domain.CapabilityFileWrite,
-			Name:        "File Write",
-			Description: "Write files to the file system",
-			Category:    "file_system",
-			RiskLevel:   "medium",
-		},
-		{
-			Type:        domain.CapabilityFileDelete,
-			Name:        "File Delete",
-			Description: "Delete files from the file system",
-			Category:    "file_system",
-			RiskLevel:   "high",
-		},
-		{
-			Type:        domain.CapabilityNetworkAccess,
-			Name:        "Network Access",
-			Description: "Make network requests and access external services",
-			Category:    "network",
-			RiskLevel:   "medium",
-		},
-		{
-			Type:        domain.CapabilityDBQuery,
-			Name:        "Database Query",
-			Description: "Query databases (read operations)",
-			Category:    "database",
-			RiskLevel:   "low",
-		},
-		{
-			Type:        domain.CapabilityDBWrite,
-			Name:        "Database Write",
-			Description: "Modify databases (write operations)",
-			Category:    "database",
-			RiskLevel:   "high",
-		},
-		{
-			Type:        domain.CapabilityAPICall,
-			Name:        "API Call",
-			Description: "Call external APIs",
-			Category:    "network",
-			RiskLevel:   "medium",
-		},
-		{
-			Type:        domain.CapabilityDataExport,
-			Name:        "Data Export",
-			Description: "Export data from the system",
-			Category:    "data",
-			RiskLevel:   "high",
-		},
-		{
-			Type:        domain.CapabilitySystemAdmin,
-			Name:        "System Administration",
-			Description: "Execute system commands and administrative actions",
-			Category:    "system",
-			RiskLevel:   "critical",
-		},
-		{
-			Type:        domain.CapabilityMCPToolUse,
-			Name:        "MCP Tool Use",
-			Description: "Use Model Context Protocol tools",
-			Category:    "mcp",
-			RiskLevel:   "medium",
-		},
+	// Fetch from database
+	definitions, err := s.capabilityRepo.ListCapabilityDefinitions(&orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list capability definitions: %w", err)
+	}
+
+	// Convert to response format
+	capabilities := make([]CapabilityDefinition, len(definitions))
+	for i, def := range definitions {
+		capabilities[i] = CapabilityDefinition{
+			Type:           def.Type(),
+			Name:           def.DisplayName,
+			Description:    def.Description,
+			Category:       def.Category,
+			RiskLevel:      def.RiskLevel,
+			CapabilityType: def.CapabilityType,
+		}
 	}
 
 	return capabilities, nil
+}
+
+// ListCapabilitiesWithMetadata returns capabilities with reserved namespaces and validation pattern
+func (s *CapabilityService) ListCapabilitiesWithMetadata(ctx context.Context, orgID uuid.UUID) (*ListCapabilitiesResponse, error) {
+	capabilities, err := s.ListCapabilities(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ListCapabilitiesResponse{
+		Capabilities:       capabilities,
+		ReservedNamespaces: domain.ReservedNamespaces,
+		ValidationPattern:  domain.CapabilityValidationPattern,
+	}, nil
+}
+
+// ValidateAndRegisterCapability validates a capability string and auto-registers custom capabilities
+func (s *CapabilityService) ValidateAndRegisterCapability(ctx context.Context, capability string, orgID uuid.UUID) error {
+	// Validate format
+	if err := domain.ValidateCapabilityFormat(capability); err != nil {
+		return err
+	}
+
+	// Parse namespace and action
+	namespace, action, err := domain.ParseCapability(capability)
+	if err != nil {
+		return err
+	}
+
+	// Check if it's a reserved namespace
+	if domain.IsReservedNamespace(namespace) {
+		// Must be an existing core capability
+		_, err := s.capabilityRepo.GetCapabilityDefinition(namespace, action, nil)
+		if err != nil {
+			return &domain.CapabilityError{
+				Capability: capability,
+				Message:    fmt.Sprintf("namespace '%s' is reserved; capability '%s' is not a valid core capability", namespace, capability),
+			}
+		}
+		return nil
+	}
+
+	// Custom capability - check if it exists, if not create it
+	_, err = s.capabilityRepo.GetCapabilityDefinition(namespace, action, &orgID)
+	if err != nil {
+		// Create new custom capability
+		def := &domain.CapabilityDefinition{
+			Namespace:      namespace,
+			Action:         action,
+			CapabilityType: "custom",
+			RiskLevel:      domain.RiskLevelMedium, // Default risk level for custom
+			DisplayName:    fmt.Sprintf("%s:%s", namespace, action),
+			Description:    fmt.Sprintf("Custom capability: %s:%s", namespace, action),
+			Category:       "custom",
+			OrganizationID: &orgID,
+		}
+		if err := s.capabilityRepo.CreateCapabilityDefinition(def); err != nil {
+			return fmt.Errorf("failed to register custom capability: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // GetViolationsByAgent retrieves violations for a specific agent

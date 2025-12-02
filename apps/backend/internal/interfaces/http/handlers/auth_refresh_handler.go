@@ -128,6 +128,8 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 				}
 
 				// Create new SDK token entry (old token remains valid until expiry)
+				// IMPORTANT: Carry forward the parent token's usage count so it's cumulative
+				now := time.Now()
 				newSDKToken := &domain.SDKToken{
 					ID:                uuid.New(),
 					UserID:            oldToken.UserID,
@@ -138,8 +140,10 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					DeviceFingerprint: oldToken.DeviceFingerprint,
 					IPAddress:         &newIPAddress,
 					UserAgent:         &userAgent,
-					CreatedAt:         time.Now(),
-					ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
+					UsageCount:        oldToken.UsageCount + 1, // Carry forward parent's usage count + 1 for this refresh
+					LastUsedAt:        &now,                    // Token is being used right now
+					CreatedAt:         now,
+					ExpiresAt:         now.Add(90 * 24 * time.Hour), // 90 days
 					Metadata: map[string]interface{}{
 						"source":        "token_rotation",
 						"rotated_from":  tokenID,

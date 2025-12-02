@@ -71,7 +71,10 @@ except Exception as e:
 
 
 # Define demo actions with different risk levels
-@agent.track_action(risk_level="low")
+# Note: action_name uses the standard namespace:action format (e.g., "api:call", "db:read")
+# See https://docs.aim.dev/capabilities for the full list of capabilities
+
+@agent.track_action(risk_level="low", action_name="api:call", resource="weather_api")
 def check_weather(city: str) -> dict:
     """Simulate checking weather - LOW risk action"""
     conditions = ["Sunny", "Cloudy", "Rainy", "Windy", "Snowy"]
@@ -83,7 +86,7 @@ def check_weather(city: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="low")
+@agent.track_action(risk_level="low", action_name="api:call", resource="product_search_api")
 def search_products(query: str) -> dict:
     """Simulate product search - LOW risk action"""
     return {
@@ -93,7 +96,7 @@ def search_products(query: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="medium", resource="database:read")
+@agent.track_action(risk_level="medium", action_name="user:read", resource="users_table")
 def get_user_profile(user_id: str) -> dict:
     """Simulate reading user data - MEDIUM risk action"""
     return {
@@ -104,7 +107,7 @@ def get_user_profile(user_id: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="medium", resource="database:read")
+@agent.track_action(risk_level="medium", action_name="db:read", resource="orders_table")
 def query_orders(user_id: str) -> dict:
     """Simulate querying orders - MEDIUM risk action"""
     return {
@@ -114,7 +117,7 @@ def query_orders(user_id: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="high", resource="notification:send")
+@agent.track_action(risk_level="high", action_name="notification:send", resource="push_notification")
 def send_notification(user_id: str, message: str) -> dict:
     """Simulate sending notification - HIGH risk action"""
     return {
@@ -125,7 +128,7 @@ def send_notification(user_id: str, message: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="high", resource="payment:process")
+@agent.track_action(risk_level="high", action_name="payment:process", resource="refund_service")
 def process_refund(order_id: str, amount: float) -> dict:
     """Simulate processing refund - HIGH risk action"""
     return {
@@ -149,9 +152,10 @@ def run_cbac_demo():
 This demo shows how AIM's Capability-Based Access Control (CBAC) blocks
 prompt injection attacks. The agent only has these capabilities declared:
   - api:call (for weather/search APIs)
-  - database:read (for user data)
-  - notification:send (for alerts)
-  - payment:process (for refunds)
+  - user:read (for reading user profiles)
+  - db:read (for querying orders)
+  - notification:send (for alerts - custom capability)
+  - payment:process (for refunds - custom capability)
 
 Watch what happens when an attacker tries to make the agent do something
 it's NOT authorized to do...

@@ -66,6 +66,28 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 
 	println("DEBUG: UserID:", userID.String())
 
+	// Get organization ID from context for capability validation
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: "Invalid organization ID type in context",
+		})
+	}
+
+	// Validate capability format and auto-register custom capabilities
+	if err := h.capabilityService.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, orgID); err != nil {
+		println("ERROR: Capability validation failed:", err.Error())
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
 	// For SDK/API key authentication, userID will be uuid.Nil
 	// Pass nil pointer instead of pointer to uuid.Nil to allow NULL in database
 	var userIDPtr *uuid.UUID
@@ -345,10 +367,10 @@ func (h *CapabilityHandler) GetViolationsByOrganization(c fiber.Ctx) error {
 
 // ListCapabilities godoc
 // @Summary List all available capabilities
-// @Description Get all capability types available in the system
+// @Description Get all capability types available in the system with metadata
 // @Tags capabilities
 // @Produce json
-// @Success 200 {array} application.CapabilityDefinition
+// @Success 200 {object} application.ListCapabilitiesResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /capabilities [get]
@@ -368,17 +390,15 @@ func (h *CapabilityHandler) ListCapabilities(c fiber.Ctx) error {
 		})
 	}
 
-	// Call capability service to list all capabilities
-	capabilities, err := h.capabilityService.ListCapabilities(context.Background(), orgID)
+	// Call capability service to list all capabilities with metadata
+	response, err := h.capabilityService.ListCapabilitiesWithMetadata(context.Background(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error: err.Error(),
 		})
 	}
 
-	return c.JSON(fiber.Map{
-		"capabilities": capabilities,
-	})
+	return c.JSON(response)
 }
 
 // GetRecentViolations godoc

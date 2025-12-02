@@ -17,11 +17,11 @@ import {
   EyeOff,
   ExternalLink,
 } from "lucide-react";
-import { api, Agent } from "@/lib/api";
+import { api, Agent, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 
 interface RegisterAgentModalProps {
   isOpen: boolean;
@@ -44,17 +44,16 @@ interface FormData {
   capabilities: string[]; // Capability strings
 }
 
-// Common capability options
-const CAPABILITY_OPTIONS = [
-  "read_files",
-  "write_files",
-  "execute_code",
-  "network_access",
-  "database_access",
-  "api_calls",
-  "user_interaction",
-  "data_processing",
-];
+// Capability validation pattern (namespace:action format)
+const CAPABILITY_PATTERN = /^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$/;
+
+// Risk level colors for capability badges
+const RISK_LEVEL_COLORS: Record<string, string> = {
+  low: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  high: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  critical: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+};
 
 export function RegisterAgentModal({
   isOpen,
@@ -78,6 +77,12 @@ export function RegisterAgentModal({
     privateKey: string;
   } | null>(null);
   const [loadingKeys, setLoadingKeys] = useState(false);
+  // Capability definitions from API
+  const [capabilityDefinitions, setCapabilityDefinitions] = useState<CapabilityDefinition[]>([]);
+  const [reservedNamespaces, setReservedNamespaces] = useState<string[]>([]);
+  const [loadingCapabilities, setLoadingCapabilities] = useState(false);
+  const [customCapability, setCustomCapability] = useState("");
+  const [customCapabilityError, setCustomCapabilityError] = useState<string | null>(null);
   const createEmptyFormData = (): FormData => ({
     name: "",
     displayName: "",
@@ -116,6 +121,25 @@ export function RegisterAgentModal({
       });
     }
   }, [error]);
+
+  // Fetch capability definitions when modal opens
+  useEffect(() => {
+    if (isOpen && capabilityDefinitions.length === 0) {
+      setLoadingCapabilities(true);
+      api.getCapabilityDefinitions()
+        .then((response: ListCapabilitiesResponse) => {
+          setCapabilityDefinitions(response.capabilities);
+          setReservedNamespaces(response.reservedNamespaces);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch capability definitions:", err);
+          // Fallback is handled by empty array - users can still add custom capabilities
+        })
+        .finally(() => {
+          setLoadingCapabilities(false);
+        });
+    }
+  }, [isOpen, capabilityDefinitions.length]);
 
   // Update form data when initialData or editMode changes
   useEffect(() => {
@@ -376,6 +400,8 @@ export function RegisterAgentModal({
     setCopiedField(null);
     setAgentKeys(null);
     setLoadingKeys(false);
+    setCustomCapability("");
+    setCustomCapabilityError(null);
   };
 
   const handleClose = () => {
@@ -411,15 +437,19 @@ export function RegisterAgentModal({
     }
   };
 
+  // Merge core capabilities from API with any custom capabilities already in form
   const mergedCapabilities = useMemo(() => {
-    return Array.from(
-      new Set([
-        ...(CAPABILITY_OPTIONS || []),
-        ...((initialFormData?.capabilities as string[]) || []),
-        ...(formData.capabilities || []),
-      ])
-    );
-  }, [initialFormData?.capabilities, formData.capabilities]);
+    const coreTypes = capabilityDefinitions.map(c => c.type);
+    const customCaps = formData.capabilities.filter(c => !coreTypes.includes(c));
+    return [...capabilityDefinitions, ...customCaps.map(c => ({
+      type: c,
+      name: c.split(":").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" "),
+      description: `Custom capability: ${c}`,
+      category: "custom",
+      riskLevel: "medium" as const,
+      capabilityType: "custom" as const,
+    }))];
+  }, [capabilityDefinitions, formData.capabilities]);
 
   const toggleCapability = (capability: string) => {
     setFormData((prev) => ({
@@ -428,6 +458,44 @@ export function RegisterAgentModal({
         ? prev.capabilities.filter((c) => c !== capability)
         : [...prev.capabilities, capability],
     }));
+  };
+
+  // Validate custom capability format
+  const validateCustomCapability = useCallback((value: string): string | null => {
+    if (!value.trim()) return null;
+
+    if (!CAPABILITY_PATTERN.test(value)) {
+      return "Format must be 'namespace:action' (e.g., 'payment:process', 'email:send')";
+    }
+
+    const [namespace] = value.split(":");
+    if (reservedNamespaces.includes(namespace)) {
+      return `Namespace '${namespace}' is reserved for core capabilities`;
+    }
+
+    if (formData.capabilities.includes(value)) {
+      return "This capability is already added";
+    }
+
+    return null;
+  }, [reservedNamespaces, formData.capabilities]);
+
+  // Add custom capability
+  const addCustomCapability = () => {
+    const trimmed = customCapability.trim().toLowerCase();
+    const error = validateCustomCapability(trimmed);
+
+    if (error) {
+      setCustomCapabilityError(error);
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      capabilities: [...prev.capabilities, trimmed],
+    }));
+    setCustomCapability("");
+    setCustomCapabilityError(null);
   };
 
   const addMcpServer = () => {
@@ -1038,35 +1106,99 @@ export function RegisterAgentModal({
               </div>
 
               {/* Capabilities */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Capabilities
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Select the capabilities this agent has. These define what
-                  actions the agent can perform.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {mergedCapabilities.map((capability) => (
-                    <label
-                      key={capability}
-                      className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.capabilities.includes(capability)}
-                        onChange={() => toggleCapability(capability)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        disabled={loading || success}
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {capability
-                          .replace(/_/g, " ")
-                          .replace(/\b\w/g, (l) => l.toUpperCase())}
-                      </span>
-                    </label>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Capabilities
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Select the capabilities this agent has. These define what
+                    actions the agent can perform. Format: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">namespace:action</code>
+                  </p>
                 </div>
+
+                {/* Loading state */}
+                {loadingCapabilities ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 py-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading capabilities...
+                  </div>
+                ) : (
+                  <>
+                    {/* Core capabilities grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {mergedCapabilities.map((capability) => (
+                        <label
+                          key={capability.type}
+                          className="flex items-start gap-2 p-2 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.capabilities.includes(capability.type)}
+                            onChange={() => toggleCapability(capability.type)}
+                            className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            disabled={loading || success}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {capability.name}
+                              </span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${RISK_LEVEL_COLORS[capability.riskLevel]}`}>
+                                {capability.riskLevel}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                              {capability.type}
+                            </span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Custom capability input */}
+                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Add Custom Capability
+                      </label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        Define custom capabilities for your organization. Reserved namespaces: {reservedNamespaces.join(", ")}
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customCapability}
+                          onChange={(e) => {
+                            setCustomCapability(e.target.value);
+                            if (customCapabilityError) {
+                              setCustomCapabilityError(validateCustomCapability(e.target.value));
+                            }
+                          }}
+                          onKeyPress={(e) =>
+                            e.key === "Enter" && (e.preventDefault(), addCustomCapability())
+                          }
+                          placeholder="e.g., payment:process or email:send"
+                          className={`flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 font-mono text-sm ${
+                            customCapabilityError ? "border-red-500" : "border-gray-200 dark:border-gray-700"
+                          }`}
+                          disabled={loading || success}
+                        />
+                        <button
+                          type="button"
+                          onClick={addCustomCapability}
+                          disabled={!customCapability.trim() || loading || success}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </button>
+                      </div>
+                      {customCapabilityError && (
+                        <p className="mt-1 text-xs text-red-500">{customCapabilityError}</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* MCP Servers Communication */}
