@@ -29,8 +29,8 @@ func (r *sdkTokenRepository) Create(token *domain.SDKToken) error {
 		INSERT INTO sdk_tokens (
 			id, user_id, organization_id, token_hash, token_id,
 			device_name, device_fingerprint, ip_address, user_agent,
-			expires_at, metadata, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			expires_at, metadata, created_at, usage_count, last_used_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, created_at
 	`
 
@@ -48,6 +48,8 @@ func (r *sdkTokenRepository) Create(token *domain.SDKToken) error {
 		token.ExpiresAt,
 		metadataJSON,
 		token.CreatedAt,
+		token.UsageCount,
+		token.LastUsedAt,
 	).Scan(&token.ID, &token.CreatedAt)
 
 	if err != nil {

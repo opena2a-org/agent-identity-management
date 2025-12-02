@@ -329,15 +329,15 @@ Total: 4/4 tests passed
 
 ```python
 # Low risk - read operations
-@aim_verify(risk_level="low")
+@aim_verify(risk_level="low", action_name="db:read")
 def read_data(): ...
 
 # Medium risk - updates
-@aim_verify(risk_level="medium")
+@aim_verify(risk_level="medium", action_name="db:write")
 def update_data(): ...
 
 # High risk - deletions, admin actions
-@aim_verify(risk_level="high")
+@aim_verify(risk_level="high", action_name="data:delete")
 def delete_data(): ...
 ```
 

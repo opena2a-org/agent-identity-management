@@ -48,10 +48,10 @@ for i, cap in enumerate(capabilities, 1):
 print()
 
 print("How it works:")
-print("  • requests → make_api_calls")
-print("  • smtplib → send_email")
-print("  • subprocess → execute_code")
-print("  • os + builtins → read_files, write_files")
+print("  • requests → api:call")
+print("  • smtplib → notification:send")
+print("  • subprocess → code:execute")
+print("  • os + builtins → file:read, file:write")
 print()
 
 # ============================================================================
@@ -183,7 +183,7 @@ print("    'my-agent',")
 print("    aim_url='http://localhost:8080',")
 print("    api_key='aim_your_key_here',")
 print("    auto_detect=False,  # Disable auto-detection")
-print("    capabilities=['custom_capability'],")
+print("    capabilities=['db:read', 'api:call'],  # namespace:action format")
 print("    talks_to=['custom-mcp-server']")
 print(")")
 print()

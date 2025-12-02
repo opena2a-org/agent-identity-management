@@ -148,6 +148,23 @@ export interface AgentCapability {
   updatedAt: string;
 }
 
+// Capability definition from the capability registry
+export interface CapabilityDefinition {
+  type: string;
+  name: string;
+  description: string;
+  category: string;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  capabilityType: "core" | "custom";
+}
+
+// Response from GET /api/v1/capabilities
+export interface ListCapabilitiesResponse {
+  capabilities: CapabilityDefinition[];
+  reservedNamespaces: string[];
+  validationPattern: string;
+}
+
 export interface SDKToken {
   id: string;
   userId: string;
@@ -1659,6 +1676,11 @@ class APIClient {
     return this.request(
       `/api/v1/agents/${agentId}/capabilities?activeOnly=${activeOnly}`
     );
+  }
+
+  // Capability Definitions (registry)
+  async getCapabilityDefinitions(): Promise<ListCapabilitiesResponse> {
+    return this.request("/api/v1/capabilities");
   }
 
   async getLatestCapabilityReport(agentId: string): Promise<any> {

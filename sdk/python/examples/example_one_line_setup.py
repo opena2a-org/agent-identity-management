@@ -147,7 +147,7 @@ print("Now you can perform actions with automatic verification:")
 print()
 
 # Example: Verified database read
-@agent.perform_action("read_database", resource="users_table")
+@agent.perform_action("db:read", resource="users_table")  # namespace:action format
 def get_user_count():
     """
     This function is automatically verified by AIM before execution.
@@ -161,7 +161,7 @@ def get_user_count():
     return {"count": 42, "table": "users"}
 
 # Example: Verified API call
-@agent.perform_action("make_api_call", resource="https://api.example.com/data")
+@agent.perform_action("api:call", resource="https://api.example.com/data")  # namespace:action format
 def fetch_external_data():
     """High-trust action with full audit trail"""
     print("  🌐 Calling external API...")

@@ -109,7 +109,7 @@ agent = secure(
     name="my-agent",
     api_key="aim_abc123",
     auto_detect=False,
-    capabilities=["read_database", "send_email"],
+    capabilities=["db:read", "notification:send"],  # namespace:action format
     version="1.0.0"
 )
 ```
@@ -200,7 +200,7 @@ def deploy_to_production(service_name, version):
 agent = secure("my-agent")  # ✅ Can use all detected capabilities immediately
 
 # Later, need new capability? Admin must approve
-client.capabilities.request("delete_data", reason="Cleanup feature")
+client.capabilities.request("data:delete", reason="Cleanup feature")
 ```
 
 ### Request Additional Capabilities
@@ -210,7 +210,7 @@ Use `request_capability()` to request capabilities that weren't detected during 
 ```python
 # Request a new capability (requires admin approval)
 result = agent.request_capability(
-    capability_type="write_database",
+    capability_type="db:write",  # namespace:action format
     reason="Need to update user preferences"
 )
 
@@ -231,7 +231,7 @@ Use `register_mcp()` to register MCP servers your agent connects to:
 mcp_result = agent.register_mcp(
     server_name="my-database-server",
     server_url="http://localhost:3001",
-    capabilities=["read", "write", "delete"]
+    capabilities=["db:read", "db:write", "data:delete"]  # namespace:action format
 )
 
 print(f"MCP Server registered: {mcp_result['id']}")
@@ -281,11 +281,11 @@ AIM automatically detects everything about your agent:
 # Full auto-detection (default)
 agent = secure("my-agent")
 
-# Partial override
-agent = secure("my-agent", capabilities=["custom_capability"])
+# Partial override - add specific capabilities
+agent = secure("my-agent", capabilities=["api:call", "db:read"])
 
-# Complete manual control
-agent = secure("my-agent", auto_detect=False, capabilities=["read", "write"])
+# Complete manual control - disable auto-detection
+agent = secure("my-agent", auto_detect=False, capabilities=["db:read", "db:write"])
 ```
 
 ## 📁 SDK Structure

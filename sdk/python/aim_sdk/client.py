@@ -14,6 +14,9 @@ import requests
 from nacl.signing import SigningKey, VerifyKey
 from nacl.encoding import Base64Encoder
 
+import re
+import warnings
+
 from .exceptions import (
     AuthenticationError,
     VerificationError,
@@ -22,6 +25,56 @@ from .exceptions import (
 )
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
+
+
+# Capability format validation pattern (namespace:action)
+CAPABILITY_PATTERN = re.compile(r'^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$')
+
+# Reserved namespaces for core capabilities
+RESERVED_NAMESPACES = ['file', 'db', 'api', 'network', 'system', 'user', 'mcp', 'data']
+
+
+def validate_capability_format(capability: str) -> tuple[bool, str]:
+    """
+    Validate that a capability string matches the namespace:action format.
+
+    Args:
+        capability: The capability string to validate
+
+    Returns:
+        Tuple of (is_valid, error_message)
+
+    Example:
+        >>> validate_capability_format("file:read")
+        (True, "")
+        >>> validate_capability_format("read_files")
+        (False, "Capability must match format 'namespace:action' (e.g., 'file:read', 'payment:process')")
+    """
+    if not capability:
+        return False, "Capability cannot be empty"
+
+    if not CAPABILITY_PATTERN.match(capability):
+        return False, (
+            f"Capability '{capability}' must match format 'namespace:action' "
+            "(e.g., 'file:read', 'payment:process'). "
+            "Namespace and action must be lowercase alphanumeric, action can contain underscores."
+        )
+
+    return True, ""
+
+
+def _warn_deprecated_capability_format(capability: str):
+    """Warn if capability doesn't match the new namespace:action format."""
+    is_valid, error_msg = validate_capability_format(capability)
+    if not is_valid:
+        warnings.warn(
+            f"DEPRECATION WARNING: {error_msg}\n"
+            "The old capability format (e.g., 'read_files') is deprecated. "
+            "Please update to the new namespace:action format (e.g., 'file:read').\n"
+            "See https://docs.aim.dev/capabilities for the full list of standard capabilities.",
+            DeprecationWarning,
+            stacklevel=3
+        )
 
 
 class AIMClient:
@@ -1392,6 +1445,9 @@ class AIMClient:
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
+                # Warn if using deprecated capability format (snake_case instead of namespace:action)
+                _warn_deprecated_capability_format(action_type)
+
                 # Request verification
                 verification_result = self.verify_action(
                     action_type=action_type,
@@ -1463,6 +1519,9 @@ class AIMClient:
             def wrapper(*args, **kwargs):
                 # Use function name if action_name not provided
                 action = action_name or func.__name__
+
+                # Warn if using deprecated capability format (snake_case instead of namespace:action)
+                _warn_deprecated_capability_format(action)
 
                 # Build context with risk level
                 context = {
