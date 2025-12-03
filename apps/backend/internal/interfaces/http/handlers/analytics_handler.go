@@ -57,8 +57,13 @@ func NewAnalyticsHandler(
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/usage [get]
 func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
 	// Support both 'days' and 'period' parameters
 	daysStr := c.Query("days", "")
 	period := c.Query("period", "month")
@@ -759,7 +764,12 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/analytics/agents/activity [get]
 func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
@@ -1105,7 +1115,12 @@ func calculateAverageTrustScore(agents []*domain.Agent) float64 {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/analytics/activity [get]
 func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
 
 	// Get days parameter (default 7 days)
 	daysStr := c.Query("days", "7")

@@ -109,20 +109,31 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 		})
 	}
 
-	// Get latest trust score
+	// Get latest trust score, or calculate on-the-fly if none exists
 	score, err := h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "No trust score found",
+	if err != nil || score == nil {
+		// No stored score - calculate one on-the-fly
+		score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to calculate trust score",
+			})
+		}
+	}
+
+	// Defensive nil check
+	if score == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Trust score calculation returned nil",
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"agentId":      agentID,
-		"agentName":    agent.Name,
+		"agentId":       agentID,
+		"agentName":     agent.Name,
 		"score":         score.Score,
 		"factors":       score.Factors,
-		"calculated_at": score.LastCalculated,
+		"calculatedAt":  score.LastCalculated,
 	})
 }
 
@@ -150,11 +161,22 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		})
 	}
 
-	// Get latest trust score
+	// Get latest trust score, or calculate on-the-fly if none exists
 	score, err := h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "No trust score found",
+	if err != nil || score == nil {
+		// No stored score - calculate one on-the-fly
+		score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to calculate trust score",
+			})
+		}
+	}
+
+	// Verify score is not nil (defensive check)
+	if score == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Trust score calculation returned invalid data",
 		})
 	}
 

@@ -24,8 +24,18 @@ import (
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/key-vault [get]
 func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -90,8 +100,18 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/audit-logs [get]
 func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

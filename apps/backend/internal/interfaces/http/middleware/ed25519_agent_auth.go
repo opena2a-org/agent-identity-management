@@ -135,14 +135,11 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		if agent.PublicKey != nil && *agent.PublicKey != "" {
 			// Use registered key from database
 			verifyPublicKey = *agent.PublicKey
-			fmt.Printf("🔑 Using REGISTERED public key from database (first 20): %s...\n", verifyPublicKey[:20])
 		} else {
 			// Agent hasn't registered a key yet, use the one from request
 			// (This allows first-time registration)
 			verifyPublicKey = publicKeyB64
-			fmt.Printf("🔑 Using REQUEST public key (first 20): %s...\n", publicKeyB64[:20])
 		}
-		fmt.Printf("🔑 Request sent public key (first 20): %s...\n", publicKeyB64[:20])
 
 		// Decode public key
 		publicKeyBytes, err := base64.StdEncoding.DecodeString(verifyPublicKey)
@@ -180,33 +177,17 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 			// CRITICAL: SDK already sends JSON with sorted keys (Python's json.dumps(sort_keys=True))
 			// Use the original body as-is to preserve exact formatting including number precision
 			bodyStr := string(c.Body())
-			fmt.Printf("🔍 Backend using original body: %s\n", bodyStr[:200])
 			messageParts = append(messageParts, bodyStr)
 		}
 
 		message := strings.Join(messageParts, "\n")
-		msgPreview := message
-		if len(message) > 500 {
-			msgPreview = message[:500]
-		}
-		fmt.Printf("🔍 Backend verifying message (first 500 chars):\n%s\n", msgPreview)
 
 		// Verify Ed25519 signature
 		if !ed25519.Verify(publicKey, []byte(message), signatureBytes) {
-			// Debug logging for signature verification failure
-			fmt.Printf("❌ Ed25519 signature verification FAILED\n")
-			fmt.Printf("   Agent ID: %s\n", agentID)
-			fmt.Printf("   Timestamp: %s\n", timestampStr)
-			fmt.Printf("   Message to verify:\n%s\n", message)
-			fmt.Printf("   Public key (first 20 chars): %s...\n", verifyPublicKey[:20])
-			fmt.Printf("   Signature (first 20 chars): %s...\n", signatureB64[:20])
-
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid signature",
 			})
 		}
-
-		fmt.Printf("✅ Ed25519 signature verification PASSED for agent %s\n", agentID)
 
 		// Signature is valid! Set agent context for handlers
 		c.Locals("agent_id", agentID)

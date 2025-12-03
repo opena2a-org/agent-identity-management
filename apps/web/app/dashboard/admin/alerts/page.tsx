@@ -175,7 +175,7 @@ export default function AlertsPage() {
             ? {
                 ...a,
                 isAcknowledged: true,
-                acknowledged_at: new Date().toISOString(),
+                acknowledgedAt: new Date().toISOString(),
               }
             : a
         )
@@ -235,7 +235,7 @@ export default function AlertsPage() {
             ? {
                 ...a,
                 isAcknowledged: true,
-                acknowledged_at: new Date().toISOString(),
+                acknowledgedAt: new Date().toISOString(),
               }
             : a
         )

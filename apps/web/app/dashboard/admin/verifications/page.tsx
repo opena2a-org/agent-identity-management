@@ -45,16 +45,16 @@ import {
 
 interface PendingVerification {
   id: string;
-  agent_id: string;
-  agent_name: string;
-  action_type: string;
+  agentId: string;
+  agentName: string;
+  actionType: string;
   resource: string;
   context?: Record<string, any>;
-  risk_level: string;
-  trust_score: number;
+  riskLevel: string;
+  trustScore: number;
   status: string;
-  requested_at: string;
-  expires_at: string;
+  requestedAt: string;
+  expiresAt: string;
 }
 
 type DialogMode = "approve" | "deny" | null;
@@ -183,9 +183,9 @@ export default function PendingVerificationsPage() {
         });
 
         setVerifications(
-          (payload?.verifications || []).map((item) => ({
+          (payload?.verifications || []).map((item: any) => ({
             ...item,
-            risk_level: (item?.risk_level || "medium").toLowerCase(),
+            riskLevel: (item?.riskLevel || item?.risk_level || "medium").toLowerCase(),
             status: (item?.status || "pending").toLowerCase(),
           }))
         );
@@ -268,15 +268,15 @@ export default function PendingVerificationsPage() {
         await api.approvePendingVerification(selected.id, reason.trim() || undefined);
         eventEmitter.emit(Events.VERIFICATION_APPROVED);
         toast.success("Action approved", {
-          description: `${selected.agent_name || "Agent"} can continue "${
-            selected.action_type
+          description: `${selected.agentName || "Agent"} can continue "${
+            selected.actionType
           }".`,
         });
       } else {
         await api.denyPendingVerification(selected.id, reason.trim());
         eventEmitter.emit(Events.VERIFICATION_DENIED);
         toast.success("Action denied", {
-          description: `${selected.agent_name || "Agent"} request blocked.`,
+          description: `${selected.agentName || "Agent"} request blocked.`,
         });
       }
       await fetchPending({ skipLoading: true });
@@ -524,7 +524,7 @@ export default function PendingVerificationsPage() {
               </div>
             ) : (
               verifications.map((verification) => {
-                const riskKey = normalizeRisk(verification.risk_level);
+                const riskKey = normalizeRisk(verification.riskLevel);
                 const riskMeta = riskStyles[riskKey];
                 const statusClass =
                   statusStyles[verification.status] ||
@@ -539,7 +539,7 @@ export default function PendingVerificationsPage() {
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-lg font-semibold">
-                            {verification.action_type}
+                            {verification.actionType}
                           </h3>
                           <Badge className={riskMeta.badge}>
                             {riskMeta.label} Risk
@@ -549,8 +549,8 @@ export default function PendingVerificationsPage() {
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Requested by {verification.agent_name || "Unknown agent"} •{" "}
-                          {formatDateTime(verification.requested_at)}
+                          Requested by {verification.agentName || "Unknown agent"} •{" "}
+                          {formatDateTime(verification.requestedAt)}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           Resource: {verification.resource || "n/a"}
@@ -561,7 +561,7 @@ export default function PendingVerificationsPage() {
                           Trust score (adjusted)
                         </p>
                         <p className="text-xl font-semibold">
-                          {(verification.trust_score * 100).toFixed(1)}%
+                          {(verification.trustScore * 100).toFixed(1)}%
                         </p>
                       </div>
                     </div>
@@ -587,8 +587,8 @@ export default function PendingVerificationsPage() {
                           const baseTrustScore =
                             typeof metadata.trustScore === "number"
                               ? metadata.trustScore
-                              : typeof verification.trust_score === "number"
-                              ? verification.trust_score
+                              : typeof verification.trustScore === "number"
+                              ? verification.trustScore
                               : null;
 
                           const formatValue = (value: any) => {
@@ -613,8 +613,9 @@ export default function PendingVerificationsPage() {
                             {
                               label: "Action Type",
                               value:
+                                metadata.actionType ||
                                 metadata.action_type ||
-                                verification.action_type ||
+                                verification.actionType ||
                                 "—",
                             },
                             {
@@ -818,9 +819,9 @@ export default function PendingVerificationsPage() {
             </AlertDialogHeader>
             <div className="space-y-3">
               <div className="text-sm">
-                <p className="font-medium">{selected?.action_type}</p>
+                <p className="font-medium">{selected?.actionType}</p>
                 <p className="text-muted-foreground">
-                  Agent: {selected?.agent_name || "Unknown"} • Resource:{" "}
+                  Agent: {selected?.agentName || "Unknown"} • Resource:{" "}
                   {selected?.resource || "n/a"}
                 </p>
               </div>
