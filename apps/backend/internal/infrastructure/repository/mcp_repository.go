@@ -75,19 +75,23 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 
 	server := &domain.MCPServer{}
 	var capabilitiesJSON []byte
+	var description sql.NullString
+	var version sql.NullString
+	var publicKey sql.NullString
+	var verificationURL sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&server.ID,
 		&server.OrganizationID,
 		&server.Name,
-		&server.Description,
+		&description,
 		&server.URL,
-		&server.Version,
-		&server.PublicKey,
+		&version,
+		&publicKey,
 		&server.Status,
 		&server.IsVerified,
 		&server.LastVerifiedAt,
-		&server.VerificationURL,
+		&verificationURL,
 		&capabilitiesJSON, // Read as JSON bytes
 		&server.TrustScore,
 		&server.RegisteredByAgent,
@@ -105,6 +109,20 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mcp server: %w", err)
+	}
+
+	// Convert nullable fields
+	if description.Valid {
+		server.Description = description.String
+	}
+	if version.Valid {
+		server.Version = version.String
+	}
+	if publicKey.Valid {
+		server.PublicKey = publicKey.String
+	}
+	if verificationURL.Valid {
+		server.VerificationURL = verificationURL.String
 	}
 
 	// Unmarshal capabilities from JSONB
@@ -145,19 +163,23 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 	for rows.Next() {
 		server := &domain.MCPServer{}
 		var capabilitiesJSON []byte
+		var description sql.NullString
+		var version sql.NullString
+		var publicKey sql.NullString
+		var verificationURL sql.NullString
 
 		err := rows.Scan(
 			&server.ID,
 			&server.OrganizationID,
 			&server.Name,
-			&server.Description,
+			&description,
 			&server.URL,
-			&server.Version,
-			&server.PublicKey,
+			&version,
+			&publicKey,
 			&server.Status,
 			&server.IsVerified,
 			&server.LastVerifiedAt,
-			&server.VerificationURL,
+			&verificationURL,
 			&capabilitiesJSON, // Read as JSON bytes
 			&server.TrustScore,
 			&server.RegisteredByAgent,
@@ -172,6 +194,20 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
+		}
+
+		// Convert nullable fields
+		if description.Valid {
+			server.Description = description.String
+		}
+		if version.Valid {
+			server.Version = version.String
+		}
+		if publicKey.Valid {
+			server.PublicKey = publicKey.String
+		}
+		if verificationURL.Valid {
+			server.VerificationURL = verificationURL.String
 		}
 
 		// Unmarshal capabilities from JSONB
@@ -200,19 +236,23 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 
 	server := &domain.MCPServer{}
 	var capabilitiesJSON []byte
+	var description sql.NullString
+	var version sql.NullString
+	var publicKey sql.NullString
+	var verificationURL sql.NullString
 
 	err := r.db.QueryRow(query, url).Scan(
 		&server.ID,
 		&server.OrganizationID,
 		&server.Name,
-		&server.Description,
+		&description,
 		&server.URL,
-		&server.Version,
-		&server.PublicKey,
+		&version,
+		&publicKey,
 		&server.Status,
 		&server.IsVerified,
 		&server.LastVerifiedAt,
-		&server.VerificationURL,
+		&verificationURL,
 		&capabilitiesJSON, // Read as JSON bytes
 		&server.TrustScore,
 		&server.RegisteredByAgent,
@@ -230,6 +270,20 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mcp server: %w", err)
+	}
+
+	// Convert nullable fields
+	if description.Valid {
+		server.Description = description.String
+	}
+	if version.Valid {
+		server.Version = version.String
+	}
+	if publicKey.Valid {
+		server.PublicKey = publicKey.String
+	}
+	if verificationURL.Valid {
+		server.VerificationURL = verificationURL.String
 	}
 
 	// Unmarshal capabilities from JSONB
@@ -329,19 +383,23 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 	for rows.Next() {
 		server := &domain.MCPServer{}
 		var capabilitiesJSON []byte
+		var description sql.NullString
+		var version sql.NullString
+		var publicKey sql.NullString
+		var verificationURL sql.NullString
 
 		err := rows.Scan(
 			&server.ID,
 			&server.OrganizationID,
 			&server.Name,
-			&server.Description,
+			&description,
 			&server.URL,
-			&server.Version,
-			&server.PublicKey,
+			&version,
+			&publicKey,
 			&server.Status,
 			&server.IsVerified,
 			&server.LastVerifiedAt,
-			&server.VerificationURL,
+			&verificationURL,
 			&capabilitiesJSON, // Read as JSON bytes
 			&server.TrustScore,
 			&server.RegisteredByAgent,
@@ -351,6 +409,20 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server: %w", err)
+		}
+
+		// Convert nullable fields
+		if description.Valid {
+			server.Description = description.String
+		}
+		if version.Valid {
+			server.Version = version.String
+		}
+		if publicKey.Valid {
+			server.PublicKey = publicKey.String
+		}
+		if verificationURL.Valid {
+			server.VerificationURL = verificationURL.String
 		}
 
 		// Unmarshal capabilities from JSONB

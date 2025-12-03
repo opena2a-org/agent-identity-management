@@ -60,16 +60,19 @@ func (r *MCPServerCapabilityRepository) GetByID(id uuid.UUID) (*domain.MCPServer
 	`
 
 	capability := &domain.MCPServerCapability{}
+	var description sql.NullString
+	var capabilitySchema []byte
+	var lastVerifiedAt sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
 		&capability.ID,
 		&capability.MCPServerID,
 		&capability.Name,
 		&capability.CapabilityType,
-		&capability.Description,
-		&capability.CapabilitySchema,
+		&description,
+		&capabilitySchema,
 		&capability.DetectedAt,
-		&capability.LastVerifiedAt,
+		&lastVerifiedAt,
 		&capability.IsActive,
 		&capability.CreatedAt,
 		&capability.UpdatedAt,
@@ -80,6 +83,17 @@ func (r *MCPServerCapabilityRepository) GetByID(id uuid.UUID) (*domain.MCPServer
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mcp server capability: %w", err)
+	}
+
+	// Convert nullable fields
+	if description.Valid {
+		capability.Description = description.String
+	}
+	if capabilitySchema != nil {
+		capability.CapabilitySchema = capabilitySchema
+	}
+	if lastVerifiedAt.Valid {
+		capability.LastVerifiedAt = &lastVerifiedAt.Time
 	}
 
 	return capability, nil
@@ -105,22 +119,36 @@ func (r *MCPServerCapabilityRepository) GetByServerID(serverID uuid.UUID) ([]*do
 	var capabilities []*domain.MCPServerCapability
 	for rows.Next() {
 		capability := &domain.MCPServerCapability{}
+		var description sql.NullString
+		var capabilitySchema []byte
+		var lastVerifiedAt sql.NullTime
 
 		err := rows.Scan(
 			&capability.ID,
 			&capability.MCPServerID,
 			&capability.Name,
 			&capability.CapabilityType,
-			&capability.Description,
-			&capability.CapabilitySchema,
+			&description,
+			&capabilitySchema,
 			&capability.DetectedAt,
-			&capability.LastVerifiedAt,
+			&lastVerifiedAt,
 			&capability.IsActive,
 			&capability.CreatedAt,
 			&capability.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server capability: %w", err)
+		}
+
+		// Convert nullable fields
+		if description.Valid {
+			capability.Description = description.String
+		}
+		if capabilitySchema != nil {
+			capability.CapabilitySchema = capabilitySchema
+		}
+		if lastVerifiedAt.Valid {
+			capability.LastVerifiedAt = &lastVerifiedAt.Time
 		}
 
 		capabilities = append(capabilities, capability)
@@ -149,22 +177,36 @@ func (r *MCPServerCapabilityRepository) GetByServerIDAndType(serverID uuid.UUID,
 	var capabilities []*domain.MCPServerCapability
 	for rows.Next() {
 		capability := &domain.MCPServerCapability{}
+		var description sql.NullString
+		var capabilitySchema []byte
+		var lastVerifiedAt sql.NullTime
 
 		err := rows.Scan(
 			&capability.ID,
 			&capability.MCPServerID,
 			&capability.Name,
 			&capability.CapabilityType,
-			&capability.Description,
-			&capability.CapabilitySchema,
+			&description,
+			&capabilitySchema,
 			&capability.DetectedAt,
-			&capability.LastVerifiedAt,
+			&lastVerifiedAt,
 			&capability.IsActive,
 			&capability.CreatedAt,
 			&capability.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mcp server capability: %w", err)
+		}
+
+		// Convert nullable fields
+		if description.Valid {
+			capability.Description = description.String
+		}
+		if capabilitySchema != nil {
+			capability.CapabilitySchema = capabilitySchema
+		}
+		if lastVerifiedAt.Valid {
+			capability.LastVerifiedAt = &lastVerifiedAt.Time
 		}
 
 		capabilities = append(capabilities, capability)

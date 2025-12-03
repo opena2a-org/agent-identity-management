@@ -110,6 +110,7 @@ interface Agent {
   name: string;
   displayName: string;
   agentType: string;
+  status?: string;
 }
 
 export default function MCPServerDetailsPage({
@@ -122,6 +123,7 @@ export default function MCPServerDetailsPage({
   const [server, setServer] = useState<MCPServer | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [connectedAgents, setConnectedAgents] = useState<Agent[]>([]);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +175,7 @@ export default function MCPServerDetailsPage({
 
         // Fetch connected agents
         try {
+          setAgentsError(null);
           const agentsData = await api.getMCPServerAgents(serverId!);
           let agents = agentsData.agents || [];
           // Robust client fallback: also match by talks_to entries containing id/name/url
@@ -232,26 +235,15 @@ export default function MCPServerDetailsPage({
             }
           }
           setConnectedAgents(agents);
-        } catch (err) {
+        } catch (err: any) {
           console.error("Failed to fetch connected agents:", err);
+          setAgentsError(err?.message || "Failed to load connected agents");
         }
 
         // Fetch attestations
         try {
-          const token = api.getToken?.();
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/mcp-servers/${serverId}/attestations`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            setAttestations(data.attestations || []);
-          }
+          const data = await api.getMCPServerAttestations(serverId!);
+          setAttestations(data.attestations || []);
         } catch (err) {
           console.error("Failed to fetch attestations:", err);
         }
@@ -733,10 +725,32 @@ export default function MCPServerDetailsPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {connectedAgents.length === 0 ? (
+                {agentsError ? (
                   <div className="text-center py-8">
+                    <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
+                    <p className="text-destructive font-medium">
+                      Failed to load connected agents
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {agentsError}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={handleRefresh}
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                ) : connectedAgents.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                     <p className="text-muted-foreground">
                       No agents connected yet
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Agents that attest to this MCP server will appear here
                     </p>
                   </div>
                 ) : (
@@ -750,7 +764,7 @@ export default function MCPServerDetailsPage({
                         }
                       >
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                          <Server className="h-5 w-5 text-blue-600" />
+                          <Bot className="h-5 w-5 text-blue-600" />
                         </div>
                         <div className="flex-1">
                           <h4 className="font-medium">
@@ -760,6 +774,19 @@ export default function MCPServerDetailsPage({
                             {agent.agentType}
                           </p>
                         </div>
+                        {agent.status && (
+                          <Badge
+                            variant={
+                              agent.status === "active"
+                                ? "default"
+                                : agent.status === "inactive"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {agent.status}
+                          </Badge>
+                        )}
                         <ExternalLink className="h-4 w-4 text-muted-foreground" />
                       </div>
                     ))}

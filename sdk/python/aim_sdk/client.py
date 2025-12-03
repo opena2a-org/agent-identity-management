@@ -1881,6 +1881,7 @@ def register_agent(
     organization_domain: Optional[str] = None,
     talks_to: Optional[list] = None,
     capabilities: Optional[list] = None,
+    tags: Optional[list] = None,  # ✅ NEW: Tag IDs to apply during registration
     auto_detect: bool = True,
     force_new: bool = False,
     sdk_token_id: Optional[str] = None
@@ -1912,6 +1913,7 @@ def register_agent(
         organization_domain: Organization domain for auto-approval
         talks_to: Override auto-detected MCP servers (manual specification)
         capabilities: Override auto-detected capabilities (manual specification)
+        tags: List of tag IDs to apply during registration (optional)
         auto_detect: Auto-detect capabilities and MCPs (default: True)
         force_new: Force new registration even if credentials exist
         sdk_token_id: SDK token for usage tracking (auto-loaded if available)
@@ -2052,6 +2054,8 @@ def register_agent(
         registration_data["talksTo"] = talks_to
     if capabilities:
         registration_data["capabilities"] = capabilities
+    if tags:
+        registration_data["tagIds"] = tags  # ✅ Tags applied during registration
 
     # 5. Register agent (mode-specific endpoint)
     try:

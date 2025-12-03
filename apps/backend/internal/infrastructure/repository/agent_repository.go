@@ -16,6 +16,38 @@ type AgentRepository struct {
 	db *sql.DB
 }
 
+// unmarshalTalksTo handles both string array and object array formats for talks_to field
+// Format 1: ["uuid1", "uuid2"] - simple string array
+// Format 2: [{"id": "uuid1", "name": "server-name"}] - object array
+func unmarshalTalksTo(data []byte) ([]string, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	// Try format 1: string array
+	var strings []string
+	if err := json.Unmarshal(data, &strings); err == nil {
+		return strings, nil
+	}
+
+	// Try format 2: object array
+	var objects []map[string]interface{}
+	if err := json.Unmarshal(data, &objects); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+	}
+
+	// Extract IDs and names from objects
+	result := make([]string, 0, len(objects))
+	for _, obj := range objects {
+		if id, ok := obj["id"].(string); ok && id != "" {
+			result = append(result, id)
+		} else if name, ok := obj["name"].(string); ok && name != "" {
+			result = append(result, name)
+		}
+	}
+	return result, nil
+}
+
 // NewAgentRepository creates a new agent repository
 func NewAgentRepository(db *sql.DB) *AgentRepository {
 	return &AgentRepository{db: db}
@@ -94,6 +126,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	`
 
 	agent := &domain.Agent{}
+	var version sql.NullString
 	var publicKey sql.NullString
 	var encryptedPrivateKey sql.NullString
 	var keyAlgorithm sql.NullString
@@ -112,7 +145,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.Description,
 		&agent.AgentType,
 		&agent.Status,
-		&agent.Version,
+		&version,
 		&publicKey,
 		&encryptedPrivateKey,
 		&keyAlgorithm,
@@ -137,6 +170,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 
 	// Convert nullable fields
+	if version.Valid {
+		agent.Version = version.String
+	}
 	if publicKey.Valid {
 		agent.PublicKey = &publicKey.String
 	}
@@ -161,8 +197,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 
 	// Unmarshal talks_to from JSONB
 	if len(talksToJSON) > 0 {
-		if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -196,6 +233,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
@@ -209,7 +247,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.Description,
 			&agent.AgentType,
 			&agent.Status,
-			&agent.Version,
+			&version,
 			&publicKey,
 			&certificateURL,
 			&repositoryURL,
@@ -226,6 +264,9 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		}
 
 		// Convert nullable fields
+		if version.Valid {
+			agent.Version = version.String
+		}
 		if publicKey.Valid {
 			agent.PublicKey = &publicKey.String
 		}
@@ -239,11 +280,10 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			agent.DocumentationURL = documentationURL.String
 		}
 
-		// Unmarshal talks_to from JSONB
-		if len(talksToJSON) > 0 {
-			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
-			}
+		// Unmarshal talks_to from JSONB (handles both string and object formats)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 
 		agents = append(agents, agent)
@@ -327,6 +367,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
@@ -340,7 +381,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.Description,
 			&agent.AgentType,
 			&agent.Status,
-			&agent.Version,
+			&version,
 			&publicKey,
 			&certificateURL,
 			&repositoryURL,
@@ -357,6 +398,9 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		}
 
 		// Convert nullable fields
+		if version.Valid {
+			agent.Version = version.String
+		}
 		if publicKey.Valid {
 			agent.PublicKey = &publicKey.String
 		}
@@ -370,11 +414,10 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			agent.DocumentationURL = documentationURL.String
 		}
 
-		// Unmarshal talks_to from JSONB
-		if len(talksToJSON) > 0 {
-			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
-			}
+		// Unmarshal talks_to from JSONB (handles both string and object formats)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 
 		agents = append(agents, agent)
@@ -407,21 +450,30 @@ func (r *AgentRepository) MarkAsCompromised(id uuid.UUID) error {
 
 // GetByMCPServer retrieves all agents that talk to a specific MCP server
 func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID) ([]*domain.Agent, error) {
-	// Query agents where talks_to JSONB array contains the MCP server ID (as string)
+	// Query agents where talks_to JSONB array contains an object with matching id
+	// The talks_to field can be:
+	// 1. An array of strings: ["uuid1", "uuid2"]
+	// 2. An array of objects: [{"id": "uuid1", "name": "server-name"}]
+	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, created_at, updated_at, created_by
 		FROM agents
 		WHERE organization_id = $1
-		  AND talks_to @> $2::jsonb
+		  AND (
+		    talks_to @> $2::jsonb
+		    OR talks_to @> $3::jsonb
+		  )
 		ORDER BY created_at DESC
 	`
 
-	// Convert MCP server ID to JSON string format for JSONB comparison
-	mcpServerJSON := fmt.Sprintf(`["%s"]`, mcpServerID.String())
+	// Format 1: Simple string array ["uuid"]
+	mcpServerStringJSON := fmt.Sprintf(`["%s"]`, mcpServerID.String())
+	// Format 2: Object array with id field [{"id": "uuid"}]
+	mcpServerObjectJSON := fmt.Sprintf(`[{"id": "%s"}]`, mcpServerID.String())
 
-	rows, err := r.db.Query(query, orgID, mcpServerJSON)
+	rows, err := r.db.Query(query, orgID, mcpServerStringJSON, mcpServerObjectJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +482,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
@@ -443,7 +496,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.Description,
 			&agent.AgentType,
 			&agent.Status,
-			&agent.Version,
+			&version,
 			&publicKey,
 			&certificateURL,
 			&repositoryURL,
@@ -460,6 +513,9 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		}
 
 		// Convert nullable fields
+		if version.Valid {
+			agent.Version = version.String
+		}
 		if publicKey.Valid {
 			agent.PublicKey = &publicKey.String
 		}
@@ -473,11 +529,10 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			agent.DocumentationURL = documentationURL.String
 		}
 
-		// Unmarshal talks_to from JSONB
-		if len(talksToJSON) > 0 {
-			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
-			}
+		// Unmarshal talks_to from JSONB (handles both string and object formats)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 
 		agents = append(agents, agent)
@@ -489,21 +544,30 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 // GetByMCPServerName gets agents by MCP server NAME (in addition to ID)
 // This is crucial because agent.talks_to often contains MCP server names, not IDs
 func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error) {
-	// Query agents where talks_to JSONB array contains the MCP server name (as string)
+	// Query agents where talks_to JSONB array contains the MCP server name
+	// The talks_to field can be:
+	// 1. An array of strings: ["server-name"]
+	// 2. An array of objects: [{"id": "uuid", "name": "server-name"}]
+	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, created_at, updated_at, created_by
 		FROM agents
 		WHERE organization_id = $1
-		  AND talks_to @> $2::jsonb
+		  AND (
+		    talks_to @> $2::jsonb
+		    OR talks_to @> $3::jsonb
+		  )
 		ORDER BY created_at DESC
 	`
 
-	// Convert MCP server name to JSON string format for JSONB comparison
-	mcpServerJSON := fmt.Sprintf(`["%s"]`, mcpServerName)
+	// Format 1: Simple string array ["name"]
+	mcpServerStringJSON := fmt.Sprintf(`["%s"]`, mcpServerName)
+	// Format 2: Object array with name field [{"name": "server-name"}]
+	mcpServerObjectJSON := fmt.Sprintf(`[{"name": "%s"}]`, mcpServerName)
 
-	rows, err := r.db.Query(query, orgID, mcpServerJSON)
+	rows, err := r.db.Query(query, orgID, mcpServerStringJSON, mcpServerObjectJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -512,6 +576,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
@@ -525,7 +590,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.Description,
 			&agent.AgentType,
 			&agent.Status,
-			&agent.Version,
+			&version,
 			&publicKey,
 			&certificateURL,
 			&repositoryURL,
@@ -542,6 +607,9 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		}
 
 		// Convert nullable fields
+		if version.Valid {
+			agent.Version = version.String
+		}
 		if publicKey.Valid {
 			agent.PublicKey = &publicKey.String
 		}
@@ -555,11 +623,10 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			agent.DocumentationURL = documentationURL.String
 		}
 
-		// Unmarshal talks_to from JSONB
-		if len(talksToJSON) > 0 {
-			if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
-			}
+		// Unmarshal talks_to from JSONB (handles both string and object formats)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 
 		agents = append(agents, agent)
@@ -678,8 +745,9 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 
 	// Unmarshal JSONB fields
 	if len(talksToJSON) > 0 {
-		if err := json.Unmarshal(talksToJSON, &agent.TalksTo); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
+		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if len(capabilitiesJSON) > 0 {

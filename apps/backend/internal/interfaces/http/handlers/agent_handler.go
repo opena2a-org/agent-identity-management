@@ -20,6 +20,7 @@ type AgentHandler struct {
 	alertService             *application.AlertService
 	verificationEventService *application.VerificationEventService
 	capabilityService        *application.CapabilityService
+	tagService               *application.TagService // ✅ For fetching agent tags in responses
 }
 
 func NewAgentHandler(
@@ -31,6 +32,7 @@ func NewAgentHandler(
 	alertService *application.AlertService,
 	verificationEventService *application.VerificationEventService,
 	capabilityService *application.CapabilityService,
+	tagService *application.TagService, // ✅ For fetching agent tags in responses
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -41,6 +43,7 @@ func NewAgentHandler(
 		alertService:             alertService,
 		verificationEventService: verificationEventService,
 		capabilityService:        capabilityService,
+		tagService:               tagService,
 	}
 }
 
@@ -58,7 +61,31 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
 	}
 
-	// Return flat response with all agent fields + capabilities (camelCase for frontend)
+	// ✅ Fetch tags from agent_tags table
+	var tags []fiber.Map
+	if h.tagService != nil {
+		agentTags, err := h.tagService.GetAgentTags(c.Context(), agent.ID)
+		if err != nil {
+			// Log error but don't fail - return empty tags
+			tags = []fiber.Map{}
+		} else {
+			tags = make([]fiber.Map, 0, len(agentTags))
+			for _, tag := range agentTags {
+				tags = append(tags, fiber.Map{
+					"id":          tag.ID,
+					"key":         tag.Key,
+					"value":       tag.Value,
+					"category":    tag.Category,
+					"description": tag.Description,
+					"color":       tag.Color,
+				})
+			}
+		}
+	} else {
+		tags = []fiber.Map{}
+	}
+
+	// Return flat response with all agent fields + capabilities + tags (camelCase for frontend)
 	return fiber.Map{
 		"id":                       agent.ID,
 		"organizationId":           agent.OrganizationID,
@@ -75,6 +102,7 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		"updatedAt":                agent.UpdatedAt,
 		"talksTo":                  agent.TalksTo,
 		"capabilities":             capabilityTypes,
+		"tags":                     tags, // ✅ Include tags in response
 		"capabilityViolationCount": agent.CapabilityViolationCount,
 		"isCompromised":            agent.IsCompromised,
 		"certificateUrl":           agent.CertificateURL,
@@ -985,15 +1013,54 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// Get MCP servers (need to pass MCP repository - we'll handle this in routing)
-	// For now, return the talks_to array
-	// TODO: Implement full server details lookup
+	// Resolve talks_to entries to full MCP server details
+	// Each entry can be a UUID (server ID) or a name
+	type MCPServerSummary struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description,omitempty"`
+		Status      string `json:"status"`
+		URL         string `json:"url,omitempty"`
+	}
+
+	mcpServers := make([]MCPServerSummary, 0)
+	for _, entry := range agent.TalksTo {
+		// Try to parse as UUID first
+		if serverID, parseErr := uuid.Parse(entry); parseErr == nil {
+			// It's a UUID, look up by ID
+			server, lookupErr := h.mcpService.GetMCPServer(c.Context(), serverID)
+			if lookupErr == nil && server != nil && server.OrganizationID == orgID {
+				mcpServers = append(mcpServers, MCPServerSummary{
+					ID:          server.ID.String(),
+					Name:        server.Name,
+					Description: server.Description,
+					Status:      string(server.Status),
+					URL:         server.URL,
+				})
+			}
+		} else {
+			// It's a name, look up all servers and find by name
+			servers, listErr := h.mcpService.ListMCPServers(c.Context(), orgID)
+			if listErr == nil {
+				for _, server := range servers {
+					if server.Name == entry {
+						mcpServers = append(mcpServers, MCPServerSummary{
+							ID:          server.ID.String(),
+							Name:        server.Name,
+							Description: server.Description,
+							Status:      string(server.Status),
+							URL:         server.URL,
+						})
+						break
+					}
+				}
+			}
+		}
+	}
 
 	return c.JSON(fiber.Map{
-		"agentId":   agentID.String(),
-		"agentName": agent.Name,
-		"talksTo":   agent.TalksTo,
-		"total":     len(agent.TalksTo),
+		"mcpServers": mcpServers,
+		"total":      len(mcpServers),
 	})
 }
 

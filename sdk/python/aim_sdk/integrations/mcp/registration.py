@@ -311,6 +311,39 @@ def use_mcp_tool(
     return response
 
 
+def get_attestation_challenge(
+    aim_client: AIMClient,
+    server_id: str
+) -> Dict[str, Any]:
+    """
+    Request a server-side challenge for proof of private key possession.
+
+    This function requests a nonce from the AIM backend that must be signed
+    and included in the attestation payload. This proves the agent holds the
+    private key at attestation time and prevents replay attacks.
+
+    Args:
+        aim_client: AIMClient instance for authentication
+        server_id: UUID of the MCP server to attest
+
+    Returns:
+        Dictionary containing challenge data:
+        {
+            "challenge": "base64-encoded-nonce",
+            "expiresAt": "2025-01-15T10:05:00Z",
+            "mcpServerId": "server-uuid"
+        }
+
+    Raises:
+        requests.exceptions.RequestException: If challenge request fails
+    """
+    response = aim_client._make_request(
+        method="GET",
+        endpoint=f"/api/v1/mcp-servers/{server_id}/challenge?agent_id={aim_client.agent_id}"
+    )
+    return response
+
+
 def attest_mcp_server(
     aim_client: AIMClient,
     server_id: str,
@@ -319,7 +352,8 @@ def attest_mcp_server(
     capabilities_found: List[str],
     connection_successful: bool = True,
     health_check_passed: bool = True,
-    connection_latency_ms: float = 0.0
+    connection_latency_ms: float = 0.0,
+    use_challenge: bool = True
 ) -> Dict[str, Any]:
     """
     Submit cryptographically signed attestation for an MCP server.
@@ -327,6 +361,11 @@ def attest_mcp_server(
     This function allows an agent to attest to the authenticity and functionality
     of an MCP server by cryptographically signing attestation data. Attestations
     increase the confidence score of the MCP server and help other agents trust it.
+
+    The attestation uses a challenge-response mechanism:
+    1. Request a challenge nonce from the server
+    2. Include the challenge in the signed attestation payload
+    3. Server validates the challenge hasn't been used (prevents replay attacks)
 
     Args:
         aim_client: AIMClient instance for authentication and signing
@@ -337,6 +376,7 @@ def attest_mcp_server(
         connection_successful: Whether connection to MCP was successful (default: True)
         health_check_passed: Whether health check passed (default: True)
         connection_latency_ms: Connection latency in milliseconds (default: 0.0)
+        use_challenge: Whether to use challenge-response for proof of key possession (default: True)
 
     Returns:
         Dictionary containing attestation response:
@@ -377,23 +417,40 @@ def attest_mcp_server(
     if not server_id:
         raise ValueError("server_id cannot be empty")
 
-    # Build attestation payload
+    # Step 1: Get challenge from server (proof of key possession)
+    challenge = None
+    if use_challenge:
+        try:
+            challenge_response = get_attestation_challenge(aim_client, server_id)
+            challenge = challenge_response.get("challenge")
+            print(f"🔐 Obtained attestation challenge (expires: {challenge_response.get('expiresAt')})")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not get challenge, proceeding without: {e}")
+            # Continue without challenge for backward compatibility
+
+    # Step 2: Build attestation payload (including challenge for proof of key possession)
     attestation_data = {
         "agent_id": str(aim_client.agent_id),
-        "mcp_url": mcp_url,
-        "mcp_name": mcp_name,
         "capabilities_found": capabilities_found,
+        "connection_latency_ms": connection_latency_ms,
         "connection_successful": connection_successful,
         "health_check_passed": health_check_passed,
-        "connection_latency_ms": connection_latency_ms,
+        "mcp_name": mcp_name,
+        "mcp_url": mcp_url,
+        "sdk_version": "1.1.0",  # Version bump for challenge-response support
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "sdk_version": "1.0.0"
     }
 
-    # Sign the attestation data using the agent's Ed25519 private key
+    # Include challenge if we got one (fields must be in alphabetical order for signing)
+    if challenge:
+        attestation_data["challenge"] = challenge
+
+    # Step 3: Sign the attestation data using the agent's Ed25519 private key
     # The signature is computed over the canonical JSON representation
     import json
     import base64
+
+    # Sort keys for canonical JSON (required for signature verification)
     canonical_json = json.dumps(attestation_data, sort_keys=True, separators=(',', ':'))
 
     # Use AIM client's signing key (PyNaCl SigningKey)
@@ -404,7 +461,7 @@ def attest_mcp_server(
     signature_bytes = aim_client.signing_key.sign(canonical_json.encode('utf-8')).signature
     signature_b64 = base64.b64encode(signature_bytes).decode('utf-8')
 
-    # Prepare API request payload
+    # Step 4: Prepare and submit API request
     payload = {
         "attestation": attestation_data,
         "signature": signature_b64
@@ -416,5 +473,10 @@ def attest_mcp_server(
         endpoint=f"/api/v1/mcp-servers/{server_id}/attest",
         data=payload
     )
+
+    if challenge:
+        print(f"✅ Attestation submitted with proof of key possession")
+    else:
+        print(f"✅ Attestation submitted (legacy mode, no challenge)")
 
     return response

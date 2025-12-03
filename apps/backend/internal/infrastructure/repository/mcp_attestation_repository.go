@@ -588,3 +588,181 @@ func (r *MCPAttestationRepository) UpdateMCPConfidenceScore(
 
 	return nil
 }
+
+// UpdateMCPVerificationStatus updates the MCP server status when multi-agent consensus is reached
+// This is called when enough unique agents have attested to the server's authenticity
+func (r *MCPAttestationRepository) UpdateMCPVerificationStatus(
+	mcpServerID uuid.UUID,
+	status string,
+	isVerified bool,
+) error {
+	query := `
+		UPDATE mcp_servers
+		SET
+			status = $1,
+			is_verified = $2,
+			last_verified_at = CASE WHEN $2 = true THEN $4 ELSE last_verified_at END,
+			updated_at = $4
+		WHERE id = $3
+	`
+
+	result, err := r.db.Exec(
+		query,
+		status,
+		isVerified,
+		mcpServerID,
+		time.Now().UTC(),
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update verification status: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("mcp server not found")
+	}
+
+	return nil
+}
+
+// GetUniqueAttestingAgentCount returns the number of unique agents that have attested an MCP server
+// Only counts valid SDK attestations (not manual attestations or expired ones)
+func (r *MCPAttestationRepository) GetUniqueAttestingAgentCount(mcpServerID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT agent_id)
+		FROM mcp_attestations
+		WHERE mcp_server_id = $1
+		  AND agent_id IS NOT NULL
+		  AND is_valid = true
+		  AND expires_at > NOW()
+		  AND signature != 'manual-attestation'
+	`
+
+	var count int
+	err := r.db.QueryRow(query, mcpServerID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count unique attesting agents: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetUniqueAgentOwnerCount returns the number of unique agent owners who have attested an MCP server
+// This ensures attestations come from truly independent sources (different users)
+func (r *MCPAttestationRepository) GetUniqueAgentOwnerCount(mcpServerID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT a.created_by)
+		FROM mcp_attestations ma
+		JOIN agents a ON ma.agent_id = a.id
+		WHERE ma.mcp_server_id = $1
+		  AND ma.agent_id IS NOT NULL
+		  AND ma.is_valid = true
+		  AND ma.expires_at > NOW()
+		  AND ma.signature != 'manual-attestation'
+	`
+
+	var count int
+	err := r.db.QueryRow(query, mcpServerID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count unique agent owners: %w", err)
+	}
+
+	return count, nil
+}
+
+// ==================== Attestation Challenge Operations (Proof of Key Possession) ====================
+
+// CreateChallenge creates a new attestation challenge for an agent
+func (r *MCPAttestationRepository) CreateChallenge(challenge *domain.AttestationChallenge) error {
+	query := `
+		INSERT INTO attestation_challenges (
+			id, challenge, agent_id, mcp_server_id, expires_at, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := r.db.Exec(
+		query,
+		challenge.ID,
+		challenge.Challenge,
+		challenge.AgentID,
+		challenge.MCPServerID,
+		challenge.ExpiresAt,
+		challenge.CreatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to create attestation challenge: %w", err)
+	}
+
+	return nil
+}
+
+// GetChallengeByValue retrieves a challenge by its nonce value
+func (r *MCPAttestationRepository) GetChallengeByValue(challenge string) (*domain.AttestationChallenge, error) {
+	query := `
+		SELECT id, challenge, agent_id, mcp_server_id, expires_at, used_at, created_at
+		FROM attestation_challenges
+		WHERE challenge = $1
+	`
+
+	row := r.db.QueryRow(query, challenge)
+
+	var c domain.AttestationChallenge
+	err := row.Scan(
+		&c.ID,
+		&c.Challenge,
+		&c.AgentID,
+		&c.MCPServerID,
+		&c.ExpiresAt,
+		&c.UsedAt,
+		&c.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("challenge not found")
+		}
+		return nil, fmt.Errorf("failed to get challenge: %w", err)
+	}
+
+	return &c, nil
+}
+
+// MarkChallengeUsed marks a challenge as used (prevents replay attacks)
+func (r *MCPAttestationRepository) MarkChallengeUsed(challengeID uuid.UUID) error {
+	query := `
+		UPDATE attestation_challenges
+		SET used_at = $1
+		WHERE id = $2 AND used_at IS NULL
+	`
+
+	result, err := r.db.Exec(query, time.Now().UTC(), challengeID)
+	if err != nil {
+		return fmt.Errorf("failed to mark challenge as used: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("challenge already used or not found")
+	}
+
+	return nil
+}
+
+// CleanupExpiredChallenges removes challenges that are expired or have been used
+func (r *MCPAttestationRepository) CleanupExpiredChallenges() (int64, error) {
+	query := `
+		DELETE FROM attestation_challenges
+		WHERE expires_at < $1 OR used_at IS NOT NULL
+	`
+
+	// Delete challenges expired more than 1 hour ago (buffer for grace period)
+	cutoff := time.Now().UTC().Add(-1 * time.Hour)
+	result, err := r.db.Exec(query, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("failed to cleanup challenges: %w", err)
+	}
+
+	return result.RowsAffected()
+}

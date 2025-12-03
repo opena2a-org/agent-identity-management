@@ -28,6 +28,7 @@ type MCPService struct {
 	connectionRepo        *repository.AgentMCPConnectionRepository  // ✅ For tracking agent-MCP connections
 	httpClient            *http.Client           // ✅ For real MCP server communication
 	agentRepo             *repository.AgentRepository // ✅ For querying connected agents
+	tagRepo               *repository.TagRepository   // ✅ For tagging MCP servers during registration
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
 }
@@ -40,7 +41,7 @@ type ChallengeData struct {
 	ExpiresAt time.Time
 }
 
-func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, capabilityRepo *repository.MCPServerCapabilityRepository, connectionRepo *repository.AgentMCPConnectionRepository, agentRepo *repository.AgentRepository) *MCPService {
+func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, capabilityRepo *repository.MCPServerCapabilityRepository, connectionRepo *repository.AgentMCPConnectionRepository, agentRepo *repository.AgentRepository, tagRepo *repository.TagRepository) *MCPService {
 	return &MCPService{
 		mcpRepo:               mcpRepo,
 		verificationEventRepo: verificationEventRepo,
@@ -55,6 +56,7 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 		},
 		challenges: make(map[string]ChallengeData),
 		agentRepo:  agentRepo,
+		tagRepo:    tagRepo,
 	}
 }
 
@@ -64,9 +66,10 @@ type CreateMCPServerRequest struct {
 	Description     string   `json:"description"`
 	URL             string   `json:"url" validate:"required,url"`
 	Version         string   `json:"version"`
-	PublicKey       string   `json:"public_key"`
-	VerificationURL string   `json:"verification_url"`
+	PublicKey       string   `json:"publicKey"`
+	VerificationURL string   `json:"verificationUrl"`
 	Capabilities    []string `json:"capabilities"`
+	TagIds          []string `json:"tagIds,omitempty"` // ✅ Tags to apply during registration
 }
 
 // UpdateMCPServerRequest represents the request to update an MCP server
@@ -207,6 +210,27 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	// MCP servers are created with status="pending" and is_verified=false
 	// Admins must manually verify servers by clicking the "Verify" button in the UI
 	// This ensures proper security review before servers are trusted
+
+	// ✅ AUTO-APPLY TAGS: Apply tags during registration (no separate API call needed)
+	if len(req.TagIds) > 0 && s.tagRepo != nil {
+		tagUUIDs := make([]uuid.UUID, 0, len(req.TagIds))
+		for _, tagIDStr := range req.TagIds {
+			tagID, err := uuid.Parse(tagIDStr)
+			if err != nil {
+				fmt.Printf("⚠️  Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
+				continue
+			}
+			tagUUIDs = append(tagUUIDs, tagID)
+		}
+
+		if len(tagUUIDs) > 0 {
+			if err := s.tagRepo.AddTagsToMCPServer(ctx, server.ID, tagUUIDs); err != nil {
+				fmt.Printf("⚠️  Warning: failed to apply tags to MCP server %s: %v\n", server.Name, err)
+			} else {
+				fmt.Printf("✅ Applied %d tags to MCP server %s\n", len(tagUUIDs), server.Name)
+			}
+		}
+	}
 
 	return server, nil
 }
