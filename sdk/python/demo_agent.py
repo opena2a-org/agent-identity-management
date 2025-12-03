@@ -355,10 +355,10 @@ it's NOT authorized to do...
         print(f"        Resource: {attack['resource']}")
         print()
 
-        # Try to verify the unauthorized action
+        # Try to verify the unauthorized capability
         try:
-            result = agent.verify_action(
-                action_type=attack['action'],
+            result = agent.verify_capability(
+                capability=attack['action'],
                 resource=attack['resource'],
                 context={"source": "prompt_injection_demo", "prompt": attack['prompt'][:100]}
             )

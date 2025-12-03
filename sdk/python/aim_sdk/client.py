@@ -346,38 +346,38 @@ class AIMClient:
         except requests.exceptions.RequestException as e:
             raise VerificationError(f"Request failed: {e}")
 
-    def verify_action(
+    def verify_capability(
         self,
-        action_type: str,
+        capability: str,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300
     ) -> Dict:
         """
-        Request verification for an action from AIM.
+        Request verification for a capability from AIM.
 
         This method:
-        1. Creates a verification request with action details
+        1. Creates a verification request with capability details
         2. Signs the request with the agent's private key
         3. Sends the request to AIM
         4. Waits for approval/denial (up to timeout_seconds)
         5. Returns verification result
 
         Args:
-            action_type: Type of action (e.g., "read_database", "send_email")
+            capability: Capability to verify (e.g., "db:read", "email:send", "file:write")
             resource: Resource being accessed (e.g., "users_table", "admin@example.com")
-            context: Additional context about the action
+            context: Additional context about the capability usage
             timeout_seconds: Maximum time to wait for approval (default: 300s = 5min)
 
         Returns:
             Verification result dict with keys:
-            - verified: bool (whether action is approved)
+            - verified: bool (whether capability is approved)
             - verification_id: str (unique ID for this verification)
             - approved_by: str (user who approved, if applicable)
             - expires_at: str (ISO timestamp when approval expires)
 
         Raises:
-            ActionDeniedError: If action is explicitly denied
+            ActionDeniedError: If capability is explicitly denied
             VerificationError: If verification request fails
         """
         # Create verification request payload
@@ -388,13 +388,13 @@ class AIMClient:
         # The backend verifies the signature by reconstructing the JSON payload
         # We need to create a signature of the JSON payload itself
         signature_payload = {
-            "action_type": action_type,
+            "capability": capability,
             "agent_id": self.agent_id,
             "context": context or {},
             "resource": resource,
             "timestamp": timestamp
         }
-        
+
         # Create deterministic JSON (sorted keys, spaces after colons and commas)
         signature_message = json.dumps(signature_payload, sort_keys=True, separators=(', ', ': '))
 
@@ -403,7 +403,7 @@ class AIMClient:
 
         request_payload = {
             "agent_id": self.agent_id,
-            "action_type": action_type,
+            "capability": capability,
             "resource": resource,
             "context": context or {},
             "timestamp": timestamp,
@@ -537,6 +537,32 @@ class AIMClient:
                 "error": f"Unexpected error: {type(e).__name__}: {str(e)}"
             }
 
+    # Backwards compatibility alias
+    def verify_action(
+        self,
+        action_type: str,
+        resource: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        timeout_seconds: int = 300
+    ) -> Dict:
+        """
+        DEPRECATED: Use verify_capability() instead.
+
+        This method is kept for backwards compatibility but will be removed in a future version.
+        """
+        import warnings
+        warnings.warn(
+            "verify_action() is deprecated, use verify_capability() instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.verify_capability(
+            capability=action_type,
+            resource=resource,
+            context=context,
+            timeout_seconds=timeout_seconds
+        )
+
     def _wait_for_approval(self, verification_id: str, timeout_seconds: int) -> Dict:
         """
         Poll AIM server for verification approval.
@@ -655,7 +681,7 @@ class AIMClient:
 
         raise VerificationError(f"Verification timeout after {timeout_seconds} seconds")
 
-    def log_action_result(
+    def log_capability_result(
         self,
         verification_id: str,
         success: bool,
@@ -663,15 +689,15 @@ class AIMClient:
         error_message: Optional[str] = None
     ):
         """
-        Log the result of an action execution to AIM.
+        Log the result of a capability execution to AIM.
 
         This helps AIM track agent behavior and build trust scores.
 
         Args:
-            verification_id: ID from verify_action response
-            success: Whether the action succeeded
+            verification_id: ID from verify_capability response
+            success: Whether the capability execution succeeded
             result_summary: Brief summary of the result
-            error_message: Error message if action failed
+            error_message: Error message if execution failed
         """
         try:
             # Use direct HTTP call to avoid signature issues
@@ -715,6 +741,32 @@ class AIMClient:
         except Exception:
             # Don't fail the action if logging fails
             pass
+
+    # Backwards compatibility alias
+    def log_action_result(
+        self,
+        verification_id: str,
+        success: bool,
+        result_summary: Optional[str] = None,
+        error_message: Optional[str] = None
+    ):
+        """
+        DEPRECATED: Use log_capability_result() instead.
+
+        Log the result of an action execution to AIM.
+        """
+        import warnings
+        warnings.warn(
+            "log_action_result() is deprecated, use log_capability_result() instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.log_capability_result(
+            verification_id=verification_id,
+            success=success,
+            result_summary=result_summary,
+            error_message=error_message
+        )
 
     def request_capability(
         self,
@@ -1412,22 +1464,22 @@ class AIMClient:
         timeout_seconds: int = 300
     ):
         """
-        Decorator for automatic action verification.
+        Decorator for automatic capability verification.
 
         This decorator wraps a function to automatically:
-        1. Request verification from AIM before execution
+        1. Request capability verification from AIM before execution
         2. Wait for approval
         3. Execute the function if approved
         4. Log the result back to AIM
 
         Args:
-            action_type: Type of action being performed
+            action_type: Capability being used (e.g., "file:read", "db:query")
             resource: Resource being accessed
             context: Additional context
             timeout_seconds: Max time to wait for approval
 
         Example:
-            @client.perform_action("read_database", resource="users_table")
+            @client.perform_action("db:read", resource="users_table")
             def get_users():
                 return database.query("SELECT * FROM users")
 
@@ -1439,7 +1491,7 @@ class AIMClient:
             users = get_users()
 
         Raises:
-            ActionDeniedError: If AIM denies the action
+            ActionDeniedError: If AIM denies the capability
             VerificationError: If verification fails
         """
         def decorator(func: Callable) -> Callable:
@@ -1448,9 +1500,9 @@ class AIMClient:
                 # Warn if using deprecated capability format (snake_case instead of namespace:action)
                 _warn_deprecated_capability_format(action_type)
 
-                # Request verification
-                verification_result = self.verify_action(
-                    action_type=action_type,
+                # Request capability verification
+                verification_result = self.verify_capability(
+                    capability=action_type,
                     resource=resource,
                     context=context,
                     timeout_seconds=timeout_seconds
@@ -1463,17 +1515,17 @@ class AIMClient:
                     result = func(*args, **kwargs)
 
                     # Log success
-                    self.log_action_result(
+                    self.log_capability_result(
                         verification_id=verification_id,
                         success=True,
-                        result_summary=f"Action '{action_type}' completed successfully"
+                        result_summary=f"Capability '{action_type}' executed successfully"
                     )
 
                     return result
 
                 except Exception as e:
                     # Log failure
-                    self.log_action_result(
+                    self.log_capability_result(
                         verification_id=verification_id,
                         success=False,
                         error_message=str(e)
@@ -1536,10 +1588,10 @@ class AIMClient:
                 if kwargs:
                     context["kwargs"] = str(kwargs)
 
-                # Request verification
+                # Request capability verification
                 try:
-                    verification_result = self.verify_action(
-                        action_type=action,
+                    verification_result = self.verify_capability(
+                        capability=action,
                         resource=resource,
                         context=context,
                         timeout_seconds=300
@@ -1547,13 +1599,13 @@ class AIMClient:
                 except Exception as e:
                     # Handle any exceptions during verification
                     print(f"  Warning: Verification request failed: {type(e).__name__}: {str(e)}")
-                    print(f"   Action '{action}' cannot proceed without verification.")
+                    print(f"   Capability '{action}' cannot proceed without verification.")
                     print(f"   Returning error result instead of raising exception.")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "action": action,
+                        "capability": action,
                         "status": "verification_failed"
                     }
 
@@ -1561,23 +1613,23 @@ class AIMClient:
                 if verification_result.get("error"):
                     error_msg = verification_result.get("error", "Unknown verification error")
                     print(f"  Warning: Verification returned error: {error_msg}")
-                    print(f"   Action '{action}' cannot proceed without successful verification.")
+                    print(f"   Capability '{action}' cannot proceed without successful verification.")
                     return {
                         "error": True,
                         "error_type": "VerificationError",
                         "error_message": error_msg,
-                        "action": action,
+                        "capability": action,
                         "status": "verification_failed"
                     }
 
                 if not verification_result.get("verified", False):
                     reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    print(f" Warning: Action '{action}' not verified: {reason}")
+                    print(f" Warning: Capability '{action}' not verified: {reason}")
                     return {
                         "error": True,
-                        "error_type": "ActionDenied",
-                        "error_message": f"Action '{action}' denied: {reason}",
-                        "action": action,
+                        "error_type": "CapabilityDenied",
+                        "error_message": f"Capability '{action}' denied: {reason}",
+                        "capability": action,
                         "status": "denied"
                     }
 
@@ -1589,36 +1641,36 @@ class AIMClient:
 
                     # Log success (handle errors in logging gracefully)
                     try:
-                        self.log_action_result(
+                        self.log_capability_result(
                             verification_id=verification_id,
                             success=True,
-                            result_summary=f"Action '{action}' completed successfully"
+                            result_summary=f"Capability '{action}' executed successfully"
                         )
                     except Exception as log_error:
                         # Don't fail the function if logging fails
-                        print(f" Warning: Failed to log action result: {str(log_error)}")
+                        print(f" Warning: Failed to log capability result: {str(log_error)}")
 
                     return result
 
                 except Exception as e:
                     # Log failure (handle errors in logging gracefully)
                     try:
-                        self.log_action_result(
+                        self.log_capability_result(
                             verification_id=verification_id,
                             success=False,
                             error_message=str(e)
                         )
                     except Exception as log_error:
                         # Don't fail if logging fails
-                        print(f"  Warning: Failed to log action failure: {str(log_error)}")
-                    
+                        print(f"  Warning: Failed to log capability failure: {str(log_error)}")
+
                     # Return error result instead of raising
-                    print(f" Error executing action '{action}': {type(e).__name__}: {str(e)}")
+                    print(f" Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "action": action,
+                        "capability": action,
                         "status": "execution_failed"
                     }
 
@@ -1688,13 +1740,13 @@ class AIMClient:
 
                 print(f"\n⏸️  Waiting for approval: {action}...")
                 print(f"   Risk Level: {risk_level.upper()}")
-                print(f"   Check AIM dashboard to approve/deny this action")
+                print(f"   Check AIM dashboard to approve/deny this capability")
                 print(f"   Timeout: {timeout_seconds} seconds")
 
-                # Request verification with extended timeout
+                # Request capability verification with extended timeout
                 try:
-                    verification_result = self.verify_action(
-                        action_type=action,
+                    verification_result = self.verify_capability(
+                        capability=action,
                         resource=resource,
                         context=context,
                         timeout_seconds=timeout_seconds
@@ -1702,13 +1754,13 @@ class AIMClient:
                 except Exception as e:
                     # Handle any exceptions during verification
                     print(f" Warning: Verification request failed: {type(e).__name__}: {str(e)}")
-                    print(f"   Action '{action}' cannot proceed without verification.")
+                    print(f"   Capability '{action}' cannot proceed without verification.")
                     print(f"   Returning error result instead of raising exception.")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "action": action,
+                        "capability": action,
                         "status": "verification_failed"
                     }
 
@@ -1716,27 +1768,27 @@ class AIMClient:
                 if verification_result.get("error"):
                     error_msg = verification_result.get("error", "Unknown verification error")
                     print(f" Warning: Verification returned error: {error_msg}")
-                    print(f"   Action '{action}' cannot proceed without successful verification.")
+                    print(f"   Capability '{action}' cannot proceed without successful verification.")
                     return {
                         "error": True,
                         "error_type": "VerificationError",
                         "error_message": error_msg,
-                        "action": action,
+                        "capability": action,
                         "status": "verification_failed"
                     }
 
                 if not verification_result.get("verified", False):
                     reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    print(f" Action '{action}' DENIED or not verified: {reason}")
+                    print(f" Capability '{action}' DENIED or not verified: {reason}")
                     return {
                         "error": True,
-                        "error_type": "ActionDenied",
-                        "error_message": f"Action '{action}' DENIED: {reason}",
-                        "action": action,
+                        "error_type": "CapabilityDenied",
+                        "error_message": f"Capability '{action}' DENIED: {reason}",
+                        "capability": action,
                         "status": "denied"
                     }
 
-                print(f"✅ Action '{action}' APPROVED by admin")
+                print(f"✅ Capability '{action}' APPROVED by admin")
                 verification_id = verification_result.get("verification_id")
 
                 try:
@@ -1745,36 +1797,36 @@ class AIMClient:
 
                     # Log success (handle errors in logging gracefully)
                     try:
-                        self.log_action_result(
+                        self.log_capability_result(
                             verification_id=verification_id,
                             success=True,
-                            result_summary=f"Action '{action}' completed successfully"
+                            result_summary=f"Capability '{action}' executed successfully"
                         )
                     except Exception as log_error:
                         # Don't fail the function if logging fails
-                        print(f"  Warning: Failed to log action result: {str(log_error)}")
+                        print(f"  Warning: Failed to log capability result: {str(log_error)}")
 
                     return result
 
                 except Exception as e:
                     # Log failure (handle errors in logging gracefully)
                     try:
-                        self.log_action_result(
+                        self.log_capability_result(
                             verification_id=verification_id,
                             success=False,
                             error_message=str(e)
                         )
                     except Exception as log_error:
                         # Don't fail if logging fails
-                        print(f"  Warning: Failed to log action failure: {str(log_error)}")
-                    
+                        print(f"  Warning: Failed to log capability failure: {str(log_error)}")
+
                     # Return error result instead of raising
-                    print(f" Error executing action '{action}': {type(e).__name__}: {str(e)}")
+                    print(f" Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "action": action,
+                        "capability": action,
                         "status": "execution_failed"
                     }
 

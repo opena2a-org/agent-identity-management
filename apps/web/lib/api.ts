@@ -673,7 +673,7 @@ class APIClient {
 
   async rotateAgentCredentials(
     id: string
-  ): Promise<{ apiKey: string; message: string }> {
+  ): Promise<{ privateKey: string; publicKey: string; message: string; rotationCount: number }> {
     return this.request(`/api/v1/agents/${id}/rotate-credentials`, {
       method: "POST",
     });
@@ -707,13 +707,21 @@ class APIClient {
     return this.request("/api/v1/api-keys");
   }
 
+  async getAPIKeys(agentId: string): Promise<{ apiKeys: APIKey[] }> {
+    return this.request(`/api/v1/api-keys?agent_id=${agentId}`);
+  }
+
+  async revokeAPIKey(id: string): Promise<void> {
+    return this.request(`/api/v1/api-keys/${id}/disable`, { method: "PATCH" });
+  }
+
   async createAPIKey(
     agentId: string,
     name: string
   ): Promise<{ apiKey: string; id: string }> {
     return this.request("/api/v1/api-keys", {
       method: "POST",
-      body: JSON.stringify({ agentId: agentId, name }),
+      body: JSON.stringify({ agent_id: agentId, name }),
     });
   }
 
@@ -1194,7 +1202,7 @@ class APIClient {
       id: string;
       agent_id: string;
       agent_name: string;
-      action_type: string;
+      capability: string;
       resource: string;
       context: Record<string, any>;
       risk_level: string;

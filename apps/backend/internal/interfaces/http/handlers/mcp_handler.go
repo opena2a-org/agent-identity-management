@@ -822,17 +822,17 @@ func (h *MCPHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // VerifyMCPAction verifies if an MCP server can perform the requested action
-// @Summary Verify MCP action authorization
-// @Description Verify if an MCP server is authorized to perform a specific action
+// @Summary Verify MCP capability authorization
+// @Description Verify if an MCP server is authorized to use a specific capability
 // @Tags mcp-servers
 // @Accept json
 // @Produce json
 // @Param id path string true "MCP Server ID"
-// @Param request body VerifyMCPActionRequest true "Action verification request"
-// @Success 200 {object} VerifyActionResponse
-// @Failure 403 {object} ErrorResponse "Action denied"
-// @Router /mcp-servers/{id}/verify-action [post]
-func (h *MCPHandler) VerifyMCPAction(c fiber.Ctx) error {
+// @Param request body VerifyMCPCapabilityRequest true "Capability verification request"
+// @Success 200 {object} VerifyCapabilityResponse
+// @Failure 403 {object} ErrorResponse "Capability denied"
+// @Router /mcp-servers/{id}/verify-capability [post]
+func (h *MCPHandler) VerifyMCPCapability(c fiber.Ctx) error {
 	mcpID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -841,7 +841,7 @@ func (h *MCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		ActionType    string                 `json:"action_type"`    // "database_query", "api_call", "file_access"
+		Capability    string                 `json:"capability"`     // "db:query", "api:call", "file:access"
 		Resource      string                 `json:"resource"`       // e.g., "SELECT * FROM table" or "POST /api/endpoint"
 		TargetService string                 `json:"target_service"` // e.g., "postgresql://prod-db"
 		Metadata      map[string]interface{} `json:"metadata"`
@@ -853,11 +853,11 @@ func (h *MCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify MCP action
-	decision, reason, auditID, err := h.mcpService.VerifyMCPAction(
+	// Verify MCP capability
+	decision, reason, auditID, err := h.mcpService.VerifyMCPCapability(
 		c.Context(),
 		mcpID,
-		req.ActionType,
+		req.Capability,
 		req.Resource,
 		req.TargetService,
 		req.Metadata,

@@ -1,18 +1,17 @@
 # 🔌 MCP Integration - Secure Model Context Protocol Servers
 
-Register your MCP servers with **automatic cryptographic verification**.
+Register and attest your MCP servers with AIM for cryptographic verification and trust scoring.
 
 ## What You'll Build
 
-An MCP server registration that:
-- ✅ Automatically registers with AIM platform
-- ✅ Cryptographic verification with Ed25519 signatures
-- ✅ Public key discovery via `.well-known/mcp/capabilities`
-- ✅ Complete audit trail of all MCP operations
-- ✅ Real-time trust scoring
+An MCP integration that:
+- ✅ Registers MCP servers with cryptographic verification
+- ✅ Attests to MCP server authenticity with Ed25519 signatures
+- ✅ Tracks agent-MCP connections for audit trails
+- ✅ Monitors MCP server trust scores
+- ✅ Detects drift when agents connect to unregistered servers
 
-**Integration Time**: 3 minutes
-**Code Changes**: Auto-detection (0 lines) or Manual (2 lines)
+**Integration Time**: 5 minutes
 **Use Case**: Claude Desktop, MCP servers, AI assistants
 
 ---
@@ -26,800 +25,374 @@ An MCP server registration that:
 - **Filesystem MCP**: Gives Claude access to local files
 - **GitHub MCP**: Connects Claude to your GitHub repositories
 - **Slack MCP**: Allows Claude to send messages, read channels
-- **Google Drive MCP**: Access and search Google Drive files
 
 **The Problem**: How do you know an MCP server is legitimate and hasn't been compromised?
 
-**AIM's Solution**: Cryptographic verification + continuous monitoring
+**AIM's Solution**: Cryptographic verification + continuous monitoring + attestation
 
 ---
 
 ## Prerequisites
 
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
-2. ✅ MCP server installed (e.g., Claude Desktop)
-3. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
-   - **NO pip install available** - must download from dashboard
-   - Dependencies: `pip install keyring PyNaCl requests cryptography`
-4. ✅ Python 3.8+ for custom MCP servers
+2. ✅ AIM SDK downloaded from dashboard
+3. ✅ Python 3.8+ with dependencies: `pip install keyring PyNaCl requests cryptography`
 
 ---
 
-## Integration Method 1: Auto-Detection (Easiest)
+## Available Functions
 
-AIM automatically discovers MCP servers from Claude Desktop's configuration.
+The MCP integration provides these functions:
 
-### How It Works
+### Auto-Detection (from `aim_sdk`)
 
-```python
-from aim_sdk import auto_detect_mcp_servers
+| Function | Description |
+|----------|-------------|
+| `auto_detect_mcps()` | Auto-detect MCP servers from Claude Desktop config and imports |
+| `MCPDetector` | Class for advanced MCP detection with multiple methods |
+| `track_mcp_call()` | Track runtime MCP tool calls for discovery |
 
-# 🔮 ZERO CONFIG - AIM finds all your MCP servers!
-detected_servers = auto_detect_mcp_servers()
+### Registration & Attestation (from `aim_sdk.integrations.mcp`)
 
-print(f"Found {len(detected_servers)} MCP servers:")
-for server in detected_servers:
-    print(f"  - {server['name']}: {server['command']}")
-```
-
-**Expected Output**:
-```
-Found 3 MCP servers:
-  - filesystem: npx -y @modelcontextprotocol/server-filesystem
-  - github: npx -y @modelcontextprotocol/server-github
-  - postgres: npx -y @modelcontextprotocol/server-postgres
-```
-
-### Register Auto-Detected Servers
-
-```python
-from aim_sdk import auto_detect_mcp_servers, register_mcp_server
-
-# Auto-detect all MCP servers
-servers = auto_detect_mcp_servers()
-
-# Register each one with AIM
-for server_config in servers:
-    result = register_mcp_server(
-        name=server_config['name'],
-        command=server_config['command'],
-        args=server_config.get('args', []),
-        env=server_config.get('env', {})
-    )
-
-    print(f"✅ Registered: {server_config['name']}")
-    print(f"   Server ID: {result['server_id']}")
-    print(f"   Public Key: {result['public_key'][:32]}...")
-    print()
-```
-
-**That's it!** All your MCP servers are now registered and monitored by AIM.
+| Function | Description |
+|----------|-------------|
+| `register_mcp_server()` | Register a new MCP server with AIM |
+| `list_mcp_servers()` | List all registered MCP servers |
+| `attest_mcp_server()` | Cryptographically attest to an MCP server |
+| `use_mcp_tool()` | Record MCP tool usage for audit trail |
+| `get_attestation_challenge()` | Get a challenge nonce for attestation |
 
 ---
 
-## Integration Method 2: Manual Registration
+## Auto-Detection (Easiest)
 
-For custom MCP servers or fine-grained control.
+AIM can automatically detect MCP servers from your Claude Desktop configuration and Python imports.
 
-### Step 1: Create an MCP Server
+### Quick Detection
 
-Create `my_mcp_server.py`:
+```python
+from aim_sdk import auto_detect_mcps
+
+# Automatically detect all MCP servers
+detections = auto_detect_mcps()
+
+print(f"Found {len(detections)} MCP servers:")
+for detection in detections:
+    print(f"  - {detection['mcpServer']} (method: {detection['detectionMethod']})")
+```
+
+**Detection Methods**:
+- `claude_config` - Reads `~/.claude/claude_desktop_config.json`
+- `sdk_import` - Scans Python imports for MCP packages
+- `sdk_runtime` - Tracks MCP calls made at runtime
+
+### Advanced Detection with MCPDetector
+
+```python
+from aim_sdk import MCPDetector
+
+detector = MCPDetector()
+
+# Detect from Claude Desktop config only
+config_detections = detector.detect_from_claude_config()
+
+# Detect from Python imports only
+import_detections = detector.detect_from_imports()
+
+# Detect from all sources including runtime tracking
+all_detections = detector.detect_all_with_runtime()
+
+for detection in all_detections:
+    print(f"{detection['mcpServer']}: {detection['confidence']}% confidence")
+```
+
+### Runtime Tracking
+
+Track MCP tool calls as they happen for automatic discovery:
+
+```python
+from aim_sdk import track_mcp_call
+
+# Before calling an MCP tool, track it
+track_mcp_call("filesystem", "read_file")
+
+# Your MCP call here
+result = mcp_client.call_tool("filesystem", "read_file", {"path": "/tmp/file.txt"})
+
+# Later, get all tracked calls
+from aim_sdk import MCPDetector
+runtime_detections = MCPDetector.get_runtime_detections()
+```
+
+---
+
+## Registering an MCP Server
+
+Register an MCP server with AIM to enable cryptographic verification and trust scoring.
+
+```python
+from aim_sdk import secure
+from aim_sdk.integrations.mcp import register_mcp_server
+
+# Initialize AIM agent
+aim_agent = secure("my-agent")
+
+# Register an MCP server
+result = register_mcp_server(
+    aim_client=aim_agent,
+    server_name="weather-mcp",
+    server_url="http://localhost:3001",
+    public_key="ed25519_base64_encoded_public_key",
+    capabilities=["weather:current", "weather:forecast"],
+    description="Weather data provider MCP server"
+)
+
+print(f"✅ Registered MCP server: {result['id']}")
+print(f"   Status: {result['status']}")
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `aim_client` | AIMClient | Yes | AIM client instance |
+| `server_name` | str | Yes | Name of the MCP server |
+| `server_url` | str | Yes | Base URL of the MCP server |
+| `public_key` | str | Yes | Ed25519 public key (base64 encoded) |
+| `capabilities` | List[str] | Yes | List of server capabilities |
+| `description` | str | No | Description of the server |
+| `version` | str | No | Server version (default: "1.0.0") |
+
+---
+
+## Listing MCP Servers
+
+List all MCP servers registered with AIM for your organization.
+
+```python
+from aim_sdk import secure
+from aim_sdk.integrations.mcp import list_mcp_servers
+
+aim_agent = secure("my-agent")
+
+# List all registered MCP servers
+servers = list_mcp_servers(aim_client=aim_agent, limit=20)
+
+print(f"Found {len(servers)} MCP servers:")
+for server in servers:
+    print(f"  - {server['name']}: {server['status']} (trust: {server.get('trustScore', 'N/A')})")
+```
+
+---
+
+## Attesting an MCP Server
+
+Attestation cryptographically verifies an MCP server's identity and increases its trust score.
+
+```python
+from aim_sdk import secure
+from aim_sdk.integrations.mcp import attest_mcp_server, list_mcp_servers
+
+aim_agent = secure("my-agent")
+
+# Get the server to attest
+servers = list_mcp_servers(aim_client=aim_agent)
+server = servers[0]
+
+# Submit attestation
+result = attest_mcp_server(
+    aim_client=aim_agent,
+    server_id=server['id'],
+    mcp_url=server['url'],
+    mcp_name=server['name'],
+    capabilities_found=["weather:current", "weather:forecast"],
+    connection_successful=True,
+    health_check_passed=True,
+    connection_latency_ms=45.0
+)
+
+print(f"✅ Attestation successful!")
+print(f"   New confidence score: {result.get('mcp_confidence_score', 'N/A')}%")
+```
+
+### How Attestation Works
+
+1. **Request Challenge**: AIM generates a unique nonce
+2. **Sign Attestation**: Agent signs attestation data including the nonce with Ed25519 key
+3. **Verify Signature**: AIM verifies the signature using the agent's public key
+4. **Update Trust**: MCP server's confidence score increases
+
+This proves the agent holds the private key at attestation time and prevents replay attacks.
+
+---
+
+## Recording MCP Tool Usage
+
+Track when agents use MCP server tools for audit trails and drift detection.
+
+```python
+from aim_sdk import secure
+from aim_sdk.integrations.mcp import use_mcp_tool
+
+aim_agent = secure("my-agent")
+
+# Record MCP tool usage
+result = use_mcp_tool(
+    aim_client=aim_agent,
+    server_id="server-uuid-here",
+    tool_name="read_file",
+    mcp_url="http://localhost:3001",
+    mcp_name="filesystem-mcp"
+)
+
+print(f"✅ Tool usage recorded: {result.get('connection_id')}")
+```
+
+---
+
+## Complete Example
+
+Here's a complete example showing the full MCP workflow:
 
 ```python
 """
-Custom MCP Server - Secured with AIM
-Provides weather data capabilities
+MCP Integration Example - Full Workflow
 """
 
 from aim_sdk import secure
-from aim_sdk.integrations.mcp import MCPServer, MCPCapability
-import requests
-import os
-from typing import Dict, Any
-
-# 🔐 ONE LINE - Secure your MCP server!
-aim_agent = secure(
-    name="weather-mcp-server",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+from aim_sdk.integrations.mcp import (
+    register_mcp_server,
+    list_mcp_servers,
+    attest_mcp_server,
+    use_mcp_tool
 )
-
-# ═══════════════════════════════════════════════════════════
-# DEFINE MCP SERVER
-# ═══════════════════════════════════════════════════════════
-
-class WeatherMCPServer(MCPServer):
-    """MCP server providing weather capabilities"""
-
-    def __init__(self):
-        super().__init__(
-            name="weather-mcp-server",
-            version="1.0.0",
-            aim_agent=aim_agent  # 🔐 AIM integration
-        )
-        self.api_key = os.getenv("OPENWEATHER_API_KEY")
-        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
-
-    def get_capabilities(self) -> list[MCPCapability]:
-        """Define what this MCP server can do"""
-        return [
-            MCPCapability(
-                name="get_weather",
-                description="Get current weather for a city",
-                parameters={
-                    "city": {"type": "string", "description": "City name"},
-                    "units": {
-                        "type": "string",
-                        "description": "Temperature units (imperial/metric)",
-                        "default": "imperial"
-                    }
-                },
-                returns={"type": "object", "description": "Weather data"}
-            ),
-            MCPCapability(
-                name="get_forecast",
-                description="Get 5-day weather forecast",
-                parameters={
-                    "city": {"type": "string", "description": "City name"}
-                },
-                returns={"type": "array", "description": "5-day forecast"}
-            )
-        ]
-
-    async def get_weather(self, city: str, units: str = "imperial") -> Dict[str, Any]:
-        """
-        Get current weather for a city
-
-        This method is automatically verified and logged by AIM
-        """
-        response = requests.get(
-            self.base_url,
-            params={"q": city, "appid": self.api_key, "units": units}
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        return {
-            "city": city,
-            "temperature": data['main']['temp'],
-            "feels_like": data['main']['feels_like'],
-            "conditions": data['weather'][0]['description'],
-            "humidity": data['main']['humidity'],
-            "wind_speed": data['wind']['speed']
-        }
-
-    async def get_forecast(self, city: str) -> list[Dict[str, Any]]:
-        """Get 5-day weather forecast"""
-        response = requests.get(
-            "https://api.openweathermap.org/data/2.5/forecast",
-            params={"q": city, "appid": self.api_key, "units": "imperial"}
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        forecasts = []
-
-        for item in data['list'][:5]:  # Next 5 entries
-            forecasts.append({
-                "datetime": item['dt_txt'],
-                "temperature": item['main']['temp'],
-                "conditions": item['weather'][0]['description']
-            })
-
-        return forecasts
-
-
-# ═══════════════════════════════════════════════════════════
-# START MCP SERVER
-# ═══════════════════════════════════════════════════════════
-
-if __name__ == "__main__":
-    server = WeatherMCPServer()
-
-    # Start server with AIM monitoring
-    server.start(
-        host="0.0.0.0",
-        port=8090,
-        expose_capabilities_endpoint=True  # Creates /.well-known/mcp/capabilities
-    )
-
-    print("🚀 Weather MCP Server running on http://localhost:8090")
-    print("📊 Capabilities: http://localhost:8090/.well-known/mcp/capabilities")
-    print("🔐 Secured by AIM - all requests verified and logged")
-```
-
-### Step 2: Start Your MCP Server
-
-```bash
-# Set environment variables
-export AIM_PRIVATE_KEY="your-aim-private-key"
-export OPENWEATHER_API_KEY="your-openweather-key"
-export AIM_URL="http://localhost:8080"
-
-# Start the server
-python my_mcp_server.py
-```
-
-**Output**:
-```
-🚀 Weather MCP Server running on http://localhost:8090
-📊 Capabilities: http://localhost:8090/.well-known/mcp/capabilities
-🔐 Secured by AIM - all requests verified and logged
-```
-
-### Step 3: Verify Capabilities Endpoint
-
-```bash
-# Check the capabilities endpoint
-curl http://localhost:8090/.well-known/mcp/capabilities | jq
-```
-
-**Response**:
-```json
-{
-  "server": {
-    "name": "weather-mcp-server",
-    "version": "1.0.0",
-    "aim_verified": true,
-    "public_key": "302a300506032b6570032100a1b2c3d4e5f6...",
-    "capabilities_url": "/.well-known/mcp/capabilities"
-  },
-  "capabilities": [
-    {
-      "name": "get_weather",
-      "description": "Get current weather for a city",
-      "parameters": {
-        "city": {"type": "string", "description": "City name"},
-        "units": {
-          "type": "string",
-          "description": "Temperature units (imperial/metric)",
-          "default": "imperial"
-        }
-      },
-      "returns": {"type": "object", "description": "Weather data"}
-    },
-    {
-      "name": "get_forecast",
-      "description": "Get 5-day weather forecast",
-      "parameters": {
-        "city": {"type": "string", "description": "City name"}
-      },
-      "returns": {"type": "array", "description": "5-day forecast"}
-    }
-  ]
-}
-```
-
----
-
-## Step 4: Use MCP Server in Claude Desktop
-
-### Configure Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "weather": {
-      "command": "python",
-      "args": ["/path/to/my_mcp_server.py"],
-      "env": {
-        "AIM_PRIVATE_KEY": "your-aim-private-key",
-        "OPENWEATHER_API_KEY": "your-openweather-key",
-        "AIM_URL": "http://localhost:8080"
-      }
-    }
-  }
-}
-```
-
-### Restart Claude Desktop
-
-```bash
-# Kill Claude Desktop
-killall Claude
-
-# Restart Claude Desktop
-open -a Claude
-```
-
-### Use in Claude
-
-```
-User: What's the weather in San Francisco?
-
-Claude: I'll check the weather using the weather MCP server.
-
-[Claude calls: get_weather(city="San Francisco")]
-
-The current weather in San Francisco is 62°F with clear skies.
-It feels like 60°F with 65% humidity and winds at 8 mph.
-```
-
-**Behind the scenes** (in AIM Dashboard):
-```
-✅ MCP Request: get_weather(city="San Francisco")
-   Server: weather-mcp-server
-   Verified: ✅ Yes (Ed25519 signature valid)
-   Response Time: 245ms
-   Status: SUCCESS
-   Trust Score Impact: +0.002 (now 0.952)
-```
-
----
-
-## Step 5: Check Your Dashboard (MCP Monitoring)
-
-Open http://localhost:3000 → MCP Servers → weather-mcp-server
-
-### Server Status
-
-```
-MCP Server: weather-mcp-server
-Version: 1.0.0
-Status: ✅ ACTIVE
-Trust Score: 0.95 (Excellent)
-Last Verified: 15 seconds ago
-Total Requests: 12
-Success Rate: 100%
-Avg Response Time: 198ms
-```
-
-### Capabilities
-
-```
-📋 Server Capabilities:
-
-1. get_weather
-   Description: Get current weather for a city
-   Parameters: city (string), units (string, optional)
-   Returns: Weather data object
-   Usage Count: 8 requests
-
-2. get_forecast
-   Description: Get 5-day weather forecast
-   Parameters: city (string)
-   Returns: Array of forecast objects
-   Usage Count: 4 requests
-```
-
-### Recent Activity
-
-```
-✅ get_weather("San Francisco")      |  15s ago  |  SUCCESS  |  245ms
-✅ get_weather("New York")            |  2m ago   |  SUCCESS  |  198ms
-✅ get_forecast("Los Angeles")        |  5m ago   |  SUCCESS  |  312ms
-✅ get_weather("Seattle")             |  8m ago   |  SUCCESS  |  176ms
-```
-
-### Trust Score Breakdown
-
-```
-✅ Verification Status:     100%  (1.00)  [All requests verified]
-✅ Uptime & Availability:   100%  (1.00)  [Server always up]
-✅ Request Success Rate:    100%  (1.00)  [12/12 succeeded]
-✅ Security Alerts:           0   (1.00)  [No anomalies]
-✅ Compliance Score:        100%  (1.00)  [Following policies]
-⚠️  Age & History:          New   (0.50)  [Improves over time]
-✅ Drift Detection:         None  (1.00)  [Consistent behavior]
-✅ User Feedback:           None  (1.00)  [No complaints]
-
-Overall Trust Score: 0.95 / 1.00
-```
-
-### Security Monitoring
-
-```
-🔐 Cryptographic Verification
-   Public Key: 302a300506032b6570032100a1b2c3d4e5f6...
-   Algorithm: Ed25519
-   Last Verified: 15 seconds ago
-   Total Verifications: 12
-   Failed Verifications: 0
-
-🛡️ Security Alerts: None
-
-📊 Anomaly Detection
-   Unusual request patterns: None
-   Suspicious parameters: None
-   Unexpected responses: None
-```
-
----
-
-## 🎓 Understanding MCP Integration
-
-### What is the `.well-known/mcp/capabilities` Endpoint?
-
-This endpoint follows the **well-known URI** pattern (like `.well-known/security.txt`) and serves as the "identity card" for your MCP server:
-
-```json
-{
-  "server": {
-    "name": "weather-mcp-server",
-    "version": "1.0.0",
-    "aim_verified": true,           // ← AIM cryptographic verification
-    "public_key": "302a300506...",  // ← Ed25519 public key
-    "capabilities_url": "/.well-known/mcp/capabilities"
-  },
-  "capabilities": [...]
-}
-```
-
-### How Does Cryptographic Verification Work?
-
-1. **MCP Server Registers with AIM**:
-   ```python
-   aim_agent = secure("weather-mcp-server")
-   # Generates Ed25519 keypair
-   # Registers public key with AIM
-   ```
-
-2. **Client Discovers Server**:
-   ```bash
-   curl http://localhost:8090/.well-known/mcp/capabilities
-   # Client retrieves public key from capabilities endpoint
-   ```
-
-3. **Every Request is Signed**:
-   ```python
-   # Client sends request
-   POST /get_weather
-   Headers:
-     X-MCP-Signature: <Ed25519 signature>
-     X-MCP-Timestamp: <Unix timestamp>
-   Body: {"city": "San Francisco"}
-   ```
-
-4. **AIM Verifies Each Request**:
-   ```python
-   # Server verifies signature
-   verify_signature(public_key, signature, request_body + timestamp)
-
-   # If valid → process request
-   # If invalid → reject with 401 Unauthorized
-   ```
-
-### Why Is This Important?
-
-**Without AIM**: Anyone can impersonate an MCP server
-```
-❌ Malicious server could claim to be "github-mcp"
-❌ Client has no way to verify authenticity
-❌ Attacker could steal credentials, inject malicious data
-```
-
-**With AIM**: Cryptographic proof of identity
-```
-✅ Only the real server has the private key
-✅ Signature proves server identity
-✅ Tampering with responses is detected
-✅ Complete audit trail of all interactions
-```
-
----
-
-## 🚀 Advanced Usage
-
-### MCP Server with Database Access
-
-```python
-from aim_sdk import secure
-from aim_sdk.integrations.mcp import MCPServer, MCPCapability
-import psycopg2
-
-aim_agent = secure("database-mcp-server")
-
-class DatabaseMCPServer(MCPServer):
-    """MCP server for database queries"""
-
-    def __init__(self):
-        super().__init__(
-            name="database-mcp-server",
-            version="1.0.0",
-            aim_agent=aim_agent
-        )
-
-    def get_capabilities(self):
-        return [
-            MCPCapability(
-                name="query_users",
-                description="Query users table with filters",
-                parameters={
-                    "filters": {
-                        "type": "object",
-                        "description": "Filter criteria"
-                    }
-                }
-            )
-        ]
-
-    async def query_users(self, filters: dict = None):
-        """Query users (automatically verified by AIM)"""
-        with psycopg2.connect(os.getenv("DATABASE_URL")) as conn:
-            cursor = conn.cursor()
-            query = "SELECT * FROM users WHERE 1=1"
-            params = []
-
-            if filters and "age__gte" in filters:
-                query += " AND age >= %s"
-                params.append(filters["age__gte"])
-
-            cursor.execute(query, params)
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-
-# Start server
-server = DatabaseMCPServer()
-server.start(host="0.0.0.0", port=8091)
-```
-
-### MCP Server with File System Access
-
-```python
-from aim_sdk import secure
-from aim_sdk.integrations.mcp import MCPServer, MCPCapability
+import base64
 import os
-from pathlib import Path
 
-aim_agent = secure("filesystem-mcp-server")
+# Initialize AIM agent
+aim_agent = secure("mcp-demo-agent")
 
-class FilesystemMCPServer(MCPServer):
-    """MCP server for file system operations"""
+# Generate a demo Ed25519 public key (in production, use real key from MCP server)
+demo_public_key = base64.b64encode(b"demo-public-key-32-bytes-long!!").decode()
 
-    def __init__(self, allowed_directory: str):
-        super().__init__(
-            name="filesystem-mcp-server",
-            version="1.0.0",
-            aim_agent=aim_agent
-        )
-        self.allowed_directory = Path(allowed_directory)
+# Step 1: Register MCP server
+print("📝 Registering MCP server...")
+server = register_mcp_server(
+    aim_client=aim_agent,
+    server_name="demo-mcp",
+    server_url="http://localhost:3001",
+    public_key=demo_public_key,
+    capabilities=["read_file", "write_file", "search"],
+    description="Demo MCP server for file operations"
+)
+print(f"✅ Registered: {server['id']}")
 
-    def get_capabilities(self):
-        return [
-            MCPCapability(
-                name="list_files",
-                description="List files in a directory",
-                parameters={
-                    "path": {"type": "string", "description": "Directory path"}
-                }
-            ),
-            MCPCapability(
-                name="read_file",
-                description="Read file contents",
-                parameters={
-                    "path": {"type": "string", "description": "File path"}
-                }
-            )
-        ]
+# Step 2: List all servers
+print("\n📋 Listing MCP servers...")
+servers = list_mcp_servers(aim_client=aim_agent)
+for s in servers:
+    print(f"  - {s['name']}: {s['status']}")
 
-    async def list_files(self, path: str = "."):
-        """List files (AIM verifies this is allowed)"""
-        full_path = (self.allowed_directory / path).resolve()
+# Step 3: Attest the server
+print("\n🔐 Attesting MCP server...")
+attestation = attest_mcp_server(
+    aim_client=aim_agent,
+    server_id=server['id'],
+    mcp_url="http://localhost:3001",
+    mcp_name="demo-mcp",
+    capabilities_found=["read_file", "write_file", "search"],
+    connection_successful=True,
+    health_check_passed=True,
+    connection_latency_ms=35.0
+)
+print(f"✅ Attestation complete! Confidence: {attestation.get('mcp_confidence_score', 'N/A')}%")
 
-        # Security: ensure path is within allowed directory
-        if not str(full_path).startswith(str(self.allowed_directory)):
-            raise PermissionError("Access denied: path outside allowed directory")
+# Step 4: Record tool usage
+print("\n📊 Recording tool usage...")
+usage = use_mcp_tool(
+    aim_client=aim_agent,
+    server_id=server['id'],
+    tool_name="read_file",
+    mcp_url="http://localhost:3001",
+    mcp_name="demo-mcp"
+)
+print(f"✅ Tool usage recorded: {usage.get('connection_id', 'OK')}")
 
-        return [f.name for f in full_path.iterdir()]
-
-    async def read_file(self, path: str):
-        """Read file (AIM logs all reads)"""
-        full_path = (self.allowed_directory / path).resolve()
-
-        if not str(full_path).startswith(str(self.allowed_directory)):
-            raise PermissionError("Access denied")
-
-        with open(full_path, 'r') as f:
-            return f.read()
-
-
-# Start server (only allows access to ~/safe_directory)
-server = FilesystemMCPServer(allowed_directory="~/safe_directory")
-server.start(host="0.0.0.0", port=8092)
-```
-
-### Multi-Server Discovery
-
-```python
-from aim_sdk import auto_detect_mcp_servers, register_all_mcp_servers
-
-# Auto-detect all MCP servers from Claude Desktop config
-servers = auto_detect_mcp_servers()
-
-# Register all at once
-results = register_all_mcp_servers(servers)
-
-print(f"✅ Registered {len(results)} MCP servers:")
-for result in results:
-    print(f"  - {result['name']}: {result['server_id']}")
-    print(f"    Public Key: {result['public_key'][:32]}...")
-    print(f"    Capabilities: {result['capabilities_count']} capabilities")
-    print()
+print("\n🎉 MCP integration complete!")
+print("View in dashboard: http://localhost:3000/dashboard/mcp")
 ```
 
 ---
 
-## 💡 Real-World Use Cases
+## Dashboard Integration
 
-### 1. Secure Claude Desktop with Multiple MCP Servers
+After registering and attesting MCP servers, view them in the AIM dashboard:
 
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "python",
-      "args": ["/path/to/filesystem_mcp.py"],
-      "env": {
-        "AIM_PRIVATE_KEY": "fs-private-key",
-        "AIM_URL": "http://localhost:8080",
-        "ALLOWED_DIRECTORY": "~/Documents"
-      }
-    },
-    "database": {
-      "command": "python",
-      "args": ["/path/to/database_mcp.py"],
-      "env": {
-        "AIM_PRIVATE_KEY": "db-private-key",
-        "AIM_URL": "http://localhost:8080",
-        "DATABASE_URL": "postgresql://localhost/mydb"
-      }
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "ghp_..."
-      }
-    }
-  }
-}
-```
+**Dashboard URL**: http://localhost:3000/dashboard/mcp
 
-**Result**: All three servers monitored by AIM with separate trust scores
-
-### 2. Large MCP Server Fleet
-
-```python
-from aim_sdk import secure, register_mcp_server
-
-# Register multiple production MCP servers
-servers = [
-    {
-        "name": "prod-database-mcp",
-        "command": "python",
-        "args": ["/opt/mcp/database_server.py"],
-        "env": {"DATABASE_URL": "postgresql://prod-db/main"}
-    },
-    {
-        "name": "prod-slack-mcp",
-        "command": "python",
-        "args": ["/opt/mcp/slack_server.py"],
-        "env": {"SLACK_TOKEN": "xoxb-..."}
-    },
-    {
-        "name": "prod-gdrive-mcp",
-        "command": "python",
-        "args": ["/opt/mcp/gdrive_server.py"],
-        "env": {"GOOGLE_CREDENTIALS": "/opt/creds/gdrive.json"}
-    }
-]
-
-# Register all
-for server_config in servers:
-    result = register_mcp_server(**server_config)
-    print(f"✅ {server_config['name']}: {result['server_id']}")
-
-# AIM dashboard now shows all servers with trust scores
-```
-
-### 3. MCP Server with Approval Workflows
-
-```python
-from aim_sdk import secure
-from aim_sdk.integrations.mcp import MCPServer, MCPCapability
-
-aim_agent = secure("sensitive-data-mcp")
-
-class SensitiveDataMCPServer(MCPServer):
-    """MCP server requiring approval for sensitive operations"""
-
-    @aim_agent.require_approval(risk_level="high")
-    async def delete_user(self, user_id: int):
-        """Delete user (requires human approval)"""
-        # AIM will pause execution and request approval
-        with psycopg2.connect(os.getenv("DATABASE_URL")) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-            return {"deleted": cursor.rowcount > 0}
-
-    @aim_agent.require_approval(risk_level="critical")
-    async def export_all_data(self):
-        """Export all data (requires urgent approval)"""
-        # High-risk operation, requires immediate human review
-        # ...
-```
+The dashboard shows:
+- All registered MCP servers
+- Trust/confidence scores
+- Connected agents
+- Attestation history
+- Tool usage audit trail
 
 ---
 
-## 🐛 Troubleshooting
+## Drift Detection
 
-### Issue: "MCP server not detected by Claude Desktop"
+AIM automatically detects when agents connect to unregistered MCP servers:
 
-**Solution**:
-1. Check `claude_desktop_config.json` syntax (must be valid JSON)
-2. Verify file path: `~/Library/Application Support/Claude/claude_desktop_config.json`
-3. Restart Claude Desktop completely
-4. Check server logs for errors
+1. **Agent connects to unknown MCP** → Drift alert created
+2. **Dashboard notification** → Admin reviews the alert
+3. **Register or block** → Admin decides to trust or deny
 
-### Issue: "Signature verification failed"
+This prevents shadow IT and ensures all MCP connections are tracked.
 
-**Error**: `401 Unauthorized: Invalid MCP signature`
+---
 
-**Solution**:
-1. Verify `AIM_PRIVATE_KEY` matches the registered server
-2. Check server is using correct `aim_agent` instance
-3. Ensure timestamps are synchronized (within 5 minutes)
-4. Verify public key in `.well-known/mcp/capabilities` is correct
+## Troubleshooting
 
-### Issue: "Capabilities endpoint returns 404"
+### Issue: "server_name cannot be empty"
 
-**Solution**:
+Ensure you provide a valid server name:
 ```python
-# Ensure expose_capabilities_endpoint=True
-server.start(
-    host="0.0.0.0",
-    port=8090,
-    expose_capabilities_endpoint=True  # ← Must be True
+register_mcp_server(
+    aim_client=aim_agent,
+    server_name="my-mcp",  # Must be non-empty
+    ...
 )
 ```
 
----
+### Issue: "public_key must be a valid Ed25519 public key"
 
-## ✅ Checklist
+The public key must be at least 32 characters. Use base64-encoded Ed25519 key:
+```python
+import base64
+public_key = base64.b64encode(your_ed25519_public_key_bytes).decode()
+```
 
-- [ ] MCP server registered in AIM dashboard
-- [ ] Private key saved securely
-- [ ] `aim-sdk` installed with MCP support
-- [ ] `.well-known/mcp/capabilities` endpoint working
-- [ ] Capabilities endpoint returns valid JSON
-- [ ] Server added to Claude Desktop config (if applicable)
-- [ ] Claude Desktop restarted
-- [ ] Dashboard shows server status
-- [ ] Trust score visible (should be >0.90)
-- [ ] Requests logged in audit trail
-- [ ] Signature verification working
+### Issue: "Authentication failed"
 
-**All checked?** 🎉 **Your MCP server is cryptographically verified!**
+Ensure your AIM agent is properly initialized:
+```python
+aim_agent = secure("my-agent")  # This handles auth automatically
+```
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
-### Explore More Integrations
-
-- [LangChain Integration →](./langchain.md) - Secure LangChain agents
 - [CrewAI Integration →](./crewai.md) - Multi-agent teams
-- [Microsoft Copilot →](./copilot.md) - AI assistants
-
-### Learn Advanced Features
-
+- [LangChain Integration →](./langchain.md) - LangChain agents
 - [SDK Documentation](../sdk/python.md) - Complete SDK reference
-- [Cryptographic Auth](../sdk/authentication.md) - Ed25519 deep dive
-- [Auto-Detection](../sdk/auto-detection.md) - MCP discovery
-
-### Deploy to Production
-
-- [Azure Deployment](../deployment/azure.md) - Production setup
-- [Security Best Practices](../security/best-practices.md) - Harden deployment
 
 ---
 
 <div align="center">
 
-**Next**: [Microsoft Copilot Integration →](./copilot.md)
+**MCP Integration Complete** 🎉
 
-[🏠 Back to Home](../../README.md) • [📚 All Integrations](./index.md) • [💬 Get Help](https://discord.gg/opena2a)
+[🏠 Back to Home](../../README.md) • [📚 All Integrations](./index.md)
 
 </div>

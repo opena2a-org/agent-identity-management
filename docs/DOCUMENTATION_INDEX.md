@@ -75,12 +75,6 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
    - **Examples**: Claude Desktop integration
    - **Perfect For**: MCP server users
 
-4. **[Microsoft Copilot Integration](./integrations/copilot.md)** ✅ **Complete**
-   - **Integration Time**: 5 minutes
-   - **What You Get**: AI assistant security
-   - **Examples**: HR assistants, IT support bots
-   - **Perfect For**: Microsoft 365 users
-
 ---
 
 ## 📖 SDK Documentation (Amateur-Friendly)
@@ -257,7 +251,6 @@ agent = secure("my-agent")
 6. `/docs/integrations/langchain.md` - LangChain integration (2 lines)
 7. `/docs/integrations/crewai.md` - CrewAI integration (3 lines)
 8. `/docs/integrations/mcp.md` - MCP integration (auto-detect)
-9. `/docs/integrations/copilot.md` - Microsoft Copilot integration
 
 **SDK Documentation**:
 10. `/docs/sdk/python.md` - Complete Python SDK reference

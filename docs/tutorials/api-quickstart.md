@@ -59,14 +59,14 @@ export AGENT_ID="550e8400-e29b-41d4-a716-446655440000"
 
 ---
 
-## Step 3: Log an Action (30 seconds)
+## Step 3: Verify a Capability (30 seconds)
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/agents/$AGENT_ID/actions" \
+curl -X POST "http://localhost:8080/api/v1/agents/$AGENT_ID/verify-capability" \
   -H "Authorization: Bearer $AIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "action_type": "api_call",
+    "capability": "api:call",
     "resource": "weather_api",
     "risk_level": "low",
     "metadata": {
@@ -79,10 +79,10 @@ curl -X POST "http://localhost:8080/api/v1/agents/$AGENT_ID/actions" \
 **Response:**
 ```json
 {
-  "id": "action_123",
+  "audit_id": "audit_123",
   "approved": true,
   "trust_score_at_time": 0.5,
-  "logged_at": "2025-01-15T10:31:00Z"
+  "verified_at": "2025-01-15T10:31:00Z"
 }
 ```
 
@@ -156,7 +156,8 @@ Now AIM will monitor this connection and alert on drift!
 | Register agent | POST | `/api/v1/agents/register` |
 | Get agent | GET | `/api/v1/agents/:id` |
 | List agents | GET | `/api/v1/agents` |
-| Log action | POST | `/api/v1/agents/:id/actions` |
+| Verify capability | POST | `/api/v1/agents/:id/verify-capability` |
+| Log capability result | POST | `/api/v1/agents/:id/log-capability/:audit_id` |
 | Get trust score | GET | `/api/v1/agents/:id/trust-score` |
 | Register MCP | POST | `/api/v1/mcp-servers` |
 | Link agent to MCP | POST | `/api/v1/agents/:id/mcp-servers/:mcp_id` |
@@ -192,19 +193,19 @@ AGENT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/agents/register" \
 AGENT_ID=$(echo $AGENT_RESPONSE | jq -r '.id')
 echo "Agent ID: $AGENT_ID"
 
-# 2. Log some actions
-echo "Logging actions..."
+# 2. Verify some capabilities
+echo "Verifying capabilities..."
 for i in 1 2 3; do
-  curl -s -X POST "$API_URL/api/v1/agents/$AGENT_ID/actions" \
+  curl -s -X POST "$API_URL/api/v1/agents/$AGENT_ID/verify-capability" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d "{
-      \"action_type\": \"api_call\",
+      \"capability\": \"api:call\",
       \"resource\": \"test_api\",
       \"risk_level\": \"low\",
       \"metadata\": {\"iteration\": $i}
     }" > /dev/null
-  echo "  Action $i logged"
+  echo "  Capability $i verified"
 done
 
 # 3. Get trust score

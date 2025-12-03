@@ -794,29 +794,29 @@ export const apiDocumentation: EndpointCategory[] = [
       },
       {
         method: "POST",
-        path: "/api/v1/agents/:id/verify-action",
+        path: "/api/v1/agents/:id/verify-capability",
         description:
-          "CORE: Runtime action verification. Verifies agent can perform action.",
-        summary: "Verify agent action",
+          "CORE: Runtime capability verification. Verifies agent can use a capability.",
+        summary: "Verify agent capability",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         tags: ["agents", "runtime", "core"],
         requestSchema: {
           type: "object",
           properties: {
-            action: {
+            capability: {
               type: "string",
-              description: "Action name",
+              description: "Capability in namespace:action format (e.g., 'file:read', 'api:call')",
               required: true,
             },
-            resourceType: { type: "string", description: "Resource type" },
-            context: { type: "object", description: "Action context" },
+            resource: { type: "string", description: "Resource being accessed" },
+            metadata: { type: "object", description: "Additional context" },
           },
         },
         example: `{
-  "action": "send_email",
-  "resourceType": "email",
-  "context": {
+  "capability": "email:send",
+  "resource": "smtp-server",
+  "metadata": {
     "recipient": "user@example.com",
     "subject": "Test Email"
   }
@@ -824,26 +824,27 @@ export const apiDocumentation: EndpointCategory[] = [
       },
       {
         method: "POST",
-        path: "/api/v1/agents/:id/log-action/:audit_id",
+        path: "/api/v1/agents/:id/log-capability/:audit_id",
         description:
-          "CORE: Log action result. Records verification outcome for audit.",
-        summary: "Log action result",
+          "CORE: Log capability result. Records verification outcome for audit.",
+        summary: "Log capability result",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
         tags: ["agents", "runtime", "core"],
         requestSchema: {
           type: "object",
           properties: {
-            status: {
-              type: "string",
-              description: "Action status (success, failed)",
+            success: {
+              type: "boolean",
+              description: "Whether the capability executed successfully",
               required: true,
             },
-            result: { type: "object", description: "Action result data" },
+            result: { type: "object", description: "Execution result data" },
+            errorMessage: { type: "string", description: "Error message if failed" },
           },
         },
         example: `{
-  "status": "success",
+  "success": true,
   "result": {
     "emailSent": true,
     "messageId": "msg_123"
@@ -2839,9 +2840,9 @@ export const apiDocumentation: EndpointCategory[] = [
               description: "Agent ID",
               required: true,
             },
-            action_type: {
+            capability: {
               type: "string",
-              description: "Action type (e.g., execute_code, write_database)",
+              description: "Capability in namespace:action format (e.g., code:execute, db:write)",
               required: true,
             },
             resource: {
@@ -2849,7 +2850,7 @@ export const apiDocumentation: EndpointCategory[] = [
               description: "Resource being accessed",
               required: true,
             },
-            context: { type: "object", description: "Action context metadata" },
+            context: { type: "object", description: "Capability context metadata" },
             timestamp: { type: "string", description: "ISO 8601 timestamp" },
           },
         },
@@ -2859,7 +2860,7 @@ export const apiDocumentation: EndpointCategory[] = [
             id: { type: "string", description: "Verification ID" },
             status: { type: "string", description: "allowed or blocked" },
             agent_id: { type: "string", description: "Agent ID" },
-            action_type: { type: "string", description: "Action type" },
+            capability: { type: "string", description: "Capability" },
             alert_created: {
               type: "boolean",
               description: "Whether alert was created",
@@ -2868,7 +2869,7 @@ export const apiDocumentation: EndpointCategory[] = [
         },
         example: `{
   "agent_id": "uuid-agent-123",
-  "action_type": "execute_code",
+  "capability": "code:execute",
   "resource": "eval(user_input)",
   "context": {
     "code": "print('hello')",
@@ -2971,9 +2972,9 @@ export const apiDocumentation: EndpointCategory[] = [
         requestSchema: {
           type: "object",
           properties: {
-            action_type: {
+            capability: {
               type: "string",
-              description: "Activity type",
+              description: "Capability used (e.g., file:read, db:query)",
               required: true,
             },
             resource: { type: "string", description: "Resource accessed" },
@@ -2982,7 +2983,7 @@ export const apiDocumentation: EndpointCategory[] = [
           },
         },
         example: `{
-  "action_type": "read_files",
+  "capability": "file:read",
   "resource": "config.json",
   "status": "success",
   "metadata": {
@@ -3261,14 +3262,14 @@ export const apiDocumentation: EndpointCategory[] = [
               description: "Agent ID requesting verification",
               required: true,
             },
-            action_type: {
+            capability: {
               type: "string",
-              description: "Type of action (e.g., 'deploy', 'delete', 'modify')",
+              description: "Capability being requested (e.g., 'infra:deploy', 'db:delete', 'config:modify')",
               required: true,
             },
-            action_details: {
+            context: {
               type: "object",
-              description: "Details about the action to be verified",
+              description: "Details about the capability usage to be verified",
               required: true,
             },
             risk_level: {
@@ -3288,8 +3289,8 @@ export const apiDocumentation: EndpointCategory[] = [
         },
         example: `{
   "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-  "action_type": "deploy",
-  "action_details": {
+  "capability": "infra:deploy",
+  "context": {
     "resource": "production-database",
     "changes": ["schema_migration", "index_creation"]
   },
@@ -3310,8 +3311,8 @@ export const apiDocumentation: EndpointCategory[] = [
             id: { type: "string", description: "Verification ID" },
             agent_id: { type: "string", description: "Agent ID" },
             status: { type: "string", description: "Current status (pending, approved, rejected, expired)" },
-            action_type: { type: "string", description: "Type of action" },
-            action_details: { type: "object", description: "Action details" },
+            capability: { type: "string", description: "Capability being verified" },
+            context: { type: "object", description: "Capability context" },
             requested_at: { type: "string", description: "Request timestamp" },
             reviewed_at: { type: "string", description: "Review timestamp (if reviewed)" },
             reviewed_by: { type: "string", description: "User who reviewed (if reviewed)" },

@@ -15,9 +15,9 @@
 
 | Method | Endpoint | Description | Authentication |
 |--------|----------|-------------|----------------|
-| POST | `/api/v1/agents/:id/verify-action` | Verify agent action against capabilities | JWT Required |
-| POST | `/api/v1/agents/:id/log-action/:audit_id` | Log action execution result | JWT Required |
-| POST | `/api/v1/mcp-servers/:id/verify-action` | Verify MCP action against capabilities | JWT Required |
+| POST | `/api/v1/agents/:id/verify-capability` | Verify agent capability before execution | JWT Required |
+| POST | `/api/v1/agents/:id/log-capability/:audit_id` | Log capability execution result | JWT Required |
+| POST | `/api/v1/mcp-servers/:id/verify-capability` | Verify MCP capability before execution | JWT Required |
 
 **Implementation Details**:
 - **File**: `apps/backend/internal/interfaces/http/handlers/agent_handler.go:277-374`
@@ -27,22 +27,22 @@
 
 **Request Flow**:
 ```
-Agent → POST /agents/:id/verify-action
+Agent → POST /agents/:id/verify-capability
        ↓
 AIM checks: exists? verified? has capabilities?
        ↓
 Response: {allowed: true/false, reason: "...", audit_id: "..."}
        ↓
-If allowed → Agent executes action
+If allowed → Agent executes capability
        ↓
-Agent → POST /agents/:id/log-action/:audit_id (result)
+Agent → POST /agents/:id/log-capability/:audit_id (result)
 ```
 
 **Example Request**:
 ```json
-POST /api/v1/agents/agent_123/verify-action
+POST /api/v1/agents/agent_123/verify-capability
 {
-  "action_type": "read_file",
+  "capability": "file:read",
   "resource": "/data/reports/sales.csv",
   "metadata": {
     "file_size": "5MB",
@@ -55,7 +55,7 @@ POST /api/v1/agents/agent_123/verify-action
 ```json
 {
   "allowed": true,
-  "reason": "Action matches registered capabilities",
+  "reason": "Capability matches registered capabilities",
   "audit_id": "audit_789"
 }
 ```

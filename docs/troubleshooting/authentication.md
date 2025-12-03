@@ -475,13 +475,13 @@ except Exception as e:
 # Step 4: Test verification flow
 print("\n4. Testing verification flow...")
 try:
-    verification = client.verify_action(
-        action_type="test_action",
+    verification = client.verify_capability(
+        capability="test:action",
         resource="test_resource",
         context={"test": True}
     )
-    if verification and 'verification_id' in verification:
-        print(f"✅ Verification successful: {verification['verification_id']}")
+    if verification and 'audit_id' in verification:
+        print(f"✅ Verification successful: {verification['audit_id']}")
     else:
         print(f"⚠️  Verification returned unexpected response")
 except Exception as e:

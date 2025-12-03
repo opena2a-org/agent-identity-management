@@ -162,7 +162,7 @@ from aim_sdk import secure
 client = secure("my-agent")
 
 # No manual token management needed!
-client.verify_action(...)
+client.verify_capability(...)
 ```
 
 ❌ **Incorrect**:

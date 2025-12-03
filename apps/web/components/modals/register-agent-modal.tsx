@@ -721,6 +721,7 @@ export function RegisterAgentModal({
                                 className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
                               />
                               <button
+                                type="button"
                                 onClick={() =>
                                   copyToClipboard(createdAgent.id, "agent_id")
                                 }
@@ -748,6 +749,7 @@ export function RegisterAgentModal({
                                 className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
                               />
                               <button
+                                type="button"
                                 onClick={() =>
                                   copyToClipboard(
                                     agentKeys.publicKey,
@@ -778,6 +780,7 @@ export function RegisterAgentModal({
                                 className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
                               />
                               <button
+                                type="button"
                                 onClick={() =>
                                   setShowPrivateKey(!showPrivateKey)
                                 }
@@ -790,6 +793,7 @@ export function RegisterAgentModal({
                                 )}
                               </button>
                               <button
+                                type="button"
                                 onClick={() =>
                                   copyToClipboard(
                                     agentKeys.privateKey,

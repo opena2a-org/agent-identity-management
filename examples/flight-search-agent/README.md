@@ -8,9 +8,9 @@ This flight search agent showcases:
 - ✅ **Auto-registration** - One line of code: `secure("agent-name")`
 - ✅ **Auto-detection** - Automatically detects 5 capabilities from code
 - ✅ **Cryptographic signing** - Ed25519 signatures for authentication
-- ✅ **Action verification** - Requests approval before executing searches
-- ✅ **Activity logging** - Logs all actions to AIM for audit trail
-- ✅ **Trust scoring** - Builds trust score through verified actions
+- ✅ **Capability verification** - Requests approval before executing searches
+- ✅ **Activity logging** - Logs all capabilities to AIM for audit trail
+- ✅ **Trust scoring** - Builds trust score through verified capabilities
 - ✅ **Dashboard integration** - Visible in AIM web dashboard
 
 ## 🚀 Quick Start
@@ -115,10 +115,10 @@ On first run, the agent:
 ### 2. Flight Search
 
 For each search:
-1. Calls `client.verify_action()` to request verification from AIM
-2. AIM checks agent trust score and action risk level
+1. Calls `client.verify_capability()` to request verification from AIM
+2. AIM checks agent trust score and capability risk level
 3. If approved, executes flight search
-4. Logs result with `client.log_action_result()`
+4. Logs result with `client.log_capability_result()`
 
 ### 3. Dashboard Visibility
 
@@ -142,23 +142,21 @@ client = secure(
 )
 ```
 
-✅ **Action Verification**
+✅ **Capability Verification**
 ```python
-verification = client.verify_action(
-    action_type="search_flights",
-    action_details={
-        "destination": destination,
-        "risk_level": "low"
-    }
+verification = client.verify_capability(
+    capability="flights:search",
+    resource=destination,
+    context={"risk_level": "low"}
 )
 ```
 
 ✅ **Activity Logging**
 ```python
-client.log_action_result(
-    action_type="search_flights",
+client.log_capability_result(
+    audit_id=verification.audit_id,
     success=True,
-    metadata={"flights_found": 4}
+    result_summary="Found 4 flights"
 )
 ```
 
@@ -217,7 +215,7 @@ See `NEXT_STEPS.md` for detailed explanation.
 If tabs like "Recent Activity" or "Trust History" are empty:
 
 **This is expected** if:
-1. Agent hasn't performed any verified actions yet, OR
+1. Agent hasn't performed any verified capabilities yet, OR
 2. Your credentials have expired (token rotation)
 
 **Solution**:

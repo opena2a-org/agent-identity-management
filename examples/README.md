@@ -89,23 +89,24 @@ client = secure("my-agent-name")
 # Agent is now registered and verified
 ```
 
-### Pattern 2: Action Verification
+### Pattern 2: Capability Verification
 ```python
-# Request verification before performing action
-verification = client.verify_action(
-    action_type="search_flights",
-    action_details={"destination": "NYC", "risk_level": "low"}
+# Request verification before performing capability
+verification = client.verify_capability(
+    capability="flights:search",
+    resource="NYC",
+    context={"risk_level": "low"}
 )
 
 if verification.approved:
-    # Perform the action
+    # Perform the capability
     results = search_flights("NYC")
 
     # Log the result
-    client.log_action_result(
-        action_type="search_flights",
+    client.log_capability_result(
+        audit_id=verification.audit_id,
         success=True,
-        metadata={"flights_found": len(results)}
+        result_summary=f"Found {len(results)} flights"
     )
 ```
 
@@ -114,9 +115,9 @@ if verification.approved:
 from aim_sdk import perform_action
 
 class TodoTool(BaseTool):
-    @perform_action(action_type="create_todo")
+    @perform_action(capability="todo:create", risk_level="low")
     def _run(self, task: str):
-        # Action is automatically verified by AIM
+        # Capability is automatically verified by AIM
         return add_todo(task)
 ```
 

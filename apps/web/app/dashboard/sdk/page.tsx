@@ -108,36 +108,6 @@ export default function SDKDownloadPage() {
               {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download Python SDK'}
             </button>
           </div>
-
-          <div className="bg-gradient-to-br from-gray-50 to-blue-50 px-6 py-5 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Features Included:</h3>
-            <div className="grid md:grid-cols-2 gap-3">
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>OAuth/OIDC auto-configured</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>Auto-detect MCPs & capabilities</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>Ed25519 crypto signing</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>System keyring integration</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>LangChain & CrewAI support</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span>100% test coverage</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Future SDKs Notice */}
