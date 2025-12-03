@@ -29,7 +29,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { api } from "@/lib/api";
+import { api, AttestationWithAgentDetails } from "@/lib/api";
 import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
 import {
   AlertDialog,
@@ -83,28 +83,6 @@ interface Capability {
   updatedAt: string;
 }
 
-// Attestation information
-interface Attestation {
-  id: string;
-  agentId: string;
-  agentName: string;
-  agentTrustScore: number;
-  verifiedAt: string;
-  expiresAt: string;
-  capabilitiesConfirmed: string[];
-  connectionLatencyMs: number;
-  healthCheckPassed: boolean;
-  isValid: boolean;
-  attestationType: string; // "sdk" or "manual"
-  attestedBy: string; // Agent name or User name
-  attesterType: string; // "agent" or "user"
-  signatureVerified: boolean;
-  sdkVersion?: string;
-  connectionSuccessful: boolean;
-  agentOwnerName?: string;
-  agentOwnerId?: string;
-}
-
 interface Agent {
   id: string;
   name: string;
@@ -124,7 +102,7 @@ export default function MCPServerDetailsPage({
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [connectedAgents, setConnectedAgents] = useState<Agent[]>([]);
   const [agentsError, setAgentsError] = useState<string | null>(null);
-  const [attestations, setAttestations] = useState<Attestation[]>([]);
+  const [attestations, setAttestations] = useState<AttestationWithAgentDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -242,7 +220,7 @@ export default function MCPServerDetailsPage({
 
         // Fetch attestations
         try {
-          const data = await api.getMCPServerAttestations(serverId!);
+          const data = await api.getMCPAttestations(serverId!);
           setAttestations(data.attestations || []);
         } catch (err) {
           console.error("Failed to fetch attestations:", err);
@@ -822,22 +800,13 @@ export default function MCPServerDetailsPage({
                         {/* Header */}
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            {attestation.attesterType === "agent" ? (
-                              <Bot className="h-5 w-5 text-blue-600" />
-                            ) : (
-                              <User className="h-5 w-5 text-purple-600" />
-                            )}
+                            <Bot className="h-5 w-5 text-blue-600" />
                             <div>
                               <p className="font-medium">
-                                {attestation.attestedBy}
-                                {attestation.attesterType === "agent" && attestation.agentOwnerName && (
-                                  <span className="ml-1 font-normal text-sm text-muted-foreground">
-                                    (owned by {attestation.agentOwnerName})
-                                  </span>
-                                )}
+                                {attestation.agentName}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {attestation.attesterType === "agent" ? "Agent" : "User"} • {attestation.attestationType === "sdk" ? "SDK" : "Manual"}
+                                Trust Score: {(attestation.agentTrustScore * 100).toFixed(0)}%
                               </p>
                             </div>
                           </div>
@@ -861,28 +830,16 @@ export default function MCPServerDetailsPage({
                               {new Date(attestation.verifiedAt).toLocaleString()}
                             </span>
                           </div>
-                          {attestation.attestationType === "sdk" && attestation.sdkVersion && (
+                          {attestation.connectionLatencyMs > 0 && (
                             <div>
-                              <span className="text-muted-foreground">SDK:</span>
-                              <span className="ml-2">{attestation.sdkVersion}</span>
+                              <span className="text-muted-foreground">Latency:</span>
+                              <span className="ml-2">{attestation.connectionLatencyMs}ms</span>
                             </div>
                           )}
                         </div>
 
                         {/* Status Badges */}
                         <div className="flex flex-wrap gap-2">
-                          {attestation.signatureVerified && (
-                            <Badge variant="outline" className="text-xs">
-                              <Shield className="h-3 w-3 mr-1" />
-                              Signature Verified
-                            </Badge>
-                          )}
-                          {attestation.connectionSuccessful && (
-                            <Badge variant="outline" className="text-xs">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Connection OK
-                            </Badge>
-                          )}
                           {attestation.healthCheckPassed && (
                             <Badge variant="outline" className="text-xs">
                               <CheckCircle className="h-3 w-3 mr-1" />

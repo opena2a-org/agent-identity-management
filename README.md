@@ -128,6 +128,124 @@ def purge_inactive_users():
 
 ---
 
+## 🔌 MCP Server Registration & Attestation
+
+AIM provides cryptographic verification for MCP (Model Context Protocol) servers, ensuring agents only connect to trusted tool providers.
+
+### Why MCP Attestation Matters
+
+```
+Agent connects to MCP server: filesystem-tools
+
+❌ WITHOUT ATTESTATION:
+   Agent → Unknown MCP → Could be malicious
+   No verification of server identity
+   No audit trail of tool usage
+
+✅ WITH AIM ATTESTATION:
+   Agent → AIM verifies MCP public key → Connection allowed
+   → Server identity cryptographically proven
+   → All tool calls logged
+   → Drift detection if agent connects to unregistered MCPs
+```
+
+### Register an MCP Server (Dashboard)
+
+1. Navigate to **MCP Servers** → **Register New**
+2. Enter server details:
+   - **Name**: Human-readable identifier (e.g., `github-tools`)
+   - **Endpoint URL**: Server location (e.g., `http://localhost:4000`)
+   - **Public Key**: Ed25519 public key for attestation
+3. AIM verifies the server and records its capabilities
+
+### Register an MCP Server (API)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/mcp/servers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "github-tools",
+    "endpoint": "http://localhost:4000",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA...\n-----END PUBLIC KEY-----",
+    "capabilities": ["github:read", "github:write"]
+  }'
+```
+
+### Auto-Detection from Claude Desktop
+
+AIM can automatically detect MCP servers from Claude Desktop's configuration:
+
+```bash
+# In AIM dashboard → MCP Servers → Auto-Detect
+# AIM reads ~/Library/Application Support/Claude/claude_desktop_config.json
+# and imports configured MCP servers automatically
+```
+
+### How Attestation Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MCP Attestation Flow                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. MCP Server generates Ed25519 keypair at startup             │
+│     └─ Private key: signs all responses                         │
+│     └─ Public key: registered with AIM                          │
+│                                                                 │
+│  2. Agent requests tool from MCP server                         │
+│     └─ MCP signs response with private key                      │
+│     └─ Signature + public key sent with response                │
+│                                                                 │
+│  3. AIM verifies attestation                                    │
+│     └─ Checks public key matches registered server              │
+│     └─ Validates signature cryptographically                    │
+│     └─ Logs tool usage with full audit trail                    │
+│                                                                 │
+│  4. Drift Detection (continuous)                                │
+│     └─ Alerts if agent connects to unregistered MCPs            │
+│     └─ Tracks capability changes over time                      │
+│     └─ Flags suspicious patterns                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### MCP Verification Status
+
+| Status | Meaning |
+|--------|---------|
+| ✅ **Verified** | Public key validated, server responds to health checks |
+| ⏳ **Pending** | Awaiting admin review or first connection |
+| ⚠️ **Unverified** | Server registered but attestation not yet confirmed |
+| ❌ **Revoked** | Server access disabled (security concern or decommissioned) |
+
+### Connecting Agents to MCP Servers
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+# Agent's MCP connections are tracked automatically
+# When using Claude Desktop or other MCP clients,
+# AIM detects and logs all server connections
+
+# Manual connection tracking via SDK
+agent.connect_mcp("github-tools")  # Logs connection to AIM
+```
+
+### Security Benefits
+
+- **Identity Verification**: Cryptographic proof of MCP server identity
+- **Audit Trail**: Every tool call logged with agent, server, and timestamp
+- **Drift Detection**: Alerts when agents use unregistered MCP servers
+- **Capability Mapping**: Track which agents can access which tools
+- **Revocation**: Instantly disable compromised MCP servers
+
+📚 **Learn more:** [MCP Registration Tutorial](https://opena2a.org/docs/tutorials/mcp-registration)
+
+---
+
 ## 🔑 Capability Requests — Secure Escalation
 
 Need more capabilities? Request them via SDK or API — admins approve in the dashboard.
