@@ -1,6 +1,6 @@
 # Microsoft Copilot + AIM Integration Guide
 
-This guide shows how to integrate **Microsoft Copilot** (GitHub Copilot, Microsoft 365 Copilot, Azure OpenAI) with **AIM (Agent Identity Management)** for production-ready identity verification and trust scoring.
+This guide shows how to integrate **Microsoft Copilot** (GitHub Copilot, Microsoft 365 Copilot, Azure OpenAI) with **AIM (Agent Identity Management)** for complete identity verification and trust scoring.
 
 ## 🎯 Why Integrate AIM with Microsoft Copilot?
 
@@ -447,18 +447,6 @@ pytest test_copilot_integration.py -v
 - 💬 [Community Forum](https://community.opena2a.org)
 - 🐛 [Report Issues](https://github.com/opena2a-org/agent-identity-management/issues)
 - 📧 Email: info@opena2a.org
-
----
-
-## 🎉 Success Stories
-
-> "Integrating AIM with our Microsoft 365 Copilot gave us the security and compliance we needed for enterprise deployment. Trust scoring helps us identify and fix agent issues before they impact users."
->
-> — **Fortune 500 Financial Services Company**
-
-> "GitHub Copilot + AIM = Perfect combination. We can now audit every code suggestion and maintain SOC 2 compliance."
->
-> — **SaaS Startup (Series B)**
 
 ---
 

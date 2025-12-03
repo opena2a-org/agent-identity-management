@@ -89,7 +89,7 @@ result = agent_executor.run("What's the weather in SF?")
 # ✅ Complete audit trail
 ```
 
-**That's it!** Your LangChain agent is now enterprise-secure.
+**That's it!** Your LangChain agent is now secure.
 
 ---
 
@@ -317,7 +317,7 @@ aim_agent = secure("rag-agent")
 
 # Create vector store
 documents = [
-    Document(page_content="AIM provides production-ready agent security."),
+    Document(page_content="AIM provides complete agent security."),
     Document(page_content="AIM uses Ed25519 cryptographic signatures."),
     Document(page_content="AIM supports LangChain, CrewAI, and MCP integrations."),
 ]
@@ -645,7 +645,7 @@ result = agent_executor.run("query")
 - [ ] Trust score updating
 - [ ] Audit trail capturing actions
 
-**All checked?** 🎉 **Your LangChain agent is enterprise-secure!**
+**All checked?** 🎉 **Your LangChain agent is secure!**
 
 ---
 

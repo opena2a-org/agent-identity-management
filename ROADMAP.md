@@ -140,7 +140,7 @@ This document tracks future enhancements and features that are deferred from the
 **Priority**: Medium
 **Status**: Deferred
 
-Create a production-ready `docker-compose.yml` for single-command deployment:
+Create a complete `docker-compose.yml` for single-command deployment:
 - PostgreSQL database with persistent volumes
 - Redis cache
 - Backend service
@@ -198,7 +198,7 @@ Implement fine-grained role-based access control:
 - Organization-level and resource-level permissions
 - Audit trail for role changes
 
-**Use Case**: Enterprise customers with complex permission requirements
+**Use Case**: Organizations with complex permission requirements
 
 ---
 

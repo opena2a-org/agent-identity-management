@@ -239,7 +239,7 @@ cp apps/backend/.env.example apps/backend/.env.production
 - [ ] Production .env configured
 - [ ] Strong passwords (20+ characters)
 - [ ] JWT secret is 64+ characters
-- [ ] OAuth credentials are production-ready
+- [ ] OAuth credentials are configured
 - [ ] Database connection string uses production host
 
 ### Step 3: Start Production Stack

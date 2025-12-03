@@ -1,10 +1,10 @@
-# 🗄️ Database Agent - Enterprise Security
+# 🗄️ Database Agent - Advanced Security
 
 Build a secure database agent with automatic risk assessment and approval workflows.
 
 ## What You'll Build
 
-A production-ready AI agent that:
+An AI agent that:
 - ✅ Securely queries PostgreSQL databases
 - ✅ Auto-approves safe read operations
 - ✅ Requires human approval for high-risk actions (DELETE, UPDATE)
@@ -14,7 +14,7 @@ A production-ready AI agent that:
 
 **Difficulty**: Advanced
 **Time**: 15 minutes
-**Use Case**: Database access for AI agents, compliance-critical operations, enterprise security
+**Use Case**: Database access for AI agents, compliance-critical operations, advanced security
 
 ---
 
@@ -127,7 +127,7 @@ Create `database_agent.py`:
 ```python
 """
 Database Agent - Secured with AIM
-production-ready database access with risk assessment
+database access with risk assessment
 """
 
 from aim_sdk import secure
@@ -850,7 +850,7 @@ class AdminAgent(DatabaseAgent):
 - [ ] SQL injection prevention tested
 - [ ] Dashboard shows pending approvals
 
-**All checked?** 🎉 **Your database agent is enterprise-ready!**
+**All checked?** 🎉 **Your database agent is ready!**
 
 ---
 
@@ -867,7 +867,7 @@ class AdminAgent(DatabaseAgent):
 
 ### Deploy
 - [Azure Deployment](../deployment/azure.md) - Production deployment
-- [Kubernetes](../deployment/kubernetes.md) - Enterprise scale
+- [Kubernetes](../deployment/kubernetes.md) - Large scale
 
 ---
 

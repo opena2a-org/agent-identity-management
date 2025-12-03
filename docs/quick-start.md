@@ -272,13 +272,13 @@ This is **the difference between a rogue agent and a trusted agent**.
 
 - [Weather Agent Example](./examples/weather-agent.md) - Complete tutorial (what you just built!)
 - [Flight Tracker Agent](./examples/flight-tracker.md) - Real-time flight tracking
-- [Database Agent](./examples/database-agent.md) - Enterprise security for DB access
+- [Database Agent](./examples/database-agent.md) - Advanced security for DB access
 
 ### 2. Integrate with Your Framework
 
 - [CrewAI Integration](./integrations/crewai.md) - Secure multi-agent teams
 - [LangChain Integration](./integrations/langchain.md) - Secure agent frameworks
-- [Microsoft Copilot](./integrations/copilot.md) - Enterprise AI assistants
+- [Microsoft Copilot](./integrations/copilot.md) - AI assistants
 - [MCP Servers](./integrations/mcp.md) - Model Context Protocol
 
 ### 3. Learn the SDK
@@ -291,7 +291,7 @@ This is **the difference between a rogue agent and a trusted agent**.
 ### 4. Deploy to Production
 
 - [Azure Deployment](./deployment/azure.md) - Production-ready Azure setup
-- [Kubernetes](./deployment/kubernetes.md) - Enterprise scale
+- [Kubernetes](./deployment/kubernetes.md) - Large scale
 - [Security Best Practices](./security/best-practices.md) - Harden your deployment
 
 ---

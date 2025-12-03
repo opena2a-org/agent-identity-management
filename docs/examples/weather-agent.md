@@ -561,7 +561,7 @@ docker compose restart aim-backend
 - [ ] Recent actions logged in audit trail
 - [ ] No security alerts
 
-**All checked?** 🎉 **Your weather agent is production-ready!**
+**All checked?** 🎉 **Your weather agent is ready!**
 
 ---
 
@@ -570,7 +570,7 @@ docker compose restart aim-backend
 ### Explore More Examples
 
 - [Flight Tracker Agent →](./flight-tracker.md) - Real-time flight tracking
-- [Database Agent →](./database-agent.md) - Enterprise database security
+- [Database Agent →](./database-agent.md) - Advanced database security
 
 ### Learn Advanced Features
 

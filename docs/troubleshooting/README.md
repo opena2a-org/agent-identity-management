@@ -737,7 +737,7 @@ echo "Please attach debug-output/ when reporting issues"
 
 ### Support Channels
 
-**Enterprise Customers**:
+**Supported Customers**:
 - Submit support ticket at: support@yourdomain.com
 - Include agent ID and organization ID
 - Priority support with SLA

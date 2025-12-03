@@ -1,8 +1,8 @@
-# Token Rotation - Enterprise Security Feature
+# Token Rotation - Security Feature
 
 ## Overview
 
-AIM uses **token rotation** to protect your organization from token theft and unauthorized access. This is an production-ready security feature that is **required for SOC 2, HIPAA, and GDPR compliance**.
+AIM uses **token rotation** to protect your organization from token theft and unauthorized access. This is a security feature that is **required for SOC 2, HIPAA, and GDPR compliance**.
 
 ## What is Token Rotation?
 
@@ -203,7 +203,7 @@ cp dev/.aim/credentials.json production/.aim/  # Will cause rotation conflicts
 
 ---
 
-## For Enterprise Administrators
+## For Administrators
 
 ### Security Benefits
 
@@ -292,7 +292,7 @@ The SDK handles rotation automatically:
 
 ### Q: Can I disable token rotation?
 
-**A:** No. Token rotation is **required for enterprise security** and compliance (SOC 2, HIPAA, GDPR).
+**A:** No. Token rotation is **required for security** and compliance (SOC 2, HIPAA, GDPR).
 
 If you need long-lived credentials:
 - Use **API keys** instead (different security model)
@@ -446,7 +446,7 @@ CREATE INDEX idx_sdk_tokens_revoked
 2. Check the [Troubleshooting Guide](../troubleshooting/authentication.md)
 3. Review your token activity in the dashboard
 
-**For enterprise customers**:
+**For supported customers**:
 - Contact your AIM administrator
 - Submit support ticket with agent ID
 - Include error messages and timestamps
@@ -468,9 +468,9 @@ CREATE INDEX idx_sdk_tokens_revoked
 
 ✅ **You only need to download fresh SDK when you see errors**
 
-✅ **This is required for enterprise compliance (SOC 2, HIPAA, GDPR)**
+✅ **This is required for compliance (SOC 2, HIPAA, GDPR)**
 
-**Bottom line**: Token rotation makes AIM more secure for enterprise deployment. The minor inconvenience of occasionally downloading fresh credentials is far outweighed by the security benefits.
+**Bottom line**: Token rotation makes AIM more secure. The minor inconvenience of occasionally downloading fresh credentials is far outweighed by the security benefits.
 
 ---
 

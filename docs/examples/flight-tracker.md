@@ -10,7 +10,7 @@ A real-world AI agent that:
 - ✅ Sends proactive alerts for flight updates
 - ✅ Automatically secured with AIM (1 line of code)
 - ✅ Complete audit trail of all API calls
-- ✅ production-ready security and compliance
+- ✅ Complete security and compliance
 
 **Difficulty**: Intermediate
 **Time**: 10 minutes
@@ -641,13 +641,13 @@ class CachedFlightAgent(FlightTrackerAgent):
 - [ ] Rate limiting implemented (production)
 - [ ] Error handling added (production)
 
-**All checked?** 🎉 **Your flight tracker is production-ready!**
+**All checked?** 🎉 **Your flight tracker is ready!**
 
 ---
 
 ## 🚀 Next Steps
 
-- [Database Agent Example →](./database-agent.md) - Enterprise database security
+- [Database Agent Example →](./database-agent.md) - Advanced database security
 - [SDK Documentation](../sdk/python.md) - Complete SDK reference
 - [Azure Deployment](../deployment/azure.md) - Production deployment
 

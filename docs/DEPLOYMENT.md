@@ -308,7 +308,7 @@ ENABLE_COMPLIANCE_REPORTS=true
     --from-literal=database-url=postgresql://...
   ```
 
-- **Option 4**: HashiCorp Vault (enterprise)
+- **Option 4**: HashiCorp Vault (advanced)
   ```bash
   vault kv put secret/aim/production \
     jwt_secret=your-secret \
