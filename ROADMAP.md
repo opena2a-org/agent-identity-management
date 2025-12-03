@@ -341,6 +341,30 @@ End-to-end UI testing:
 
 ---
 
+## 🔌 Framework Integrations
+
+### GitHub Copilot Integration
+**Priority**: Medium
+**Status**: Planned (Q1 2026)
+**Estimated Effort**: 2 weeks
+
+Integrate AIM with GitHub Copilot for VS Code:
+- Copilot agent capability detection
+- Code suggestion security verification
+- Trust-based code review workflows
+- Audit trail for AI-generated code
+- Integration with GitHub Copilot Business/Enterprise
+
+**Implementation**:
+- VS Code extension integration
+- Copilot API hooks for code suggestions
+- Security policy enforcement for generated code
+- Dashboard visibility for Copilot usage patterns
+
+**Use Case**: Organizations using GitHub Copilot who need visibility and control over AI-generated code
+
+---
+
 ## 📖 Documentation
 
 ### API Documentation Portal
