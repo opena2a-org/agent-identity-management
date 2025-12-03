@@ -364,19 +364,19 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 	})
 }
 
-// VerifyAction verifies if an agent can perform the requested action
-// This is the CORE endpoint that agents call before every action
-// @Summary Verify agent action authorization
-// @Description Verify if an agent is authorized to perform a specific action based on its registered capabilities
+// VerifyCapability verifies if an agent can perform the requested capability
+// This is the CORE endpoint that agents call before performing sensitive operations
+// @Summary Verify agent capability authorization
+// @Description Verify if an agent is authorized to use a specific capability based on its registered capabilities
 // @Tags agents
 // @Accept json
 // @Produce json
 // @Param id path string true "Agent ID"
-// @Param request body VerifyActionRequest true "Action verification request"
-// @Success 200 {object} VerifyActionResponse
-// @Failure 403 {object} ErrorResponse "Action denied"
-// @Router /agents/{id}/verify-action [post]
-func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
+// @Param request body VerifyCapabilityRequest true "Capability verification request"
+// @Success 200 {object} VerifyCapabilityResponse
+// @Failure 403 {object} ErrorResponse "Capability denied"
+// @Router /agents/{id}/verify-capability [post]
+func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -385,7 +385,7 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		ActionType string                 `json:"action_type"`        // "read_file", "write_file", "execute_code", "network_request", "database_query"
+		Capability string                 `json:"capability"`         // "file:read", "file:write", "code:execute", "api:call", "db:query"
 		Resource   string                 `json:"resource"`           // e.g., "/data/file.csv" or "SELECT * FROM users"
 		Metadata   map[string]interface{} `json:"metadata"`           // Additional context
 		Protocol   *string                `json:"protocol,omitempty"` // Optional: "mcp", "a2a", "acp", "did", "oauth", "saml" - SDK auto-detects or user declares
@@ -409,10 +409,10 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 	startTime := c.Context().Time()
 
 	// Fetch agent and verify capabilities
-	decision, reason, auditID, err := h.agentService.VerifyAction(
+	decision, reason, auditID, err := h.agentService.VerifyCapability(
 		c.Context(),
 		agentID,
-		req.ActionType,
+		req.Capability,
 		req.Resource,
 		req.Metadata,
 	)
@@ -428,11 +428,11 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 
 	// 1. LOG AUDIT ENTRY (for all verification attempts)
 	auditMetadata := map[string]interface{}{
-		"action_type": req.ActionType,
-		"resource":    req.Resource,
-		"allowed":     decision,
-		"reason":      reason,
-		"audit_id":    auditID,
+		"capability": req.Capability,
+		"resource":   req.Resource,
+		"allowed":    decision,
+		"reason":     reason,
+		"audit_id":   auditID,
 	}
 	if req.Metadata != nil {
 		auditMetadata["request_metadata"] = req.Metadata
@@ -450,7 +450,7 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		orgID,
 		userID,
 		domain.AuditActionVerify,
-		"agent_action",
+		"agent_capability",
 		agentID,
 		c.IP(),
 		c.Get("User-Agent"),
@@ -496,10 +496,10 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 		domain.InitiatorTypeAgent,
 		nil, // No specific initiator ID for agent self-verification
 		map[string]interface{}{
-			"action_type": req.ActionType,
-			"resource":    req.Resource,
-			"allowed":     decision,
-			"reason":      reason,
+			"capability": req.Capability,
+			"resource":   req.Resource,
+			"allowed":    decision,
+			"reason":     reason,
 		},
 	)
 
@@ -512,9 +512,9 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 			OrganizationID: orgID,
 			AlertType:      domain.AlertSecurityBreach, // Using security_breach for capability violations
 			Severity:       domain.AlertSeverityHigh,
-			Title:          fmt.Sprintf("Capability Violation: %s attempted %s", agent.DisplayName, req.ActionType),
-			Description: fmt.Sprintf("Agent '%s' attempted action '%s' on resource '%s' without required capability. Reason: %s",
-				agent.DisplayName, req.ActionType, req.Resource, reason),
+			Title:          fmt.Sprintf("Capability Violation: %s attempted %s", agent.DisplayName, req.Capability),
+			Description: fmt.Sprintf("Agent '%s' attempted capability '%s' on resource '%s' without authorization. Reason: %s",
+				agent.DisplayName, req.Capability, req.Resource, reason),
 			ResourceType: "agent",
 			ResourceID:   agentID,
 		}
@@ -551,18 +551,18 @@ func (h *AgentHandler) VerifyAction(c fiber.Ctx) error {
 	})
 }
 
-// LogActionResult logs the outcome of an action that was verified
-// @Summary Log action result
-// @Description Log whether a verified action succeeded or failed
+// LogCapabilityResult logs the outcome of a capability that was verified
+// @Summary Log capability result
+// @Description Log whether a verified capability usage succeeded or failed
 // @Tags agents
 // @Accept json
 // @Produce json
 // @Param id path string true "Agent ID"
 // @Param audit_id path string true "Audit ID from verification"
-// @Param request body LogActionResultRequest true "Action result"
+// @Param request body LogCapabilityResultRequest true "Capability result"
 // @Success 200 {object} SuccessResponse
-// @Router /agents/{id}/log-action/{audit_id} [post]
-func (h *AgentHandler) LogActionResult(c fiber.Ctx) error {
+// @Router /agents/{id}/log-capability/{audit_id} [post]
+func (h *AgentHandler) LogCapabilityResult(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -589,9 +589,9 @@ func (h *AgentHandler) LogActionResult(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.agentService.LogActionResult(c.Context(), agentID, auditID, req.Success, req.Error, req.Result); err != nil {
+	if err := h.agentService.LogCapabilityResult(c.Context(), agentID, auditID, req.Success, req.Error, req.Result); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to log action result",
+			"error": "Failed to log capability result",
 		})
 	}
 
@@ -1602,15 +1602,15 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"success":             true,
-		"message":             "Credentials rotated successfully",
-		"publicKey":           publicKey,
-		"private_key":         privateKey, // ⚠️ SENSITIVE: Only returned once during rotation
-		"previous_public_key": agent.PreviousPublicKey,
-		"rotationCount":       agent.RotationCount,
-		"keyCreatedAt":        agent.KeyCreatedAt,
-		"keyExpiresAt":        agent.KeyExpiresAt,
-		"warning":             "Store the private key securely. It will not be shown again.",
+		"success":           true,
+		"message":           "Credentials rotated successfully",
+		"publicKey":         publicKey,
+		"privateKey":        privateKey, // ⚠️ SENSITIVE: Only returned once during rotation
+		"previousPublicKey": agent.PreviousPublicKey,
+		"rotationCount":     agent.RotationCount,
+		"keyCreatedAt":      agent.KeyCreatedAt,
+		"keyExpiresAt":      agent.KeyExpiresAt,
+		"warning":           "Store the private key securely. It will not be shown again.",
 	})
 }
 

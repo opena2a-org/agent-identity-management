@@ -36,6 +36,7 @@ import { api, Agent } from "@/lib/api";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
+import { APIKeysTab } from "@/components/agent/api-keys-tab";
 import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
 import { AgentTagsTab } from "@/components/agent/tags-tab";
 import {
@@ -91,11 +92,9 @@ export default function AgentDetailsPage({
   const [deleting, setDeleting] = useState(false);
   const [suspending, setSuspending] = useState(false);
   const [reactivating, setReactivating] = useState(false);
-  const [rotatingCreds, setRotatingCreds] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
-  const [showRotateCredsConfirm, setShowRotateCredsConfirm] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
 
@@ -261,21 +260,6 @@ export default function AgentDetailsPage({
       alert(e?.message || "Reactivate failed");
     } finally {
       setReactivating(false);
-    }
-  };
-
-  const handleRotateCredentials = async () => {
-    if (!agentId) return;
-    setRotatingCreds(true);
-    try {
-      const result = await api.rotateAgentCredentials(agentId);
-      alert(`Credentials rotated successfully!\n\nNew API Key:\n${result.apiKey}\n\nPlease save this key - you won't be able to see it again.`);
-      handleRefresh();
-    } catch (e: any) {
-      alert(e?.message || "Credential rotation failed");
-    } finally {
-      setRotatingCreds(false);
-      setShowRotateCredsConfirm(false);
     }
   };
 
@@ -527,25 +511,6 @@ export default function AgentDetailsPage({
                 )}
               </Button>
             )}
-            {canEdit && (
-              <Button
-                variant="outline"
-                onClick={() => setShowRotateCredsConfirm(true)}
-                disabled={rotatingCreds}
-                className="border-blue-500 text-blue-600 hover:bg-blue-50"
-              >
-                {rotatingCreds ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
-                    Rotating...
-                  </>
-                ) : (
-                  <>
-                    <KeyRound className="h-4 w-4 mr-1" /> Rotate Credentials
-                  </>
-                )}
-              </Button>
-            )}
             {canManage && (
               <Button
                 variant="destructive"
@@ -649,7 +614,11 @@ export default function AgentDetailsPage({
           </TabsTrigger>
           <TabsTrigger value="key-vault">
             <KeyRound className="h-4 w-4 mr-2" />
-            Key Vault
+            Identity & Signing
+          </TabsTrigger>
+          <TabsTrigger value="api-keys">
+            <KeyRound className="h-4 w-4 mr-2" />
+            API Keys
           </TabsTrigger>
           <TabsTrigger value="tags">
             <Tag className="h-4 w-4 mr-2" />
@@ -753,6 +722,10 @@ export default function AgentDetailsPage({
 
         <TabsContent value="key-vault">
           <KeyVaultTab agentId={agent.id} />
+        </TabsContent>
+
+        <TabsContent value="api-keys">
+          <APIKeysTab agentId={agent.id} />
         </TabsContent>
 
         <TabsContent value="tags">
@@ -1000,29 +973,6 @@ export default function AgentDetailsPage({
               className="bg-orange-600 hover:bg-orange-700"
             >
               {suspending ? "Suspending..." : "Suspend"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Rotate Credentials Confirmation Dialog */}
-      <AlertDialog open={showRotateCredsConfirm} onOpenChange={setShowRotateCredsConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Rotate Agent Credentials</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will generate new credentials for "{agent.name}". The old API key will be immediately revoked and can no longer be used.
-              <br /><br />
-              <strong>Warning:</strong> Any applications using the old key will lose access until updated with the new key.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRotateCredentials}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {rotatingCreds ? "Rotating..." : "Rotate Credentials"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

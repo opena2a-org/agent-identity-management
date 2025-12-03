@@ -51,22 +51,22 @@ verification_status = verified_actions / total_actions
 - **Score**: 1.0 (100%)
 
 **How to improve**:
-- ✅ Always use `agent.verify_action()` or `@agent.track_action` decorator
+- ✅ Always use `agent.verify_capability()` or `@perform_action` decorator
 - ✅ Ensure Ed25519 private key is valid
 - ✅ Fix authentication errors immediately
 
 **Code Example**:
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, perform_action
 
 agent = secure("my-agent")
 
-# ✅ GOOD - Action is automatically verified
-@agent.track_action(risk_level="low")
+# ✅ GOOD - Capability is automatically verified
+@perform_action(capability="data:read", risk_level="low")
 def get_data(id: int):
     return {"data": f"Data for {id}"}
 
-# ❌ BAD - Action not verified (reduces score)
+# ❌ BAD - Capability not verified (reduces score)
 def get_data_unverified(id: int):
     return {"data": f"Data for {id}"}
 ```
@@ -140,16 +140,16 @@ success_rate = successful_actions / total_actions
 
 **Code Example**:
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, perform_action
 import requests
 
 agent = secure("weather-agent")
 
-@agent.track_action(risk_level="low")
+@perform_action(capability="weather:fetch", risk_level="low")
 def get_weather(city: str) -> dict:
     """
     Get weather with error handling
-    Prevents failed actions from lowering trust score
+    Prevents failed capabilities from lowering trust score
     """
     try:
         response = requests.get(
@@ -620,13 +620,13 @@ else:
 ### Automated Actions by Trust Score
 
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, perform_action
 
 agent = secure("my-agent")
 
-@agent.track_action(risk_level="high")
+@perform_action(capability="sensitive:execute", risk_level="high")
 def sensitive_action(data):
-    """Sensitive action with trust score check"""
+    """Sensitive capability with trust score check"""
     score = agent.get_trust_score()
 
     if score >= 0.90:

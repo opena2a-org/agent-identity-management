@@ -24,12 +24,6 @@ This directory contains comprehensive integration guides and configuration docum
   - Server lifecycle management
   - Real-time verification
 
-- **[MICROSOFT_COPILOT_INTEGRATION.md](./MICROSOFT_COPILOT_INTEGRATION.md)** - Microsoft Copilot Studio integration
-  - Power Platform connector setup
-  - Copilot skill registration
-  - Authentication configuration
-  - Runtime verification
-
 ## ⚙️ Configuration
 
 - **[ENV_CONFIG.md](./ENV_CONFIG.md)** - Environment variables and configuration options

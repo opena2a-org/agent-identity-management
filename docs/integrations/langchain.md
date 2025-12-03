@@ -79,7 +79,7 @@ agent = create_openai_functions_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]  # ← Line 3: Add callback
+    callbacks=[AIMCallbackHandler(agent=aim_agent)]  # ← Line 3: Add callback
 )
 
 # Run agent - now secured!
@@ -171,7 +171,7 @@ agent = create_openai_functions_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)],  # ← AIM integration
+    callbacks=[AIMCallbackHandler(agent=aim_agent)],  # ← AIM integration
     verbose=True
 )
 
@@ -338,7 +338,7 @@ agent = create_openai_functions_agent(llm, [retriever_tool], prompt)
 agent_executor = AgentExecutor(
     agent=agent,
     tools=[retriever_tool],
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]  # ← AIM integration
+    callbacks=[AIMCallbackHandler(agent=aim_agent)]  # ← AIM integration
 )
 
 # Query
@@ -367,7 +367,7 @@ toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(model="gpt-4"))
 agent_executor = create_sql_agent(
     llm=ChatOpenAI(model="gpt-4", temperature=0),
     toolkit=toolkit,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)],  # ← AIM integration
+    callbacks=[AIMCallbackHandler(agent=aim_agent)],  # ← AIM integration
     verbose=True
 )
 
@@ -407,7 +407,7 @@ agent = create_openai_functions_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)],  # ← AIM integration
+    callbacks=[AIMCallbackHandler(agent=aim_agent)],  # ← AIM integration
     max_iterations=10
 )
 
@@ -471,7 +471,7 @@ aim_agent = secure("my-agent")
 
 # Configure callback with custom risk levels
 callback = AIMCallbackHandler(
-    aim_agent=aim_agent,
+    agent=aim_agent,
     risk_levels={
         "search": "low",           # Auto-approve searches
         "database_query": "medium",  # Log but auto-approve
@@ -491,7 +491,7 @@ agent_executor = AgentExecutor(
 
 ```python
 callback = AIMCallbackHandler(
-    aim_agent=aim_agent,
+    agent=aim_agent,
     auto_retry=True,          # Retry failed verifications
     max_retries=3,            # Up to 3 retries
     retry_delay=1.0           # 1 second between retries
@@ -507,7 +507,7 @@ from langchain.schema.runnable import RunnablePassthrough
 async def run_async_agent(query: str):
     result = await agent_executor.ainvoke(
         {"input": query},
-        callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]
+        callbacks=[AIMCallbackHandler(agent=aim_agent)]
     )
     return result
 
@@ -573,7 +573,7 @@ if trust_score < 0.7:
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]  # ← Must be in list
+    callbacks=[AIMCallbackHandler(agent=aim_agent)]  # ← Must be in list
 )
 ```
 
@@ -624,7 +624,7 @@ aim_agent = secure("my-agent")  # ← Add line 1
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]  # ← Add line 2
+    callbacks=[AIMCallbackHandler(agent=aim_agent)]  # ← Add line 2
 )
 result = agent_executor.run("query")
 ```

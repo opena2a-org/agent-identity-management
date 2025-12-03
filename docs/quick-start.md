@@ -278,7 +278,6 @@ This is **the difference between a rogue agent and a trusted agent**.
 
 - [CrewAI Integration](./integrations/crewai.md) - Secure multi-agent teams
 - [LangChain Integration](./integrations/langchain.md) - Secure agent frameworks
-- [Microsoft Copilot](./integrations/copilot.md) - AI assistants
 - [MCP Servers](./integrations/mcp.md) - Model Context Protocol
 
 ### 3. Learn the SDK

@@ -310,14 +310,14 @@ ls %APPDATA%/Claude/claude_desktop_config.json
 
 #### 1. No Verification Events (Most Common)
 
-**Cause**: Agent hasn't performed any verified actions yet.
+**Cause**: Agent hasn't performed any verified capabilities yet.
 
 **Fix**: Run your agent to create verification events:
 
 ```python
-# Perform an action that requires verification
-client.verify_action(
-    action_type="search_flights",
+# Perform a capability that requires verification
+client.verify_capability(
+    capability="flights:search",
     resource="NYC",
     context={"risk_level": "low"}
 )

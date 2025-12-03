@@ -179,15 +179,15 @@ class FlightAgent:
         """
         print(f"\n🔍 Searching flights to {destination}...")
 
-        # Verify action with AIM before executing
-        verification_id = None
+        # Verify capability with AIM before executing
+        audit_id = None
         if self.client:
             try:
                 print("🔐 Requesting verification from AIM...")
 
-                # Request verification for this action
-                verification = self.client.verify_action(
-                    action_type="search_flights",
+                # Request verification for this capability
+                verification = self.client.verify_capability(
+                    capability="flights:search",
                     resource=destination,
                     context={
                         "departure_date": departure_date or "flexible",
@@ -196,8 +196,8 @@ class FlightAgent:
                     }
                 )
 
-                verification_id = verification.get('verification_id')
-                print(f"✅ Verification requested (ID: {verification_id})")
+                audit_id = verification.get('audit_id')
+                print(f"✅ Verification requested (Audit ID: {audit_id})")
                 print()
 
                 # Note: In real usage, you'd wait for approval here
@@ -225,16 +225,16 @@ class FlightAgent:
         print(f"   Found {len(flights_sorted)} flights to {destination}")
         print()
 
-        # Log successful action with AIM
-        if self.client and verification_id:
+        # Log successful capability with AIM
+        if self.client and audit_id:
             try:
-                self.client.log_action_result(
-                    verification_id=verification_id,
+                self.client.log_capability_result(
+                    audit_id=audit_id,
                     success=True,
                     result_summary=f"Found {len(flights_sorted)} flights to {destination}. Cheapest: ${flights_sorted[0]['price']:.2f}" if flights_sorted else f"No flights found to {destination}"
                 )
             except Exception as e:
-                print(f"⚠️  Failed to log action: {e}")
+                print(f"⚠️  Failed to log capability: {e}")
 
         return flights_sorted
 

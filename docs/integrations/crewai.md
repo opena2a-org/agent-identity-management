@@ -692,7 +692,6 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 
 - [LangChain Integration →](./langchain.md) - Secure LangChain agents
 - [MCP Integration →](./mcp.md) - Register MCP servers
-- [Microsoft Copilot →](./copilot.md) - AI assistants
 
 ### Learn Advanced Features
 

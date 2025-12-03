@@ -95,14 +95,14 @@ def verify_agent_registration():
         print_check(f"Agent registration failed: {str(e)}", False)
         return None
 
-def verify_action_verification(client):
+def verify_capability_verification(client):
     """Verify verification flow works"""
-    print_section("STEP 3: Verifying Action Verification Flow")
+    print_section("STEP 3: Verifying Capability Verification Flow")
 
     try:
         # Request verification for a flight search
-        verification = client.verify_action(
-            action_type="search_flights",
+        verification = client.verify_capability(
+            capability="flights:search",
             resource="NYC",
             context={
                 "destination": "NYC",
@@ -112,10 +112,10 @@ def verify_action_verification(client):
             }
         )
 
-        if verification and verification.get('verification_id'):
+        if verification and verification.get('audit_id'):
             print_check("Verification request created", True)
-            print(f"   Verification ID: {verification['verification_id']}")
-            return verification['verification_id']
+            print(f"   Audit ID: {verification['audit_id']}")
+            return verification['audit_id']
         else:
             print_check("Verification request created", False)
             print(f"   Response: {verification}")
@@ -125,14 +125,14 @@ def verify_action_verification(client):
         print_check(f"Verification failed: {str(e)}", False)
         return None
 
-def verify_action_logging(client, verification_id):
+def verify_capability_logging(client, audit_id):
     """Verify activity logging works"""
     print_section("STEP 4: Verifying Activity Logging")
 
     try:
-        # Log action result
-        result = client.log_action_result(
-            verification_id=verification_id,
+        # Log capability result
+        result = client.log_capability_result(
+            audit_id=audit_id,
             success=True,
             result_summary="QA test - Found 4 flights to NYC, prices from $179-$289"
         )
@@ -290,13 +290,13 @@ def main():
         print("\n❌ Cannot proceed without agent registration.")
         sys.exit(1)
 
-    # Step 3: Verify action
-    verification_id = verify_action_verification(client)
-    results["Verification flow working"] = verification_id is not None
+    # Step 3: Verify capability
+    audit_id = verify_capability_verification(client)
+    results["Verification flow working"] = audit_id is not None
 
     # Step 4: Log activity
-    if verification_id:
-        logged = verify_action_logging(client, verification_id)
+    if audit_id:
+        logged = verify_capability_logging(client, audit_id)
         results["Activity logging working"] = logged
     else:
         results["Activity logging working"] = False

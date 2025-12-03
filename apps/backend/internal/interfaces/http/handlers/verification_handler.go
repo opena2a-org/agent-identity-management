@@ -44,10 +44,10 @@ func NewVerificationHandler(
 	}
 }
 
-// VerificationRequest represents an action verification request from an agent
+// VerificationRequest represents a capability verification request from an agent
 type VerificationRequest struct {
 	AgentID    string                 `json:"agent_id" validate:"required"`
-	ActionType string                 `json:"action_type" validate:"required"`
+	Capability string                 `json:"capability" validate:"required"`
 	Resource   string                 `json:"resource"`
 	Context    map[string]interface{} `json:"context"`
 	Timestamp  string                 `json:"timestamp" validate:"required"`
@@ -88,9 +88,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 
 	// Validate required fields
-	if req.AgentID == "" || req.ActionType == "" || req.Signature == "" || req.PublicKey == "" {
+	if req.AgentID == "" || req.Capability == "" || req.Signature == "" || req.PublicKey == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "agent_id, action_type, signature, and public_key are required",
+			"error": "agent_id, capability, signature, and public_key are required",
 		})
 	}
 
@@ -134,18 +134,18 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 	signatureVerified = true
 
-	// Calculate trust score for this action
-	trustScore := h.calculateActionTrustScore(agent, req.ActionType, req.Resource)
+	// Calculate trust score for this capability
+	trustScore := h.calculateCapabilityTrustScore(agent, req.Capability, req.Resource)
 
 	// ============================================================================
-	// ✅ CRITICAL: Use AgentService.VerifyAction for PROPER capability-based access control
+	// ✅ CRITICAL: Use AgentService.VerifyCapability for PROPER capability-based access control
 	// This enforces the security policies configured in the dashboard
 	// The old determineVerificationStatus() only checked trust scores, not capabilities!
 	// ============================================================================
-	allowed, denialReason, auditIDFromVerify, err := h.agentService.VerifyAction(
+	allowed, denialReason, auditIDFromVerify, err := h.agentService.VerifyCapability(
 		c.Context(),
 		agentID,
-		req.ActionType,
+		req.Capability,
 		req.Resource,
 		req.Context,
 	)
@@ -153,7 +153,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	var status string
 	if err != nil {
 		// Error during verification - deny by default for security
-		fmt.Printf("⚠️  VerifyAction error: %v\n", err)
+		fmt.Printf("⚠️  VerifyCapability error: %v\n", err)
 		status = "denied"
 		if denialReason == "" {
 			denialReason = fmt.Sprintf("Verification error: %v", err)
@@ -172,7 +172,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Low-risk actions: No alerts needed, just tracking (better UX for demos)
 	// Medium/High-risk actions: Alert if action is denied or lacks capability
 	shouldCreateAlert := false
-	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.ActionType, req.Resource)
+	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.Capability, req.Resource)
 	if err != nil {
 		fmt.Printf("⚠️  Error checking capability: %v\n", err)
 	} else if !hasCapability {
@@ -180,20 +180,20 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		// Low-risk actions approved by trust score: No alert (good UX for demos)
 		// Medium-risk actions without capability: Alert only if denied
 		// High-risk actions without capability: Always alert
-		isLowRisk := isLowRiskAction(req.ActionType)
+		isLowRisk := isLowRiskCapability(req.Capability)
 		isDenied := status == "denied"
 
 		if isDenied {
 			// Always alert on denied actions
 			shouldCreateAlert = true
-			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.ActionType)
+			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.Capability)
 		} else if !isLowRisk && req.RiskLevel != "low" {
 			// Alert for medium/high risk actions without capability (even if approved)
 			shouldCreateAlert = true
-			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.ActionType)
+			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.Capability)
 		} else {
 			// Low-risk approved actions: Just log, no alert
-			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.ActionType)
+			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.Capability)
 		}
 	}
 
@@ -202,7 +202,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		ID:             uuid.New(),
 		OrganizationID: agent.OrganizationID,
 		UserID:         agent.CreatedBy, // Creator of the agent
-		Action:         domain.AuditAction(req.ActionType),
+		Action:         domain.AuditAction(req.Capability),
 		ResourceType:   "agent_action",
 		ResourceID:     agentID,
 		IPAddress:      c.IP(),
@@ -211,7 +211,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"verification_id": verificationID.String(),
 			"trustScore":      trustScore,
 			"auto_approved":   status == "approved",
-			"action_type":     req.ActionType,
+			"action_type":     req.Capability,
 			"resource":        req.Resource,
 			"context":         req.Context,
 		},
@@ -235,7 +235,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		var alertType domain.AlertType
 		var severity domain.AlertSeverity
 
-		if isDemoHighRiskAction(req.ActionType) {
+		if isDemoHighRiskCapability(req.Capability) {
 			// Demo high-risk actions get informational monitoring alerts (not scary breach alerts)
 			alertType = domain.AlertUnusualActivity // Info-level, not breach
 			severity = domain.AlertSeverityInfo
@@ -244,19 +244,19 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 				"Agent '%s' performed high-risk action '%s' on resource '%s'. "+
 					"This action was approved (trust score: %.2f) and logged for monitoring. "+
 					"Verification ID: %s. Consider granting explicit capability for production use.",
-				agent.Name, req.ActionType, req.Resource,
+				agent.Name, req.Capability, req.Resource,
 				trustScore, verificationID.String(),
 			)
 		} else {
 			// Real security concern - create breach alert
 			alertType = domain.AlertSecurityBreach
-			severity = h.determineAlertSeverity(req.ActionType, req.Context, req.RiskLevel)
+			severity = h.determineAlertSeverity(req.Capability, req.Context, req.RiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 			alertDescription = fmt.Sprintf(
 				"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
 					"This action was logged but allowed for monitoring purposes. "+
 					"Trust Score: %.2f. Verification ID: %s",
-				agent.Name, agent.ID.String(), req.ActionType, req.Resource,
+				agent.Name, agent.ID.String(), req.Capability, req.Resource,
 				trustScore, verificationID.String(),
 			)
 		}
@@ -291,15 +291,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Determine verification protocol based on action type
 	protocol := domain.VerificationProtocolA2A // Default to A2A (Agent-to-Agent)
-	if strings.Contains(req.ActionType, "mcp") || strings.Contains(req.ActionType, "azure_openai") {
+	if strings.Contains(req.Capability, "mcp") || strings.Contains(req.Capability, "azure_openai") {
 		protocol = domain.VerificationProtocolMCP
 	}
 
 	// Determine verification type
 	verificationType := domain.VerificationTypeIdentity // Default to identity verification
-	if strings.Contains(req.ActionType, "capability") {
+	if strings.Contains(req.Capability, "capability") {
 		verificationType = domain.VerificationTypeCapability
-	} else if strings.Contains(req.ActionType, "permission") {
+	} else if strings.Contains(req.Capability, "permission") {
 		verificationType = domain.VerificationTypePermission
 	}
 
@@ -321,7 +321,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification event metadata
 	eventMetadata := map[string]interface{}{
 		"verification_id": verificationID.String(),
-		"action_type":     req.ActionType,
+		"action_type":     req.Capability,
 		"resource":        req.Resource,
 		"context":         req.Context,
 		"trustScore":      trustScore,
@@ -356,7 +356,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		InitiatorType:    domain.InitiatorTypeAgent,
 		InitiatorID:      &agentID,
 		InitiatorName:    &agent.DisplayName,
-		Action:           &req.ActionType,
+		Action:           &req.Capability,
 		ResourceType:     &req.Resource,
 		StartedAt:        startTime.Add(-time.Duration(verificationDurationMs) * time.Millisecond),
 		CompletedAt:      &completedAt,
@@ -464,7 +464,7 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 
 	// Build payload in Go map (will be sorted by json.Marshal)
 	signaturePayload := make(map[string]interface{})
-	signaturePayload["action_type"] = req.ActionType
+	signaturePayload["action_type"] = req.Capability
 	signaturePayload["agent_id"] = req.AgentID
 
 	// Handle context carefully
@@ -547,20 +547,20 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 	return nil
 }
 
-// calculateActionTrustScore calculates trust score for specific action
-func (h *VerificationHandler) calculateActionTrustScore(agent *domain.Agent, actionType, resource string) float64 {
+// calculateCapabilityTrustScore calculates trust score for specific capability
+func (h *VerificationHandler) calculateCapabilityTrustScore(agent *domain.Agent, capability, resource string) float64 {
 	// Start with agent's base trust score
 	score := agent.TrustScore
 
-	// Adjust based on action type (high-risk actions reduce effective trust)
-	riskAdjustment := h.getActionRiskAdjustment(actionType)
+	// Adjust based on capability (high-risk capabilities reduce effective trust)
+	riskAdjustment := h.getCapabilityRiskAdjustment(capability)
 	score = score * riskAdjustment
 
 	return score
 }
 
-// getActionRiskAdjustment returns multiplier based on action risk
-func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64 {
+// getCapabilityRiskAdjustment returns multiplier based on capability risk
+func (h *VerificationHandler) getCapabilityRiskAdjustment(capability string) float64 {
 	riskLevels := map[string]float64{
 		// Low risk (read-only)
 		"read_database": 1.0,
@@ -578,7 +578,7 @@ func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64
 		"admin_action":    0.3,
 	}
 
-	if adjustment, ok := riskLevels[actionType]; ok {
+	if adjustment, ok := riskLevels[capability]; ok {
 		return adjustment
 	}
 
@@ -586,39 +586,46 @@ func (h *VerificationHandler) getActionRiskAdjustment(actionType string) float64
 	return 0.8
 }
 
-// isLowRiskAction checks if an action is considered low-risk (read-only, informational)
-// Low-risk actions don't generate security alerts when approved by trust score alone
-func isLowRiskAction(actionType string) bool {
-	lowRiskActions := map[string]bool{
+// isLowRiskCapability checks if a capability is considered low-risk (read-only, informational)
+// Low-risk capabilities don't generate security alerts when approved by trust score alone
+func isLowRiskCapability(capability string) bool {
+	lowRiskCapabilities := map[string]bool{
 		// Read-only database operations
+		"db:read":   true,
+		"file:read": true,
+		"api:read":  true,
+		// Demo-friendly capabilities (low and medium risk from demo_agent.py)
+		"weather:check":   true,
+		"products:search": true,
+		"user:read":       true, // Medium in demo but really just a read
+		"orders:read":     true, // Medium in demo but really just a read
+		// General read operations
+		"data:fetch":   true,
+		"items:list":   true,
+		"status:get":   true,
+		"search":       true,
+		"lookup":       true,
+		"view":         true,
+		"read":         true,
+		// Legacy format support
 		"read_database": true,
 		"read_file":     true,
 		"query_api":     true,
-		// Demo-friendly actions (low and medium risk from demo_agent.py)
-		"check_weather":    true,
-		"search_products":  true,
-		"get_user_profile": true, // Medium in demo but really just a read
-		"query_orders":     true, // Medium in demo but really just a read
-		// General read operations
-		"fetch_data": true,
-		"list_items": true,
-		"get_status": true,
-		"search":     true,
-		"lookup":     true,
-		"view":       true,
-		"read":       true,
 	}
-	return lowRiskActions[actionType]
+	return lowRiskCapabilities[capability]
 }
 
-// isDemoHighRiskAction checks if this is a high-risk demo action that should
+// isDemoHighRiskCapability checks if this is a high-risk demo capability that should
 // generate informational alerts (not security breach alerts) to demonstrate monitoring
-func isDemoHighRiskAction(actionType string) bool {
+func isDemoHighRiskCapability(capability string) bool {
 	demoHighRisk := map[string]bool{
+		"notification:send": true,
+		"refund:process":    true,
+		// Legacy format support
 		"send_notification": true,
 		"process_refund":    true,
 	}
-	return demoHighRisk[actionType]
+	return demoHighRisk[capability]
 }
 
 func normalizeVerificationStatus(status domain.VerificationEventStatus) string {

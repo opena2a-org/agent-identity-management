@@ -73,16 +73,16 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 
 	// Return key vault information
 	return c.JSON(fiber.Map{
-		"agentId":                 agentID.String(),
-		"agentName":               agent.Name,
-		"publicKey":               agent.PublicKey,
-		"keyAlgorithm":            agent.KeyAlgorithm,
-		"certificateUrl":          agent.CertificateURL,
-		"keyCreatedAt":           agent.KeyCreatedAt,
-		"keyExpiresAt":           agent.KeyExpiresAt,
-		"key_rotation_grace_until": agent.KeyRotationGraceUntil,
-		"rotationCount":           agent.RotationCount,
-		"has_previous_public_key":  agent.PreviousPublicKey != nil,
+		"agentId":               agentID.String(),
+		"agentName":             agent.Name,
+		"publicKey":             agent.PublicKey,
+		"keyAlgorithm":          agent.KeyAlgorithm,
+		"certificateUrl":        agent.CertificateURL,
+		"keyCreatedAt":          agent.KeyCreatedAt,
+		"keyExpiresAt":          agent.KeyExpiresAt,
+		"keyRotationGraceUntil": agent.KeyRotationGraceUntil,
+		"rotationCount":         agent.RotationCount,
+		"hasPreviousPublicKey":  agent.PreviousPublicKey != nil,
 	})
 }
 

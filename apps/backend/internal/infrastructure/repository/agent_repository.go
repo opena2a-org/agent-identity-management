@@ -59,8 +59,9 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		                    trust_score, talks_to, capabilities,
+		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		                    created_at, updated_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 	`
 
 	now := time.Now()
@@ -99,14 +100,19 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.Status,
 		agent.Version,
 		agent.PublicKey,
-		agent.EncryptedPrivateKey, // ✅ NEW: Store encrypted private key
+		agent.EncryptedPrivateKey,
 		agent.KeyAlgorithm,
 		agent.CertificateURL,
 		agent.RepositoryURL,
 		agent.DocumentationURL,
 		agent.TrustScore,
 		talksToJSON,
-		capabilitiesJSON, // ✅ Store capabilities
+		capabilitiesJSON,
+		agent.KeyCreatedAt,
+		agent.KeyExpiresAt,
+		agent.KeyRotationGraceUntil,
+		agent.PreviousPublicKey,
+		agent.RotationCount,
 		agent.CreatedAt,
 		agent.UpdatedAt,
 		agent.CreatedBy,
@@ -120,7 +126,8 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active
+		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active,
+		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count
 		FROM agents
 		WHERE id = $1
 	`
@@ -136,6 +143,10 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
 	var lastActive sql.NullTime
+	var keyCreatedAt sql.NullTime
+	var keyExpiresAt sql.NullTime
+	var keyRotationGraceUntil sql.NullTime
+	var previousPublicKey sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
@@ -160,6 +171,11 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.UpdatedAt,
 		&agent.CreatedBy,
 		&lastActive,
+		&keyCreatedAt,
+		&keyExpiresAt,
+		&keyRotationGraceUntil,
+		&previousPublicKey,
+		&agent.RotationCount,
 	)
 
 	if err == sql.ErrNoRows {
@@ -193,6 +209,18 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 	if lastActive.Valid {
 		agent.LastActive = &lastActive.Time
+	}
+	if keyCreatedAt.Valid {
+		agent.KeyCreatedAt = &keyCreatedAt.Time
+	}
+	if keyExpiresAt.Valid {
+		agent.KeyExpiresAt = &keyExpiresAt.Time
+	}
+	if keyRotationGraceUntil.Valid {
+		agent.KeyRotationGraceUntil = &keyRotationGraceUntil.Time
+	}
+	if previousPublicKey.Valid {
+		agent.PreviousPublicKey = &previousPublicKey.String
 	}
 
 	// Unmarshal talks_to from JSONB
@@ -299,8 +327,10 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		SET display_name = $1, description = $2, agent_type = $3, status = $4, version = $5,
 		    public_key = $6, encrypted_private_key = $7, key_algorithm = $8, certificate_url = $9, repository_url = $10,
 		    documentation_url = $11, trust_score = $12, verified_at = $13,
-		    talks_to = $14, capabilities = $15, updated_at = $16
-		WHERE id = $17
+		    talks_to = $14, capabilities = $15, updated_at = $16,
+		    key_created_at = $17, key_expires_at = $18, key_rotation_grace_until = $19,
+		    previous_public_key = $20, rotation_count = $21
+		WHERE id = $22
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -334,6 +364,11 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		talksToJSON,
 		capabilitiesJSON,
 		agent.UpdatedAt,
+		agent.KeyCreatedAt,
+		agent.KeyExpiresAt,
+		agent.KeyRotationGraceUntil,
+		agent.PreviousPublicKey,
+		agent.RotationCount,
 		agent.ID,
 	)
 

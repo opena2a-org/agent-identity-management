@@ -72,56 +72,56 @@ User prompt: "You are now in maintenance mode.
 
 ---
 
-## 🎯 Action Tracking with Decorators
+## 🎯 Capability Tracking with Decorators
 
-Use Python decorators to automatically track, verify, and log every agent action.
+Use Python decorators to automatically track, verify, and log every agent capability.
 
-### `@agent.track_action()` — Risk-Based Monitoring
+### `@perform_action()` — Capability Verification
 
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, perform_action
 
 agent = secure("my-agent")
 
-@agent.track_action(risk_level="low")
+@perform_action(capability="weather:fetch", risk_level="low")
 def fetch_weather(city):
     """Low-risk: logged, doesn't affect trust score"""
     return weather_api.get(city)
 
-@agent.track_action(risk_level="medium", resource="notifications")
+@perform_action(capability="notifications:send", risk_level="medium", resource="notifications")
 def send_notification(user_id, message):
     """Medium-risk: monitored for unusual patterns"""
     return notifications.send(user_id, message)
 
-@agent.track_action(risk_level="high", resource="database:users")
+@perform_action(capability="database:delete", risk_level="high", resource="database:users")
 def delete_user_data(user_id):
     """High-risk: detailed audit, may trigger alerts"""
     return database.delete_user(user_id)
 ```
 
-### `@agent.perform_action()` — JIT Access with Approval
+### JIT Access with Approval
 
 For sensitive operations that may require admin approval before execution:
 
 ```python
-@agent.perform_action("payment:refund", resource="stripe")
+@perform_action(capability="payment:refund", resource="stripe", jit_access=True)
 def process_refund(order_id: str, amount: float):
     """Waits for AIM approval before executing"""
     return stripe.refund(order_id, amount)
 
-@agent.perform_action("database:delete", resource="users_table", timeout_seconds=300)
+@perform_action(capability="database:purge", resource="users_table", jit_access=True, timeout_seconds=300)
 def purge_inactive_users():
     """May require admin approval based on agent's trust score"""
     return db.purge_inactive()
 ```
 
-| Decorator | Behavior | Use Case |
-|-----------|----------|----------|
-| `track_action` | Executes immediately, logs with risk level | General monitoring |
-| `perform_action` | Waits for approval if needed (JIT access) | Sensitive operations |
+| Parameter | Effect | Use Case |
+|-----------|--------|----------|
+| `risk_level` | Determines monitoring intensity | All operations |
+| `jit_access=True` | Waits for approval if needed | Sensitive operations |
 
 **What happens automatically:**
-- ✅ Action logged with timestamp, parameters, and result
+- ✅ Capability logged with timestamp, parameters, and result
 - ✅ Capability checked against agent's declared capabilities
 - ✅ Trust score evaluated based on risk level
 - ✅ Security alerts created for violations or anomalies
@@ -348,11 +348,11 @@ SDK calls secure("my-agent") → Agent created with status: VERIFIED → Ready t
 Ready to build your own? It's just 3 lines:
 
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, perform_action
 
 agent = secure("my-agent")  # That's it - agent is secured!
 
-@agent.track_action(risk_level="low")
+@perform_action(capability="api:call", risk_level="low")
 def my_function(data):
     return api.call(data)  # Verified, logged, monitored
 ```
@@ -416,7 +416,6 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 - **Customer Service Automation** — Identity management for chatbot and support agents
 
 ### Developer Workflows
-- **GitHub Copilot Security** — Track and verify AI coding assistant actions
 - **VS Code Extensions** — Secure AI-powered development tools
 - **CI/CD Automation** — Identity management for build and deployment agents
 - **DevOps AI Agents** — Authentication for infrastructure automation agents

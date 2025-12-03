@@ -47,7 +47,7 @@ interface PendingVerification {
   id: string;
   agentId: string;
   agentName: string;
-  actionType: string;
+  capability: string;
   resource: string;
   context?: Record<string, any>;
   riskLevel: string;
@@ -269,7 +269,7 @@ export default function PendingVerificationsPage() {
         eventEmitter.emit(Events.VERIFICATION_APPROVED);
         toast.success("Action approved", {
           description: `${selected.agentName || "Agent"} can continue "${
-            selected.actionType
+            selected.capability
           }".`,
         });
       } else {
@@ -539,7 +539,7 @@ export default function PendingVerificationsPage() {
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-lg font-semibold">
-                            {verification.actionType}
+                            {verification.capability}
                           </h3>
                           <Badge className={riskMeta.badge}>
                             {riskMeta.label} Risk
@@ -611,11 +611,13 @@ export default function PendingVerificationsPage() {
 
                           const primaryCards = [
                             {
-                              label: "Action Type",
+                              label: "Capability",
                               value:
+                                metadata.capability ||
+                                verification.capability ||
+                                // Legacy fallbacks
                                 metadata.actionType ||
                                 metadata.action_type ||
-                                verification.actionType ||
                                 "—",
                             },
                             {
@@ -819,7 +821,7 @@ export default function PendingVerificationsPage() {
             </AlertDialogHeader>
             <div className="space-y-3">
               <div className="text-sm">
-                <p className="font-medium">{selected?.actionType}</p>
+                <p className="font-medium">{selected?.capability}</p>
                 <p className="text-muted-foreground">
                   Agent: {selected?.agentName || "Unknown"} • Resource:{" "}
                   {selected?.resource || "n/a"}

@@ -550,11 +550,11 @@ func (s *MCPService) VerifyChallengeResponse(ctx context.Context, serverID uuid.
 	return nil
 }
 
-// VerifyMCPAction verifies if an MCP server can perform an action
-func (s *MCPService) VerifyMCPAction(
+// VerifyMCPCapability verifies if an MCP server can use a capability
+func (s *MCPService) VerifyMCPCapability(
 	ctx context.Context,
 	mcpID uuid.UUID,
-	actionType string,
+	capability string,
 	resource string,
 	targetService string,
 	metadata map[string]interface{},
@@ -606,7 +606,7 @@ func (s *MCPService) VerifyMCPAction(
 		Confidence:       1.0,
 		TrustScore:       mcp.TrustScore,
 		InitiatorType:    domain.InitiatorTypeSystem,
-		Action:           &actionType,
+		Action:           &capability,
 		ResourceType:     &targetService,
 		ResourceID:       &resource,
 		StartedAt:        now,

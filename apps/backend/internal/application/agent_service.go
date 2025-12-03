@@ -115,6 +115,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	// are automatically verified since the creator is already authenticated.
 	// This removes friction from the development workflow while maintaining security.
 	// Admins can still suspend/revoke agents if needed.
+	now := time.Now()
+	keyExpiresAt := now.AddDate(1, 0, 0) // Keys expire in 1 year by default
 	agent := &domain.Agent{
 		OrganizationID:   orgID,
 		Name:             req.Name,
@@ -124,6 +126,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		Version:          req.Version,
 		PublicKey:        &publicKeyBase64, // ✅ Stored for verification (SDK-provided or generated)
 		KeyAlgorithm:     keyAlgorithm,     // ✅ "Ed25519"
+		KeyCreatedAt:     &now,             // ✅ Track when key was created
+		KeyExpiresAt:     &keyExpiresAt,    // ✅ Keys expire in 1 year
 		CertificateURL:   req.CertificateURL,
 		RepositoryURL:    req.RepositoryURL,
 		DocumentationURL: req.DocumentationURL,
@@ -543,7 +547,7 @@ func (s *AgentService) CreateSecurityAlert(ctx context.Context, alert *domain.Al
 }
 
 // HasCapability checks if an agent has a specific capability
-func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, actionType string, resource string) (bool, error) {
+func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error) {
 	// Get agent's active capabilities
 	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
 	if err != nil {
@@ -555,9 +559,9 @@ func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, act
 		return false, nil
 	}
 
-	// Check if action matches any capability
-	for _, capability := range capabilities {
-		if s.matchesCapability(actionType, resource, capability.CapabilityType) {
+	// Check if capability matches any granted capability
+	for _, cap := range capabilities {
+		if s.matchesCapability(capabilityToCheck, resource, cap.CapabilityType) {
 			return true, nil
 		}
 	}
@@ -565,13 +569,13 @@ func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, act
 	return false, nil
 }
 
-// VerifyAction verifies if an agent can perform an action
+// VerifyCapability verifies if an agent can use a capability
 // ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
 // This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
-func (s *AgentService) VerifyAction(
+func (s *AgentService) VerifyCapability(
 	ctx context.Context,
 	agentID uuid.UUID,
-	actionType string,
+	capability string,
 	resource string,
 	metadata map[string]interface{},
 ) (allowed bool, reason string, auditID uuid.UUID, err error) {
@@ -620,9 +624,9 @@ func (s *AgentService) VerifyAction(
 	capabilityTypes := []string{}
 	hasCapability := false
 
-	for _, capability := range activeCapabilities {
-		capabilityTypes = append(capabilityTypes, capability.CapabilityType)
-		if s.matchesCapability(actionType, resource, capability.CapabilityType) {
+	for _, cap := range activeCapabilities {
+		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
+		if s.matchesCapability(capability, resource, cap.CapabilityType) {
 			hasCapability = true
 		}
 	}
@@ -638,7 +642,7 @@ func (s *AgentService) VerifyAction(
 
 		// 🛡️ Evaluate security policies to determine enforcement action
 		shouldBlock, shouldAlert, policyName, err := s.policyService.EvaluateCapabilityViolation(
-			ctx, agent, actionType, resource, auditID,
+			ctx, agent, capability, resource, auditID,
 		)
 		if err != nil {
 			// Policy evaluation failed - use safe default (block + alert)
@@ -652,10 +656,10 @@ func (s *AgentService) VerifyAction(
 		if shouldAlert {
 			alertTitle := fmt.Sprintf("Capability Violation Detected: %s", agent.DisplayName)
 			alertDescription := fmt.Sprintf(
-				"Agent '%s' attempted unauthorized action '%s' which is not in its capability list (allowed: %v). "+
+				"Agent '%s' attempted unauthorized capability '%s' which is not in its capability list (allowed: %v). "+
 					"This matches the attack pattern of CVE-2025-32711 (EchoLeak). "+
 					"Security Policy '%s' enforcement: %s. Audit ID: %s",
-				agent.DisplayName, actionType, capabilityTypes, policyName,
+				agent.DisplayName, capability, capabilityTypes, policyName,
 				map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[shouldBlock],
 				auditID.String(),
 			)
@@ -685,11 +689,11 @@ func (s *AgentService) VerifyAction(
 		// This ensures the Violations tab shows all capability violations
 		violation := &domain.CapabilityViolation{
 			AgentID:             agentID,
-			AttemptedCapability: actionType,
+			AttemptedCapability: capability,
 			RegisteredCapabilities: map[string]interface{}{
-				"allowed_capabilities": capabilityTypes,
-				"attempted_action":     actionType,
-				"resource":             resource,
+				"allowed_capabilities":  capabilityTypes,
+				"attempted_capability":  capability,
+				"resource":              resource,
 			},
 			Severity:         s.calculateViolationSeverity(agent, shouldBlock),
 			TrustScoreImpact: s.calculateTrustScoreImpact(shouldBlock),
@@ -702,7 +706,7 @@ func (s *AgentService) VerifyAction(
 			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
 		} else {
 			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s (blocked: %v)\n",
-				agent.Name, actionType, shouldBlock)
+				agent.Name, capability, shouldBlock)
 		}
 
 		// ✅ APPLY TRUST SCORE IMPACT directly from violation
@@ -729,13 +733,13 @@ func (s *AgentService) VerifyAction(
 		// Return enforcement decision from policy
 		if shouldBlock {
 			return false, fmt.Sprintf(
-				"Capability violation blocked by security policy '%s': Agent does not have permission for action '%s' (allowed: %v)",
-				policyName, actionType, capabilityTypes,
+				"Capability violation blocked by security policy '%s': Agent does not have permission for capability '%s' (allowed: %v)",
+				policyName, capability, capabilityTypes,
 			), auditID, nil
 		} else {
 			// Policy says alert-only mode - allow the action but log it
 			fmt.Printf("⚠️  Capability violation ALLOWED by policy '%s' (alert-only mode): %s attempting %s\n",
-				policyName, agent.Name, actionType)
+				policyName, agent.Name, capability)
 			return true, fmt.Sprintf(
 				"Action allowed by security policy '%s' (alert-only mode) - capability violation logged",
 				policyName,
@@ -748,7 +752,7 @@ func (s *AgentService) VerifyAction(
 
 	// 6.1 Trust Score Policy Evaluation
 	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := s.policyService.EvaluateTrustScoreLow(
-		ctx, agent, actionType, resource, auditID,
+		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
 		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
@@ -766,14 +770,14 @@ func (s *AgentService) VerifyAction(
 
 	// 6.2 Data Exfiltration Policy Evaluation
 	exfilBlocked, exfilAlert, exfilPolicyName, err := s.policyService.EvaluateDataExfiltration(
-		ctx, agent, actionType, resource, auditID,
+		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
 		fmt.Printf("⚠️  Data exfiltration policy evaluation failed: %v\n", err)
 	}
 	if exfilAlert {
 		s.createPolicyAlert(agent, "Data Exfiltration Attempt", exfilPolicyName, exfilBlocked,
-			fmt.Sprintf("Suspected data exfiltration pattern detected: %s on %s", actionType, resource),
+			fmt.Sprintf("Suspected data exfiltration pattern detected: %s on %s", capability, resource),
 			domain.AlertSeverityCritical, auditID)
 	}
 	if exfilBlocked {
@@ -785,7 +789,7 @@ func (s *AgentService) VerifyAction(
 
 	// 6.3 Unusual Activity Policy Evaluation (stub - needs historical data)
 	unusualBlocked, unusualAlert, unusualPolicyName, err := s.policyService.EvaluateUnusualActivity(
-		ctx, agent, actionType, resource, auditID,
+		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
 		fmt.Printf("⚠️  Unusual activity policy evaluation failed: %v\n", err)
@@ -803,7 +807,7 @@ func (s *AgentService) VerifyAction(
 
 	// 6.4 Config Drift Policy Evaluation (stub - needs baseline)
 	driftBlocked, driftAlert, driftPolicyName, err := s.policyService.EvaluateConfigDrift(
-		ctx, agent, actionType, resource, auditID,
+		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
 		fmt.Printf("⚠️  Config drift policy evaluation failed: %v\n", err)
@@ -821,7 +825,7 @@ func (s *AgentService) VerifyAction(
 
 	// 6.5 Unauthorized Access Policy Evaluation (stub)
 	unauthBlocked, unauthAlert, unauthPolicyName, err := s.policyService.EvaluateUnauthorizedAccess(
-		ctx, agent, actionType, resource, auditID,
+		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
 		fmt.Printf("⚠️  Unauthorized access policy evaluation failed: %v\n", err)
@@ -841,32 +845,32 @@ func (s *AgentService) VerifyAction(
 	return true, "Action matches registered capabilities and passes all security policies", auditID, nil
 }
 
-// matchesCapability checks if an action matches a registered capability
+// matchesCapability checks if a requested capability matches a registered capability
 // Supports exact matching and wildcard patterns
-func (s *AgentService) matchesCapability(actionType string, resource string, capability string) bool {
+func (s *AgentService) matchesCapability(requestedCapability string, resource string, grantedCapability string) bool {
 	// Exact match
-	if actionType == capability {
+	if requestedCapability == grantedCapability {
 		return true
 	}
 
-	// Wildcard patterns (e.g., "read_*" matches "read_email", "read_file")
-	if len(capability) > 0 && capability[len(capability)-1] == '*' {
-		prefix := capability[:len(capability)-1]
-		if len(actionType) >= len(prefix) && actionType[:len(prefix)] == prefix {
+	// Wildcard patterns (e.g., "file:*" matches "file:read", "file:write")
+	if len(grantedCapability) > 0 && grantedCapability[len(grantedCapability)-1] == '*' {
+		prefix := grantedCapability[:len(grantedCapability)-1]
+		if len(requestedCapability) >= len(prefix) && requestedCapability[:len(prefix)] == prefix {
 			return true
 		}
 	}
 
 	// Future: Add more sophisticated pattern matching here
-	// - Resource-based matching (e.g., "read:/data/*")
+	// - Resource-based matching (e.g., "file:read:/data/*")
 	// - Time-based capabilities
 	// - Context-aware matching
 
 	return false
 }
 
-// LogActionResult logs the outcome of a verified action
-func (s *AgentService) LogActionResult(
+// LogCapabilityResult logs the outcome of a verified capability usage
+func (s *AgentService) LogCapabilityResult(
 	ctx context.Context,
 	agentID uuid.UUID,
 	auditID uuid.UUID,

@@ -135,31 +135,32 @@ print(agent.is_verified)     # Verification status
 print(agent.created_at)      # Creation timestamp
 ```
 
-#### Verify Action
+#### Verify Capability
 
-Manually verify an action before execution.
+Manually verify a capability before execution.
 
 ```python
-agent.verify_action(
-    action_name: str,           # Name of the action
-    parameters: dict = None,    # Action parameters (optional)
-    risk_level: str = "low"     # Risk level (low/medium/high/critical)
-) -> bool
+agent.verify_capability(
+    capability: str,            # Capability in namespace:action format (e.g., "user:delete")
+    resource: str = None,       # Resource being accessed (optional)
+    context: dict = None        # Additional context (optional)
+) -> dict
 ```
 
 **Example**:
 ```python
 # Verify before executing sensitive operation
-if agent.verify_action(
-    action_name="delete_user",
-    parameters={"user_id": 12345},
-    risk_level="high"
-):
+result = agent.verify_capability(
+    capability="user:delete",
+    resource="user_12345",
+    context={"reason": "account_cleanup"}
+)
+if result.get("verified"):
     # Verification succeeded, execute action
     delete_user(12345)
 else:
     # Verification failed
-    print("Action not allowed or requires approval")
+    print("Capability not allowed or requires approval")
 ```
 
 #### Log Action
@@ -503,32 +504,6 @@ secured_crew = AIMCrewWrapper(crew, aim_agent=aim_crew)
 result = secured_crew.kickoff(inputs={"topic": "AI in Healthcare"})
 ```
 
-### Microsoft Copilot
-
-```python
-from aim_sdk import secure
-from aim_sdk.integrations.copilot import CopilotPlugin
-
-# Secure your Copilot plugin
-aim_agent = secure("hr-copilot")
-
-class HRPlugin(CopilotPlugin):
-    def __init__(self):
-        super().__init__(
-            name="HR Assistant",
-            version="1.0.0",
-            aim_agent=aim_agent
-        )
-
-    async def check_leave_balance(self, employee_id: str):
-        # Implementation
-        pass
-
-# Start plugin (all actions verified and logged)
-plugin = HRPlugin()
-plugin.start(host="0.0.0.0", port=8095)
-```
-
 ---
 
 ## Configuration
@@ -605,11 +580,11 @@ from aim_sdk.exceptions import AIMVerificationError, AIMConnectionError
 try:
     agent = secure("my-agent")
 
-    # Verify high-risk action
-    agent.verify_action(
-        action_name="delete_database",
-        parameters={"database": "production"},
-        risk_level="critical"
+    # Verify high-risk capability
+    agent.verify_capability(
+        capability="db:delete",
+        resource="production-database",
+        context={"reason": "maintenance"}
     )
 
 except AIMAuthenticationError as e:
@@ -617,8 +592,8 @@ except AIMAuthenticationError as e:
     # Check AIM_PRIVATE_KEY environment variable
 
 except AIMVerificationError as e:
-    print(f"Action verification failed: {e}")
-    # Action was rejected by AIM
+    print(f"Capability verification failed: {e}")
+    # Capability was rejected by AIM
 
 except AIMConnectionError as e:
     print(f"Cannot connect to AIM backend: {e}")
@@ -661,9 +636,9 @@ def get_weather(city: str):
 
 # ❌ BAD - Manual tracking everywhere
 def get_weather(city: str):
-    agent.verify_action("get_weather", {"city": city})
+    agent.verify_capability("weather:read", resource=city)
     result = requests.get(f"https://api.weather.com/{city}").json()
-    agent.log_action("get_weather", {"city": city}, result)
+    agent.log_capability_result(verification_id, success=True)
     return result
 ```
 

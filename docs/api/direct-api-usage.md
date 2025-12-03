@@ -291,13 +291,13 @@ curl -X POST http://localhost:8080/api/agents/register \
 
 ---
 
-## Step 3: Verify Actions Before Execution
+## Step 3: Verify Capabilities Before Execution
 
 Before performing sensitive operations, verify them with AIM for audit trail and security monitoring.
 
 ### API Endpoint
 ```
-POST /api/agents/{agent_id}/verify
+POST /api/v1/agents/{agent_id}/verify-capability
 Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 X-Agent-Signature: BASE64_SIGNATURE
@@ -318,11 +318,11 @@ import (
     "fmt"
 )
 
-type ActionRequest struct {
-    ActionType    string                 `json:"action_type"`
-    ActionDetails map[string]interface{} `json:"action_details"`
-    ResourceName  string                 `json:"resource_name"`
-    RiskLevel     string                 `json:"risk_level"`
+type CapabilityRequest struct {
+    Capability  string                 `json:"capability"`
+    Resource    string                 `json:"resource"`
+    Metadata    map[string]interface{} `json:"metadata"`
+    RiskLevel   string                 `json:"risk_level"`
 }
 
 func signRequest(privateKeyB64 string, payload interface{}) (string, error) {
@@ -346,27 +346,27 @@ func signRequest(privateKeyB64 string, payload interface{}) (string, error) {
     return base64.StdEncoding.EncodeToString(signature), nil
 }
 
-func verifyAction(agentID, apiKey, privateKeyB64 string) error {
-    actionReq := ActionRequest{
-        ActionType: "database_query",
-        ActionDetails: map[string]interface{}{
+func verifyCapability(agentID, apiKey, privateKeyB64 string) error {
+    capReq := CapabilityRequest{
+        Capability: "db:query",
+        Resource:   "users_table",
+        Metadata: map[string]interface{}{
             "query": "SELECT * FROM users",
             "table": "users",
         },
-        ResourceName: "users_table",
-        RiskLevel:    "medium",
+        RiskLevel: "medium",
     }
 
     // Sign the request
-    signature, err := signRequest(privateKeyB64, actionReq)
+    signature, err := signRequest(privateKeyB64, capReq)
     if err != nil {
         return err
     }
 
     // Make API request
-    jsonBody, _ := json.Marshal(actionReq)
+    jsonBody, _ := json.Marshal(capReq)
     req, _ := http.NewRequest("POST",
-        fmt.Sprintf("http://localhost:8080/api/agents/%s/verify", agentID),
+        fmt.Sprintf("http://localhost:8080/api/v1/agents/%s/verify-capability", agentID),
         bytes.NewBuffer(jsonBody))
 
     req.Header.Set("Content-Type", "application/json")
@@ -385,11 +385,11 @@ func verifyAction(agentID, apiKey, privateKeyB64 string) error {
     json.NewDecoder(resp.Body).Decode(&result)
 
     if result["approved"].(bool) {
-        fmt.Println("✅ Action approved - safe to execute")
+        fmt.Println("✅ Capability approved - safe to execute")
         return nil
     } else {
-        fmt.Printf("❌ Action denied: %s\n", result["reason"])
-        return fmt.Errorf("action denied")
+        fmt.Printf("❌ Capability denied: %s\n", result["reason"])
+        return fmt.Errorf("capability denied")
     }
 }
 ```
@@ -409,22 +409,22 @@ function signRequest(privateKeyPem, payload) {
     return signature.toString('base64');
 }
 
-async function verifyAction(agentId, apiKey, privateKey) {
-    const actionReq = {
-        action_type: 'database_query',
-        action_details: {
+async function verifyCapability(agentId, apiKey, privateKey) {
+    const capReq = {
+        capability: 'db:query',
+        resource: 'users_table',
+        metadata: {
             query: 'SELECT * FROM users',
             table: 'users'
         },
-        resource_name: 'users_table',
         risk_level: 'medium'
     };
 
-    const signature = signRequest(privateKey, actionReq);
+    const signature = signRequest(privateKey, capReq);
 
     const response = await axios.post(
-        `http://localhost:8080/api/agents/${agentId}/verify`,
-        actionReq,
+        `http://localhost:8080/api/v1/agents/${agentId}/verify-capability`,
+        capReq,
         {
             headers: {
                 'Content-Type': 'application/json',
@@ -435,10 +435,10 @@ async function verifyAction(agentId, apiKey, privateKey) {
     );
 
     if (response.data.approved) {
-        console.log('✅ Action approved - safe to execute');
+        console.log('✅ Capability approved - safe to execute');
         return true;
     } else {
-        console.log('❌ Action denied:', response.data.reason);
+        console.log('❌ Capability denied:', response.data.reason);
         return false;
     }
 }
@@ -449,7 +449,7 @@ async function verifyAction(agentId, apiKey, privateKey) {
 {
   "approved": true,
   "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-  "action_type": "database_query",
+  "capability": "db:query",
   "risk_assessment": {
     "risk_level": "medium",
     "confidence": 0.95
@@ -461,13 +461,13 @@ async function verifyAction(agentId, apiKey, privateKey) {
 
 ---
 
-## Step 4: Log Action Results
+## Step 4: Log Capability Results
 
-After executing an action, log the result back to AIM for audit trail and trust score updates.
+After executing a capability, log the result back to AIM for audit trail and trust score updates.
 
 ### API Endpoint
 ```
-POST /api/agents/{agent_id}/actions/log
+POST /api/v1/agents/{agent_id}/log-capability/{audit_id}
 Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 X-Agent-Signature: BASE64_SIGNATURE
@@ -476,9 +476,11 @@ X-Agent-Signature: BASE64_SIGNATURE
 ### Request Body
 ```json
 {
-  "action_type": "database_query",
   "success": true,
-  "duration_ms": 245,
+  "result": {
+    "rows_returned": 150,
+    "duration_ms": 245
+  },
   "result_summary": "Retrieved 150 user records",
   "metadata": {
     "rows_returned": 150,
@@ -489,23 +491,21 @@ X-Agent-Signature: BASE64_SIGNATURE
 
 ### Go Example
 ```go
-func logActionResult(agentID, apiKey, privateKeyB64 string, success bool) error {
+func logCapabilityResult(agentID, auditID, apiKey, privateKeyB64 string, success bool) error {
     logReq := map[string]interface{}{
-        "action_type": "database_query",
-        "success":     success,
-        "duration_ms": 245,
-        "result_summary": "Retrieved 150 user records",
-        "metadata": map[string]interface{}{
+        "success": success,
+        "result": map[string]interface{}{
             "rows_returned":  150,
             "execution_time": "245ms",
         },
+        "result_summary": "Retrieved 150 user records",
     }
 
     signature, _ := signRequest(privateKeyB64, logReq)
     jsonBody, _ := json.Marshal(logReq)
 
     req, _ := http.NewRequest("POST",
-        fmt.Sprintf("http://localhost:8080/api/agents/%s/actions/log", agentID),
+        fmt.Sprintf("http://localhost:8080/api/v1/agents/%s/log-capability/%s", agentID, auditID),
         bytes.NewBuffer(jsonBody))
 
     req.Header.Set("Content-Type", "application/json")
@@ -516,7 +516,7 @@ func logActionResult(agentID, apiKey, privateKeyB64 string, success bool) error 
     resp, _ := client.Do(req)
     defer resp.Body.Close()
 
-    fmt.Println("✅ Action logged successfully")
+    fmt.Println("✅ Capability result logged successfully")
     return nil
 }
 ```
@@ -594,18 +594,18 @@ func (a *AIMAgent) Register(name string, capabilities []string) error {
     return nil
 }
 
-func (a *AIMAgent) VerifyAction(actionType string, details map[string]interface{}) (bool, error) {
-    actionReq := map[string]interface{}{
-        "action_type":    actionType,
-        "action_details": details,
-        "risk_level":     "medium",
+func (a *AIMAgent) VerifyCapability(capability string, resource string, metadata map[string]interface{}) (bool, string, error) {
+    capReq := map[string]interface{}{
+        "capability": capability,
+        "resource":   resource,
+        "metadata":   metadata,
     }
 
-    signature := a.signRequest(actionReq)
-    jsonBody, _ := json.Marshal(actionReq)
+    signature := a.signRequest(capReq)
+    jsonBody, _ := json.Marshal(capReq)
 
     req, _ := http.NewRequest("POST",
-        fmt.Sprintf("%s/api/agents/%s/verify", a.BaseURL, a.AgentID),
+        fmt.Sprintf("%s/api/v1/agents/%s/verify-capability", a.BaseURL, a.AgentID),
         bytes.NewBuffer(jsonBody))
 
     req.Header.Set("Content-Type", "application/json")
@@ -619,7 +619,8 @@ func (a *AIMAgent) VerifyAction(actionType string, details map[string]interface{
     var result map[string]interface{}
     json.NewDecoder(resp.Body).Decode(&result)
 
-    return result["approved"].(bool), nil
+    auditID := result["audit_id"].(string)
+    return result["approved"].(bool), auditID, nil
 }
 
 func (a *AIMAgent) signRequest(payload interface{}) string {
@@ -636,16 +637,17 @@ func main() {
     agent, _ := NewAIMAgent("your-api-key", "http://localhost:8080")
 
     // Register agent
-    agent.Register("my-go-agent", []string{"read_database", "send_email"})
+    agent.Register("my-go-agent", []string{"db:read", "email:send"})
 
-    // Verify action
-    approved, _ := agent.VerifyAction("database_query", map[string]interface{}{
+    // Verify capability
+    approved, auditID, _ := agent.VerifyCapability("db:query", "users_table", map[string]interface{}{
         "query": "SELECT * FROM users",
     })
 
     if approved {
-        fmt.Println("✅ Action approved - executing query")
+        fmt.Println("✅ Capability approved - executing query")
         // Execute your database query here
+        fmt.Printf("   Audit ID: %s\n", auditID)
     }
 }
 ```
@@ -660,8 +662,8 @@ func main() {
 |----------|--------|-------------|
 | `/api/agents/register` | POST | Register a new agent |
 | `/api/agents/{id}` | GET | Get agent details |
-| `/api/agents/{id}/verify` | POST | Verify an action before execution |
-| `/api/agents/{id}/actions/log` | POST | Log action result |
+| `/api/v1/agents/{id}/verify-capability` | POST | Verify a capability before execution |
+| `/api/v1/agents/{id}/log-capability/{audit_id}` | POST | Log capability result |
 | `/api/agents/{id}/trust-score` | GET | Get current trust score |
 | `/api/agents/{id}/audit-trail` | GET | Get complete audit trail |
 | `/api/auth/token/refresh` | POST | Refresh OAuth token (for SDK mode) |
@@ -717,7 +719,7 @@ const agent = secure('my-node-agent');
 **Solution**:
 ```go
 // Make sure you sign the EXACT JSON that you send
-payload := map[string]interface{}{"action_type": "read"}
+payload := map[string]interface{}{"capability": "file:read", "resource": "config.json"}
 signature := signRequest(privateKey, payload)
 
 // Send the SAME payload (don't modify it)
@@ -761,8 +763,8 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 1. Generate Ed25519 keypair
 2. Register agent with `/api/agents/register`
 3. Sign requests with private key
-4. Verify actions with `/api/agents/{id}/verify`
-5. Log results with `/api/agents/{id}/actions/log`
+4. Verify capabilities with `/api/v1/agents/{id}/verify-capability`
+5. Log results with `/api/v1/agents/{id}/log-capability/{audit_id}`
 
 **Until official SDKs are released**, use the REST API directly. The experience is straightforward and well-documented.
 

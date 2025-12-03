@@ -868,8 +868,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
 	agents.Put("/:id/keys", middleware.MemberMiddleware(), h.Agent.UpdateAgentKeys) // SDK key registration
 	// Runtime verification endpoints - CORE functionality
-	agents.Post("/:id/verify-action", h.Agent.VerifyAction)
-	agents.Post("/:id/log-action/:audit_id", h.Agent.LogActionResult)
+	agents.Post("/:id/verify-capability", h.Agent.VerifyCapability)
+	agents.Post("/:id/log-capability/:audit_id", h.Agent.LogCapabilityResult)
 	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
 	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
@@ -1010,7 +1010,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP) // ✅ Manual attestation (non-SDK users)
 	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)  // ✅ Dashboard: Get agents with this MCP in talks_to field
 	// Runtime verification endpoint - CORE functionality
-	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
+	mcpServers.Post("/:id/verify-capability", h.MCP.VerifyMCPCapability)
 
 	// Attestation management routes (authentication required)
 	// 🔴 Supply chain security: Revoke attestations when agent keys are compromised
