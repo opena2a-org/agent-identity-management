@@ -17,6 +17,7 @@ import sys
 import time
 import random
 from datetime import datetime
+from typing import Optional
 
 # Banner
 print("""
@@ -34,6 +35,12 @@ Dashboard: http://localhost:3000/dashboard/agents
 # Try to import the SDK
 try:
     from aim_sdk import secure
+    from aim_sdk.integrations.mcp.registration import (
+        register_mcp_server,
+        list_mcp_servers,
+        attest_mcp_server,
+        use_mcp_tool
+    )
 except ImportError:
     print("ERROR: Could not import aim_sdk")
     print()
@@ -392,6 +399,253 @@ Check your dashboard to see the security alerts:
 """)
 
 
+def register_mcp_server_demo():
+    """Demo registering an MCP server with AIM"""
+    print("""
+================================================================================
+                      REGISTER MCP SERVER
+================================================================================
+
+MCP (Model Context Protocol) servers extend agent capabilities. AIM tracks
+and cryptographically verifies all MCP servers your agents connect to.
+
+Let's register a new MCP server...
+
+================================================================================
+""")
+
+    # Get MCP server details from user
+    name = input("Enter MCP server name [weather-mcp]: ").strip() or "weather-mcp"
+    url = input("Enter MCP server URL [http://localhost:3001]: ").strip() or "http://localhost:3001"
+    description = input("Enter description [Weather data provider]: ").strip() or "Weather data provider"
+
+    # Generate a demo public key (in real usage, this comes from the MCP server)
+    import base64
+    demo_public_key = base64.b64encode(f"demo-public-key-{random.randint(1000, 9999)}".encode()).decode()
+
+    print(f"\nRegistering MCP server: {name}")
+    print(f"  URL: {url}")
+    print(f"  Description: {description}")
+    print()
+
+    try:
+        result = register_mcp_server(
+            aim_client=agent,
+            server_name=name,
+            server_url=url,
+            public_key=demo_public_key,
+            capabilities=["weather:current", "weather:forecast", "weather:alerts"],
+            description=description
+        )
+        print("  MCP Server registered!")
+        print(f"    Server ID: {result.get('id', 'pending')}")
+        print(f"    Status: {result.get('status', 'pending_attestation')}")
+        print()
+        print("  View in dashboard: http://localhost:3000/dashboard/mcp")
+    except Exception as e:
+        print(f"  Registration result: {e}")
+        print()
+        print("  This is expected if the MCP server doesn't exist or isn't running.")
+        print("  In production, you would register real MCP servers with valid URLs.")
+
+    print("""
+================================================================================
+              MCP Registration enables secure agent-to-server trust!
+================================================================================
+
+Benefits of registering MCP servers:
+  - Cryptographic verification prevents impersonation
+  - Drift detection alerts when agents connect to unregistered servers
+  - Complete audit trail of agent-MCP interactions
+  - Trust scoring for MCP servers based on behavior
+
+================================================================================
+""")
+
+
+def list_mcp_connections_demo():
+    """Demo listing MCP server connections"""
+    print("""
+================================================================================
+                      LIST MCP SERVER CONNECTIONS
+================================================================================
+
+View all MCP servers registered with AIM for your organization.
+
+================================================================================
+""")
+
+    try:
+        servers = list_mcp_servers(aim_client=agent, limit=20)
+
+        if not servers:
+            print("  No MCP servers registered yet.")
+            print()
+            print("  Register one using option E or via the dashboard:")
+            print("  → http://localhost:3000/dashboard/mcp")
+        else:
+            print(f"  Found {len(servers)} MCP server(s):\n")
+            for i, server in enumerate(servers, 1):
+                print(f"  {i}. {server.get('name', 'Unknown')}")
+                print(f"     ID: {server.get('id', 'N/A')}")
+                print(f"     URL: {server.get('url', 'N/A')}")
+                print(f"     Status: {server.get('status', 'unknown')}")
+                print(f"     Trust Score: {server.get('trustScore', server.get('confidence_score', 0))}")
+                print()
+
+    except Exception as e:
+        print(f"  Could not list MCP servers: {e}")
+        print()
+        print("  This may happen if no servers are registered or the API is unavailable.")
+
+    print("""
+================================================================================
+              View details: http://localhost:3000/dashboard/mcp
+================================================================================
+""")
+
+
+def attest_mcp_server_demo():
+    """Demo attesting (cryptographically verifying) an MCP server"""
+    print("""
+================================================================================
+                      ATTEST MCP SERVER
+================================================================================
+
+Attestation cryptographically verifies an MCP server's identity. This:
+  - Proves the server holds the private key matching its public key
+  - Increases the server's confidence/trust score
+  - Creates a verifiable audit trail
+  - Uses Ed25519 signatures for security
+
+================================================================================
+""")
+
+    # First, list available servers
+    try:
+        servers = list_mcp_servers(aim_client=agent, limit=20)
+
+        if not servers:
+            print("  No MCP servers to attest. Register one first using option E.")
+            return
+
+        print("  Available MCP servers:\n")
+        for i, server in enumerate(servers, 1):
+            print(f"  {i}. {server.get('name', 'Unknown')} ({server.get('status', 'unknown')})")
+            print(f"     ID: {server.get('id', 'N/A')}")
+            print()
+
+        # Let user choose
+        choice = input(f"Enter server number to attest [1]: ").strip() or "1"
+        try:
+            idx = int(choice) - 1
+            if idx < 0 or idx >= len(servers):
+                print("  Invalid selection.")
+                return
+            server = servers[idx]
+        except ValueError:
+            print("  Invalid input.")
+            return
+
+        server_id = server.get('id')
+        server_name = server.get('name', 'Unknown')
+        server_url = server.get('url', 'http://localhost:3001')
+
+        print(f"\n  Attesting MCP server: {server_name}")
+        print(f"  Server ID: {server_id}")
+        print()
+
+        # Perform attestation
+        result = attest_mcp_server(
+            aim_client=agent,
+            server_id=server_id,
+            mcp_url=server_url,
+            mcp_name=server_name,
+            capabilities_found=["weather:current", "weather:forecast"],
+            connection_successful=True,
+            health_check_passed=True,
+            connection_latency_ms=45.0
+        )
+
+        print()
+        print("  Attestation successful!")
+        print(f"    Attestation ID: {result.get('id', result.get('attestation_id', 'N/A'))}")
+        print(f"    New Confidence Score: {result.get('mcp_confidence_score', result.get('confidence_score', 'N/A'))}")
+        print()
+        print("  View attestation details: http://localhost:3000/dashboard/mcp")
+
+    except Exception as e:
+        print(f"  Attestation failed: {e}")
+        print()
+        print("  This may happen if:")
+        print("  - The MCP server isn't running")
+        print("  - The server ID is invalid")
+        print("  - The agent lacks attestation permissions")
+
+    print("""
+================================================================================
+              Attestation builds trust through cryptographic proof!
+================================================================================
+""")
+
+
+def simulate_mcp_drift_demo():
+    """Demo MCP drift detection - connecting to unregistered server"""
+    print("""
+================================================================================
+                    MCP DRIFT DETECTION DEMO
+================================================================================
+
+Drift detection alerts you when an agent connects to an MCP server that
+isn't registered in AIM. This helps detect:
+  - Unauthorized MCP connections
+  - Configuration changes
+  - Potential security threats
+
+Let's simulate connecting to an UNREGISTERED MCP server...
+
+================================================================================
+""")
+
+    # Simulate connecting to an unregistered MCP server
+    fake_server_id = f"unregistered-{random.randint(1000, 9999)}"
+    fake_server_url = f"http://suspicious-server-{random.randint(100, 999)}.example.com"
+
+    print(f"  Attempting connection to unregistered server:")
+    print(f"  Server: {fake_server_url}")
+    print()
+
+    try:
+        # This will likely fail or create an alert
+        result = use_mcp_tool(
+            aim_client=agent,
+            server_id=fake_server_id,
+            tool_name="suspicious_tool",
+            mcp_url=fake_server_url,
+            mcp_name="unregistered-server"
+        )
+        print(f"  Connection recorded - drift alert may have been created!")
+        print(f"  Result: {result}")
+    except Exception as e:
+        print(f"  Connection flagged/blocked: {e}")
+        print()
+        print("  This is expected! AIM detected the unregistered server.")
+
+    print("""
+================================================================================
+              Check for drift alerts: http://localhost:3000/dashboard/admin/alerts
+================================================================================
+
+Drift detection protects against:
+  - Shadow IT (unauthorized MCP servers)
+  - Supply chain attacks via malicious MCPs
+  - Configuration tampering
+  - Compliance violations
+
+================================================================================
+""")
+
+
 def print_menu():
     """Print the action menu"""
     print("""
@@ -420,6 +674,12 @@ def print_menu():
     B. JIT Access Demo      - Just-In-Time approval workflow
     C. Request Capability   - Request new capability (admin approves)
     D. Show Agent Status    - View trust score & capabilities
+
+  MCP SERVER DEMOS:
+    E. Register MCP Server  - Register a new MCP server with AIM
+    F. List MCP Servers     - View all registered MCP servers
+    G. Attest MCP Server    - Cryptographically verify an MCP server
+    H. MCP Drift Detection  - Simulate connecting to unregistered server
 
   0. Exit
 
@@ -514,6 +774,18 @@ def run_action(choice: str):
         elif choice.upper() == "D":
             show_agent_status()
 
+        elif choice.upper() == "E":
+            register_mcp_server_demo()
+
+        elif choice.upper() == "F":
+            list_mcp_connections_demo()
+
+        elif choice.upper() == "G":
+            attest_mcp_server_demo()
+
+        elif choice.upper() == "H":
+            simulate_mcp_drift_demo()
+
         else:
             print("Invalid choice. Please try again.")
             return
@@ -533,7 +805,7 @@ def main():
 
     while True:
         print_menu()
-        choice = input("Enter your choice (0-8, A-D): ").strip()
+        choice = input("Enter your choice (0-8, A-H): ").strip()
 
         if choice == "0":
             print("\nThanks for trying AIM! Check your dashboard for the full activity log.")
