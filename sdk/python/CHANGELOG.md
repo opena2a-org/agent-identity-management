@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GraphQL API support
 - CLI tool for automation
 
+## [1.1.0] - 2025-12-03
+
+### Added
+- **MCP Server Registration**: `agent.register_mcp()` method for programmatic MCP server registration
+- **Capability Requests**: `agent.request_capability()` method for requesting additional capabilities
+- **JIT Access Demo**: Interactive demo showing just-in-time access request workflows
+- **Consolidated Demo Agent**: Single `demo_agent.py` with comprehensive feature demonstrations
+- **Standardized Capability Format**: All capabilities now use `namespace:action` format consistently
+
+### Changed
+- Demo agents consolidated into single interactive `demo_agent.py`
+- Improved credential migration and stale credential handling
+- Enhanced demo UX with better credential discovery and alerts
+
+### Fixed
+- Trust score nil pointer handling
+- Duplicate plaintext file deletion in credential migration
+- Stale encrypted credentials cleared on new SDK install
+
 ## [1.0.0] - 2025-11-06
 
 ### Added

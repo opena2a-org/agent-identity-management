@@ -510,7 +510,7 @@ def drop_table(table_name: str) -> str:
 **Last Tested**: October 8, 2025
 **Test Results**: 4/4 passing
 **LangChain Version**: 0.3.78
-**AIM SDK Version**: 1.0.0
+**AIM SDK Version**: 1.1.0
 
 ---
 

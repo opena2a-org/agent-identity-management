@@ -29,7 +29,7 @@ The SDK version is stored in a single source of truth: `/sdk/python/VERSION`
 
 **Contents**:
 ```
-1.0.0
+1.1.0
 ```
 
 **Why a VERSION file?**
@@ -43,7 +43,7 @@ The SDK version is stored in a single source of truth: `/sdk/python/VERSION`
 When you download the SDK from the AIM dashboard, the filename includes the version:
 
 ```
-aim-sdk-python-v1.0.0.zip
+aim-sdk-python-v1.1.0.zip
 ```
 
 **Format**: `aim-sdk-{language}-v{version}.zip`
@@ -198,7 +198,7 @@ Before introducing breaking changes:
 import aim_sdk
 
 # Get SDK version
-print(aim_sdk.__version__)  # "1.0.0"
+print(aim_sdk.__version__)  # "1.1.0"
 
 # Check minimum version
 from packaging import version

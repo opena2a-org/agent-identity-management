@@ -297,7 +297,6 @@ sdk/python/
 │   ├── CREWAI_INTEGRATION.md
 │   ├── LANGCHAIN_INTEGRATION.md
 │   ├── MCP_INTEGRATION.md
-│   ├── MICROSOFT_COPILOT_INTEGRATION.md
 │   ├── ENV_CONFIG.md
 │   └── VERSIONING.md    # Versioning strategy
 ├── examples/             # Working code examples
@@ -308,7 +307,7 @@ sdk/python/
 ├── demos/                # Demo projects
 ├── README.md             # This file
 ├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.0.0)
+├── VERSION               # Current SDK version (1.1.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -340,7 +339,6 @@ Traditional example with decorator-based verification.
 - **[LangChain](./docs/LANGCHAIN_INTEGRATION.md)** - Complete LangChain integration guide
 - **[CrewAI](./docs/CREWAI_INTEGRATION.md)** - CrewAI agent integration
 - **[MCP Servers](./docs/MCP_INTEGRATION.md)** - Model Context Protocol integration
-- **[Microsoft Copilot](./docs/MICROSOFT_COPILOT_INTEGRATION.md)** - Copilot Studio integration
 
 **See [docs/README.md](./docs/README.md) for all integration guides.**
 
@@ -361,14 +359,14 @@ All dependencies are included in the downloaded SDK's `requirements.txt`.
 The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 
 ```
-1.0.0
+1.1.0
 │ │ │
 │ │ └─── PATCH: Bug fixes
 │ └───── MINOR: New features (backward-compatible)
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.0.0
+**Current Version**: 1.1.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -377,7 +375,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.0.0"
+print(aim_sdk.__version__)  # "1.1.0"
 ```
 
 **See Also**:

@@ -557,7 +557,7 @@ public_key_b64 = base64.b64encode(public_key_bytes).decode()
 **Integration Status**: ✅ **SDK IMPLEMENTATION COMPLETE**
 **Backend Status**: ✅ **ENDPOINTS IMPLEMENTED**
 **Last Updated**: October 8, 2025
-**AIM SDK Version**: 1.0.0
+**AIM SDK Version**: 1.1.0
 
 ---
 
