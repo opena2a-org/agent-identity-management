@@ -21,6 +21,14 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			return c.Next()
 		}
 
+		// Check if already authenticated by API key middleware
+		authMethod := c.Locals("auth_method")
+		if authMethod == "api_key" {
+			// Already authenticated via API key - skip JWT validation
+			fmt.Printf("✅ JWT middleware: Skipping JWT - API key already authenticated\n")
+			return c.Next()
+		}
+
 		// Try to get token from Authorization header first
 		authHeader := c.Get("Authorization")
 		var token string
