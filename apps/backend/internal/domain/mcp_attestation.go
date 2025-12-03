@@ -37,6 +37,7 @@ type AgentMCPConnection struct {
 type AttestationPayload struct {
 	AgentID              string   `json:"agent_id"`                // 1. agent_id
 	CapabilitiesFound    []string `json:"capabilities_found"`      // 2. capabilities_found
+	Challenge            string   `json:"challenge,omitempty"`     // 2.5. challenge (server nonce for proof of key possession)
 	ConnectionLatencyMs  float64  `json:"connection_latency_ms"`   // 3. connection_latency_ms
 	ConnectionSuccessful bool     `json:"connection_successful"`   // 4. connection_successful
 	HealthCheckPassed    bool     `json:"health_check_passed"`     // 5. health_check_passed
@@ -44,6 +45,18 @@ type AttestationPayload struct {
 	MCPURL               string   `json:"mcp_url"`                 // 7. mcp_url
 	SDKVersion           string   `json:"sdk_version"`             // 8. sdk_version
 	Timestamp            string   `json:"timestamp"`               // 9. timestamp
+}
+
+// AttestationChallenge represents a server-generated nonce for proof of private key possession
+// This prevents replay attacks and proves the agent holds the private key at attestation time
+type AttestationChallenge struct {
+	ID          uuid.UUID  `json:"id"`
+	Challenge   string     `json:"challenge"`    // Random nonce (32 bytes base64)
+	AgentID     uuid.UUID  `json:"agentId"`      // Agent that requested this challenge
+	MCPServerID uuid.UUID  `json:"mcpServerId"`  // MCP server being attested
+	ExpiresAt   time.Time  `json:"expiresAt"`    // Challenge expires after 5 minutes
+	UsedAt      *time.Time `json:"usedAt"`       // Set when challenge is consumed (prevents replay)
+	CreatedAt   time.Time  `json:"createdAt"`
 }
 
 // ToCanonicalJSON converts attestation payload to canonical JSON for signature verification

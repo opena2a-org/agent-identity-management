@@ -489,6 +489,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		securityPolicyService,    // ✅ NEW: Inject SecurityPolicyService for policy evaluation
 		repos.Capability,         // ✅ NEW: Inject CapabilityRepository for capability checks
 		verificationEventService, // ✅ NEW: Inject VerificationEventService for creating verification events
+		repos.Tag,                // ✅ NEW: Inject TagRepository for tagging agents during registration
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -523,6 +524,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPCapability,      // ✅ For creating SDK capabilities
 		repos.AgentMCPConnection, // ✅ For tracking agent-MCP connections
 		repos.Agent,              // ✅ For connected agents tracking
+		repos.Tag,                // ✅ For tagging MCP servers during registration
 	)
 
 	// ✅ Initialize MCP Attestation Service for agent attestation of MCPs
@@ -651,6 +653,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Alert,             // ✅ For creating security alerts on capability violations
 			services.VerificationEvent, // ✅ For recording action verification attempts in Security Dashboard
 			services.Capability,
+			services.Tag, // ✅ For fetching agent tags in responses
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
@@ -681,6 +684,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			repos.Agent,             // ✅ For agent relationships ("Talks To")
 			repos.VerificationEvent, // ✅ For verification events endpoint
+			services.Tag,            // ✅ For fetching MCP server tags in responses
 		),
 		MCPAttestation: handlers.NewMCPAttestationHandler(
 			services.MCPAttestation,
@@ -871,9 +875,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
 	agents.Get("/:id/credentials", h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
-	agents.Get("/:id/mcp-servers", h.MCPAttestation.GetAgentMCPServers)                                        // ✅ Get MCP servers agent is connected to (via attestation)
+	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                  // ✅ Dashboard: Get MCP servers from talks_to field
 	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                // Add MCP servers (bulk)
 	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent) // Remove single MCP
+	// Attestation revocation for supply chain security (when agent key is compromised)
+	agents.Post("/:id/attestations/revoke-all", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAllAttestationsByAgent) // 🔴 Revoke ALL attestations by this agent
 	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)      // Auto-detect MCPs from config
 	// Trust Score management - RESTful endpoints under /agents/:id/trust-score/*
 	agents.Get("/:id/trust-score", h.Agent.GetAgentTrustScore)                                                      // Get current trust score
@@ -979,9 +985,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServersAgentAuth := v1.Group("/mcp-servers")
 	mcpServersAgentAuth.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Ed25519 signature verification
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
-	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)               // ✅ Submit agent attestation (Ed25519 signed)
-	mcpServersAgentAuth.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations) // ✅ Get all attestations for this MCP
-	mcpServersAgentAuth.Get("/:id/agents", h.MCPAttestation.GetConnectedAgents)       // ✅ Get agents connected to this MCP (via attestation)
+	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)  // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
+	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                  // ✅ Submit agent attestation (Ed25519 signed, with challenge)
+	mcpServersAgentAuth.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations)    // ✅ Get all attestations for this MCP
+	// NOTE: /:id/agents moved to JWT-authenticated mcpServers group to fix route conflict
+	// The Ed25519 middleware's c.Next() was forwarding JWT requests to wrong handler
 
 	// Standard MCP Server management endpoints - Use JWT authentication (user-to-backend)
 	mcpServers := v1.Group("/mcp-servers")
@@ -996,10 +1004,20 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/keys", middleware.MemberMiddleware(), h.MCP.AddPublicKey)
 	mcpServers.Get("/:id/verification-status", h.MCP.GetVerificationStatus)
 	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities)                                    // ✅ Get detected capabilities
+	mcpServers.Post("/:id/detect-capabilities", middleware.MemberMiddleware(), h.MCP.DetectCapabilities) // ✅ Manually trigger capability detection
 	mcpServers.Get("/:id/verification-events", h.MCP.GetMCPVerificationEvents)                             // ✅ Get verification events for MCP server
+	mcpServers.Get("/:id/consensus-status", h.MCPAttestation.GetConsensusStatus)                           // 🔐 Multi-agent consensus status for verification
 	mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP) // ✅ Manual attestation (non-SDK users)
+	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)  // ✅ Dashboard: Get agents with this MCP in talks_to field
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-action", h.MCP.VerifyMCPAction)
+
+	// Attestation management routes (authentication required)
+	// 🔴 Supply chain security: Revoke attestations when agent keys are compromised
+	attestations := v1.Group("/attestations")
+	attestations.Use(middleware.AuthMiddleware(jwtService))
+	attestations.Use(middleware.RateLimitMiddleware())
+	attestations.Post("/:attestation_id/revoke", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAttestation) // 🔴 Revoke single attestation
 
 	// Security routes (admin/manager)
 	security := v1.Group("/security")

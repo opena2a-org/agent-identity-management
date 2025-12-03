@@ -2,8 +2,12 @@ package application
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +15,43 @@ import (
 	infracrypto "github.com/opena2a/identity/backend/internal/infrastructure/crypto"
 	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
 )
+
+// Multi-Agent Consensus Configuration
+// These thresholds determine when an MCP server is considered "verified" by the community
+const (
+	// DefaultMinAgentsForConsensus is the minimum number of unique agents required
+	// to verify an MCP server. Can be overridden via MCP_MIN_AGENTS_FOR_CONSENSUS env var.
+	DefaultMinAgentsForConsensus = 3
+
+	// DefaultMinOwnersForConsensus is the minimum number of unique agent owners required.
+	// This ensures attestations come from truly independent sources.
+	// Can be overridden via MCP_MIN_OWNERS_FOR_CONSENSUS env var.
+	DefaultMinOwnersForConsensus = 2
+
+	// MinConfidenceScoreForVerification is the minimum confidence score required
+	// for automatic verification via consensus.
+	MinConfidenceScoreForVerification = 60.0
+)
+
+// getMinAgentsForConsensus returns the configured minimum agents for consensus
+func getMinAgentsForConsensus() int {
+	if val := os.Getenv("MCP_MIN_AGENTS_FOR_CONSENSUS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return DefaultMinAgentsForConsensus
+}
+
+// getMinOwnersForConsensus returns the configured minimum owners for consensus
+func getMinOwnersForConsensus() int {
+	if val := os.Getenv("MCP_MIN_OWNERS_FOR_CONSENSUS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return DefaultMinOwnersForConsensus
+}
 
 // MCPAttestationService handles Agent Attestation operations
 type MCPAttestationService struct {
@@ -52,6 +93,69 @@ type AttestMCPResponse struct {
 	MCPConfidenceScore float64 `json:"mcp_confidence_score"`
 	AttestationCount   int     `json:"attestation_count"`
 	Message            string  `json:"message"`
+}
+
+// ChallengeResponse represents a server-generated challenge for proof of key possession
+type ChallengeResponse struct {
+	Challenge   string    `json:"challenge"`    // Base64-encoded random nonce
+	ExpiresAt   time.Time `json:"expiresAt"`    // When the challenge expires (5 minutes)
+	MCPServerID string    `json:"mcpServerId"`  // MCP server this challenge is for
+}
+
+// GenerateChallenge creates a server-side nonce for proof of private key possession
+// The agent must include this challenge in their signed attestation payload
+func (s *MCPAttestationService) GenerateChallenge(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerID uuid.UUID,
+) (*ChallengeResponse, error) {
+	// Verify agent exists and is verified
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	if agent.Status != domain.AgentStatusVerified {
+		return nil, fmt.Errorf("only verified agents can request attestation challenges")
+	}
+
+	// Verify MCP server exists
+	if _, err := s.mcpRepo.GetByID(mcpServerID); err != nil {
+		return nil, fmt.Errorf("mcp server not found: %w", err)
+	}
+
+	// Generate cryptographically secure random nonce (32 bytes)
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate challenge nonce: %w", err)
+	}
+
+	challenge := base64.StdEncoding.EncodeToString(nonce)
+	now := time.Now().UTC()
+	expiresAt := now.Add(5 * time.Minute)
+
+	// Store challenge in database
+	challengeRecord := &domain.AttestationChallenge{
+		ID:          uuid.New(),
+		Challenge:   challenge,
+		AgentID:     agentID,
+		MCPServerID: mcpServerID,
+		ExpiresAt:   expiresAt,
+		CreatedAt:   now,
+	}
+
+	if err := s.attestationRepo.CreateChallenge(challengeRecord); err != nil {
+		return nil, fmt.Errorf("failed to store challenge: %w", err)
+	}
+
+	fmt.Printf("🔐 Generated attestation challenge for agent %s -> MCP %s (expires: %s)\n",
+		agentID, mcpServerID, expiresAt.Format(time.RFC3339))
+
+	return &ChallengeResponse{
+		Challenge:   challenge,
+		ExpiresAt:   expiresAt,
+		MCPServerID: mcpServerID.String(),
+	}, nil
 }
 
 // VerifyAndRecordAttestation verifies and records an agent's attestation of an MCP server
@@ -110,7 +214,49 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 
 	fmt.Printf("✅ Attestation signature verification PASSED\n")
 
-	// 4. Check attestation is recent (< 5 minutes old)
+	// 4. PROOF OF KEY POSSESSION: Validate server-generated challenge (prevents replay attacks)
+	// If a challenge is provided, validate it. For backward compatibility, challenge is optional
+	// but required for new attestations (when challenge is present in payload)
+	var challengeRecord *domain.AttestationChallenge
+	if req.Attestation.Challenge != "" {
+		challengeRecord, err = s.attestationRepo.GetChallengeByValue(req.Attestation.Challenge)
+		if err != nil {
+			fmt.Printf("❌ Challenge not found: %s\n", req.Attestation.Challenge)
+			return nil, fmt.Errorf("invalid or unknown challenge - please request a new challenge")
+		}
+
+		// Validate challenge hasn't expired
+		if time.Now().UTC().After(challengeRecord.ExpiresAt) {
+			fmt.Printf("❌ Challenge expired at %s\n", challengeRecord.ExpiresAt)
+			return nil, fmt.Errorf("challenge expired - please request a new challenge")
+		}
+
+		// Validate challenge hasn't been used (replay attack prevention)
+		if challengeRecord.UsedAt != nil {
+			fmt.Printf("❌ Challenge already used at %s (replay attack detected)\n", challengeRecord.UsedAt)
+			return nil, fmt.Errorf("challenge already used (possible replay attack)")
+		}
+
+		// Validate challenge was issued for this agent
+		if challengeRecord.AgentID != agentID {
+			fmt.Printf("❌ Challenge was issued for different agent: %s (expected %s)\n",
+				challengeRecord.AgentID, agentID)
+			return nil, fmt.Errorf("challenge was issued for a different agent")
+		}
+
+		// Validate challenge was issued for this MCP server
+		if challengeRecord.MCPServerID != mcpServerID {
+			fmt.Printf("❌ Challenge was issued for different MCP: %s (expected %s)\n",
+				challengeRecord.MCPServerID, mcpServerID)
+			return nil, fmt.Errorf("challenge was issued for a different MCP server")
+		}
+
+		fmt.Printf("✅ Challenge validated: proof of private key possession confirmed\n")
+	} else {
+		fmt.Printf("⚠️  No challenge provided (legacy attestation mode - consider upgrading SDK)\n")
+	}
+
+	// 5. Check attestation is recent (< 5 minutes old)
 	attestationTime, err := time.Parse(time.RFC3339, req.Attestation.Timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timestamp format: %w", err)
@@ -120,12 +266,28 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		return nil, fmt.Errorf("attestation expired (older than 5 minutes)")
 	}
 
-	// 5. Verify MCP server exists
-	if _, err := s.mcpRepo.GetByID(mcpServerID); err != nil {
+	// 6. Verify MCP server exists and organization isolation
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
 		return nil, fmt.Errorf("mcp server not found: %w", err)
 	}
 
-	// 6. Store attestation
+	// ORGANIZATION ISOLATION: Agent can only attest MCP servers in the same organization
+	if mcpServer.OrganizationID != agent.OrganizationID {
+		fmt.Printf("🔒 Organization isolation violation: agent %s (org: %s) attempted to attest MCP %s (org: %s)\n",
+			agentID, agent.OrganizationID, mcpServerID, mcpServer.OrganizationID)
+		return nil, fmt.Errorf("cannot attest MCP servers from other organizations")
+	}
+
+	// 7. Mark challenge as used (MUST happen before storing attestation to prevent race conditions)
+	if challengeRecord != nil {
+		if err := s.attestationRepo.MarkChallengeUsed(challengeRecord.ID); err != nil {
+			return nil, fmt.Errorf("failed to mark challenge as used: %w", err)
+		}
+		fmt.Printf("✅ Challenge marked as used (replay protection active)\n")
+	}
+
+	// 8. Store attestation
 	now := time.Now().UTC()
 	attestation := &domain.MCPAttestation{
 		ID:                uuid.New(),
@@ -165,6 +327,8 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 }
 
 // updateMCPConfidenceScore calculates and updates the confidence score for an MCP server
+// The scoring system weights SDK attestations (cryptographically verified) higher than manual attestations
+// MULTI-AGENT CONSENSUS: If enough independent agents attest, the MCP is automatically verified
 func (s *MCPAttestationService) updateMCPConfidenceScore(
 	ctx context.Context,
 	mcpServerID uuid.UUID,
@@ -181,38 +345,57 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	}
 
 	// Confidence calculation factors:
-	// 1. Number of unique agents attesting (20 points each, max 5 agents = 100)
-	// 2. Average trust score of attesting agents (0-50 points)
-	// 3. Recency of attestations (0-30 points)
+	// 1. SDK attestations (cryptographically verified): 20 points each, max 100 points
+	// 2. Manual attestations (user-verified, no crypto): 5 points each, max 25 points
+	// 3. Average trust score of attesting agents (0-50 points)
+	// 4. Recency of attestations (0-25 points)
 
 	uniqueAgents := make(map[uuid.UUID]bool)
 	var totalTrust float64
+	var sdkAttestations int
+	var manualAttestations int
 	var mostRecentAttestation time.Time
 
 	for _, att := range attestations {
-		// Only count SDK attestations (with agent_id) for confidence score
-		if att.AgentID != nil {
-			uniqueAgents[*att.AgentID] = true
-			totalTrust += att.AgentTrustScore
-		}
-
+		// Track most recent attestation
 		if att.VerifiedAt != nil && att.VerifiedAt.After(mostRecentAttestation) {
 			mostRecentAttestation = *att.VerifiedAt
 		}
+
+		// Count SDK attestations (with agent_id and cryptographic signature)
+		if att.AgentID != nil && att.Signature != "manual-attestation" {
+			uniqueAgents[*att.AgentID] = true
+			totalTrust += att.AgentTrustScore
+			sdkAttestations++
+		} else {
+			// Manual attestation - lower trust weight
+			manualAttestations++
+		}
 	}
 
-	// Factor 1: Number of unique agents (20 points each, max 100)
+	// Factor 1: SDK attestations with cryptographic proof (20 points each, max 100)
+	// These are higher trust because they use challenge-response and Ed25519 signatures
 	agentCount := len(uniqueAgents)
-	agentPoints := float64(agentCount) * 20.0
-	if agentPoints > 100.0 {
-		agentPoints = 100.0
+	sdkPoints := float64(agentCount) * 20.0
+	if sdkPoints > 100.0 {
+		sdkPoints = 100.0
 	}
 
-	// Factor 2: Average trust score of attesting agents (0-50 points)
-	avgTrust := totalTrust / float64(len(attestations))
-	trustPoints := (avgTrust / 100.0) * 50.0 // Scale to 0-50
+	// Factor 2: Manual attestations with reduced weight (5 points each, max 25)
+	// These are lower trust because they lack cryptographic proof
+	manualPoints := float64(manualAttestations) * 5.0
+	if manualPoints > 25.0 {
+		manualPoints = 25.0
+	}
 
-	// Factor 3: Recency factor (% of attestations in last 7 days)
+	// Factor 3: Average trust score of attesting agents (0-50 points)
+	var trustPoints float64
+	if sdkAttestations > 0 {
+		avgTrust := totalTrust / float64(sdkAttestations)
+		trustPoints = (avgTrust / 100.0) * 50.0 // Scale to 0-50
+	}
+
+	// Factor 4: Recency factor (% of attestations in last 7 days, 0-25 points)
 	recentCount := 0
 	for _, att := range attestations {
 		if att.VerifiedAt != nil && time.Since(*att.VerifiedAt) < 7*24*time.Hour {
@@ -220,13 +403,24 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 		}
 	}
 	recencyFactor := float64(recentCount) / float64(len(attestations))
-	recencyPoints := recencyFactor * 30.0
+	recencyPoints := recencyFactor * 25.0
 
 	// Calculate final confidence score (0-100)
-	confidenceScore := (agentPoints + trustPoints + recencyPoints) / 1.8
+	// Weighted sum: SDK (max 100) + Manual (max 25) + Trust (max 50) + Recency (max 25) = 200 max
+	// Normalize to 0-100 scale
+	rawScore := sdkPoints + manualPoints + trustPoints + recencyPoints
+	confidenceScore := rawScore / 2.0 // Normalize from 0-200 to 0-100
 	if confidenceScore > 100.0 {
 		confidenceScore = 100.0
 	}
+
+	// Log the breakdown for debugging
+	fmt.Printf("📊 MCP %s confidence score breakdown:\n", mcpServerID)
+	fmt.Printf("   SDK attestations: %d (%.1f points)\n", sdkAttestations, sdkPoints)
+	fmt.Printf("   Manual attestations: %d (%.1f points)\n", manualAttestations, manualPoints)
+	fmt.Printf("   Trust score: %.1f points\n", trustPoints)
+	fmt.Printf("   Recency: %.1f points\n", recencyPoints)
+	fmt.Printf("   Final score: %.2f%%\n", confidenceScore)
 
 	// Update MCP server
 	err = s.attestationRepo.UpdateMCPConfidenceScore(
@@ -239,7 +433,190 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 		return 0, 0, err
 	}
 
+	// MULTI-AGENT CONSENSUS: Check if MCP should be auto-verified
+	// Requirements:
+	// 1. Minimum number of unique agents
+	// 2. Minimum number of unique agent owners (independence)
+	// 3. Confidence score above threshold
+	if err := s.checkAndApplyConsensusVerification(ctx, mcpServerID, confidenceScore); err != nil {
+		// Log but don't fail - attestation was still recorded successfully
+		fmt.Printf("⚠️  Warning: failed to check consensus verification: %v\n", err)
+	}
+
 	return confidenceScore, len(attestations), nil
+}
+
+// checkAndApplyConsensusVerification checks if an MCP server has reached multi-agent consensus
+// and automatically updates its status to "verified" if all criteria are met
+func (s *MCPAttestationService) checkAndApplyConsensusVerification(
+	ctx context.Context,
+	mcpServerID uuid.UUID,
+	confidenceScore float64,
+) error {
+	// Check current MCP status - skip if already verified
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
+		return fmt.Errorf("failed to get MCP server: %w", err)
+	}
+
+	if mcpServer.Status == domain.MCPServerStatusVerified {
+		// Already verified - nothing to do
+		return nil
+	}
+
+	// Get consensus thresholds
+	minAgents := getMinAgentsForConsensus()
+	minOwners := getMinOwnersForConsensus()
+
+	// Check 1: Minimum unique agents
+	uniqueAgentCount, err := s.attestationRepo.GetUniqueAttestingAgentCount(mcpServerID)
+	if err != nil {
+		return fmt.Errorf("failed to get unique agent count: %w", err)
+	}
+
+	if uniqueAgentCount < minAgents {
+		fmt.Printf("🔐 MCP %s: Consensus not reached - need %d agents, have %d\n",
+			mcpServerID, minAgents, uniqueAgentCount)
+		return nil
+	}
+
+	// Check 2: Minimum unique agent owners (for true independence)
+	uniqueOwnerCount, err := s.attestationRepo.GetUniqueAgentOwnerCount(mcpServerID)
+	if err != nil {
+		return fmt.Errorf("failed to get unique owner count: %w", err)
+	}
+
+	if uniqueOwnerCount < minOwners {
+		fmt.Printf("🔐 MCP %s: Consensus not reached - need %d owners, have %d\n",
+			mcpServerID, minOwners, uniqueOwnerCount)
+		return nil
+	}
+
+	// Check 3: Confidence score threshold
+	if confidenceScore < MinConfidenceScoreForVerification {
+		fmt.Printf("🔐 MCP %s: Consensus not reached - need %.1f%% confidence, have %.1f%%\n",
+			mcpServerID, MinConfidenceScoreForVerification, confidenceScore)
+		return nil
+	}
+
+	// 🎉 All consensus criteria met! Auto-verify the MCP server
+	fmt.Printf("🎉 MULTI-AGENT CONSENSUS REACHED for MCP %s:\n", mcpServerID)
+	fmt.Printf("   ✓ Unique agents: %d (required: %d)\n", uniqueAgentCount, minAgents)
+	fmt.Printf("   ✓ Unique owners: %d (required: %d)\n", uniqueOwnerCount, minOwners)
+	fmt.Printf("   ✓ Confidence: %.1f%% (required: %.1f%%)\n", confidenceScore, MinConfidenceScoreForVerification)
+	fmt.Printf("   → Auto-verifying MCP server\n")
+
+	// Update MCP status to verified
+	err = s.attestationRepo.UpdateMCPVerificationStatus(
+		mcpServerID,
+		string(domain.MCPServerStatusVerified),
+		true,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update MCP verification status: %w", err)
+	}
+
+	fmt.Printf("✅ MCP server %s automatically verified via multi-agent consensus\n", mcpServerID)
+	return nil
+}
+
+// ConsensusStatus represents the current multi-agent consensus status for an MCP server
+type ConsensusStatus struct {
+	MCPServerID         string  `json:"mcpServerId"`
+	Status              string  `json:"status"`            // "pending", "verified", etc.
+	IsVerified          bool    `json:"isVerified"`
+	UniqueAgents        int     `json:"uniqueAgents"`      // Current count
+	RequiredAgents      int     `json:"requiredAgents"`    // Threshold
+	UniqueOwners        int     `json:"uniqueOwners"`      // Current count
+	RequiredOwners      int     `json:"requiredOwners"`    // Threshold
+	ConfidenceScore     float64 `json:"confidenceScore"`   // Current score
+	RequiredConfidence  float64 `json:"requiredConfidence"`// Threshold
+	ConsensusReached    bool    `json:"consensusReached"`  // All criteria met
+	ProgressPercent     float64 `json:"progressPercent"`   // Overall progress 0-100
+	MissingCriteria     []string `json:"missingCriteria"`  // What's still needed
+}
+
+// GetConsensusStatus returns the current multi-agent consensus status for an MCP server
+// Useful for dashboard to show verification progress
+func (s *MCPAttestationService) GetConsensusStatus(
+	ctx context.Context,
+	mcpServerID uuid.UUID,
+) (*ConsensusStatus, error) {
+	// Get MCP server details
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("mcp server not found: %w", err)
+	}
+
+	// Get thresholds
+	minAgents := getMinAgentsForConsensus()
+	minOwners := getMinOwnersForConsensus()
+
+	// Get current counts
+	uniqueAgentCount, err := s.attestationRepo.GetUniqueAttestingAgentCount(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unique agent count: %w", err)
+	}
+
+	uniqueOwnerCount, err := s.attestationRepo.GetUniqueAgentOwnerCount(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unique owner count: %w", err)
+	}
+
+	// Calculate progress and missing criteria
+	var missingCriteria []string
+	agentsProgress := float64(uniqueAgentCount) / float64(minAgents) * 100
+	if agentsProgress > 100 {
+		agentsProgress = 100
+	}
+	if uniqueAgentCount < minAgents {
+		missingCriteria = append(missingCriteria,
+			fmt.Sprintf("Need %d more agent attestations", minAgents-uniqueAgentCount))
+	}
+
+	ownersProgress := float64(uniqueOwnerCount) / float64(minOwners) * 100
+	if ownersProgress > 100 {
+		ownersProgress = 100
+	}
+	if uniqueOwnerCount < minOwners {
+		missingCriteria = append(missingCriteria,
+			fmt.Sprintf("Need attestations from %d more independent owners", minOwners-uniqueOwnerCount))
+	}
+
+	confidenceProgress := mcpServer.ConfidenceScore / MinConfidenceScoreForVerification * 100
+	if confidenceProgress > 100 {
+		confidenceProgress = 100
+	}
+	if mcpServer.ConfidenceScore < MinConfidenceScoreForVerification {
+		missingCriteria = append(missingCriteria,
+			fmt.Sprintf("Need %.1f%% more confidence score", MinConfidenceScoreForVerification-mcpServer.ConfidenceScore))
+	}
+
+	// Overall progress is the minimum of all criteria (all must be met)
+	overallProgress := agentsProgress
+	if ownersProgress < overallProgress {
+		overallProgress = ownersProgress
+	}
+	if confidenceProgress < overallProgress {
+		overallProgress = confidenceProgress
+	}
+
+	consensusReached := len(missingCriteria) == 0
+
+	return &ConsensusStatus{
+		MCPServerID:        mcpServerID.String(),
+		Status:             string(mcpServer.Status),
+		IsVerified:         mcpServer.IsVerified,
+		UniqueAgents:       uniqueAgentCount,
+		RequiredAgents:     minAgents,
+		UniqueOwners:       uniqueOwnerCount,
+		RequiredOwners:     minOwners,
+		ConfidenceScore:    mcpServer.ConfidenceScore,
+		RequiredConfidence: MinConfidenceScoreForVerification,
+		ConsensusReached:   consensusReached,
+		ProgressPercent:    overallProgress,
+		MissingCriteria:    missingCriteria,
+	}, nil
 }
 
 // updateAgentMCPConnection updates or creates the connection between agent and MCP
@@ -485,6 +862,76 @@ func (s *MCPAttestationService) InvalidateExpiredAttestations(ctx context.Contex
 	return s.attestationRepo.InvalidateExpiredAttestations()
 }
 
+// RevokeAttestation revokes a specific attestation with a reason (supply chain security)
+// This is critical for incident response when an agent's private key is compromised
+func (s *MCPAttestationService) RevokeAttestation(
+	ctx context.Context,
+	attestationID uuid.UUID,
+	revokerID uuid.UUID,
+	reason string,
+) error {
+	// Get the attestation to find the MCP server ID
+	attestation, err := s.attestationRepo.GetAttestationByID(attestationID)
+	if err != nil {
+		return fmt.Errorf("attestation not found: %w", err)
+	}
+
+	// Invalidate the attestation
+	if err := s.attestationRepo.InvalidateAttestation(attestationID); err != nil {
+		return fmt.Errorf("failed to revoke attestation: %w", err)
+	}
+
+	// Recalculate MCP confidence score after revocation
+	_, _, err = s.updateMCPConfidenceScore(ctx, attestation.MCPServerID)
+	if err != nil {
+		// Log but don't fail - revocation was successful
+		fmt.Printf("⚠️  Warning: failed to recalculate confidence score after revocation: %v\n", err)
+	}
+
+	fmt.Printf("🔴 Attestation %s revoked by %s: %s\n", attestationID, revokerID, reason)
+	return nil
+}
+
+// RevokeAllAttestationsByAgent revokes all attestations made by a specific agent
+// Use when an agent's private key is compromised
+func (s *MCPAttestationService) RevokeAllAttestationsByAgent(
+	ctx context.Context,
+	agentID uuid.UUID,
+	revokerID uuid.UUID,
+	reason string,
+) (int, error) {
+	// Get all attestations by this agent
+	attestations, err := s.attestationRepo.GetAttestationsByAgent(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get attestations by agent: %w", err)
+	}
+
+	revokedCount := 0
+	affectedMCPs := make(map[uuid.UUID]bool)
+
+	for _, attestation := range attestations {
+		if attestation.IsValid {
+			if err := s.attestationRepo.InvalidateAttestation(attestation.ID); err != nil {
+				fmt.Printf("⚠️  Warning: failed to revoke attestation %s: %v\n", attestation.ID, err)
+				continue
+			}
+			revokedCount++
+			affectedMCPs[attestation.MCPServerID] = true
+		}
+	}
+
+	// Recalculate confidence scores for affected MCPs
+	for mcpID := range affectedMCPs {
+		_, _, err = s.updateMCPConfidenceScore(ctx, mcpID)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: failed to recalculate confidence score for MCP %s: %v\n", mcpID, err)
+		}
+	}
+
+	fmt.Printf("🔴 Revoked %d attestations by agent %s (reason: %s)\n", revokedCount, agentID, reason)
+	return revokedCount, nil
+}
+
 // RecalculateAllConfidenceScores recalculates confidence scores for all MCPs (background job)
 func (s *MCPAttestationService) RecalculateAllConfidenceScores(ctx context.Context) error {
 	// Get all MCP servers
@@ -512,6 +959,8 @@ func toCanonicalJSON(v interface{}) ([]byte, error) {
 
 // RecordManualAttestation records a manual attestation from a user (no cryptographic signature required)
 // This allows users without SDK integration to manually attest MCP servers they've verified
+// SECURITY: Manual attestations have lower trust weight than SDK attestations (see updateMCPConfidenceScore)
+// SECURITY: Organization isolation - users can only attest MCP servers within their organization
 func (s *MCPAttestationService) RecordManualAttestation(
 	ctx context.Context,
 	mcpServerID uuid.UUID,
@@ -528,7 +977,14 @@ func (s *MCPAttestationService) RecordManualAttestation(
 		return nil, fmt.Errorf("mcp server not found: %w", err)
 	}
 
-	// 2. Create attestation record (manual type, no cryptographic signature)
+	// 2. ORGANIZATION ISOLATION: Verify user can only attest MCP servers in their organization
+	if mcpServer.OrganizationID != organizationID {
+		fmt.Printf("🔒 Organization isolation violation: user %s (org: %s) attempted to attest MCP %s (org: %s)\n",
+			userID, organizationID, mcpServerID, mcpServer.OrganizationID)
+		return nil, fmt.Errorf("cannot attest MCP servers from other organizations")
+	}
+
+	// 3. Create attestation record (manual type, no cryptographic signature)
 	now := time.Now().UTC()
 	attestation := &domain.MCPAttestation{
 		ID:            uuid.New(),

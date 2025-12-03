@@ -22,6 +22,7 @@ type AgentService struct {
 	policyService            *SecurityPolicyService      // ✅ For policy-based enforcement
 	capabilityRepo           domain.CapabilityRepository // ✅ For checking agent capabilities
 	verificationEventService *VerificationEventService   // ✅ For creating verification events
+	tagRepo                  domain.TagRepository        // ✅ For tagging agents during registration
 }
 
 // NewAgentService creates a new agent service
@@ -34,6 +35,7 @@ func NewAgentService(
 	policyService *SecurityPolicyService, // ✅ NEW: Security Policy Service
 	capabilityRepo domain.CapabilityRepository, // ✅ NEW: CapabilityRepository for capability checks
 	verificationEventService *VerificationEventService, // ✅ NEW: For creating verification events
+	tagRepo domain.TagRepository, // ✅ NEW: For tagging agents during registration
 ) *AgentService {
 	return &AgentService{
 		agentRepo:                agentRepo,
@@ -44,6 +46,7 @@ func NewAgentService(
 		policyService:            policyService,
 		capabilityRepo:           capabilityRepo,
 		verificationEventService: verificationEventService,
+		tagRepo:                  tagRepo,
 	}
 }
 
@@ -60,6 +63,7 @@ type CreateAgentRequest struct {
 	DocumentationURL string           `json:"documentationUrl"`
 	TalksTo          []string         `json:"talksTo,omitempty"`      // MCP servers this agent communicates with
 	Capabilities     []string         `json:"capabilities,omitempty"` // Agent capabilities
+	TagIds           []string         `json:"tagIds,omitempty"`       // ✅ Tags to apply during registration
 }
 
 // CreateAgent creates a new agent
@@ -221,6 +225,27 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 		if grantedCount > 0 {
 			fmt.Printf("✅ Auto-granted %d capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
+		}
+	}
+
+	// ✅ AUTO-APPLY TAGS: Apply tags during registration (no separate API call needed)
+	if len(req.TagIds) > 0 && s.tagRepo != nil {
+		tagUUIDs := make([]uuid.UUID, 0, len(req.TagIds))
+		for _, tagIDStr := range req.TagIds {
+			tagID, err := uuid.Parse(tagIDStr)
+			if err != nil {
+				fmt.Printf("⚠️  Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
+				continue
+			}
+			tagUUIDs = append(tagUUIDs, tagID)
+		}
+
+		if len(tagUUIDs) > 0 {
+			if err := s.tagRepo.AddTagsToAgent(ctx, agent.ID, tagUUIDs); err != nil {
+				fmt.Printf("⚠️  Warning: failed to apply tags to agent %s: %v\n", agent.Name, err)
+			} else {
+				fmt.Printf("✅ Applied %d tags to agent %s\n", len(tagUUIDs), agent.Name)
+			}
 		}
 	}
 

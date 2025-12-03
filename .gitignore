@@ -79,3 +79,5 @@ sdk-page
 *-state
 *-final
 apps/backend/internal/interfaces/http/middleware/request_logger.go
+test_mcp_server.py
+apps/backend/aim-server

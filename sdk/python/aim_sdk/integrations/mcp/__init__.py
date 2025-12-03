@@ -22,7 +22,13 @@ Usage:
     )
 """
 
-from aim_sdk.integrations.mcp.registration import register_mcp_server, list_mcp_servers, attest_mcp_server, use_mcp_tool
+from aim_sdk.integrations.mcp.registration import (
+    register_mcp_server,
+    list_mcp_servers,
+    attest_mcp_server,
+    use_mcp_tool,
+    get_attestation_challenge,  # For proof of private key possession
+)
 from aim_sdk.integrations.mcp.verification import verify_mcp_action
 
 __all__ = [
@@ -30,5 +36,6 @@ __all__ = [
     "list_mcp_servers",
     "attest_mcp_server",
     "use_mcp_tool",
+    "get_attestation_challenge",
     "verify_mcp_action",
 ]
