@@ -1320,7 +1320,7 @@ export const apiDocumentation: EndpointCategory[] = [
   "capabilities_verified": ["read_file", "write_file"],
   "attestation_method": "runtime_detection",
   "metadata": {
-    "sdk_version": "1.0.0"
+    "sdk_version": "1.1.0"
   }
 }`,
       },

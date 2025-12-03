@@ -562,7 +562,7 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 **Last Tested**: October 8, 2025
 **Test Results**: 4/4 passing
 **CrewAI Version**: 0.201.1
-**AIM SDK Version**: 1.0.0
+**AIM SDK Version**: 1.1.0
 
 ---
 
