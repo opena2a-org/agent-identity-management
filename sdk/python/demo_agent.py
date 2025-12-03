@@ -139,6 +139,156 @@ def process_refund(order_id: str, amount: float) -> dict:
     }
 
 
+# JIT Access Actions - These may require admin approval before execution
+# The @perform_action decorator waits for AIM approval based on trust score
+
+@agent.perform_action("database:delete", resource="users_table", timeout_seconds=30)
+def delete_user_account(user_id: str) -> dict:
+    """Delete a user account - Requires JIT approval for low-trust agents"""
+    return {
+        "user_id": user_id,
+        "status": "deleted",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@agent.perform_action("payment:refund_bulk", resource="stripe", timeout_seconds=60)
+def bulk_refund(order_ids: list, reason: str) -> dict:
+    """Process bulk refunds - Always requires approval"""
+    return {
+        "orders_processed": len(order_ids),
+        "reason": reason,
+        "status": "completed",
+        "batch_id": f"BATCH-{random.randint(10000, 99999)}"
+    }
+
+
+def show_agent_status():
+    """Display current agent status and trust score"""
+    print("""
+================================================================================
+                         AGENT STATUS & TRUST SCORE
+================================================================================
+""")
+    try:
+        details = agent.get_agent_details()
+        print(f"  Agent ID:     {details.get('id', agent.agent_id)}")
+        print(f"  Name:         {details.get('name', 'demo-agent')}")
+        print(f"  Status:       {details.get('status', 'active')}")
+        print(f"  Trust Score:  {details.get('trustScore', 0) * 100:.1f}%")
+        print(f"  Verified:     {'✓ Yes' if details.get('verified') else '✗ No'}")
+
+        caps = details.get('capabilities', [])
+        if caps:
+            print(f"  Capabilities: {', '.join(caps[:5])}" + ("..." if len(caps) > 5 else ""))
+
+        print()
+        print(f"  View in dashboard: http://localhost:3000/dashboard/agents/{agent.agent_id}")
+    except Exception as e:
+        print(f"  Could not fetch agent details: {e}")
+        print(f"  Agent ID: {agent.agent_id}")
+
+    print("""
+================================================================================
+""")
+
+
+def request_new_capability():
+    """Demo requesting a new capability"""
+    print("""
+================================================================================
+                      REQUEST NEW CAPABILITY
+================================================================================
+
+Agents can request additional capabilities through the SDK.
+Admins review and approve/deny these requests in the dashboard.
+
+""")
+
+    cap_type = input("Enter capability to request [admin:access]: ").strip() or "admin:access"
+    reason = input("Enter justification [Need admin access for reporting]: ").strip() or "Need admin access for reporting"
+
+    print(f"\nRequesting capability: {cap_type}")
+    print(f"Reason: {reason}")
+    print()
+
+    try:
+        result = agent.request_capability(
+            capability_type=cap_type,
+            reason=reason
+        )
+        print("  ✓ Capability request submitted!")
+        print(f"    Request ID: {result.get('id', 'pending')}")
+        print(f"    Status: {result.get('status', 'pending')}")
+        print()
+        print("  → Admin can approve at: http://localhost:3000/dashboard/admin/capability-requests")
+    except Exception as e:
+        print(f"  Request submitted (or already pending)")
+        print(f"  → Check dashboard: http://localhost:3000/dashboard/admin/capability-requests")
+
+    print("""
+================================================================================
+""")
+
+
+def run_jit_access_demo():
+    """Demo Just-In-Time access with approval workflow"""
+    print("""
+================================================================================
+                    JUST-IN-TIME (JIT) ACCESS DEMO
+================================================================================
+
+JIT Access means sensitive operations may require admin approval BEFORE
+they can execute. This is controlled by the @perform_action decorator.
+
+The agent's trust score determines whether approval is needed:
+  - High trust (>80%): May auto-approve low-risk JIT actions
+  - Medium trust (50-80%): Most JIT actions need approval
+  - Low trust (<50%): All JIT actions need approval
+
+Watch what happens when we try a sensitive operation...
+
+================================================================================
+""")
+
+    print("\n  Attempting: delete_user_account('test-user-999')")
+    print("  This uses @perform_action('database:delete') decorator")
+    print()
+
+    try:
+        # This will either succeed (high trust) or wait for approval (lower trust)
+        result = delete_user_account("test-user-999")
+        print("  ✓ Action APPROVED and executed!")
+        print(f"    Result: {result}")
+    except TimeoutError:
+        print("  ⏳ Action is WAITING for admin approval")
+        print("     → Approve at: http://localhost:3000/dashboard/admin/capability-requests")
+    except Exception as e:
+        if "denied" in str(e).lower() or "approval" in str(e).lower():
+            print("  ⏳ Action requires admin approval")
+            print("     → Approve at: http://localhost:3000/dashboard/admin/capability-requests")
+        else:
+            print(f"  Action blocked or pending: {e}")
+
+    print("""
+================================================================================
+              JIT Access provides an extra layer of security!
+================================================================================
+
+Even if an agent has a capability declared, JIT-protected actions require
+explicit approval. This prevents runaway agents from performing destructive
+operations without human oversight.
+
+Perfect for:
+  - Database deletions
+  - Bulk operations
+  - Financial transactions
+  - User account modifications
+
+================================================================================
+""")
+
+
 def run_cbac_demo():
     """
     Demonstrate Capability-Based Access Control (CBAC) blocking prompt injection attacks.
@@ -261,10 +411,15 @@ def print_menu():
     5. Send Notification    - Simulate sending a notification
     6. Process Refund       - Simulate processing a payment refund
 
-  SECURITY DEMO:
+  BULK DEMOS:
     7. Run All Actions      - Run all actions in sequence (great for demo!)
     8. Run 10 Random Actions- Bulk test with random actions
-    9. Capability-Based Access Control (CBAC) Demo - See attacks get BLOCKED!
+
+  SECURITY DEMOS:
+    A. CBAC Demo            - Capability-Based Access Control (blocks attacks!)
+    B. JIT Access Demo      - Just-In-Time approval workflow
+    C. Request Capability   - Request new capability (admin approves)
+    D. Show Agent Status    - View trust score & capabilities
 
   0. Exit
 
@@ -347,8 +502,17 @@ def run_action(choice: str):
                 time.sleep(0.3)
             print("\n  All 10 actions completed!")
 
-        elif choice == "9":
+        elif choice.upper() == "A":
             run_cbac_demo()
+
+        elif choice.upper() == "B":
+            run_jit_access_demo()
+
+        elif choice.upper() == "C":
+            request_new_capability()
+
+        elif choice.upper() == "D":
+            show_agent_status()
 
         else:
             print("Invalid choice. Please try again.")
@@ -369,7 +533,7 @@ def main():
 
     while True:
         print_menu()
-        choice = input("Enter your choice (0-9): ").strip()
+        choice = input("Enter your choice (0-8, A-D): ").strip()
 
         if choice == "0":
             print("\nThanks for trying AIM! Check your dashboard for the full activity log.")
