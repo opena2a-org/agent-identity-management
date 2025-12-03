@@ -33,6 +33,67 @@ Without visibility, a single rogue agent can exfiltrate data, rack up API bills,
 
 ---
 
+## 🔐 Cryptographic Identity
+
+Every AI agent gets a unique, cryptographically-verifiable identity that **cannot be forged or impersonated**.
+
+### How It Works
+
+```
+Agent Registration:
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Agent calls secure("my-agent")                              │
+│  2. AIM generates Ed25519 keypair:                              │
+│     ├─ Private key: Stored securely on agent                    │
+│     └─ Public key: Registered with AIM backend                  │
+│  3. Agent ID + public key = Unforgeable identity                │
+└─────────────────────────────────────────────────────────────────┘
+
+Every API Request:
+┌─────────────────────────────────────────────────────────────────┐
+│  Agent signs request with private key                           │
+│           ↓                                                     │
+│  AIM verifies signature using registered public key             │
+│           ↓                                                     │
+│  ✅ Match = Request authenticated                               │
+│  ❌ No match = Request rejected, alert created                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Why Ed25519?
+
+| Property | Benefit |
+|----------|---------|
+| **256-bit security** | Computationally infeasible to forge |
+| **Fast verification** | ~10,000 signatures/second on commodity hardware |
+| **Small keys** | 32-byte public key, 64-byte signature |
+| **Deterministic** | Same input → same signature (no random failures) |
+
+### What This Prevents
+
+```
+❌ WITHOUT Cryptographic Identity:
+   Attacker: "I'm agent-007, trust me"
+   System: "OK!" → Executes attacker's requests
+
+✅ WITH AIM Cryptographic Identity:
+   Attacker: "I'm agent-007, trust me"
+   AIM: "Prove it. Sign this challenge."
+   Attacker: Cannot sign without private key
+   AIM: Request rejected → Security alert → Attacker blocked
+```
+
+### Automatic Key Management
+
+- **Generation**: Keys created automatically on agent registration
+- **Storage**: Private keys never leave the agent's secure environment
+- **Rotation**: Automatic key rotation every 90 days (configurable)
+- **Revocation**: Instant key revocation if agent is compromised
+
+📚 **Learn more:** [Security Architecture](https://opena2a.org/docs/security-model)
+
+---
+
 ## 🛡️ Capability-Based Access Control (CBAC)
 
 Traditional security asks: *"Who is this agent?"*
