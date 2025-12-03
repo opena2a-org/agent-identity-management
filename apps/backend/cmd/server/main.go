@@ -851,9 +851,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
-	// Agents routes - All other agent endpoints with dual authentication (Ed25519 or JWT)
+	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Try Ed25519 first (for SDK agents)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
+	agents.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Then try Ed25519 (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
