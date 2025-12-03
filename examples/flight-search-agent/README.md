@@ -205,7 +205,7 @@ cp -r ./fresh-sdk/aim-sdk-python/.aim ~/.aim
 
 **Why does this happen?**
 
-AIM uses **token rotation** for enterprise security:
+AIM uses **token rotation** for security:
 - When you use a refresh token → backend issues NEW token
 - OLD token is immediately revoked → prevents reuse attacks
 - This is SOC 2 / HIPAA compliant behavior
@@ -282,7 +282,7 @@ After running the agent, you should see:
 - Review `PRODUCTION_READINESS_REPORT.md`
 - Complete documentation improvements
 - Set up monitoring
-- Deploy to enterprise environment
+- Deploy to your environment
 
 ## 🚀 TL;DR - Get Started in 60 Seconds
 

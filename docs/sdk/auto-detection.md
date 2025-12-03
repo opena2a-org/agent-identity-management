@@ -415,7 +415,7 @@ servers = auto_detect_mcp_servers()
 environment = os.getenv("ENVIRONMENT", "development")
 
 if environment == "production":
-    # Only production-ready servers
+    # Only approved servers
     servers = [s for s in servers if s['name'] in ['github', 'postgres']]
 elif environment == "staging":
     # Staging servers

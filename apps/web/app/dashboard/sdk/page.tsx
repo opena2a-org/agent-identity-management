@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Code, Terminal, CheckCircle, AlertCircle, Lock, Shield } from 'lucide-react'
-import Link from 'next/link'
+import { Download, Code, Terminal, CheckCircle, AlertCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { AuthGuard } from "@/components/auth-guard";
 
@@ -47,7 +46,7 @@ export default function SDKDownloadPage() {
       <div className="container mx-auto py-8 px-4 max-w-4xl">
         <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          production-ready Agent Security
+          Open Source Agent Security
         </h1>
         <p className="text-gray-600 dark:text-gray-400 text-lg">
           Secure your agents with 1 line of code. Zero configuration required.
@@ -80,7 +79,7 @@ export default function SDKDownloadPage() {
 
       {/* SDK Card - Python Only */}
       <div className="mb-8">
-        {/* Python SDK - Production Ready */}
+        {/* Python SDK - Stable */}
         <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg overflow-hidden max-w-2xl mx-auto">
           <div className="p-8">
             <div className="flex items-center gap-4 mb-6">
@@ -90,13 +89,13 @@ export default function SDKDownloadPage() {
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Python SDK</h2>
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 mt-1">
-                  ✅ Production Ready
+                  ✅ Stable Release
                 </span>
               </div>
             </div>
 
             <p className="text-base text-gray-700 mb-6">
-              Official production-ready Python client for agent identity management with Ed25519 cryptographic
+              Official Python client for agent identity management with Ed25519 cryptographic
               verification, OAuth integration, automatic MCP detection, and secure keyring storage.
             </p>
 
@@ -149,28 +148,9 @@ export default function SDKDownloadPage() {
             </p>
             <p className="text-sm text-blue-800">
               Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026. The Python SDK provides
-              complete feature parity and is production-ready for all use cases today.
+              complete feature parity and is ready for all use cases today.
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Security Notice */}
-      <div className="bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/20 rounded-lg p-6 mb-8 flex items-start gap-3">
-        <Shield className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="font-semibold text-gray-900 dark:text-white text-lg">production-ready Security, Developer-Friendly UX</p>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-            AIM SDK uses Ed25519 cryptographic signing for authentication - more secure than API keys.
-            Each agent gets a unique private key, and you can monitor and revoke access anytime.
-          </p>
-          <Link
-            href="/dashboard/agents"
-            className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium mt-3"
-          >
-            <Lock className="h-4 w-4" />
-            View Agent Security Dashboard →
-          </Link>
         </div>
       </div>
 

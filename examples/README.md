@@ -29,7 +29,7 @@ A LangChain-based agent that performs CRUD operations on a todo list:
 - ✅ Real-time trust scoring
 - ✅ Security alerts for dangerous operations
 
-**Use Case**: LangChain agents with enterprise security and compliance
+**Use Case**: LangChain agents with security and compliance
 
 **Tech Stack**: Python 3.11+, LangChain, Google Gemini, AIM SDK
 
@@ -127,7 +127,7 @@ class TodoTool(BaseTool):
 | **Production AI Search** | Flight Search Agent | Auto-detection, verification, audit trail |
 | **LangChain Integration** | CRUD Agent | Decorator pattern, tool security |
 | **MCP Server Registration** | MCP Server Demo | Server attestation, capability management |
-| **Enterprise Compliance** | All examples | Audit logs, trust scoring, RBAC |
+| **Compliance** | All examples | Audit logs, trust scoring, RBAC |
 
 ## 📖 Documentation
 

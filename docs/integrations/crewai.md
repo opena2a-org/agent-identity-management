@@ -682,7 +682,7 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 - [ ] Agent actions logged in audit trail
 - [ ] No security alerts
 
-**All checked?** 🎉 **Your CrewAI team is enterprise-secure!**
+**All checked?** 🎉 **Your CrewAI team is secure!**
 
 ---
 
@@ -692,7 +692,7 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 
 - [LangChain Integration →](./langchain.md) - Secure LangChain agents
 - [MCP Integration →](./mcp.md) - Register MCP servers
-- [Microsoft Copilot →](./copilot.md) - Enterprise AI assistants
+- [Microsoft Copilot →](./copilot.md) - AI assistants
 
 ### Learn Advanced Features
 

@@ -295,7 +295,7 @@ POST /api/v1/agents/agent_123/verify-action
 ### Runtime Verification Flow (ADR-006)
 
 **The Problem AIM Solves**:
-- Enterprises need to trust AI agents and MCP servers
+- Organizations need to trust AI agents and MCP servers
 - Agents can drift from their authorized capabilities
 - No visibility into what AI tools are doing
 - Security teams blind to AI-related threats
@@ -448,7 +448,7 @@ type AgentCapabilities struct {
 ✅ **Clean Architecture**: Domain → Application → Infrastructure → Interfaces
 ✅ **Multi-Tenancy**: Organization-level isolation
 ✅ **Security**: OAuth2, JWT, RLS, Rate limiting
-✅ **Enterprise Features**: Compliance, audit logs, trust scoring
+✅ **Advanced Features**: Compliance, audit logs, trust scoring
 
 ---
 

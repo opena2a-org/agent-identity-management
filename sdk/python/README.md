@@ -1,8 +1,8 @@
 # AIM Python SDK
 
-**Production-ready AI Agent Security - One line of code. Complete protection.**
+**Open Source AI Agent Security - One line of code. Complete protection.**
 
-Production-ready cryptographic verification with zero configuration.
+Cryptographic verification with zero configuration.
 
 ---
 
@@ -28,7 +28,7 @@ Open your AIM dashboard side-by-side and watch it update in real-time as you tri
 ```python
 from aim_sdk import secure
 
-# ONE LINE - Complete enterprise security
+# ONE LINE - Complete security
 agent = secure("my-agent")
 
 # That's it. Your agent now has:

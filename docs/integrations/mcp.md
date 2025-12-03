@@ -679,7 +679,7 @@ for result in results:
 
 **Result**: All three servers monitored by AIM with separate trust scores
 
-### 2. Enterprise MCP Server Fleet
+### 2. Large MCP Server Fleet
 
 ```python
 from aim_sdk import secure, register_mcp_server
@@ -801,7 +801,7 @@ server.start(
 
 - [LangChain Integration →](./langchain.md) - Secure LangChain agents
 - [CrewAI Integration →](./crewai.md) - Multi-agent teams
-- [Microsoft Copilot →](./copilot.md) - Enterprise AI assistants
+- [Microsoft Copilot →](./copilot.md) - AI assistants
 
 ### Learn Advanced Features
 
