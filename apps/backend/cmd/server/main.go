@@ -258,6 +258,7 @@ func main() {
 	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
 	sdkAPI := app.Group("/api/v1/sdk-api")
 	sdkAPI.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Validates agent signatures, passes through JWT
+	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                             // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                       // SDK capability reporting

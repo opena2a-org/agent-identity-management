@@ -1172,8 +1172,19 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /api/v1/sdk-api/agents/{identifier} [get]
 func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
-	// Get organization ID from API key middleware
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	// Get organization ID from middleware (API key, Ed25519, or JWT)
+	orgIDLocal := c.Locals("organization_id")
+	if orgIDLocal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Authentication required - organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDLocal.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID format in context",
+		})
+	}
 	identifier := c.Params("identifier")
 
 	if identifier == "" {
