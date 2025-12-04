@@ -354,9 +354,9 @@ export default function PendingVerificationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Pending Agent Approvals</h1>
+            <h1 className="text-3xl font-bold">JIT Access Requests</h1>
             <p className="text-muted-foreground mt-1">
-              Review actions that require human approval before execution.
+              Review high-risk actions that require real-time approval before execution.
             </p>
           </div>
           <Button
@@ -508,18 +508,18 @@ export default function PendingVerificationsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Requests Awaiting Approval</CardTitle>
+            <CardTitle>Pending JIT Requests</CardTitle>
             <CardDescription>
-              Approve or deny actions that agents cannot perform automatically.
+              Approve or deny high-risk actions that agents are waiting to execute.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {verifications.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-green-600" />
-                <p className="text-lg font-semibold">No pending approvals</p>
+                <p className="text-lg font-semibold">No pending JIT requests</p>
                 <p className="text-sm">
-                  Actions requiring human approval will appear here in real time.
+                  High-risk actions requiring approval will appear here in real time.
                 </p>
               </div>
             ) : (
