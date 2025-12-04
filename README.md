@@ -424,6 +424,59 @@ For more details, see the [SDK Quickstart Tutorial](https://opena2a.org/docs/tut
 
 ---
 
+## 🔑 API Authentication
+
+AIM supports three authentication methods. Choose based on your needs:
+
+| Method | Best For | Security Level | Setup |
+|--------|----------|----------------|-------|
+| **API Key** | Scripts, any language, quick integrations | Good | Dashboard → API Keys |
+| **SDK (OAuth)** | Python apps with decorators | Better | SDK Download |
+| **Ed25519** | High-security, cryptographic proof | Best | Auto by SDK |
+
+### Option 1: API Key (Simplest)
+
+```bash
+# Get API key from: Dashboard → API Keys → Create API Key
+curl -X POST "http://localhost:8080/api/v1/agents/AGENT-ID/verify-capability" \
+  -H "Authorization: Bearer YOUR-API-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"capability": "api:call", "resource": "weather.api"}'
+```
+
+### Option 2: SDK (Recommended for Python)
+
+```python
+from aim_sdk import secure, perform_action
+
+agent = secure("my-agent")  # OAuth handled automatically
+
+@perform_action(capability="api:call", risk_level="low")
+def call_api(data):
+    return requests.get(data["url"])
+```
+
+### Option 3: Ed25519 Signatures (Highest Security)
+
+The SDK automatically uses Ed25519 signatures for all requests. For manual implementation:
+
+```python
+# Sign request with Ed25519 private key
+signature = sign_request(private_key, request_body)
+headers = {
+    "X-Agent-ID": agent_id,
+    "X-Signature": base64.b64encode(signature),
+    "X-Timestamp": str(int(time.time()))
+}
+```
+
+**Which should I use?**
+- **Starting out?** → API Key (one line, works everywhere)
+- **Building a Python agent?** → SDK (decorators + auto-detection)
+- **Enterprise/compliance?** → Ed25519 via SDK (cryptographic audit trail)
+
+---
+
 ## 📚 Learn More
 
 | Resource | Time | Description |
