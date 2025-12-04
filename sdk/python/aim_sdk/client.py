@@ -826,6 +826,36 @@ class AIMClient:
 
             return result
 
+        except VerificationError as e:
+            # Handle 409 Conflict - capability request already exists
+            if "409" in str(e):
+                # Fetch existing capability requests and return the matching one
+                try:
+                    existing = self._make_request(
+                        method="GET",
+                        endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capability-requests"
+                    )
+                    # Find the matching capability request
+                    requests_list = existing.get("requests", existing) if isinstance(existing, dict) else existing
+                    if isinstance(requests_list, list):
+                        for req in requests_list:
+                            if req.get("capabilityType") == capability_type or req.get("capability_type") == capability_type:
+                                print(f"ℹ️  Capability request for '{capability_type}' already exists (status: {req.get('status', 'unknown')})")
+                                return req
+                    # If we can't find the specific request, return a helpful message
+                    return {
+                        "status": "already_exists",
+                        "message": f"A capability request for '{capability_type}' already exists for this agent",
+                        "capability_type": capability_type
+                    }
+                except Exception:
+                    # If we can't fetch existing, return helpful info
+                    return {
+                        "status": "already_exists",
+                        "message": f"A capability request for '{capability_type}' already exists for this agent",
+                        "capability_type": capability_type
+                    }
+            raise VerificationError(f"Capability request failed: {e}")
         except Exception as e:
             raise VerificationError(f"Capability request failed: {e}")
 
