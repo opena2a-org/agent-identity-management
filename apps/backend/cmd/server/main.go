@@ -262,6 +262,7 @@ func main() {
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                             // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                       // SDK capability reporting
+	sdkAPI.Get("/agents/:id/capability-requests", h.CapabilityRequest.ListAgentCapabilityRequests)  // SDK list agent's capability requests
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
 	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                               // SDK MCP registration (create new MCP server)
 	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                 // SDK list MCP servers for agent's org
