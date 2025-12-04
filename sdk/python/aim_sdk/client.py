@@ -387,8 +387,9 @@ class AIMClient:
         # Create signature for Ed25519 verification
         # The backend verifies the signature by reconstructing the JSON payload
         # We need to create a signature of the JSON payload itself
+        # NOTE: Backend expects "action_type" not "capability" for signature verification
         signature_payload = {
-            "capability": capability,
+            "action_type": capability,  # Backend expects action_type for signature
             "agent_id": self.agent_id,
             "context": context or {},
             "resource": resource,
@@ -1488,53 +1489,79 @@ class AIMClient:
 
     def perform_action(
         self,
-        action_type: str,
+        action_type: str = None,
+        capability: str = None,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        timeout_seconds: int = 300
+        timeout_seconds: int = 300,
+        jit_access: bool = False,
+        risk_level: str = "medium"
     ):
         """
         Decorator for automatic capability verification.
 
         This decorator wraps a function to automatically:
         1. Request capability verification from AIM before execution
-        2. Wait for approval
+        2. Wait for approval (if jit_access=True, waits for admin approval)
         3. Execute the function if approved
         4. Log the result back to AIM
 
         Args:
-            action_type: Capability being used (e.g., "file:read", "db:query")
+            action_type: DEPRECATED - use capability instead
+            capability: Capability being used (e.g., "file:read", "db:query", "payment:refund")
             resource: Resource being accessed
             context: Additional context
-            timeout_seconds: Max time to wait for approval
+            timeout_seconds: Max time to wait for approval (default: 5 minutes)
+            jit_access: If True, requires real-time admin approval for sensitive operations
+            risk_level: Risk level for JIT access ("low", "medium", "high", "critical")
 
-        Example:
-            @client.perform_action("db:read", resource="users_table")
+        Example - Standard verification:
+            @client.perform_action(capability="db:read", resource="users_table")
             def get_users():
                 return database.query("SELECT * FROM users")
 
-            # When called, this will:
-            # 1. Request verification from AIM
-            # 2. Wait for approval
-            # 3. Execute the query if approved
-            # 4. Log the result to AIM
-            users = get_users()
+        Example - JIT Access (waits for admin approval):
+            @client.perform_action(capability="payment:refund", resource="stripe", jit_access=True)
+            def process_refund(order_id: str, amount: float):
+                '''Waits for AIM approval before executing'''
+                return stripe.refund(order_id, amount)
+
+            @client.perform_action(capability="database:purge", resource="users_table",
+                                   jit_access=True, timeout_seconds=300, risk_level="critical")
+            def purge_inactive_users():
+                '''May require admin approval based on agent's trust score'''
+                return db.purge_inactive()
 
         Raises:
             ActionDeniedError: If AIM denies the capability
-            VerificationError: If verification fails
+            VerificationError: If verification fails or times out
         """
+        # Support both action_type (deprecated) and capability
+        cap = capability or action_type
+        if not cap:
+            raise ValueError("capability parameter is required")
+
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 # Warn if using deprecated capability format (snake_case instead of namespace:action)
-                _warn_deprecated_capability_format(action_type)
+                _warn_deprecated_capability_format(cap)
+
+                # Build context with JIT access info
+                merged_context = context.copy() if context else {}
+                if jit_access:
+                    merged_context["jit_access"] = True
+                    merged_context["risk_level"] = risk_level
+                    merged_context["function"] = func.__name__
+                    merged_context["module"] = func.__module__
+                    print(f"🔐 JIT Access requested for '{cap}' - waiting for admin approval...")
+                    print(f"   Check: http://localhost:3000/dashboard/admin/verifications")
 
                 # Request capability verification
                 verification_result = self.verify_capability(
-                    capability=action_type,
+                    capability=cap,
                     resource=resource,
-                    context=context,
+                    context=merged_context,
                     timeout_seconds=timeout_seconds
                 )
 
@@ -1548,7 +1575,7 @@ class AIMClient:
                     self.log_capability_result(
                         verification_id=verification_id,
                         success=True,
-                        result_summary=f"Capability '{action_type}' executed successfully"
+                        result_summary=f"Capability '{cap}' executed successfully"
                     )
 
                     return result

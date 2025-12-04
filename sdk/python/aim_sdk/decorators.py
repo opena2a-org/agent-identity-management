@@ -92,29 +92,29 @@ def aim_verify(
             # Determine resource name
             resource_name = resource or f"{func.__module__}.{func.__name__}"
 
-            # Build context with function metadata
+            # Build context with function metadata and risk level
             context = {
                 "function": func.__name__,
                 "module": func.__module__,
                 "args_count": len(args),
                 "kwargs_keys": list(kwargs.keys()),
                 "timestamp": int(time.time()),
+                "risk_level": risk_level,
             }
 
             # Perform verification
             try:
-                verification = client.verify_action(
-                    action_type=action_type,
+                verification = client.verify_capability(
+                    capability=action_type,
                     resource=resource_name,
                     context=context,
-                    risk_level=risk_level,
                 )
 
                 # Check if verification succeeded
-                if not verification.get("allowed", False):
+                if not verification.get("verified", False):
                     raise PermissionError(
                         f"AIM verification failed for {func.__name__}: "
-                        f"{verification.get('reason', 'Unknown reason')}"
+                        f"{verification.get('reason', verification.get('error', 'Unknown reason'))}"
                     )
 
                 # Execute the original function
