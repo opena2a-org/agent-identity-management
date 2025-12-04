@@ -593,6 +593,40 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 	})
 }
 
+// GetAuditLogByID returns a single audit log entry by ID
+func (h *AdminHandler) GetAuditLogByID(c fiber.Ctx) error {
+	// Parse audit log ID from URL
+	idParam := c.Params("id")
+	if idParam == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Audit log ID is required",
+		})
+	}
+
+	auditLogID, err := uuid.Parse(idParam)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid audit log ID format",
+		})
+	}
+
+	// Get audit log from service
+	auditLog, err := h.auditService.GetByID(c.Context(), auditLogID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch audit log",
+		})
+	}
+
+	if auditLog == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Audit log not found",
+		})
+	}
+
+	return c.JSON(auditLog)
+}
+
 // GetAlerts returns all alerts with optional filtering
 func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	// 🔍 Safe type assertion with error checking

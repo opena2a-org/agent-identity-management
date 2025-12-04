@@ -1512,12 +1512,10 @@ func (s *AgentService) createPolicyAlert(
 	auditID uuid.UUID,
 ) {
 	alertTitle := fmt.Sprintf("%s: %s", alertType, agent.DisplayName)
+	enforcement := map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[isBlocked]
 	alertDescription := fmt.Sprintf(
-		"Agent '%s' triggered security policy '%s'. %s. "+
-			"Enforcement: %s. Audit ID: %s",
-		agent.DisplayName, policyName, description,
-		map[bool]string{true: "BLOCKED", false: "ALLOWED (monitored)"}[isBlocked],
-		auditID.String(),
+		"Agent '%s' triggered security policy '%s'. %s. Enforcement: %s.",
+		agent.DisplayName, policyName, description, enforcement,
 	)
 
 	alert := &domain.Alert{
@@ -1529,6 +1527,15 @@ func (s *AgentService) createPolicyAlert(
 		Description:    alertDescription,
 		ResourceType:   "agent",
 		ResourceID:     agent.ID,
+		AuditID:        &auditID, // Link to triggering audit log
+		AgentName:      agent.DisplayName,
+		Metadata: map[string]interface{}{
+			"policyName":  policyName,
+			"policyType":  alertType,
+			"enforcement": enforcement,
+			"isBlocked":   isBlocked,
+			"trustScore":  agent.TrustScore,
+		},
 		IsAcknowledged: false,
 		CreatedAt:      time.Now(),
 	}

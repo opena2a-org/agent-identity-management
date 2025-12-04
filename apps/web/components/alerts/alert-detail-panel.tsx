@@ -1,0 +1,422 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { X, ExternalLink, Copy, Check, Shield, Clock, User, Globe, FileText, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/date-utils";
+import { toast } from "sonner";
+import Link from "next/link";
+
+interface Alert {
+  id: string;
+  alertType: string;
+  severity: "low" | "medium" | "high" | "critical" | "info" | "warning";
+  title: string;
+  description: string;
+  resourceType: string;
+  resourceId: string;
+  auditId?: string;
+  agentName?: string;
+  metadata?: Record<string, any>;
+  isAcknowledged: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  createdAt: string;
+}
+
+interface AuditLog {
+  id: string;
+  organizationId: string;
+  userId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  ipAddress: string;
+  userAgent: string;
+  metadata: Record<string, any>;
+  timestamp: string;
+}
+
+interface AlertDetailPanelProps {
+  alert: Alert | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onAcknowledge: (alertId: string, alertTitle: string) => void;
+  onResolve: (alertId: string) => void;
+}
+
+const severityColors: Record<string, string> = {
+  low: "bg-gray-100 text-gray-800 border-gray-300",
+  info: "bg-blue-100 text-blue-800 border-blue-300",
+  medium: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  warning: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  high: "bg-orange-100 text-orange-800 border-orange-300",
+  critical: "bg-red-100 text-red-800 border-red-300",
+};
+
+interface VerificationEvent {
+  id: string;
+  status: string;
+  result?: string;
+  verificationType: string;
+  action?: string;
+  resource?: string;
+  trustScore: number;
+  errorReason?: string;
+  durationMs: number;
+  initiatorIp?: string;
+  createdAt: string;
+  allowed?: boolean;
+  reason?: string;
+}
+
+export function AlertDetailPanel({
+  alert,
+  isOpen,
+  onClose,
+  onAcknowledge,
+  onResolve,
+}: AlertDetailPanelProps) {
+  const [auditLog, setAuditLog] = useState<AuditLog | null>(null);
+  const [verificationHistory, setVerificationHistory] = useState<VerificationEvent[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showFullMetadata, setShowFullMetadata] = useState(false);
+
+  // Fetch audit log and verification history when alert changes
+  useEffect(() => {
+    if (!alert) {
+      setAuditLog(null);
+      setVerificationHistory([]);
+      return;
+    }
+
+    setLoadingData(true);
+
+    const fetchData = async () => {
+      // Try to fetch the linked audit log
+      if (alert.auditId) {
+        const log = await api.getAuditLogById(alert.auditId);
+        if (log) {
+          setAuditLog(log);
+        } else {
+          setAuditLog(null);
+        }
+      } else {
+        setAuditLog(null);
+      }
+
+      // Always fetch verification history for the agent
+      const history = await api.getAgentVerificationHistory(alert.resourceId, 5);
+      setVerificationHistory(history);
+      setLoadingData(false);
+    };
+
+    fetchData();
+  }, [alert?.auditId, alert?.resourceId]);
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  const copyToClipboard = useCallback((text: string, field: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopiedField(null), 2000);
+    });
+  }, []);
+
+  if (!isOpen || !alert) return null;
+
+  const metadata = alert.metadata || {};
+  const metadataEntries = Object.entries(metadata);
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Badge
+                variant="outline"
+                className={severityColors[alert.severity] || severityColors.medium}
+              >
+                {alert.severity.toUpperCase()}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {alert.alertType.replace(/_/g, " ")}
+              </Badge>
+            </div>
+            <h2 className="text-lg font-semibold truncate">{alert.title}</h2>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="ml-2">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Agent Info */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Agent Information
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Agent Name</span>
+                <span className="font-medium">{alert.agentName || "Unknown"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Agent ID</span>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-gray-200 px-2 py-1 rounded font-mono">
+                    {alert.resourceId}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => copyToClipboard(alert.resourceId, "agentId")}
+                  >
+                    {copiedField === "agentId" ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              {metadata.trustScore !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Trust Score</span>
+                  <span className="font-medium">
+                    {(metadata.trustScore * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Alert Details */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Alert Details
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div>
+                <span className="text-sm text-gray-600">Description</span>
+                <p className="mt-1 text-sm">{alert.description}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Created</span>
+                <span className="text-sm">{formatDateTime(alert.createdAt)}</span>
+              </div>
+              {alert.isAcknowledged && alert.acknowledgedAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Acknowledged</span>
+                  <span className="text-sm text-green-600">
+                    {formatDateTime(alert.acknowledgedAt)}
+                  </span>
+                </div>
+              )}
+              {metadata.policyName && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Policy</span>
+                  <Badge variant="outline">{metadata.policyName}</Badge>
+                </div>
+              )}
+              {metadata.enforcement && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Enforcement</span>
+                  <Badge
+                    variant={metadata.isBlocked ? "destructive" : "secondary"}
+                  >
+                    {metadata.enforcement}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Verification History */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Verification History
+            </h3>
+
+            {loadingData ? (
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ) : verificationHistory.length > 0 ? (
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">Recent Verifications</span>
+                  <Badge variant="outline" className="text-xs">
+                    {verificationHistory.length} events
+                  </Badge>
+                </div>
+                <div className="space-y-3">
+                  {verificationHistory.map((event) => {
+                    const isDenied = event.allowed === false || event.result === "denied" || event.status === "failed";
+                    const isSuccess = event.allowed === true || event.result === "verified" || event.status === "success";
+
+                    return (
+                      <div
+                        key={event.id}
+                        className={`p-3 rounded-lg border ${
+                          isDenied
+                            ? "bg-red-50 border-red-200"
+                            : isSuccess
+                            ? "bg-green-50 border-green-200"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={isDenied ? "destructive" : isSuccess ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {isDenied ? "DENIED" : isSuccess ? "ALLOWED" : event.status.toUpperCase()}
+                            </Badge>
+                            <span className="text-xs font-medium text-gray-600">
+                              {event.verificationType}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {formatDateTime(event.createdAt)}
+                          </span>
+                        </div>
+
+                        {(event.action || event.resource) && (
+                          <div className="mt-2 space-y-1">
+                            {event.action && (
+                              <p className="text-sm text-gray-700">
+                                <span className="text-gray-500">Capability:</span>{" "}
+                                <code className="text-xs bg-white px-1.5 py-0.5 rounded border">
+                                  {event.action}
+                                </code>
+                              </p>
+                            )}
+                            {event.resource && (
+                              <p className="text-sm text-gray-700">
+                                <span className="text-gray-500">Resource:</span>{" "}
+                                <code className="text-xs bg-white px-1.5 py-0.5 rounded border">
+                                  {event.resource}
+                                </code>
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {isDenied && event.reason && (
+                          <p className="text-sm text-red-600 mt-2">
+                            <span className="font-medium">Denied:</span> {event.reason}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <span>Trust: {(event.trustScore * 100).toFixed(0)}%</span>
+                          {event.durationMs > 0 && <span>{event.durationMs}ms</span>}
+                          {event.initiatorIp && <span>IP: {event.initiatorIp}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-500">
+                  No verification events recorded for this agent.
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Alert Metadata - Only show if there's context beyond what's already displayed */}
+          {(() => {
+            const contextEntries = metadataEntries.filter(
+              ([key]) => !["trustScore", "policyName", "enforcement", "isBlocked", "policyType"].includes(key)
+            );
+            if (contextEntries.length === 0) return null;
+            return (
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Context
+                </h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  {contextEntries.map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 capitalize">
+                        {key.replace(/([A-Z])/g, " $1").trim()}
+                      </span>
+                      <span className="text-sm font-medium">
+                        {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })()}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-3">
+          {!alert.isAcknowledged ? (
+            <Button
+              className="flex-1"
+              onClick={() => onAcknowledge(alert.id, alert.title)}
+            >
+              Acknowledge
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+              onClick={() => onResolve(alert.id)}
+            >
+              Resolve
+            </Button>
+          )}
+          <Link href={`/dashboard/agents/${alert.resourceId}`} className="flex-1">
+            <Button variant="outline" className="w-full">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View Agent
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </>
+  );
+}

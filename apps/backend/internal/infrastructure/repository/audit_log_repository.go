@@ -50,6 +50,45 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 	return err
 }
 
+func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
+	query := `
+		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		FROM audit_logs
+		WHERE id = $1
+	`
+
+	log := &domain.AuditLog{}
+	var metadataJSON []byte
+
+	err := r.db.QueryRow(query, id).Scan(
+		&log.ID,
+		&log.OrganizationID,
+		&log.UserID,
+		&log.Action,
+		&log.ResourceType,
+		&log.ResourceID,
+		&log.IPAddress,
+		&log.UserAgent,
+		&metadataJSON,
+		&log.Timestamp,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Return nil, nil for not found
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {
+			return nil, err
+		}
+	}
+
+	return log, nil
+}
+
 func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
 		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp

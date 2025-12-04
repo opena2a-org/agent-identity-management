@@ -69,6 +69,7 @@ type AuditLog struct {
 // AuditLogRepository defines the interface for audit log persistence
 type AuditLogRepository interface {
 	Create(log *AuditLog) error
+	GetByID(id uuid.UUID) (*AuditLog, error)
 	GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*AuditLog, error)
 	GetByUser(userID uuid.UUID, limit, offset int) ([]*AuditLog, error)
 	GetByResource(resourceType string, resourceID uuid.UUID) ([]*AuditLog, error)

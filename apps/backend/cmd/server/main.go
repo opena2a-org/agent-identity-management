@@ -935,6 +935,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)
+	admin.Get("/audit-logs/:id", h.Admin.GetAuditLogByID)
 
 	// Alerts
 	admin.Get("/alerts", h.Admin.GetAlerts)
