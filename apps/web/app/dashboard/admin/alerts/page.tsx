@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -27,7 +27,6 @@ import {
   Key,
   TrendingDown,
   GitBranch,
-  Check,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
@@ -35,15 +34,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AuthGuard } from "@/components/auth-guard";
 import { eventEmitter, Events } from "@/lib/events";
 import { toast } from "sonner";
+import { AlertDetailPanel } from "@/components/alerts/alert-detail-panel";
 
 interface Alert {
   id: string;
   alertType: string;
-  severity: "low" | "medium" | "high" | "critical" | "info" | "warning"; // ✅ All severity levels
+  severity: "low" | "medium" | "high" | "critical" | "info" | "warning";
   title: string;
   description: string;
   resourceType: string;
   resourceId: string;
+  auditId?: string;
+  agentName?: string;
+  metadata?: Record<string, any>;
   isAcknowledged: boolean;
   acknowledgedBy?: string;
   acknowledgedAt?: string;
@@ -88,13 +91,18 @@ const alertTypeIcons: Record<string, any> = {
   configuration_drift: GitBranch,
 };
 
-export default function AlertsPage() {
+function AlertsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [authChecked, setAuthChecked] = useState(false);
   const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">(
     "viewer"
   );
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Panel state
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   // Admin-only guard per request
   useEffect(() => {
@@ -133,6 +141,36 @@ export default function AlertsPage() {
   const [pageSize, setPageSize] = useState<number | "all">(10);
   const [searchField, setSearchField] = useState<string>("title");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Open panel from URL query param (deep linking)
+  useEffect(() => {
+    const selectedId = searchParams.get("selected");
+    if (selectedId && alerts.length > 0) {
+      const alert = alerts.find((a) => a.id === selectedId);
+      if (alert) {
+        setSelectedAlert(alert);
+        setIsPanelOpen(true);
+      }
+    }
+  }, [searchParams, alerts]);
+
+  const openAlertPanel = (alert: Alert) => {
+    setSelectedAlert(alert);
+    setIsPanelOpen(true);
+    // Update URL for deep linking (shareable)
+    const url = new URL(window.location.href);
+    url.searchParams.set("selected", alert.id);
+    window.history.pushState({}, "", url.toString());
+  };
+
+  const closePanel = () => {
+    setIsPanelOpen(false);
+    setSelectedAlert(null);
+    // Remove from URL
+    const url = new URL(window.location.href);
+    url.searchParams.delete("selected");
+    window.history.pushState({}, "", url.toString());
+  };
 
   useEffect(() => {
     // Reset to page 1 when filters change
@@ -611,11 +649,12 @@ export default function AlertsPage() {
               return (
                 <div
                   key={alert.id}
-                  className={`p-4 border-2 rounded-lg ${
+                  onClick={() => openAlertPanel(alert)}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] ${
                     alert.isAcknowledged
                       ? "opacity-60 bg-muted/30"
                       : config.color
-                  }`}
+                  } ${selectedAlert?.id === alert.id ? "ring-2 ring-blue-500" : ""}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
@@ -656,7 +695,7 @@ export default function AlertsPage() {
                         )}
                       </div>
 
-                      <div className="flex flex-wrap gap-2 justify-end sm:justify-start">
+                      <div className="flex flex-wrap gap-2 justify-end sm:justify-start" onClick={(e) => e.stopPropagation()}>
                         {!alert.isAcknowledged && (
                           <Button
                             size="sm"
@@ -699,7 +738,40 @@ export default function AlertsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Investigation Panel */}
+      <AlertDetailPanel
+        alert={selectedAlert}
+        isOpen={isPanelOpen}
+        onClose={closePanel}
+        onAcknowledge={acknowledgeAlert}
+        onResolve={resolveAlert}
+      />
     </div>
     </AuthGuard>
+  );
+}
+
+export default function AlertsPage() {
+  return (
+    <Suspense fallback={
+      <div className="space-y-6">
+        <Skeleton className="h-9 w-32" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    }>
+      <AlertsPageContent />
+    </Suspense>
   );
 }

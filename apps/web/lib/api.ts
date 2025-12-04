@@ -846,6 +846,67 @@ class APIClient {
     return response.logs || [];
   }
 
+  async getAuditLogById(id: string): Promise<{
+    id: string;
+    organizationId: string;
+    userId: string;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    ipAddress: string;
+    userAgent: string;
+    metadata: Record<string, any>;
+    timestamp: string;
+  } | null> {
+    try {
+      return await this.request(`/api/v1/admin/audit-logs/${id}`);
+    } catch (error) {
+      console.error("Failed to fetch audit log:", error);
+      return null;
+    }
+  }
+
+  async getAgentVerificationHistory(agentId: string, limit = 5): Promise<{
+    id: string;
+    status: string;
+    result?: string;
+    verificationType: string;
+    action?: string;
+    resource?: string;
+    trustScore: number;
+    errorReason?: string;
+    durationMs: number;
+    initiatorIp?: string;
+    createdAt: string;
+    allowed?: boolean;
+    reason?: string;
+  }[]> {
+    try {
+      const response = await this.request<{ events: any[] }>(
+        `/api/v1/verification-events?agent_id=${agentId}&limit=${limit}`
+      );
+      // Transform events to extract metadata fields
+      return (response.events || []).map((event: any) => ({
+        id: event.id,
+        status: event.status,
+        result: event.result,
+        verificationType: event.verificationType,
+        action: event.metadata?.capability || event.action,
+        resource: event.metadata?.resource || event.resourceType,
+        trustScore: event.trustScore,
+        errorReason: event.errorReason || event.metadata?.reason,
+        durationMs: event.durationMs,
+        initiatorIp: event.initiatorIp,
+        createdAt: event.createdAt,
+        allowed: event.metadata?.allowed,
+        reason: event.metadata?.reason,
+      }));
+    } catch (error) {
+      console.error("Failed to fetch agent verification history:", error);
+      return [];
+    }
+  }
+
   // Alerts
   async getAlerts(limit = 100, offset = 0, status?: string): Promise<{
     alerts: any[];

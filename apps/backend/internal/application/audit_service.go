@@ -69,6 +69,11 @@ func (s *AuditService) SearchLogs(ctx context.Context, query string, limit, offs
 	return s.auditRepo.Search(query, limit, offset)
 }
 
+// GetByID retrieves a single audit log by ID
+func (s *AuditService) GetByID(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error) {
+	return s.auditRepo.GetByID(id)
+}
+
 // GetAuditLogs retrieves audit logs with filtering
 func (s *AuditService) GetAuditLogs(
 	ctx context.Context,

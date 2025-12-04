@@ -163,8 +163,6 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	} else {
 		status = "denied"
 	}
-	_ = auditIDFromVerify // Audit ID already created by VerifyAction
-
 	// Create verification ID
 	verificationID := uuid.New()
 
@@ -197,9 +195,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		}
 	}
 
-	// Create audit log entry
+	// Create audit log entry - Use the audit ID from VerifyCapability so alerts can link to it
 	auditEntry := &domain.AuditLog{
-		ID:             uuid.New(),
+		ID:             auditIDFromVerify, // Use same ID so alerts link correctly
 		OrganizationID: agent.OrganizationID,
 		UserID:         agent.CreatedBy, // Creator of the agent
 		Action:         domain.AuditAction(req.Capability),
@@ -243,9 +241,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			alertDescription = fmt.Sprintf(
 				"Agent '%s' performed high-risk action '%s' on resource '%s'. "+
 					"This action was approved (trust score: %.2f) and logged for monitoring. "+
-					"Verification ID: %s. Consider granting explicit capability for production use.",
-				agent.Name, req.Capability, req.Resource,
-				trustScore, verificationID.String(),
+					"Consider granting explicit capability for production use.",
+				agent.Name, req.Capability, req.Resource, trustScore,
 			)
 		} else {
 			// Real security concern - create breach alert
@@ -253,11 +250,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			severity = h.determineAlertSeverity(req.Capability, req.Context, req.RiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 			alertDescription = fmt.Sprintf(
-				"Agent '%s' (ID: %s) attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-					"This action was logged but allowed for monitoring purposes. "+
-					"Trust Score: %.2f. Verification ID: %s",
-				agent.Name, agent.ID.String(), req.Capability, req.Resource,
-				trustScore, verificationID.String(),
+				"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
+					"This action was logged but allowed for monitoring purposes.",
+				agent.Name, req.Capability, req.Resource,
 			)
 		}
 
@@ -270,6 +265,17 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			Description:    alertDescription,
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AuditID:        &auditEntry.ID, // Link to the audit log entry
+			AgentName:      agent.Name,
+			Metadata: map[string]interface{}{
+				"capability":     req.Capability,
+				"resource":       req.Resource,
+				"trustScore":     trustScore,
+				"verificationId": verificationID.String(),
+				"riskLevel":      req.RiskLevel,
+				"status":         status,
+				"ipAddress":      c.IP(),
+			},
 			IsAcknowledged: false,
 			CreatedAt:      time.Now(),
 		}

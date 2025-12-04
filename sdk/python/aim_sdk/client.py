@@ -1862,6 +1862,47 @@ def _get_credentials_path():
     return aim_dir / "credentials.json"
 
 
+def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: str, capabilities: List[str]):
+    """
+    Update an existing agent's capabilities.
+
+    Args:
+        aim_url: AIM server URL
+        headers: Request headers with auth token
+        agent_id: Agent ID
+        capabilities: List of capability strings to add
+    """
+    try:
+        # Get existing capabilities first
+        get_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/capabilities"
+        get_response = requests.get(get_url, headers=headers, timeout=30)
+
+        existing_caps = set()
+        if get_response.status_code == 200:
+            caps_data = get_response.json()
+            existing_caps = {cap.get("action") for cap in caps_data.get("capabilities", [])}
+
+        # Add new capabilities that don't exist yet
+        new_caps = [cap for cap in capabilities if cap not in existing_caps]
+
+        if new_caps:
+            print(f"   📝 Adding {len(new_caps)} new capabilities...")
+            for cap in new_caps:
+                add_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/capabilities"
+                cap_data = {
+                    "action": cap,
+                    "resourceType": "api",
+                    "isAllowed": True
+                }
+                requests.post(add_url, json=cap_data, headers=headers, timeout=30)
+            print(f"   ✅ Capabilities updated")
+        else:
+            print(f"   ℹ️  All capabilities already registered")
+
+    except Exception as e:
+        print(f"   ⚠️  Failed to update capabilities: {e}")
+
+
 def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
     """
     Save agent credentials locally.
@@ -2171,9 +2212,7 @@ def _register_via_oauth(
     if not access_token:
         raise ConfigurationError("Failed to obtain OAuth access token")
 
-    # Call authenticated endpoint
-    url = f"{aim_url.rstrip('/')}/api/v1/agents"
-
+    # Set up headers for API calls
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
@@ -2182,6 +2221,47 @@ def _register_via_oauth(
     if sdk_token_id:
         headers["X-SDK-Token"] = sdk_token_id
 
+    # FIRST: Check if agent already exists (get or create pattern)
+    check_url = f"{aim_url.rstrip('/')}/api/v1/agents/{name}"
+    check_response = requests.get(check_url, headers=headers, timeout=30)
+
+    if check_response.status_code == 200:
+        # Agent exists - connect to it
+        print(f"   ℹ️  Agent '{name}' already exists, connecting...")
+        response_data = check_response.json()
+        existing_agent = response_data.get("agent", response_data)
+
+        # Load saved credentials
+        saved_creds = _load_credentials(name)
+        if saved_creds and saved_creds.get("private_key"):
+            # Use saved credentials
+            credentials = saved_creds
+            credentials["agent_id"] = existing_agent.get("id")
+            credentials["aim_url"] = aim_url
+
+            # Update capabilities if new ones provided
+            if registration_data.get("capabilities"):
+                _update_agent_capabilities(aim_url, headers, existing_agent["id"], registration_data["capabilities"])
+
+            client = AIMClient(
+                agent_id=credentials["agent_id"],
+                public_key=credentials["public_key"],
+                private_key=credentials["private_key"],
+                aim_url=credentials["aim_url"],
+                oauth_token_manager=token_manager
+            )
+            print(f"   ✅ Connected to existing agent: {name}")
+            return client
+        else:
+            # No saved credentials - provide helpful error
+            raise ConfigurationError(
+                f"Agent '{name}' exists but no local credentials found. "
+                "Either use a different agent name, delete the existing agent from the dashboard, "
+                "or ensure you're using the same machine where the agent was originally created."
+            )
+
+    # Agent doesn't exist - create it
+    url = f"{aim_url.rstrip('/')}/api/v1/agents"
     response = requests.post(
         url,
         json=registration_data,

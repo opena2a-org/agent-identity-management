@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -19,8 +20,8 @@ func NewAlertRepository(db *sql.DB) *AlertRepository {
 
 func (r *AlertRepository) Create(alert *domain.Alert) error {
 	query := `
-		INSERT INTO alerts (id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO alerts (id, organization_id, alert_type, severity, title, description, resource_type, resource_id, audit_id, agent_name, metadata, is_acknowledged, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	if alert.ID == uuid.Nil {
@@ -30,7 +31,19 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		alert.CreatedAt = time.Now()
 	}
 
-	_, err := r.db.Exec(query,
+	// Convert metadata to JSON
+	var metadataJSON []byte
+	var err error
+	if alert.Metadata != nil {
+		metadataJSON, err = json.Marshal(alert.Metadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal metadata: %w", err)
+		}
+	} else {
+		metadataJSON = []byte("{}")
+	}
+
+	_, err = r.db.Exec(query,
 		alert.ID,
 		alert.OrganizationID,
 		alert.AlertType,
@@ -39,6 +52,9 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		alert.Description,
 		alert.ResourceType,
 		alert.ResourceID,
+		alert.AuditID,
+		alert.AgentName,
+		metadataJSON,
 		alert.IsAcknowledged,
 		alert.CreatedAt,
 	)
@@ -47,12 +63,15 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 
 func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
 		FROM alerts
 		WHERE id = $1
 	`
 
 	alert := &domain.Alert{}
+	var metadataJSON []byte
+	var agentName sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
 		&alert.ID,
 		&alert.OrganizationID,
@@ -62,6 +81,9 @@ func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 		&alert.Description,
 		&alert.ResourceType,
 		&alert.ResourceID,
+		&alert.AuditID,
+		&agentName,
+		&metadataJSON,
 		&alert.IsAcknowledged,
 		&alert.AcknowledgedBy,
 		&alert.AcknowledgedAt,
@@ -71,12 +93,29 @@ func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("alert not found")
 	}
-	return alert, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle nullable agent name
+	if agentName.Valid {
+		alert.AgentName = agentName.String
+	}
+
+	// Parse metadata JSON
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &alert.Metadata); err != nil {
+			alert.Metadata = make(map[string]interface{})
+		}
+	}
+
+	return alert, nil
 }
 
 func (r *AlertRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
 	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
 		FROM alerts
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -97,19 +136,19 @@ func (r *AlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status stri
 	var query string
 	var args []interface{}
 
+	baseSelect := `SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		FROM alerts`
+
 	if status == "acknowledged" {
-		query = `
-			SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
-			FROM alerts
+		query = baseSelect + `
 			WHERE organization_id = $1 AND is_acknowledged = true
 			ORDER BY created_at DESC
 			LIMIT $2 OFFSET $3
 		`
 		args = []interface{}{orgID, limit, offset}
 	} else if status == "unacknowledged" {
-		query = `
-			SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
-			FROM alerts
+		query = baseSelect + `
 			WHERE organization_id = $1 AND is_acknowledged = false
 			ORDER BY created_at DESC
 			LIMIT $2 OFFSET $3
@@ -117,9 +156,7 @@ func (r *AlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status stri
 		args = []interface{}{orgID, limit, offset}
 	} else {
 		// Return all alerts (no status filter)
-		query = `
-			SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
-			FROM alerts
+		query = baseSelect + `
 			WHERE organization_id = $1
 			ORDER BY created_at DESC
 			LIMIT $2 OFFSET $3
@@ -138,7 +175,8 @@ func (r *AlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status stri
 
 func (r *AlertRepository) GetUnacknowledged(orgID uuid.UUID) ([]*domain.Alert, error) {
 	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
 		FROM alerts
 		WHERE organization_id = $1 AND is_acknowledged = false
 		ORDER BY created_at DESC
@@ -223,7 +261,8 @@ func (r *AlertRepository) CountByOrganizationFiltered(orgID uuid.UUID, status st
 
 func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
 	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
 		FROM alerts
 		WHERE resource_id = $1
 		ORDER BY created_at DESC
@@ -241,7 +280,8 @@ func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset in
 
 func (r *AlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*domain.Alert, error) {
 	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id, is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
 		FROM alerts
 		WHERE resource_id = $1 AND is_acknowledged = false
 		ORDER BY created_at DESC
@@ -261,6 +301,8 @@ func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 
 	for rows.Next() {
 		alert := &domain.Alert{}
+		var metadataJSON []byte
+		var agentName sql.NullString
 		err := rows.Scan(
 			&alert.ID,
 			&alert.OrganizationID,
@@ -270,6 +312,9 @@ func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 			&alert.Description,
 			&alert.ResourceType,
 			&alert.ResourceID,
+			&alert.AuditID,
+			&agentName,
+			&metadataJSON,
 			&alert.IsAcknowledged,
 			&alert.AcknowledgedBy,
 			&alert.AcknowledgedAt,
@@ -278,6 +323,19 @@ func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Handle nullable agent name
+		if agentName.Valid {
+			alert.AgentName = agentName.String
+		}
+
+		// Parse metadata JSON
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &alert.Metadata); err != nil {
+				alert.Metadata = make(map[string]interface{})
+			}
+		}
+
 		alerts = append(alerts, alert)
 	}
 

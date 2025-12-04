@@ -37,18 +37,21 @@ const (
 
 // Alert represents a security or operational alert
 type Alert struct {
-	ID             uuid.UUID     `json:"id"`
-	OrganizationID uuid.UUID     `json:"organizationId"`
-	AlertType      AlertType     `json:"alertType"`
-	Severity       AlertSeverity `json:"severity"`
-	Title          string        `json:"title"`
-	Description    string        `json:"description"`
-	ResourceType   string        `json:"resourceType"`
-	ResourceID     uuid.UUID     `json:"resourceId"`
-	IsAcknowledged bool          `json:"isAcknowledged"`
-	AcknowledgedBy *uuid.UUID    `json:"acknowledgedBy"`
-	AcknowledgedAt *time.Time    `json:"acknowledgedAt"`
-	CreatedAt      time.Time     `json:"createdAt"`
+	ID             uuid.UUID              `json:"id"`
+	OrganizationID uuid.UUID              `json:"organizationId"`
+	AlertType      AlertType              `json:"alertType"`
+	Severity       AlertSeverity          `json:"severity"`
+	Title          string                 `json:"title"`
+	Description    string                 `json:"description"`
+	ResourceType   string                 `json:"resourceType"`
+	ResourceID     uuid.UUID              `json:"resourceId"`
+	AuditID        *uuid.UUID             `json:"auditId,omitempty"`   // Links to triggering audit log
+	AgentName      string                 `json:"agentName,omitempty"` // Denormalized for display
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`  // Additional context
+	IsAcknowledged bool                   `json:"isAcknowledged"`
+	AcknowledgedBy *uuid.UUID             `json:"acknowledgedBy"`
+	AcknowledgedAt *time.Time             `json:"acknowledgedAt"`
+	CreatedAt      time.Time              `json:"createdAt"`
 }
 
 // AlertRepository defines the interface for alert persistence
