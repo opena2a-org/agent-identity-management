@@ -311,3 +311,39 @@ func (h *CapabilityRequestHandlers) RejectCapabilityRequest(c fiber.Ctx) error {
 		"message": "capability request rejected",
 	})
 }
+
+// ListAgentCapabilityRequests godoc
+// @Summary List capability requests for a specific agent
+// @Description SDK endpoint to list all capability requests for an agent
+// @Tags sdk-api
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {array} domain.CapabilityRequestWithDetails
+// @Router /api/v1/sdk-api/agents/{id}/capability-requests [get]
+func (h *CapabilityRequestHandlers) ListAgentCapabilityRequests(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid agent ID",
+		})
+	}
+
+	filter := domain.CapabilityRequestFilter{
+		AgentID: &agentID,
+		Limit:   100,
+		Offset:  0,
+	}
+
+	requests, err := h.service.ListRequests(c.Context(), filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to list capability requests",
+		})
+	}
+
+	if requests == nil {
+		requests = []*domain.CapabilityRequestWithDetails{}
+	}
+
+	return c.JSON(requests)
+}
