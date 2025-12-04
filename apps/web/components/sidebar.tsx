@@ -146,10 +146,10 @@ const navigationBase: NavSection[] = [
         roles: ["admin", "manager"], // Managers can view alerts
       },
       {
-        name: "Verification Approvals",
+        name: "JIT Requests",
         href: "/dashboard/admin/verifications",
         icon: CheckCircle,
-        roles: ["admin"], // Admin-only manual approvals
+        roles: ["admin"], // Admin-only JIT access approvals
       },
       {
         name: "Capability Requests",
