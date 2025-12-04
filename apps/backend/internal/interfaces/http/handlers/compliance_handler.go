@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -166,7 +167,7 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
-		CheckType string `json:"check_type"` // "soc2", "iso27001", "hipaa", "gdpr", "all"
+		CheckType string `json:"checkType"` // "soc2", "iso27001", "hipaa", "gdpr", "all"
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
@@ -216,6 +217,7 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 // @Tags compliance
 // @Produce text/csv,application/json
 // @Param format query string false "Export format (csv or json)" default(csv)
+// @Param framework query string false "Compliance framework (soc2 or hipaa)" default(soc2)
 // @Param start_date query string false "Start date for report (RFC3339)"
 // @Param end_date query string false "End date for report (RFC3339)"
 // @Success 200 {file} file
@@ -232,8 +234,17 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		})
 	}
 
+	framework := c.Query("framework", "aim")
+	if framework != "aim" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid framework. Only 'aim' is supported",
+		})
+	}
+
 	// Parse date range (optional)
-	var startDate, endDate time.Time
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -30) // Default to last 30 days
+
 	if startDateStr := c.Query("start_date"); startDateStr != "" {
 		parsed, err := time.Parse(time.RFC3339, startDateStr)
 		if err == nil {
@@ -247,19 +258,106 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		}
 	}
 
-	// Get compliance data
-	status, err := h.complianceService.GetComplianceStatus(c.Context(), orgID)
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionExport,
+		"compliance_report",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"format":    format,
+			"framework": framework,
+			"startDate": startDate,
+			"endDate":   endDate,
+		},
+	)
+
+	if format == "json" {
+		// Full JSON export with all compliance data
+		report, err := h.complianceService.ExportComplianceReportFull(
+			c.Context(),
+			orgID,
+			framework,
+			startDate,
+			endDate,
+			userID,
+		)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to generate compliance report",
+			})
+		}
+
+		c.Set("Content-Type", "application/json")
+		c.Set("Content-Disposition", "attachment; filename=compliance-report.json")
+		return c.JSON(report)
+	}
+
+	// CSV format
+	csvData, err := h.complianceService.ExportToCSV(c.Context(), orgID, framework)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch compliance status",
+			"error": "Failed to generate CSV report",
 		})
 	}
 
-	// Get metrics
-	metricsData, err := h.complianceService.GetComplianceMetrics(c.Context(), orgID, startDate, endDate, "day")
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", "attachment; filename=compliance-report.csv")
+	return c.SendString(csvData)
+}
+
+// GetComplianceTrending returns compliance score history
+// @Summary Get compliance score trending
+// @Description Get historical compliance scores over time for a framework
+// @Tags compliance
+// @Produce json
+// @Param framework query string false "Compliance framework (soc2 or hipaa)" default(soc2)
+// @Param start_date query string false "Start date (RFC3339)"
+// @Param end_date query string false "End date (RFC3339)"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/compliance/trending [get]
+func (h *ComplianceHandler) GetComplianceTrending(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	framework := c.Query("framework", "aim")
+	if framework != "aim" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid framework. Only 'aim' is supported",
+		})
+	}
+
+	// Parse date range
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -30) // Default to last 30 days
+
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		parsed, err := time.Parse(time.RFC3339, startDateStr)
+		if err == nil {
+			startDate = parsed
+		}
+	}
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		parsed, err := time.Parse(time.RFC3339, endDateStr)
+		if err == nil {
+			endDate = parsed
+		}
+	}
+
+	trending, err := h.complianceService.GetComplianceTrending(
+		c.Context(),
+		orgID,
+		framework,
+		startDate,
+		endDate,
+	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch compliance metrics",
+			"error": "Failed to fetch compliance trending",
 		})
 	}
 
@@ -269,32 +367,253 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		orgID,
 		userID,
 		domain.AuditActionView,
-		"compliance_export",
+		"compliance_trending",
 		orgID,
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"format":     format,
+			"framework": framework,
 			"startDate": startDate,
 			"endDate":   endDate,
 		},
 	)
 
-	if format == "json" {
-		c.Set("Content-Type", "application/json")
-		c.Set("Content-Disposition", "attachment; filename=compliance-report.json")
-		return c.JSON(fiber.Map{
-			"generatedAt":    time.Now().Format(time.RFC3339),
-			"organizationId": orgID,
-			"status":          status,
-			"metrics":         metricsData,
+	return c.JSON(trending)
+}
+
+// RecordComplianceSnapshot records a point-in-time compliance score
+// @Summary Record compliance snapshot
+// @Description Record a snapshot of current compliance scores for trending
+// @Tags compliance
+// @Accept json
+// @Produce json
+// @Param body body object true "Snapshot request"
+// @Success 200 {object} domain.ComplianceSnapshot
+// @Router /api/v1/compliance/snapshot [post]
+func (h *ComplianceHandler) RecordComplianceSnapshot(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req struct {
+		Framework string `json:"framework"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
 		})
 	}
 
-	// CSV format - simplified since status type is interface{}
-	c.Set("Content-Type", "text/csv")
-	c.Set("Content-Disposition", "attachment; filename=compliance-report.csv")
+	if req.Framework == "" {
+		req.Framework = "aim"
+	}
 
-	// Simple CSV export - just return status and metrics as JSON representation
-	return c.SendString("Compliance Report Export\nPlease use JSON format for full report details.")
+	if req.Framework != "aim" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid framework. Only 'aim' is supported",
+		})
+	}
+
+	snapshot, err := h.complianceService.RecordComplianceSnapshot(
+		c.Context(),
+		orgID,
+		domain.ComplianceFramework(req.Framework),
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to record compliance snapshot",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"compliance_snapshot",
+		snapshot.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"framework": req.Framework,
+			"score":     snapshot.Score,
+		},
+	)
+
+	return c.JSON(snapshot)
+}
+
+// ListEvidence returns compliance evidence for the organization
+// @Summary List compliance evidence
+// @Description Get a list of collected compliance evidence
+// @Tags compliance
+// @Produce json
+// @Param framework query string false "Filter by framework (soc2 or hipaa)"
+// @Param limit query int false "Limit results" default(50)
+// @Param offset query int false "Offset results" default(0)
+// @Success 200 {array} domain.ComplianceEvidence
+// @Router /api/v1/compliance/evidence [get]
+func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	framework := c.Query("framework", "")
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	evidence, err := h.complianceService.ListEvidence(
+		c.Context(),
+		orgID,
+		framework,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch compliance evidence",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"compliance_evidence",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"framework": framework,
+			"limit":     limit,
+			"offset":    offset,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"evidence": evidence,
+		"count":    len(evidence),
+	})
+}
+
+// CollectEvidence collects evidence for a specific compliance check
+// @Summary Collect compliance evidence
+// @Description Automatically collect evidence for a compliance check
+// @Tags compliance
+// @Accept json
+// @Produce json
+// @Param body body object true "Evidence collection request"
+// @Success 200 {object} domain.ComplianceEvidence
+// @Router /api/v1/compliance/evidence/collect [post]
+func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req struct {
+		Framework string `json:"framework"`
+		CheckName string `json:"checkName"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Framework == "" || req.CheckName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Framework and checkName are required",
+		})
+	}
+
+	if req.Framework != "aim" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid framework. Only 'aim' is supported",
+		})
+	}
+
+	evidence, err := h.complianceService.CollectEvidence(
+		c.Context(),
+		orgID,
+		domain.ComplianceFramework(req.Framework),
+		req.CheckName,
+		userID,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to collect evidence: " + err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"compliance_evidence",
+		evidence.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"framework": req.Framework,
+			"checkName": req.CheckName,
+		},
+	)
+
+	return c.JSON(evidence)
+}
+
+// GetEvidenceForCheck returns evidence for a specific compliance check
+// @Summary Get evidence for check
+// @Description Get collected evidence for a specific compliance check
+// @Tags compliance
+// @Produce json
+// @Param checkName path string true "Check name"
+// @Success 200 {array} domain.ComplianceEvidence
+// @Router /api/v1/compliance/evidence/check/{checkName} [get]
+func (h *ComplianceHandler) GetEvidenceForCheck(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	checkName := c.Params("checkName")
+	if checkName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Check name is required",
+		})
+	}
+
+	evidence, err := h.complianceService.GetEvidenceForCheck(
+		c.Context(),
+		orgID,
+		checkName,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch evidence",
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"compliance_evidence",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"checkName": checkName,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"checkName": checkName,
+		"evidence":  evidence,
+		"count":     len(evidence),
+	})
 }
