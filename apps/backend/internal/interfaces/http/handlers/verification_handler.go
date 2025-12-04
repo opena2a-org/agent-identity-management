@@ -150,6 +150,12 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		req.Context,
 	)
 
+	// Check if this is a JIT (Just-In-Time) access request that needs admin approval
+	isJITRequest := false
+	if jitAccess, ok := req.Context["jit_access"].(bool); ok && jitAccess {
+		isJITRequest = true
+	}
+
 	var status string
 	if err != nil {
 		// Error during verification - deny by default for security
@@ -160,6 +166,10 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		}
 	} else if allowed {
 		status = "approved"
+	} else if isJITRequest {
+		// JIT access request without capability - create pending record for admin approval
+		status = "pending"
+		fmt.Printf("🔐 JIT Access request: Agent %s requesting '%s' - awaiting admin approval\n", agent.Name, req.Capability)
 	} else {
 		status = "denied"
 	}
