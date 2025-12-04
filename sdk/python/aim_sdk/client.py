@@ -2222,7 +2222,8 @@ def _register_via_oauth(
         headers["X-SDK-Token"] = sdk_token_id
 
     # FIRST: Check if agent already exists (get or create pattern)
-    check_url = f"{aim_url.rstrip('/')}/api/v1/agents/{name}"
+    # Use sdk-api endpoint which accepts both ID and name
+    check_url = f"{aim_url.rstrip('/')}/api/v1/sdk-api/agents/{name}"
     check_response = requests.get(check_url, headers=headers, timeout=30)
 
     if check_response.status_code == 200:
