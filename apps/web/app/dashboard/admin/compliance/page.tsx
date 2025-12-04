@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Shield,
   CheckCircle,
@@ -94,19 +95,86 @@ interface ComplianceCategory {
   items: { name: string; passed: boolean; details: string }[];
 }
 
+// Audit log entry from API
+interface AuditLogEntry {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  userId: string;
+  userEmail?: string;
+  ipAddress: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
 
-// Recent Audit Activities (9 items to align with left column)
-const RECENT_ACTIVITIES = [
-  { action: "Agent verification completed", user: "system", time: "2 minutes ago", type: "success" },
-  { action: "Trust score recalculated for 11 agents", user: "system", time: "15 minutes ago", type: "info" },
-  { action: "API key rotated", user: "admin@opena2a.org", time: "1 hour ago", type: "warning" },
-  { action: "New agent registered: claude-assistant", user: "admin@opena2a.org", time: "3 hours ago", type: "info" },
-  { action: "Compliance check passed", user: "system", time: "6 hours ago", type: "success" },
-  { action: "Access review completed", user: "admin@opena2a.org", time: "1 day ago", type: "info" },
-  { action: "MCP server registered: data-pipeline", user: "admin@opena2a.org", time: "1 day ago", type: "success" },
-  { action: "Security policy updated", user: "admin@opena2a.org", time: "2 days ago", type: "info" },
-  { action: "Agent capability request approved", user: "admin@opena2a.org", time: "2 days ago", type: "success" },
-];
+// Alert entry from API
+interface AlertEntry {
+  id: string;
+  title: string;
+  description: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  alertType: string;
+  isAcknowledged: boolean;
+  createdAt: string;
+  acknowledgedAt?: string;
+  resourceType?: string;
+  resourceId?: string;
+}
+
+// Agent entry for risk distribution
+interface AgentEntry {
+  id: string;
+  displayName: string;
+  name: string;
+  trustScore: number;
+  status: string;
+}
+
+// Helper to format audit action for display
+function formatAuditAction(log: AuditLogEntry): string {
+  const actionMap: Record<string, string> = {
+    login: "User logged in",
+    logout: "User logged out",
+    create: `Created ${log.resourceType}`,
+    update: `Updated ${log.resourceType}`,
+    delete: `Deleted ${log.resourceType}`,
+    verify: `Verified ${log.resourceType}`,
+    approve: `Approved ${log.resourceType}`,
+    reject: `Rejected ${log.resourceType}`,
+    view: `Viewed ${log.resourceType}`,
+    export: `Exported ${log.resourceType}`,
+  };
+  return actionMap[log.action] || `${log.action} ${log.resourceType}`;
+}
+
+// Helper to determine activity type from audit action
+function getActivityType(action: string): "success" | "warning" | "info" | "error" {
+  const successActions = ["create", "verify", "approve", "login"];
+  const warningActions = ["update", "export"];
+  const errorActions = ["delete", "reject"];
+
+  if (successActions.includes(action)) return "success";
+  if (warningActions.includes(action)) return "warning";
+  if (errorActions.includes(action)) return "error";
+  return "info";
+}
+
+// Helper to format relative time
+function formatRelativeTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  return date.toLocaleDateString();
+}
 
 
 
@@ -118,7 +186,7 @@ function ComplianceSummaryCard({
   total,
   icon: Icon,
   color,
-  checks
+  checks,
 }: {
   title: string;
   description: string;
@@ -162,19 +230,28 @@ function ComplianceSummaryCard({
   };
   const colors = colorMap[color];
 
-  // Format check name for display
+  // Format check name for display with better descriptions
   const formatCheckName = (name: string) => {
-    return name
-      .replace(/_/g, " ")
-      .split(" ")
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
+    const checkLabels: Record<string, string> = {
+      "apiKeyRotationNeeded": "API Key Rotation",
+      "trustScoreDegradation": "Low Trust Scores",
+      "capabilityViolations": "Capability Violations",
+      "inactiveAgents": "Inactive Agents",
+      "unverifiedAgentBacklog": "Pending Verifications",
+      "orphanedResources": "Orphaned Resources",
+      "adminAccessReview": "Admin Access Review",
+    };
+    return checkLabels[name] || name
+      // Convert camelCase to Title Case
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
   };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-      {/* Header with gradient */}
-      <div className={`${colors.bgLight} px-6 py-5 border-b ${colors.border}`}>
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className={`${colors.bg} p-3 rounded-xl shadow-lg`}>
@@ -208,61 +285,129 @@ function ComplianceSummaryCard({
 
       {/* Individual checks */}
       <div className="px-6 py-4 space-y-3">
-        {checks.map((check, idx) => (
-          <div key={idx} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {check.passed ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-              )}
-              <span className="text-sm text-gray-700 dark:text-gray-300">{formatCheckName(check.name)}</span>
+        {checks.map((check, idx) => {
+          // Format the badge text to always show counts (more meaningful than just Pass/Fail)
+          const getBadgeText = () => {
+            const count = check.count || 0;
+            // Use appropriate label based on check type
+            if (check.name === "trustScoreDegradation") {
+              return count === 1 ? "1 agent" : `${count} agents`;
+            }
+            if (check.name === "inactiveAgents") {
+              return count === 1 ? "1 inactive" : `${count} inactive`;
+            }
+            if (check.name === "capabilityViolations") {
+              return count === 1 ? "1 violation" : `${count} violations`;
+            }
+            if (check.name === "unverifiedAgentBacklog") {
+              return count === 1 ? "1 pending" : `${count} pending`;
+            }
+            if (check.name === "apiKeyRotationNeeded") {
+              return count === 1 ? "1 key" : `${count} keys`;
+            }
+            if (check.name === "orphanedResources") {
+              return count === 1 ? "1 resource" : `${count} resources`;
+            }
+            return count === 1 ? "1 issue" : `${count} issues`;
+          };
+
+          return (
+            <div key={idx} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {check.passed ? (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                )}
+                <span className="text-sm text-gray-700 dark:text-gray-300">{formatCheckName(check.name)}</span>
+              </div>
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                check.passed
+                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                  : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+              }`}>
+                {getBadgeText()}
+              </span>
             </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-              check.passed
-                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-            }`}>
-              {check.passed ? "Passed" : "Action Required"}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Footer */}
-      <div className={`${colors.bgLight} px-6 py-3 border-t ${colors.border}`}>
-        <button className={`text-sm font-medium ${colors.text} hover:underline flex items-center gap-1`}>
-          View Details
-          <ArrowUpRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
     </div>
   );
 }
 
 
-// Component: Activity Item
-function ActivityItem({ activity }: { activity: typeof RECENT_ACTIVITIES[0] }) {
-  const typeStyles = {
-    success: { icon: CheckCircle, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
-    warning: { icon: AlertTriangle, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20" },
-    info: { icon: Info, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
-    error: { icon: XCircle, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
+// Component: Alert Activity Item - for showing security alerts/violations
+function AlertActivityItem({ alert }: { alert: AlertEntry }) {
+  const severityStyles = {
+    critical: { icon: XCircle, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    high: { icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+    medium: { icon: AlertTriangle, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20", badge: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+    low: { icon: Info, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20", badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    info: { icon: Info, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-50 dark:bg-gray-900/20", badge: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400" },
   };
-  const style = typeStyles[activity.type as keyof typeof typeStyles] || typeStyles.info;
+  const style = severityStyles[alert.severity] || severityStyles.info;
   const Icon = style.icon;
 
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-      <div className={`p-1.5 rounded-lg ${style.bg}`}>
+    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <div className={`p-1.5 rounded-lg ${style.bg} flex-shrink-0`}>
         <Icon className={`h-4 w-4 ${style.color}`} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-900 dark:text-white">{activity.action}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-gray-500 dark:text-gray-400">{activity.user}</span>
-          <span className="text-xs text-gray-400">•</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400">{activity.time}</span>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{alert.title}</p>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase ${style.badge}`}>
+            {alert.severity}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{alert.description}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs text-gray-400">{formatRelativeTime(alert.createdAt)}</span>
+          {alert.isAcknowledged && (
+            <>
+              <span className="text-xs text-gray-400">•</span>
+              <span className="text-xs text-green-600 dark:text-green-400">Acknowledged</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Component: Compliance Activity Item - for agent/check-related activities
+function ComplianceActivityItem({ activity }: { activity: { type: "agent" | "check" | "trust"; title: string; description: string; timestamp: string; status?: "passed" | "failed" | "warning" } }) {
+  const typeStyles = {
+    agent: { icon: Shield, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
+    check: { icon: FileCheck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20" },
+    trust: { icon: TrendingUp, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
+  };
+  const statusStyles = {
+    passed: "text-green-600 dark:text-green-400",
+    failed: "text-red-600 dark:text-red-400",
+    warning: "text-yellow-600 dark:text-yellow-400",
+  };
+  const style = typeStyles[activity.type];
+  const Icon = style.icon;
+
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <div className={`p-1.5 rounded-lg ${style.bg} flex-shrink-0`}>
+        <Icon className={`h-4 w-4 ${style.color}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.title}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{activity.description}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs text-gray-400">{formatRelativeTime(activity.timestamp)}</span>
+          {activity.status && (
+            <>
+              <span className="text-xs text-gray-400">•</span>
+              <span className={`text-xs capitalize ${statusStyles[activity.status]}`}>{activity.status}</span>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -302,57 +447,43 @@ function StatCard({ stat }: { stat: { name: string; value: string; icon: any; ic
   );
 }
 
-// Component: Risk Distribution Chart (dynamic based on agent trust scores)
-function RiskDistributionChart({ status }: { status: ComplianceStatus | null }) {
-  // Calculate risk distribution from actual data
-  // Based on trust scores: Low >= 80%, Medium 60-79%, High 40-59%, Critical < 40%
-  const totalAgents = status?.totalAgents || 0;
-  const verifiedAgents = status?.verifiedAgents || 0;
-  const avgTrustScore = status?.averageTrustScore || 0;
-
-  // Estimate risk distribution based on verification rate and trust score
-  // In production, this would come from actual agent trust score breakdown
+// Component: Risk Distribution Chart (uses actual agent trust scores)
+function RiskDistributionChart({ agents }: { agents: AgentEntry[] }) {
+  // Calculate risk distribution from actual agent trust scores
+  // Trust score is stored as 0-1, so multiply by 100 for percentage
+  // Low Risk: >= 80%, Medium Risk: 60-79%, High Risk: 40-59%, Critical: < 40%
   const calculateRiskDistribution = () => {
-    if (totalAgents === 0) {
+    if (agents.length === 0) {
       return [
-        { name: "No Agents", value: 100, color: "#9ca3af" },
+        { name: "No Agents", value: 100, color: "#9ca3af", count: 0 },
       ];
     }
 
-    const verificationRate = totalAgents > 0 ? (verifiedAgents / totalAgents) * 100 : 0;
+    let lowRisk = 0;
+    let mediumRisk = 0;
+    let highRisk = 0;
+    let critical = 0;
 
-    // Estimate distribution based on avg trust score
-    let lowRisk, mediumRisk, highRisk, critical;
-
-    if (avgTrustScore >= 80) {
-      lowRisk = Math.round(verificationRate * 0.8);
-      mediumRisk = Math.round(verificationRate * 0.15);
-      highRisk = Math.round((100 - verificationRate) * 0.6);
-      critical = 100 - lowRisk - mediumRisk - highRisk;
-    } else if (avgTrustScore >= 60) {
-      lowRisk = Math.round(verificationRate * 0.5);
-      mediumRisk = Math.round(verificationRate * 0.35);
-      highRisk = Math.round((100 - verificationRate) * 0.5 + 10);
-      critical = 100 - lowRisk - mediumRisk - highRisk;
-    } else {
-      lowRisk = Math.round(verificationRate * 0.3);
-      mediumRisk = Math.round(verificationRate * 0.3);
-      highRisk = Math.round(40);
-      critical = 100 - lowRisk - mediumRisk - highRisk;
+    for (const agent of agents) {
+      const score = agent.trustScore * 100; // Convert 0-1 to 0-100
+      if (score >= 80) {
+        lowRisk++;
+      } else if (score >= 60) {
+        mediumRisk++;
+      } else if (score >= 40) {
+        highRisk++;
+      } else {
+        critical++;
+      }
     }
 
-    // Ensure values are non-negative
-    lowRisk = Math.max(0, lowRisk);
-    mediumRisk = Math.max(0, mediumRisk);
-    highRisk = Math.max(0, highRisk);
-    critical = Math.max(0, critical);
-
+    const total = agents.length;
     return [
-      { name: "Low Risk", value: lowRisk, color: "#10b981" },
-      { name: "Medium Risk", value: mediumRisk, color: "#f59e0b" },
-      { name: "High Risk", value: highRisk, color: "#f97316" },
-      { name: "Critical", value: critical, color: "#ef4444" },
-    ].filter(d => d.value > 0);
+      { name: "Low Risk", value: Math.round((lowRisk / total) * 100), color: "#10b981", count: lowRisk },
+      { name: "Medium Risk", value: Math.round((mediumRisk / total) * 100), color: "#f59e0b", count: mediumRisk },
+      { name: "High Risk", value: Math.round((highRisk / total) * 100), color: "#f97316", count: highRisk },
+      { name: "Critical", value: Math.round((critical / total) * 100), color: "#ef4444", count: critical },
+    ].filter(d => d.count > 0);
   };
 
   const data = calculateRiskDistribution();
@@ -386,9 +517,9 @@ function RiskDistributionChart({ status }: { status: ComplianceStatus | null }) 
             <span className="text-sm font-semibold text-gray-900 dark:text-white">{item.value}%</span>
           </div>
         ))}
-        {totalAgents > 0 && (
+        {agents.length > 0 && (
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
-            <span className="text-xs text-gray-500">Based on {totalAgents} agent{totalAgents !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-gray-500">Based on {agents.length} agent{agents.length !== 1 ? "s" : ""}</span>
           </div>
         )}
       </div>
@@ -466,12 +597,15 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 
 // Main Page Component
 export default function CompliancePage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ComplianceStatus | null>(null);
   const [metrics, setMetrics] = useState<ComplianceMetrics | null>(null);
   const [accessReview, setAccessReview] = useState<AccessReviewUser[]>([]);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
+  const [agents, setAgents] = useState<AgentEntry[]>([]);
+  const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [runningCheck, setRunningCheck] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
   // Framework for exports only (not for display)
@@ -481,14 +615,18 @@ export default function CompliancePage() {
     try {
       setLoading(true);
       setError(null);
-      const [statusData, metricsData, accessData] = await Promise.all([
+      const [statusData, metricsData, accessData, agentsData, alertsData] = await Promise.all([
         api.getComplianceStatus(),
         api.getComplianceMetrics(),
         api.getAccessReview(),
+        api.listAgents(),
+        api.getAlerts(10, 0), // Get 10 most recent alerts
       ]);
       setStatus(statusData);
       setMetrics(metricsData);
       setAccessReview(accessData.users || []);
+      setAgents(agentsData.agents || []);
+      setAlerts(alertsData.alerts || []);
     } catch (err) {
       console.error("Failed to fetch compliance data:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -650,23 +788,23 @@ export default function CompliancePage() {
               {/* Security Checks */}
               <ComplianceSummaryCard
                 title="Security Compliance"
-                description="API keys, certificates, and trust scores"
-                passed={checkResults.filter(c => ["api_key_rotation_needed", "trust_score_degradation", "certificate_expiry_warning"].includes(c.name) && c.passed).length}
-                total={checkResults.filter(c => ["api_key_rotation_needed", "trust_score_degradation", "certificate_expiry_warning"].includes(c.name)).length}
+                description="API keys, capability violations, and trust scores"
+                passed={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name) && c.passed).length}
+                total={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name)).length}
                 icon={Lock}
                 color="blue"
-                checks={checkResults.filter(c => ["api_key_rotation_needed", "trust_score_degradation", "certificate_expiry_warning"].includes(c.name))}
+                checks={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name))}
               />
 
               {/* Operations Checks */}
               <ComplianceSummaryCard
                 title="Operations Compliance"
                 description="Agent activity and verification status"
-                passed={checkResults.filter(c => ["inactive_agents", "unverified_agent_backlog", "orphaned_resources"].includes(c.name) && c.passed).length}
-                total={checkResults.filter(c => ["inactive_agents", "unverified_agent_backlog", "orphaned_resources"].includes(c.name)).length}
+                passed={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name) && c.passed).length}
+                total={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name)).length}
                 icon={Activity}
                 color="green"
-                checks={checkResults.filter(c => ["inactive_agents", "unverified_agent_backlog", "orphaned_resources"].includes(c.name))}
+                checks={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name))}
               />
             </div>
           </div>
@@ -719,7 +857,7 @@ export default function CompliancePage() {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Risk Distribution</h3>
                   <BarChart3 className="h-5 w-5 text-gray-400" />
                 </div>
-                <RiskDistributionChart status={status} />
+                <RiskDistributionChart agents={agents} />
               </div>
 
               {/* Compliance Checks */}
@@ -763,19 +901,38 @@ export default function CompliancePage() {
 
           </div>
 
-          {/* Right Column - Activity */}
+          {/* Right Column - Security Alerts */}
           <div className="flex flex-col">
-            {/* Audit Activity */}
+            {/* Security Alerts & Violations */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-                <Activity className="h-5 w-5 text-gray-400" />
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Security Alerts</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Recent violations and warnings</p>
+                </div>
+                <AlertTriangle className="h-5 w-5 text-gray-400" />
               </div>
-              <div className="space-y-1 flex-1">
-                {RECENT_ACTIVITIES.map((activity, idx) => (
-                  <ActivityItem key={idx} activity={activity} />
-                ))}
+              <div className="space-y-0 flex-1">
+                {alerts.length > 0 ? (
+                  alerts.slice(0, 8).map((alert) => (
+                    <AlertActivityItem key={alert.id} alert={alert} />
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-32 text-center">
+                    <CheckCircle className="h-8 w-8 text-green-400 mb-2" />
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">All Clear</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">No security alerts</p>
+                  </div>
+                )}
               </div>
+              {alerts.length > 8 && (
+                <button
+                  onClick={() => router.push("/dashboard/admin/alerts")}
+                  className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline text-center"
+                >
+                  View all {alerts.length} alerts →
+                </button>
+              )}
             </div>
           </div>
         </div>
