@@ -115,8 +115,10 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		}
 
 		now := time.Now().Unix()
-		// Allow 5 minutes clock skew
-		if timestamp < now-300 || timestamp > now+300 {
+		// SECURITY: Allow only 30 seconds clock skew to minimize replay attack window
+		// This is a balance between security and usability for network latency
+		const maxClockSkewSeconds = 30
+		if timestamp < now-maxClockSkewSeconds || timestamp > now+maxClockSkewSeconds {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Request timestamp expired or invalid",
 			})

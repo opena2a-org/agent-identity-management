@@ -1111,9 +1111,9 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Fetch MCP servers
+	// SECURITY: No error logging to prevent information leakage
 	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
 	if err != nil {
-		fmt.Printf("Error fetching MCP servers: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch MCP servers",
 		})

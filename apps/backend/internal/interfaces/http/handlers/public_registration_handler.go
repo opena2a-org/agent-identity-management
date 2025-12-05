@@ -91,9 +91,7 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		req.Password,
 	)
 	if err != nil {
-		// Log the actual error for debugging
-		fmt.Printf("ERROR in RegisterUser: %v\n", err)
-		
+		// SECURITY: No error logging to prevent information leakage
 		// Handle specific error cases
 		switch err {
 		case application.ErrUserAlreadyExists:
@@ -235,11 +233,8 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
 	// Check users table first - if user exists there, they are automatically approved
+	// SECURITY: Debug logging removed to prevent credential/PII leakage
 	user, err := h.authService.GetUserByEmail(c.Context(), email)
-	fmt.Printf("🔍 DEBUG: GetUserByEmail result for %s: user=%v, err=%v\n", email, user, err)
-	if user != nil {
-		fmt.Printf("🔍 DEBUG: User loaded - ID: %s, Email: %s, Role: '%s' (type: %T)\n", user.ID, user.Email, user.Role, user.Role)
-	}
 	if err == nil && user != nil {
 		// Check if user account is deactivated
 		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
@@ -250,15 +245,12 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 		}
 
 		// Check if user has password hash for local authentication
+		// SECURITY: No logging of password hashes or verification results
 		if user.PasswordHash != nil && *user.PasswordHash != "" {
 			// Verify password from users table
 			passwordHasher := auth.NewPasswordHasher()
-			fmt.Printf("🔍 DEBUG: Verifying password for %s\n", user.Email)
-			fmt.Printf("🔍 DEBUG: Password hash from DB: %s\n", *user.PasswordHash)
-			fmt.Printf("🔍 DEBUG: Password length: %d chars\n", len(req.Password))
 			if err := passwordHasher.VerifyPassword(req.Password, *user.PasswordHash); err == nil {
 				// Check if user must change password (e.g., default admin on first login)
-				fmt.Printf("✅ DEBUG: Password verification PASSED for %s\n", user.Email)
 				if user.ForcePasswordChange {
 					// Generate tokens even for forced password change
 					// so user can access the change password page
@@ -267,8 +259,6 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 
 				// User in users table = automatically approved, generate tokens
 				return h.generateApprovedLoginResponse(c, user)
-			} else {
-				fmt.Printf("❌ DEBUG: Password verification FAILED for %s: %v\n", user.Email, err)
 			}
 			// Password verification failed - continue to check registration requests
 		}
@@ -333,15 +323,12 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 }
 
 // generateApprovedLoginResponse generates tokens and response for approved users
+// SECURITY: No logging of user credentials or token generation details
 func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, user *domain.User) error {
-	// Update last login timestamp
-	if err := h.authService.UpdateLastLogin(c.Context(), user); err != nil {
-		// Log warning but continue - this is non-critical
-		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
-	}
+	// Update last login timestamp (silent failure - non-critical)
+	_ = h.authService.UpdateLastLogin(c.Context(), user)
 
 	// Generate tokens
-	fmt.Printf("🔍 DEBUG: Generating JWT for user %s (email: %s, role: '%s', role type: %T)\n", user.ID, user.Email, user.Role, user.Role)
 	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
 		user.ID.String(),
 		user.OrganizationID.String(),
@@ -528,9 +515,7 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 		req.OrganizationName,
 	)
 	if err != nil {
-		// Log the actual error for debugging
-		fmt.Printf("ERROR in RequestAccess: %v\n", err)
-
+		// SECURITY: No error logging to prevent information leakage
 		// Handle specific error cases
 		switch err {
 		case application.ErrUserAlreadyExists:
@@ -675,10 +660,8 @@ func (h *PublicRegistrationHandler) ForgotPassword(c fiber.Ctx) error {
 	}
 
 	// Request password reset (always succeeds for security - don't reveal if email exists)
-	if err := h.registrationService.RequestPasswordReset(c.Context(), req.Email); err != nil {
-		// Log error but don't reveal to user
-		fmt.Printf("ERROR in ForgotPassword: %v\n", err)
-	}
+	// SECURITY: No error logging to prevent information leakage
+	_ = h.registrationService.RequestPasswordReset(c.Context(), req.Email)
 
 	// Always return success message for security (timing-attack prevention)
 	return c.JSON(&ForgotPasswordResponse{

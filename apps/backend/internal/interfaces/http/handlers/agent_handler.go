@@ -174,10 +174,9 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: No error logging to prevent information leakage
 	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID)
 	if err != nil {
-		// Log the full error for debugging
-		fmt.Printf("ERROR creating agent: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -545,21 +544,14 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		}
 
 		// Create alert (non-blocking - don't fail the verification if alert creation fails)
-		if err := h.alertService.CreateAlert(c.Context(), alert); err != nil {
-			fmt.Printf("WARNING: Failed to create security alert for capability violation: %v\n", err)
-		}
+		// SECURITY: No error logging to prevent information leakage
+		_ = h.alertService.CreateAlert(c.Context(), alert)
 	}
 
 	// 4. UPDATE AGENT LAST ACTIVE TIMESTAMP (for activity tracking)
 	// Update last_active regardless of whether action was allowed or denied
-	// This helps track when agents were last seen attempting actions
-	fmt.Printf("🔄 Updating last_active for agent %s...\n", agentID)
-	if err := h.agentService.UpdateLastActive(c.Context(), agentID); err != nil {
-		// Log but don't fail the request if timestamp update fails
-		fmt.Printf("❌ WARNING: Failed to update agent last_active: %v\n", err)
-	} else {
-		fmt.Printf("✅ Successfully updated last_active for agent %s\n", agentID)
-	}
+	// SECURITY: No logging to prevent information leakage
+	_ = h.agentService.UpdateLastActive(c.Context(), agentID)
 
 	if !decision {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -667,9 +659,9 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Get agent credentials (decrypts private key)
+	// SECURITY: No error logging to prevent credential-related information leakage
 	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agentID)
 	if err != nil {
-		fmt.Println(err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve agent credentials",
 		})

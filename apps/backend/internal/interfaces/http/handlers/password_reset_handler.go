@@ -118,20 +118,14 @@ func (h *PasswordResetHandler) RequestPasswordReset(c fiber.Ctx) error {
 			req.Email,
 			emailData,
 		); err != nil {
-			// Log error but don't fail - fallback to console
-			fmt.Printf("[WARN] Failed to send password reset email to %s: %v\n", req.Email, err)
-			fmt.Printf("Reset Link (console fallback): %s\n", resetLink)
+			// SECURITY: Email service failed - don't log sensitive data (email, reset link)
+			// In development, check email service configuration
+			_ = err // Silently fail for security - user already gets generic response
 		}
 	} else {
-		// Fallback: log to console
-		fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-		fmt.Printf("📧 PASSWORD RESET EMAIL\n")
-		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-		fmt.Printf("To: %s\n", req.Email)
-		fmt.Printf("User: %s\n", userName)
-		fmt.Printf("Reset Link: %s\n", resetLink)
-		fmt.Printf("Expires: %s (1 hour)\n", expiresAt.Format(time.RFC1123))
-		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+		// SECURITY: Production systems should ALWAYS have email service configured
+		// Never log password reset tokens or user emails to console
+		// In production, this case should not occur - email service is required
 	}
 
 	return c.JSON(fiber.Map{
@@ -280,7 +274,7 @@ func (h *PasswordResetHandler) ResetPassword(c fiber.Ctx) error {
 		})
 	}
 
-	fmt.Printf("✅ Password reset successful for user: %s\n", req.Email)
+	// SECURITY: No logging of email addresses or password events to prevent information leakage
 
 	return c.JSON(fiber.Map{
 		"success": true,

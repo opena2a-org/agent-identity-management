@@ -38,18 +38,32 @@ func NewKeyVault(masterKeyBase64 string) (*KeyVault, error) {
 }
 
 // NewKeyVaultFromEnv creates a KeyVault using a master key from environment variable
+// SECURITY: Master key MUST be set in production environments
 func NewKeyVaultFromEnv() (*KeyVault, error) {
 	masterKeyBase64 := os.Getenv("KEYVAULT_MASTER_KEY")
+	environment := os.Getenv("ENVIRONMENT")
+
 	if masterKeyBase64 == "" {
-		// Generate a new master key if not set (for development only)
-		// In production, this should be set externally
-		fmt.Println("Warning: KEYVAULT_MASTER_KEY not set, generating new master key (development only)")
+		// In production, master key is REQUIRED
+		if environment == "production" {
+			return nil, fmt.Errorf("SECURITY ERROR: KEYVAULT_MASTER_KEY environment variable is required in production")
+		}
+
+		// Generate a new master key for development only
+		// SECURITY: This key is ephemeral and will be different on each restart
+		// This is acceptable for development but NOT for production
+		fmt.Println("⚠️  SECURITY WARNING: KEYVAULT_MASTER_KEY not set")
+		fmt.Println("   Generating ephemeral master key for development only.")
+		fmt.Println("   Set KEYVAULT_MASTER_KEY environment variable in production!")
+
 		masterKey := make([]byte, 32)
 		if _, err := rand.Read(masterKey); err != nil {
 			return nil, fmt.Errorf("failed to generate master key: %w", err)
 		}
 		masterKeyBase64 = base64.StdEncoding.EncodeToString(masterKey)
-		fmt.Printf("Generated master key (save this): %s\n", masterKeyBase64)
+
+		// SECURITY: Never print the actual key - only a notification
+		fmt.Println("   Generated ephemeral 256-bit AES key for this session.")
 	}
 
 	return NewKeyVault(masterKeyBase64)

@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"fmt"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a/identity/backend/internal/application"
@@ -36,18 +34,14 @@ func (h *SecurityPolicyHandler) ListPolicies(c fiber.Ctx) error {
 		})
 	}
 
-	// 🔍 DEBUG: Log the organization ID being queried
-	fmt.Printf("🔍 DEBUG ListPolicies: Querying policies for org_id=%s\n", orgID)
-
+	// SECURITY: Debug logging removed to prevent information leakage
 	policies, err := h.policyService.ListPolicies(c.Context(), orgID)
 	if err != nil {
-		fmt.Printf("❌ DEBUG ListPolicies: Error fetching policies: %v\n", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve policies",
 		})
 	}
 
-	fmt.Printf("✅ DEBUG ListPolicies: Found %d policies for org_id=%s\n", len(policies), orgID)
 	return c.JSON(policies)
 }
 

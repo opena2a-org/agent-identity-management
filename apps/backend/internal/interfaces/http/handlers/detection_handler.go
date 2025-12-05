@@ -227,8 +227,7 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 		c.Context(), agentID, orgID, &req)
 
 	if err != nil {
-		// Log the error for debugging
-		println("❌ Error in ReportCapabilities:", err.Error())
+		// SECURITY: No error logging to prevent information leakage
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})

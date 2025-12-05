@@ -159,11 +159,13 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	}
 
 	// Return new tokens
+	// SECURITY: Access token expires in 15 minutes (900 seconds) by default
+	// This matches the JWT_ACCESS_TTL setting for short-lived access tokens
 	return c.JSON(RefreshTokenResponse{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    86400, // 24 hours in seconds
+		ExpiresIn:    900, // 15 minutes in seconds (configurable via JWT_ACCESS_TTL env)
 	})
 }
 

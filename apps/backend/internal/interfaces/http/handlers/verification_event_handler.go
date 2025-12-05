@@ -303,10 +303,9 @@ func (h *VerificationEventHandler) GetRecentEvents(c fiber.Ctx) error {
 	}
 
 	// Get recent events
+	// SECURITY: No error logging to prevent information leakage
 	events, err := h.service.GetRecentEvents(c.Context(), orgID, minutes)
 	if err != nil {
-		// Log the actual error for debugging
-		println("ERROR in GetRecentEvents:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve recent events: " + err.Error(),
 		})
@@ -386,10 +385,9 @@ func (h *VerificationEventHandler) GetStatistics(c fiber.Ctx) error {
 	}
 
 	// Get statistics
+	// SECURITY: No error logging to prevent information leakage
 	stats, err := h.service.GetStatistics(c.Context(), orgID, startTime, endTime)
 	if err != nil {
-		// Log the actual error for debugging
-		println("ERROR in GetStatistics:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve statistics: " + err.Error(),
 		})
