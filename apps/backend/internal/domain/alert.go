@@ -47,6 +47,7 @@ type Alert struct {
 	ResourceID     uuid.UUID              `json:"resourceId"`
 	AuditID        *uuid.UUID             `json:"auditId,omitempty"`   // Links to triggering audit log
 	AgentName      string                 `json:"agentName,omitempty"` // Denormalized for display
+	SourceIP       string                 `json:"sourceIp,omitempty"`  // IP address that triggered the alert
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`  // Additional context
 	IsAcknowledged bool                   `json:"isAcknowledged"`
 	AcknowledgedBy *uuid.UUID             `json:"acknowledgedBy"`

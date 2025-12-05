@@ -415,6 +415,7 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		req.Capability,
 		req.Resource,
 		req.Metadata,
+		c.IP(), // Capture source IP for security tracking
 	)
 
 	if err != nil {
@@ -1650,7 +1651,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 
 	// Parse request body
 	var req struct {
-		PublicKey string `json:"public_key"`
+		PublicKey string `json:"publicKey"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
