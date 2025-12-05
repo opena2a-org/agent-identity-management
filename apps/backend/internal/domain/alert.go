@@ -63,6 +63,7 @@ type AlertRepository interface {
 	GetByOrganizationFiltered(orgID uuid.UUID, status string, limit, offset int) ([]*Alert, error)
 	CountByOrganization(orgID uuid.UUID) (int, error)
 	CountByOrganizationFiltered(orgID uuid.UUID, status string) (int, error)
+	CountBySeverity(orgID uuid.UUID, status string) (critical, high, warning, info int, err error)
 	GetUnacknowledged(orgID uuid.UUID) ([]*Alert, error)
 	GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*Alert, error)
 	GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*Alert, error)

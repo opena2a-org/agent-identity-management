@@ -273,6 +273,54 @@ func (r *AlertRepository) CountByOrganizationFiltered(orgID uuid.UUID, status st
 	return total, err
 }
 
+// CountBySeverity counts alerts grouped by severity level with optional status filtering
+func (r *AlertRepository) CountBySeverity(orgID uuid.UUID, status string) (critical, high, warning, info int, err error) {
+	var query string
+	var args []interface{}
+
+	if status == "acknowledged" {
+		query = `
+			SELECT
+				COUNT(*) FILTER (WHERE severity = 'critical') AS critical_count,
+				COUNT(*) FILTER (WHERE severity = 'high') AS high_count,
+				COUNT(*) FILTER (WHERE severity = 'warning') AS warning_count,
+				COUNT(*) FILTER (WHERE severity = 'info') AS info_count
+			FROM alerts
+			WHERE organization_id = $1 AND is_acknowledged = true
+		`
+		args = []interface{}{orgID}
+	} else if status == "unacknowledged" {
+		query = `
+			SELECT
+				COUNT(*) FILTER (WHERE severity = 'critical') AS critical_count,
+				COUNT(*) FILTER (WHERE severity = 'high') AS high_count,
+				COUNT(*) FILTER (WHERE severity = 'warning') AS warning_count,
+				COUNT(*) FILTER (WHERE severity = 'info') AS info_count
+			FROM alerts
+			WHERE organization_id = $1 AND is_acknowledged = false
+		`
+		args = []interface{}{orgID}
+	} else {
+		query = `
+			SELECT
+				COUNT(*) FILTER (WHERE severity = 'critical') AS critical_count,
+				COUNT(*) FILTER (WHERE severity = 'high') AS high_count,
+				COUNT(*) FILTER (WHERE severity = 'warning') AS warning_count,
+				COUNT(*) FILTER (WHERE severity = 'info') AS info_count
+			FROM alerts
+			WHERE organization_id = $1
+		`
+		args = []interface{}{orgID}
+	}
+
+	err = r.db.QueryRow(query, args...).Scan(&critical, &high, &warning, &info)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	return critical, high, warning, info, nil
+}
+
 func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,

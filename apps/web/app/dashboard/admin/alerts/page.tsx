@@ -134,6 +134,10 @@ function AlertsPageContent() {
   const [allCount, setAllCount] = useState<number>(0);
   const [acknowledgedCount, setAcknowledgedCount] = useState<number>(0);
   const [unacknowledgedCount, setUnacknowledgedCount] = useState<number>(0);
+  const [criticalCount, setCriticalCount] = useState<number>(0);
+  const [highCount, setHighCount] = useState<number>(0);
+  const [mediumCount, setMediumCount] = useState<number>(0);
+  const [lowAndInfoCount, setLowAndInfoCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("unacknowledged");
@@ -192,6 +196,10 @@ function AlertsPageContent() {
       setAllCount(data.allCount || 0);
       setAcknowledgedCount(data.acknowledgedCount || 0);
       setUnacknowledgedCount(data.unacknowledgedCount || 0);
+      setCriticalCount(data.criticalCount || 0);
+      setHighCount(data.highCount || 0);
+      setMediumCount(data.mediumCount || 0);
+      setLowAndInfoCount(data.lowAndInfoCount || 0);
     } catch (error) {
       console.error("Failed to fetch alerts:", error);
     } finally {
@@ -341,27 +349,17 @@ function AlertsPageContent() {
     }
   }, [page, totalPages]);
 
-  // Stats based on API counts and current filter
+  // Stats based on API counts (server-side, accurate across all pages)
   const stats = {
-    total: allCount,
+    // Total respects current status filter
+    total: totalFilteredCount,
     acknowledged: acknowledgedCount,
     unacknowledged: unacknowledgedCount,
-    // Severity counts are still calculated from loaded alerts (client-side)
-    // since API doesn't provide severity breakdown
-    critical: alerts.filter(
-      (a) => a.severity === "critical" && !a.isAcknowledged
-    ).length,
-    high: alerts.filter((a) => a.severity === "high" && !a.isAcknowledged)
-      .length,
-    medium: alerts.filter(
-      (a) =>
-        (a.severity === "medium" || a.severity === "warning") &&
-        !a.isAcknowledged
-    ).length,
-    low: alerts.filter(
-      (a) =>
-        (a.severity === "low" || a.severity === "info") && !a.isAcknowledged
-    ).length,
+    // Severity counts come from API (accurate across all data, not just current page)
+    critical: criticalCount,
+    high: highCount,
+    medium: mediumCount,
+    low: lowAndInfoCount,
   };
 
   if (loading) {

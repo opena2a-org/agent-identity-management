@@ -61,6 +61,11 @@ func (s *AlertService) CountUnacknowledged(ctx context.Context, orgID uuid.UUID)
 	return allCount, acknowledgedCount, unacknowledgedCount, nil
 }
 
+// CountBySeverity returns counts of alerts grouped by severity level
+func (s *AlertService) CountBySeverity(ctx context.Context, orgID uuid.UUID, status string) (critical, high, warning, info int, err error) {
+	return s.alertRepo.CountBySeverity(orgID, status)
+}
+
 // CheckAPIKeyExpiry checks for expiring API keys and creates alerts
 // NOTE: This method is not currently used but kept for future expansion
 // when API key expiry tracking is added to the system
