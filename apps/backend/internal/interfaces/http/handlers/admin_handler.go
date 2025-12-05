@@ -828,6 +828,17 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		unacknowledgedCount = 0
 	}
 
+	// Get severity counts based on current status filter
+	criticalCount, highCount, warningCount, infoCount, err := h.alertService.CountBySeverity(c.Context(), orgID, status)
+	if err != nil {
+		// If severity count fails, set defaults but don't fail the request
+		criticalCount, highCount, warningCount, infoCount = 0, 0, 0, 0
+	}
+
+	// Map severity buckets for frontend (warning = medium, info = lowAndInfo)
+	mediumCount := warningCount
+	lowAndInfoCount := infoCount
+
 	// Log audit with enhanced metadata
 	metadata := map[string]interface{}{
 		"results_returned": len(alerts),
@@ -857,13 +868,17 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"alerts":               alerts,
-		"total":                total,
+		"alerts":              alerts,
+		"total":               total,
 		"allCount":            allCount,
 		"acknowledgedCount":   acknowledgedCount,
 		"unacknowledgedCount": unacknowledgedCount,
-		"limit":                limit,
-		"offset":               offset,
+		"criticalCount":       criticalCount,
+		"highCount":           highCount,
+		"mediumCount":         mediumCount,
+		"lowAndInfoCount":     lowAndInfoCount,
+		"limit":               limit,
+		"offset":              offset,
 	})
 }
 

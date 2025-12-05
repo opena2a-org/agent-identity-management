@@ -461,13 +461,13 @@ export function Sidebar() {
   );
 
   const SidebarContent = () => (
-    <>
+    <div className="flex flex-col h-full">
       {isLoading ? (
         <SidebarSkeleton />
       ) : (
         <>
           {/* Logo */}
-          <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
             <Link href="/dashboard" className="flex items-center gap-3">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                 <Shield className="h-5 w-5 text-white" />
@@ -503,7 +503,7 @@ export function Sidebar() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto min-h-0">
             {navigation.map((section, idx) => (
               <div key={idx} className="space-y-1">
                 {section.title && !collapsed && (
@@ -553,7 +553,7 @@ export function Sidebar() {
           </nav>
         </>
       )}
-    </>
+    </div>
   );
 
   return (
@@ -589,7 +589,7 @@ export function Sidebar() {
       <aside
         className={`
           lg:hidden fixed top-0 left-0 bottom-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
-          transform transition-transform duration-300 ease-in-out
+          transform transition-transform duration-300 ease-in-out flex flex-col
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >

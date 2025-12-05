@@ -930,6 +930,10 @@ class APIClient {
     allCount: number;
     acknowledgedCount: number;
     unacknowledgedCount: number;
+    criticalCount: number;
+    highCount: number;
+    mediumCount: number;
+    lowAndInfoCount: number;
   }> {
     let url = `/api/v1/admin/alerts?limit=${limit}&offset=${offset}`;
     if (status && status !== 'all') {
@@ -942,6 +946,10 @@ class APIClient {
       allCount: response.allCount || 0,
       acknowledgedCount: response.acknowledgedCount || 0,
       unacknowledgedCount: response.unacknowledgedCount || 0,
+      criticalCount: response.criticalCount || 0,
+      highCount: response.highCount || 0,
+      mediumCount: response.mediumCount || 0,
+      lowAndInfoCount: response.lowAndInfoCount || 0,
     };
   }
 
