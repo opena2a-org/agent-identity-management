@@ -307,6 +307,371 @@ agent.connect_mcp("github-tools")  # Logs connection to AIM
 
 ---
 
+## 📊 MCP Trust Scoring
+
+AIM applies a sophisticated **8-factor weighted algorithm** to calculate trust scores for MCP servers, similar to agent trust scoring.
+
+### Trust Score Factors
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| **Attestation Consensus** | 25% | Multi-agent verification strength (requires 3+ agents) |
+| **Connection Health** | 15% | Uptime and response times over 30 days |
+| **Capability Stability** | 15% | Schema consistency, no unexpected capability changes |
+| **Security Posture** | 15% | TLS enabled, authentication required, no known CVEs |
+| **Organization Compliance** | 10% | Meets allowlist policies and requirements |
+| **Age & History** | 10% | Operating duration without security incidents |
+| **Usage Patterns** | 5% | Normal vs anomalous connection patterns |
+| **User Feedback** | 5% | Admin ratings and manual attestations |
+
+### How It Works
+
+```
+MCP Server Registered
+        ↓
+Initial Score: ~50% (pending verification)
+        ↓
+Agent attestations accumulate → +25% (attestation consensus)
+        ↓
+Health checks pass consistently → +15% (connection health)
+        ↓
+Capabilities remain stable → +15% (capability stability)
+        ↓
+Security checks pass → +15% (security posture)
+        ↓
+Meets policy requirements → +10% (compliance)
+        ↓
+Time without issues → +10% (age & history)
+        ↓
+Normal usage patterns → +5% (usage patterns)
+        ↓
+Final Trust Score: 80-100% = Trusted MCP Server
+```
+
+### Viewing Trust Scores
+
+Navigate to **MCP Servers → [Server Name]** to see:
+- Overall trust score with color-coded indicator
+- Factor-by-factor breakdown in radar chart
+- Score history over time
+- Recommendations for improving trust score
+
+---
+
+## 🔍 MCP Discovery Dashboard
+
+AIM automatically detects MCP servers your agents are connecting to, even if they haven't been registered yet.
+
+### How Discovery Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MCP Discovery Flow                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Agent connects to MCP server during operation               │
+│     └─ SDK detects connection (URL, capabilities)               │
+│                                                                 │
+│  2. SDK reports detection to AIM backend                        │
+│     └─ POST /api/v1/sdk-api/mcp/discovered                      │
+│                                                                 │
+│  3. AIM checks if MCP is already registered                     │
+│     ├─ Registered → Link connection to existing server          │
+│     └─ Not registered → Add to Discovery queue                  │
+│                                                                 │
+│  4. Admin reviews Discovery Dashboard                           │
+│     ├─ Register → Creates MCP with pre-filled data              │
+│     └─ Ignore → Dismisses (won't show again)                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Detection Sources
+
+| Source | How It Works |
+|--------|--------------|
+| **SDK Runtime** | SDK detects MCP connections during `perform_action` calls |
+| **Claude Desktop** | Reads `claude_desktop_config.json` for configured servers |
+| **Manual Import** | Admin uploads MCP configuration file |
+
+### Using the Discovery Dashboard
+
+1. Navigate to **MCP Servers → Discovery** tab
+2. View detected MCPs with:
+   - Server name and endpoint URL
+   - Detection source (SDK, Claude Desktop, etc.)
+   - Which agents detected it
+   - First/last detection timestamps
+3. **Register**: Opens pre-filled registration form
+4. **Ignore**: Dismisses false positives
+
+### Security Alerts
+
+When agents connect to unregistered MCP servers, AIM creates a **Configuration Drift** alert:
+- **Severity**: Medium
+- **Action**: Review and register or block the MCP
+- **Automatic**: Alert clears when MCP is registered
+
+---
+
+## 🛡️ MCP Security Policies
+
+Define and enforce security policies for MCP server connections using allowlists, blocklists, and capability requirements.
+
+### Policy Types
+
+| Policy Type | Description | Enforcement |
+|------------|-------------|-------------|
+| **MCP Allowlist** | Only allow connections to listed domains/servers | Block unlisted MCPs |
+| **MCP Blocklist** | Block connections to known malicious servers | Block listed MCPs |
+| **MCP Capabilities** | Require/forbid specific capabilities | Block violating MCPs |
+| **MCP Minimum Trust** | Require minimum trust score | Alert or block low-trust MCPs |
+| **Unverified MCP Restrictions** | Control access to unverified MCPs | Alert or block unverified |
+| **High-Risk MCP Block** | Block critically low trust score MCPs | Block connections |
+
+### Creating Policies (Dashboard)
+
+1. Navigate to **Security Policies**
+2. Click **Create MCP Policy**
+3. Configure:
+   - **Policy Type**: Select from dropdown
+   - **Enforcement Mode**: Alert Only (monitor) or Block & Alert (enforce)
+   - **Priority**: Higher priority = evaluated first
+   - **Rules**: Domain patterns, capability lists, trust thresholds
+
+### Policy Examples
+
+**Allowlist: Only company-approved MCPs**
+```json
+{
+  "type": "mcp_allowlist",
+  "enforcement": "block_and_alert",
+  "rules": {
+    "allowedDomains": ["*.company.com", "github.com"],
+    "allowedNames": ["filesystem-mcp", "github-mcp"],
+    "requireVerified": true,
+    "minTrustScore": 70
+  }
+}
+```
+
+**Blocklist: Block known malicious servers**
+```json
+{
+  "type": "mcp_blocklist",
+  "enforcement": "block_and_alert",
+  "rules": {
+    "blockedDomains": ["*.malware.com", "suspicious.io"],
+    "blockedUrls": ["http://evil.com:4000"]
+  }
+}
+```
+
+**Capability Requirements: Forbid dangerous capabilities**
+```json
+{
+  "type": "mcp_capabilities",
+  "enforcement": "alert_only",
+  "rules": {
+    "forbiddenCapabilities": ["system_exec", "file_delete", "network_admin"],
+    "requiredCapabilities": ["tools"]
+  }
+}
+```
+
+### Enforcement Modes
+
+| Mode | Behavior |
+|------|----------|
+| **Alert Only** | Log violations, create alerts, allow connection |
+| **Block & Alert** | Log violations, create alerts, **block connection** |
+
+When a policy is set to **Block & Alert**, a red banner displays:
+> ⚠️ BLOCKING MODE ACTIVE: This policy will block MCP server connections in real-time
+
+---
+
+## 🚨 Security Dashboard
+
+Real-time security monitoring with threat detection, alerts, and source IP tracking.
+
+### Dashboard Overview
+
+Navigate to **Security** to view:
+- **Active Alerts**: Current security issues requiring attention
+- **Threat Detection**: ML-powered anomaly detection
+- **Recent Activity**: Security events timeline
+- **Source IP Analysis**: Geographic and pattern analysis
+
+### Alert Types
+
+| Alert Type | Severity | Trigger |
+|------------|----------|---------|
+| **Authentication Failure** | High | Multiple failed login attempts |
+| **Capability Violation** | High | Agent attempted unauthorized action |
+| **Trust Score Degradation** | Medium | Agent trust dropped below threshold |
+| **Configuration Drift** | Medium | Agent connected to unregistered MCP |
+| **Unusual Activity** | Medium | ML detected anomalous behavior |
+| **API Key Exposure** | Critical | API key used from unexpected location |
+
+### Alert Management
+
+**Bulk Operations:**
+- Select multiple alerts
+- Actions: Acknowledge, Resolve, Dismiss, Export
+
+**Alert Details Panel:**
+- Full event timeline
+- Affected agent/MCP details
+- Recommended remediation steps
+- Related alerts
+
+### Source IP Tracking
+
+Every security event captures:
+- **Source IP address**
+- **Geographic location** (country, city)
+- **User agent** (browser/SDK version)
+- **Request fingerprint**
+
+This enables:
+- Detection of unusual access patterns
+- Geographic anomaly detection
+- Session correlation
+- Forensic investigation
+
+---
+
+## ✅ Compliance Dashboard
+
+AIM provides a unified compliance framework with automated checks across security and operations domains.
+
+### Compliance Status Overview
+
+Navigate to **Compliance** to view:
+- **Overall Score**: Percentage of passing checks
+- **Security Compliance**: 5 security-focused checks
+- **Operations Compliance**: 5 operational checks
+- **Check Details**: Drill-down into each check
+
+### Security Compliance Checks (5)
+
+| Check | Description | Passing Criteria |
+|-------|-------------|------------------|
+| **API Key Rotation** | Keys should be rotated every 90 days | No keys older than 90 days |
+| **Trust Score Health** | Agents maintain healthy trust scores | No agents below trust threshold |
+| **Capability Violations** | Agents stay within declared capabilities | Zero recent violations |
+| **Admin Access Review** | Admin users reviewed regularly | All admins reviewed recently |
+| **Audit Log Coverage** | No gaps in audit logging | Logs present for past 7 days |
+
+### Operations Compliance Checks (5)
+
+| Check | Description | Passing Criteria |
+|-------|-------------|------------------|
+| **Inactive Agents** | Agents should be active or decommissioned | No agents inactive >30 days |
+| **Verification Backlog** | Pending verifications processed timely | No agents pending >7 days |
+| **Orphaned Resources** | Resources have active owners | No orphaned resources |
+| **Inactive MCP Servers** | MCPs should be active or removed | No MCPs inactive >30 days |
+| **MCP Verification Backlog** | MCP verifications processed timely | No MCPs pending >7 days |
+
+### Compliance Check Details
+
+Click any check to view:
+- **Status**: Pass (✓) or Fail (✗)
+- **Affected Items**: List of agents/MCPs/resources failing the check
+- **Remediation**: Specific actions to resolve
+- **History**: Pass/fail trend over time
+
+### Compliance Reporting
+
+Export compliance status for:
+- **SOC 2** audit evidence
+- **HIPAA** security reviews
+- **GDPR** data governance
+- **Internal** security assessments
+
+---
+
+## ⏱️ JIT (Just-In-Time) Access
+
+For sensitive operations, AIM supports **real-time admin approval** before execution.
+
+### How JIT Access Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    JIT Access Flow                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Agent calls @perform_action with jit_access=True            │
+│     └─ SDK creates capability request                           │
+│                                                                 │
+│  2. Request appears in admin's JIT Requests queue               │
+│     └─ Shows agent, capability, resource, justification         │
+│                                                                 │
+│  3. Admin reviews and decides:                                  │
+│     ├─ Approve → Agent proceeds with action                     │
+│     └─ Deny → Agent receives denial, action blocked             │
+│                                                                 │
+│  4. SDK polls for decision (configurable timeout)               │
+│     └─ Returns approval/denial to calling code                  │
+│                                                                 │
+│  5. Full audit trail recorded                                   │
+│     └─ Who approved, when, justification, outcome               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### SDK Usage
+
+```python
+from aim_sdk import secure, perform_action
+
+agent = secure("my-agent")
+
+@perform_action(
+    capability="database:delete",
+    resource="users_table",
+    risk_level="high",
+    jit_access=True,           # Require approval
+    timeout_seconds=300        # Wait up to 5 minutes
+)
+def delete_user_data(user_id: str):
+    """This function will wait for admin approval before executing."""
+    return database.delete_user(user_id)
+
+# When called:
+# 1. SDK creates JIT request
+# 2. Admin sees request in dashboard
+# 3. Admin approves/denies
+# 4. Function executes (if approved) or raises JITDenied (if denied)
+```
+
+### JIT Requests Dashboard
+
+Navigate to **JIT Requests** to view:
+- **Pending Requests**: Awaiting approval
+- **Recent Decisions**: Approved/denied history
+- **Request Details**: Agent, capability, resource, justification
+
+### Approval Criteria
+
+Admins see when reviewing:
+- **Agent Trust Score**: Higher trust = more likely to approve
+- **Capability History**: Past usage of this capability
+- **Risk Assessment**: Low/Medium/High based on capability
+- **Justification**: Context provided by the requesting code
+
+### Timeout Behavior
+
+If no admin responds within the timeout:
+- Request expires
+- SDK receives timeout error
+- Agent code handles gracefully
+- Audit records the timeout
+
+---
+
 ## 🔑 Capability Requests — Secure Escalation
 
 Need more capabilities? Request them via SDK or API — admins approve in the dashboard.
@@ -505,11 +870,15 @@ headers = {
 | **Agent Identity** | Ed25519 cryptographic signing, automatic key rotation, secure credential storage |
 | **Auto-Verification** | Agents auto-verified on creation, admins can suspend/revoke if needed |
 | **Capability Requests** | SDK/API workflow for requesting new capabilities with admin approval |
+| **⏱️ JIT Access** | Just-In-Time approval workflow for sensitive operations with real-time admin approval |
 | **MCP Attestation** | Cryptographic verification, auto-detection from Claude Desktop, capability mapping |
-| **Trust Scoring** | Dynamic 8-factor algorithm, agents start at ~90%, violations reduce score |
-| **Compliance & Audit** | Complete audit trails, automated policy enforcement, real-time reporting |
-| **Security Monitoring** | ML anomaly detection, real-time alerts, bulk alert management, drift detection |
-| **Security Policies** | 6 policy types: unusual activity, config drift, access control, capability violations, trust monitoring, data exfiltration prevention |
+| **📊 MCP Trust Scoring** | 8-factor weighted algorithm for MCP servers: attestation consensus, connection health, security posture |
+| **🔍 MCP Discovery** | Auto-detect unregistered MCP servers, streamlined registration workflow |
+| **🛡️ MCP Security Policies** | Allowlist/blocklist enforcement, capability requirements, trust score thresholds |
+| **Trust Scoring** | Dynamic 8-factor algorithm for agents, start at ~90%, violations reduce score |
+| **✅ Compliance Dashboard** | 10 automated compliance checks (5 security, 5 operations), SOC 2/HIPAA/GDPR ready |
+| **🚨 Security Dashboard** | Real-time alerts, threat detection, source IP tracking, ML anomaly detection |
+| **Security Policies** | 12 policy types for agents and MCP servers: blocking mode, alert-only, configurable enforcement |
 
 📚 **Full documentation:** [opena2a.org/docs](https://opena2a.org/docs)
 
