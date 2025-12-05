@@ -252,7 +252,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 			alertDescription = fmt.Sprintf(
 				"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-					"This action was logged but allowed for monitoring purposes.",
+					"This action was DENIED. Grant the required capability to allow this action.",
 				agent.Name, req.Capability, req.Resource,
 			)
 		}
