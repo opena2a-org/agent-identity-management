@@ -13,29 +13,25 @@ import (
 
 // APIKeyMiddleware validates API keys from Authorization header or X-API-Key header
 // Used for SDK authentication and direct API calls
+// SECURITY: No debug logging of API keys or auth headers to prevent credential leakage
 func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		path := c.Path()
-		println("DEBUG: APIKeyMiddleware checking path:", path)
 
 		// Skip API key middleware for verification endpoints (use signature auth instead)
 		if path == "/api/v1/sdk-api/verifications" ||
 			strings.HasPrefix(path, "/api/v1/sdk-api/verifications/") {
-			println("DEBUG: Skipping API key check for verification endpoint")
 			return c.Next()
 		}
 
-		println("DEBUG: API key middleware running for path:", path)
 		var apiKey string
 
 		// Try Authorization header first (Bearer token format)
 		authHeader := c.Get("Authorization")
-		println("DEBUG: Authorization header:", authHeader)
 		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				apiKey = parts[1]
-				println("DEBUG: Extracted API key:", apiKey[:10]+"...")
 			}
 		}
 

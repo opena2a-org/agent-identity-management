@@ -143,6 +143,7 @@ func main() {
 
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
+	app.Use(middleware.SecurityHeadersMiddleware()) // SECURITY: Add HTTP security headers (HSTS, CSP, etc.)
 	app.Use(middleware.LoggerMiddleware())
 	app.Use(metrics.PrometheusMiddleware())   // Prometheus metrics collection
 	app.Use(middleware.AnalyticsTracking(db)) // Real-time API call tracking
@@ -150,12 +151,15 @@ func main() {
 
 	// CORS with allowed origins from environment
 	// IMPORTANT: Frontend ALWAYS runs on port 3000, backend on port 8080
+	// SECURITY: CORS origins are validated by CORSMiddleware to reject wildcards
 	allowedOrigins := []string{
 		"http://localhost:3000",
 	}
 	if customOrigins := os.Getenv("ALLOWED_ORIGINS"); customOrigins != "" {
-		allowedOrigins = []string{customOrigins}
+		// Support multiple comma-separated origins in environment variable
+		allowedOrigins = strings.Split(customOrigins, ",")
 	}
+	// CORSMiddleware will validate and sanitize these origins (rejecting wildcards)
 	app.Use(middleware.CORSMiddleware(allowedOrigins))
 
 	// Health check (no auth required)

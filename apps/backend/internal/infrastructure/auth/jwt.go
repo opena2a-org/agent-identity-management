@@ -26,14 +26,23 @@ type JWTService struct {
 }
 
 // NewJWTService creates a new JWT service
+// SECURITY: Default access token expiry reduced to 15 minutes for enterprise security
+// Users should use refresh tokens to obtain new access tokens
 func NewJWTService() *JWTService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		panic("JWT_SECRET environment variable is required")
 	}
 
-	// Get expiry durations from env or use defaults
-	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "24h"))
+	// SECURITY: Validate JWT secret minimum length (256 bits = 32 bytes recommended)
+	if len(secret) < 32 {
+		panic("JWT_SECRET must be at least 32 characters for security")
+	}
+
+	// Get expiry durations from env or use secure defaults
+	// SECURITY: 15 minute access token expiry minimizes exposure window
+	// Refresh tokens last 7 days and support rotation
+	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "15m"))
 	refreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
 
 	return &JWTService{

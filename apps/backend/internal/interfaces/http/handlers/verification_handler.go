@@ -158,10 +158,10 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		isJITRequest = true
 	}
 
+	// SECURITY: Debug logging removed to prevent information leakage
 	var status string
 	if err != nil {
 		// Error during verification - deny by default for security
-		fmt.Printf("⚠️  VerifyCapability error: %v\n", err)
 		status = "denied"
 		if denialReason == "" {
 			denialReason = fmt.Sprintf("Verification error: %v", err)
@@ -171,40 +171,31 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	} else if isJITRequest {
 		// JIT access request without capability - create pending record for admin approval
 		status = "pending"
-		fmt.Printf("🔐 JIT Access request: Agent %s requesting '%s' - awaiting admin approval\n", agent.Name, req.Capability)
 	} else {
 		status = "denied"
 	}
 	// Create verification ID
 	verificationID := uuid.New()
 
-	// ✅ CHECK FOR CAPABILITY VIOLATIONS - Create alert based on risk level
-	// Low-risk actions: No alerts needed, just tracking (better UX for demos)
+	// CHECK FOR CAPABILITY VIOLATIONS - Create alert based on risk level
+	// Low-risk actions: No alerts needed, just tracking
 	// Medium/High-risk actions: Alert if action is denied or lacks capability
+	// SECURITY: No debug logging to prevent information leakage
 	shouldCreateAlert := false
 	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.Capability, req.Resource)
-	if err != nil {
-		fmt.Printf("⚠️  Error checking capability: %v\n", err)
-	} else if !hasCapability {
+	if err == nil && !hasCapability {
 		// Determine if this action warrants an alert based on risk level and approval status
-		// Low-risk actions approved by trust score: No alert (good UX for demos)
-		// Medium-risk actions without capability: Alert only if denied
-		// High-risk actions without capability: Always alert
 		isLowRisk := isLowRiskCapability(req.Capability)
 		isDenied := status == "denied"
 
 		if isDenied {
 			// Always alert on denied actions
 			shouldCreateAlert = true
-			fmt.Printf("🚨 DENIED ACTION: Agent %s denied for action: %s\n", agent.Name, req.Capability)
 		} else if !isLowRisk && req.RiskLevel != "low" {
 			// Alert for medium/high risk actions without capability (even if approved)
 			shouldCreateAlert = true
-			fmt.Printf("🚨 CAPABILITY VIOLATION: Agent %s attempting %s-risk action without capability: %s\n", agent.Name, req.RiskLevel, req.Capability)
-		} else {
-			// Low-risk approved actions: Just log, no alert
-			fmt.Printf("📝 TRACKED: Agent %s performed low-risk action: %s (approved by trust score)\n", agent.Name, req.Capability)
 		}
+		// Low-risk approved actions: No alert, no logging needed
 	}
 
 	// Create audit log entry - Use the audit ID from VerifyCapability so alerts can link to it
@@ -232,11 +223,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		auditEntry.Metadata["denialReason"] = denialReason
 	}
 
-	// Save audit log
-	if err := h.auditService.Log(c.Context(), auditEntry); err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("Failed to create audit log: %v\n", err)
-	}
+	// Save audit log - errors don't block the request
+	// SECURITY: No error logging to prevent information leakage
+	_ = h.auditService.Log(c.Context(), auditEntry)
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
@@ -293,11 +282,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		}
 
 		// Save alert to database using AgentService's alert repository
-		if err := h.agentService.CreateSecurityAlert(c.Context(), alert); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
-		} else {
-			fmt.Printf("✅ Security alert created (severity: %s): %s\n", severity, alert.ID.String())
-		}
+		// Create security alert - errors don't block the request
+		// SECURITY: No logging to prevent information leakage
+		_ = h.agentService.CreateSecurityAlert(c.Context(), alert)
 
 		// NOTE: Violation record is already created by VerifyAction() with correct is_blocked and severity
 		// Do NOT create a duplicate here - it was causing dashboard to show incorrect data
@@ -382,13 +369,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 
 	// Save verification event using service
+	// SECURITY: No error logging to prevent information leakage
 	event, err := h.verificationEventService.CreateVerificationEvent(c.Context(), verificationEventReq)
-	if err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("❌ Failed to create verification event: %v\n", err)
-	} else {
-		fmt.Printf("✅ Verification event created: ID=%s, OrgID=%s, AgentID=%s\n",
-			event.ID, event.OrganizationID, *event.AgentID)
+	if err == nil {
 		// Use the actual database ID from the created event
 		verificationID = event.ID
 	}
@@ -397,19 +380,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// UNUSUAL ACCESS PATTERN DETECTION
 	// Run anomaly detection after each verification to catch suspicious behavior
 	// ============================================================================
+	// UNUSUAL ACCESS PATTERN DETECTION (async, non-blocking)
+	// SECURITY: No error logging to prevent information leakage
 	if h.alertService != nil {
-		// Capture values needed for async operation - don't use c.Context() in goroutine
-		// because the request context becomes invalid after the response is sent
 		orgID := agent.OrganizationID
 		agentIDCopy := agentID
 		go func() {
-			// Run async to not slow down verification response
-			// Use background context since request context may be cancelled
 			ctx := context.Background()
-			_, err := h.alertService.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
-			if err != nil {
-				fmt.Printf("⚠️ Unusual access pattern detection failed: %v\n", err)
-			}
+			_, _ = h.alertService.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
 		}()
 	}
 
@@ -703,8 +681,8 @@ func (h *VerificationHandler) determineVerificationStatus(
 	// CRITICAL ACTION BLOCKING
 	// These actions ALWAYS require manual admin approval regardless of trust score
 	// ============================================================================
+	// SECURITY: No debug logging to prevent information leakage
 	if criticalActions[actionType] {
-		fmt.Printf("🔴 CRITICAL ACTION BLOCKED: %s requires manual admin approval\n", actionType)
 		return "pending", fmt.Sprintf("Critical action '%s' requires manual admin approval", actionType)
 	}
 
@@ -712,13 +690,13 @@ func (h *VerificationHandler) determineVerificationStatus(
 	// HIGH-RISK ACTION EVALUATION
 	// High-risk actions with low trust score require manual approval
 	// ============================================================================
+	// SECURITY: No debug logging to prevent information leakage
 	if highRiskActions[actionType] && trustScore < MinTrustForCritical {
 		if trustScore < MinTrustForHighRisk {
 			// Very low trust - deny outright
 			return "denied", fmt.Sprintf("Trust score %.2f below required %.2f for high-risk action %s", trustScore, MinTrustForHighRisk, actionType)
 		}
 		// Medium-high trust but not high enough for auto-approval - require manual review
-		fmt.Printf("⚠️ HIGH-RISK ACTION PENDING: %s with trust score %.2f requires review\n", actionType, trustScore)
 		return "pending", fmt.Sprintf("High-risk action '%s' with trust score %.2f requires admin review (auto-approve threshold: %.2f)", actionType, trustScore, MinTrustForCritical)
 	}
 
@@ -1285,7 +1263,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	}
 	_ = h.auditService.Log(c.Context(), auditEntry)
 
-	fmt.Printf("✅ Verification %s APPROVED by %s\n", vid.String(), userName)
+	// SECURITY: No logging of approval events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"id":         vid.String(),
@@ -1388,7 +1366,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	}
 	_ = h.auditService.Log(c.Context(), auditEntry)
 
-	fmt.Printf("❌ Verification %s DENIED by %s: %s\n", vid.String(), userName, req.Reason)
+	// SECURITY: No logging of denial events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"id":           vid.String(),

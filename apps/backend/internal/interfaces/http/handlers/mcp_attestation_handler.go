@@ -115,10 +115,9 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 	}
 
 	// Verify and record attestation
+	// SECURITY: No error logging to prevent information leakage
 	response, err := h.attestationService.VerifyAndRecordAttestation(c.Context(), mcpServerID, &req)
 	if err != nil {
-		// Log the actual error for debugging
-		fmt.Printf("❌ Attestation failed for MCP %s: %v\n", mcpServerID, err)
 
 		// Determine status code based on error
 		statusCode := fiber.StatusInternalServerError
@@ -343,9 +342,8 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 		req.HealthCheckPassed,
 		req.Notes,
 	)
+	// SECURITY: No error logging to prevent information leakage
 	if err != nil {
-		fmt.Printf("❌ Manual attestation failed for MCP %s: %v\n", mcpServerID, err)
-
 		statusCode := fiber.StatusInternalServerError
 		if err.Error() == "mcp server not found" {
 			statusCode = fiber.StatusNotFound
@@ -469,7 +467,7 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 		},
 	)
 
-	fmt.Printf("🔴 Attestation %s revoked by user %s: %s\n", attestationID, userID, req.Reason)
+	// SECURITY: No logging of revocation events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":        true,
@@ -563,8 +561,7 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 		},
 	)
 
-	fmt.Printf("🔴 All attestations by agent %s revoked by user %s: %d attestations revoked (%s)\n",
-		agentID, userID, revokedCount, req.Reason)
+	// SECURITY: No logging of revocation events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":       true,

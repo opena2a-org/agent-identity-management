@@ -8,7 +8,7 @@
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 
-[📚 Docs](https://opena2a.org/docs) • [🚀 Tutorials](https://opena2a.org/docs/tutorials) • [💬 Discord](https://discord.gg/uRZa3KXgEn) • [📺 Demo Video](https://youtu.be/jji5XbxRHfk)
+[📚 Docs](https://opena2a.org/docs) • [🔒 Security](https://opena2a.org/docs/security-assessment) • [🚀 Tutorials](https://opena2a.org/docs/tutorials) • [💬 Discord](https://discord.gg/uRZa3KXgEn) • [📺 Demo Video](https://youtu.be/jji5XbxRHfk)
 
 </div>
 

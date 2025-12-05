@@ -147,11 +147,9 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		},
 	}
 
-	err = h.sdkTokenRepo.Create(sdkToken)
-	if err != nil {
-		// Log error but don't fail download (tracking is not critical for download)
-		fmt.Printf("Warning: Failed to track SDK token: %v\n", err)
-	}
+	// SECURITY: Track SDK token (errors don't block download)
+	// No logging to prevent information leakage
+	_ = h.sdkTokenRepo.Create(sdkToken)
 
 	// Get AIM URL from environment or use request base URL
 	aimURL := os.Getenv("AIM_PUBLIC_URL")

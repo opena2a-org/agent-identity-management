@@ -36,10 +36,11 @@ func NewCapabilityHandler(capabilityService *application.CapabilityService) *Cap
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /agents/{id}/capabilities [post]
+// GrantCapability grants a capability to an agent
+// SECURITY: Debug logging removed to prevent information leakage
 func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		println("ERROR: Invalid agent ID:", err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
 		})
@@ -47,24 +48,18 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 
 	var req GrantCapabilityRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		println("ERROR: Failed to bind request body:", err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid request body",
 		})
 	}
 
-	println("DEBUG: GrantCapability - AgentID:", agentID.String(), "CapabilityType:", req.CapabilityType)
-
 	// Get user ID from JWT claims
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
-		println("ERROR: Failed to get user ID:", err.Error())
 		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error: "Unauthorized",
 		})
 	}
-
-	println("DEBUG: UserID:", userID.String())
 
 	// Get organization ID from context for capability validation
 	orgIDValue := c.Locals("organization_id")
@@ -82,7 +77,6 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 
 	// Validate capability format and auto-register custom capabilities
 	if err := h.capabilityService.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, orgID); err != nil {
-		println("ERROR: Capability validation failed:", err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: err.Error(),
 		})
@@ -103,13 +97,11 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		userIDPtr,
 	)
 	if err != nil {
-		println("ERROR: GrantCapability service failed:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error: err.Error(),
 		})
 	}
 
-	println("DEBUG: Capability granted successfully:", capability.ID.String())
 	return c.Status(fiber.StatusCreated).JSON(capability)
 }
 

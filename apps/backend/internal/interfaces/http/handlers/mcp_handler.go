@@ -160,11 +160,9 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		}
 	}
 
+	// SECURITY: No error logging to prevent information leakage
 	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
 	if err != nil {
-		// Log the actual error for debugging
-		fmt.Printf("❌ Error creating MCP server: %v\n", err)
-
 		// Return 409 Conflict for duplicate URL errors
 		if err.Error() == "mcp server with this URL already exists" {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
