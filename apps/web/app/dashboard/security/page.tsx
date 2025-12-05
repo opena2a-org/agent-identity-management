@@ -10,9 +10,13 @@ import {
   Eye,
   XCircle,
   CheckCircle,
-  Loader2,
   AlertCircle,
+  Bell,
+  FileText,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import {
   LineChart,
   Line,
@@ -286,8 +290,9 @@ export default function SecurityPage() {
   const [error, setError] = useState<string | null>(null);
   const [threats, setThreats] = useState<SecurityThreat[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
-  const [verificationEvents, setVerificationEvents] = useState<any[]>([]);
-  const [verificationLoading, setVerificationLoading] = useState(true);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alertCounts, setAlertCounts] = useState({ all: 0, acknowledged: 0, unacknowledged: 0 });
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Modal states
   const [selectedThreat, setSelectedThreat] = useState<SecurityThreat | null>(
@@ -299,12 +304,21 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       setError(null);
-      const [threatsData, metricsData] = await Promise.all([
+      const [threatsData, metricsData, alertsData, auditData] = await Promise.all([
         api.getSecurityThreats(),
         api.getSecurityMetrics(),
+        api.getAlerts(10, 0),
+        api.getAuditLogs(10, 0),
       ]);
       setThreats(threatsData.threats || []);
       setMetrics(metricsData);
+      setAlerts(alertsData.alerts || []);
+      setAlertCounts({
+        all: alertsData.allCount || 0,
+        acknowledged: alertsData.acknowledgedCount || 0,
+        unacknowledged: alertsData.unacknowledgedCount || 0,
+      });
+      setAuditLogs(auditData || []);
     } catch (err) {
       console.error("Failed to fetch security data:", err);
       const errorMessage = getErrorMessage(err, {
@@ -317,25 +331,8 @@ export default function SecurityPage() {
     }
   };
 
-  const fetchVerificationEvents = async () => {
-    try {
-      setVerificationLoading(true);
-      const data = await api.getRecentVerificationEvents(15); // Last 15 minutes
-      setVerificationEvents(data.events || []);
-    } catch (err) {
-      console.error("Failed to fetch verification events:", err);
-    } finally {
-      setVerificationLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchSecurityData();
-    fetchVerificationEvents();
-
-    // Auto-refresh verification events every 30 seconds
-    const interval = setInterval(fetchVerificationEvents, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   // Handler for viewing threat details
@@ -354,24 +351,24 @@ export default function SecurityPage() {
 
   const stats = [
     {
-      name: "Total Threats",
-      value: metrics?.total_threats?.toLocaleString() || "0",
-      icon: AlertTriangle,
-    },
-    {
       name: "Active Threats",
-      value: metrics?.active_threats?.toLocaleString() || "0",
+      value: metrics?.activeThreats?.toLocaleString() || "0",
       icon: AlertOctagon,
     },
     {
+      name: "Unacknowledged Alerts",
+      value: alertCounts.unacknowledged.toLocaleString(),
+      icon: Bell,
+    },
+    {
       name: "Blocked Threats",
-      value: metrics?.blocked_threats?.toLocaleString() || "0",
+      value: metrics?.blockedThreats?.toLocaleString() || "0",
       icon: CheckCircle,
     },
     {
-      name: "Anomalies Detected",
-      value: metrics?.total_anomalies?.toLocaleString() || "0",
-      icon: Activity,
+      name: "Total Threats",
+      value: metrics?.totalThreats?.toLocaleString() || "0",
+      icon: AlertTriangle,
     },
   ];
 
@@ -405,7 +402,7 @@ export default function SecurityPage() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={metrics?.threat_trend || []}>
+              <LineChart data={metrics?.threatTrend || []}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   className="stroke-gray-200 dark:stroke-gray-700"
@@ -449,7 +446,7 @@ export default function SecurityPage() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metrics?.severity_distribution || []}>
+              <BarChart data={metrics?.severityDistribution || []}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   className="stroke-gray-200 dark:stroke-gray-700"
@@ -581,148 +578,137 @@ export default function SecurityPage() {
         </div>
       </div>
 
-      {/* Agent Action Verification - Real-time verification events */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Agent Action Verification
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Real-time Ed25519 signature verification for agent actions (last 15 minutes)
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {!verificationLoading && (
-                <span className="flex items-center text-xs text-green-600 dark:text-green-400">
-                  <Activity className="h-3 w-3 mr-1 animate-pulse" />
-                  Live
-                </span>
-              )}
-              <Shield className="h-5 w-5 text-gray-400" />
+      {/* Two-column layout for Alerts and Audit Activity */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Recent Security Alerts */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  Security Alerts
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {alertCounts.unacknowledged} unacknowledged of {alertCounts.all} total
+                </p>
+              </div>
+              <Link
+                href="/dashboard/admin/alerts"
+                className="flex items-center text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                View all <ChevronRight className="h-4 w-4 ml-1" />
+              </Link>
             </div>
           </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {alerts.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bell className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">No security alerts</p>
+              </div>
+            ) : (
+              alerts.slice(0, 5).map((alert) => (
+                <div key={alert.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 p-1.5 rounded-full ${
+                      alert.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30' :
+                      alert.severity === 'high' ? 'bg-orange-100 dark:bg-orange-900/30' :
+                      alert.severity === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
+                      'bg-blue-100 dark:bg-blue-900/30'
+                    }`}>
+                      <AlertTriangle className={`h-3.5 w-3.5 ${
+                        alert.severity === 'critical' ? 'text-red-600 dark:text-red-400' :
+                        alert.severity === 'high' ? 'text-orange-600 dark:text-orange-400' :
+                        alert.severity === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                        'text-blue-600 dark:text-blue-400'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {alert.title}
+                        </p>
+                        <SeverityBadge severity={alert.severity} />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                        {alert.description}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="h-3 w-3 text-gray-400" />
+                        <span className="text-xs text-gray-400">
+                          {formatDateTime(alert.createdAt)}
+                        </span>
+                        {!alert.isAcknowledged && (
+                          <span className="text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded">
+                            Unacknowledged
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-        <div className="overflow-hidden">
-          {verificationLoading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="h-8 w-8 mx-auto mb-2 text-blue-600 animate-spin" />
-              <p className="text-sm text-gray-500 dark:text-gray-400">Loading verification events...</p>
+
+        {/* Audit Activity */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  Audit Activity
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Recent security-related actions
+                </p>
+              </div>
+              <FileText className="h-5 w-5 text-gray-400" />
             </div>
-          ) : verificationEvents.length === 0 ? (
-            <div className="p-8 text-center">
-              <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-              <p className="text-sm text-gray-500 dark:text-gray-400">No verification events in the last 15 minutes</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Agent actions will appear here as they occur
-              </p>
-            </div>
-          ) : (
-            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%]">
-                    Agent
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">
-                    Action
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">
-                    Protocol
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">
-                    Result
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">
-                    Trust Score
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">
-                    Duration
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">
-                    Timestamp
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {verificationEvents.map((event) => (
-                  <tr
-                    key={event.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div
-                        className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
-                        title={event.agentName || event.agentId}
-                      >
-                        {event.agentName ||
-                          `ID: ${event.agentId?.substring(0, 8)}...`}
-                      </div>
-                      {event.initiatorName && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          By: {event.initiatorName}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {event.action || '-'}
-                      </div>
-                      {event.resourceType && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {event.resourceType}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                        {event.protocol}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {event.status === 'success' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Verified
+          </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {auditLogs.length === 0 ? (
+              <div className="p-8 text-center">
+                <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">No recent audit activity</p>
+              </div>
+            ) : (
+              auditLogs.slice(0, 5).map((log) => (
+                <div key={log.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 p-1.5 rounded-full bg-gray-100 dark:bg-gray-700">
+                      <Activity className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {log.action}
+                        </p>
+                        <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                          {log.resourceType}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          {event.status}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {event.trustScore !== undefined ? (
-                        <div className="flex items-center">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {(event.trustScore * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {event.durationMs !== undefined ? (
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {event.durationMs}ms
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {event.createdAt && formatDateTime(event.createdAt)}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {log.userEmail || 'System'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="h-3 w-3 text-gray-400" />
+                        <span className="text-xs text-gray-400">
+                          {formatDateTime(log.createdAt)}
+                        </span>
+                        {log.ipAddress && (
+                          <span className="text-xs text-gray-400">
+                            from {log.ipAddress}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
