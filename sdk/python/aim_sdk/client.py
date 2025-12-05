@@ -403,13 +403,13 @@ class AIMClient:
         signature = self._sign_message(signature_message)
 
         request_payload = {
-            "agent_id": self.agent_id,
+            "agentId": self.agent_id,  # camelCase for backend
             "capability": capability,
             "resource": resource,
             "context": context or {},
             "timestamp": timestamp,
             "signature": signature,  # Ed25519 signature in body
-            "public_key": self.public_key  # Public key in body
+            "publicKey": self.public_key  # camelCase for backend
         }
 
         # SDK API endpoint
@@ -2134,8 +2134,9 @@ def register_agent(
     elif sdk_creds:
         # SDK MODE: Use embedded OAuth credentials
         auth_mode = "oauth"
-        aim_url = aim_url or sdk_creds.get("aim_url")
-        sdk_token_id = sdk_token_id or sdk_creds.get("sdk_token_id")
+        # Support both camelCase and snake_case for backward compatibility
+        aim_url = aim_url or sdk_creds.get("aimUrl") or sdk_creds.get("aim_url")
+        sdk_token_id = sdk_token_id or sdk_creds.get("sdkTokenId") or sdk_creds.get("sdk_token_id")
 
         if not aim_url:
             raise ConfigurationError("aim_url not found in SDK credentials")
