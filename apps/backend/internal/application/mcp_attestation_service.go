@@ -89,9 +89,9 @@ type AttestMCPRequest struct {
 // AttestMCPResponse represents the response after attestation
 type AttestMCPResponse struct {
 	Success            bool    `json:"success"`
-	AttestationID      string  `json:"attestation_id"`
-	MCPConfidenceScore float64 `json:"mcp_confidence_score"`
-	AttestationCount   int     `json:"attestation_count"`
+	AttestationID      string  `json:"attestationId"`
+	MCPConfidenceScore float64 `json:"mcpConfidenceScore"`
+	AttestationCount   int     `json:"attestationCount"`
 	Message            string  `json:"message"`
 }
 

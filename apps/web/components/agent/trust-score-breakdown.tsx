@@ -23,6 +23,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 interface TrustScoreBreakdownProps {
   agentId: string;
   userRole?: "admin" | "manager" | "member" | "viewer";
+  onTrustScoreUpdate?: (trustScore: number) => void;
 }
 
 interface TrustScoreBreakdown {
@@ -135,7 +136,7 @@ const factorMetadata = {
   },
 };
 
-export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScoreBreakdownProps) {
+export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScoreUpdate }: TrustScoreBreakdownProps) {
   const [breakdown, setBreakdown] = useState<TrustScoreBreakdown | null>(null);
   const [history, setHistory] = useState<TrustScoreHistory | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,10 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer" }: TrustScore
       try {
         const data = await api.getTrustScoreBreakdown(agentId);
         setBreakdown(data);
+        // Notify parent of the fresh trust score for consistency
+        if (onTrustScoreUpdate && data?.overall !== undefined) {
+          onTrustScoreUpdate(data.overall);
+        }
       } catch (err: any) {
         console.error('Failed to fetch trust score breakdown:', err);
         setError(err.message || 'Failed to load trust score breakdown');

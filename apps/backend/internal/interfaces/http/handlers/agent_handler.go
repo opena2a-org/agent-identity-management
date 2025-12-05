@@ -110,6 +110,12 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		"documentationUrl":         agent.DocumentationURL,
 		"keyAlgorithm":             agent.KeyAlgorithm,
 		"createdBy":                agent.CreatedBy,
+		"createdByName":            agent.CreatedByName,       // ✅ Audit trail: who created this agent
+		"createdByEmail":           agent.CreatedByEmail,      // ✅ Audit trail: creator's email
+		"createdBySdkTokenId":      agent.CreatedBySDKTokenID, // ✅ SDK token tracking for revocation
+		"updatedBy":                agent.UpdatedBy,           // ✅ Audit trail: who last updated
+		"updatedByName":            agent.UpdatedByName,       // ✅ Audit trail: updater's name
+		"updatedByEmail":           agent.UpdatedByEmail,      // ✅ Audit trail: updater's email
 		"lastActive":               agent.LastActive,
 		"keyCreatedAt":             agent.KeyCreatedAt,
 		"keyExpiresAt":             agent.KeyExpiresAt,
@@ -142,6 +148,24 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	// ✅ Extract SDK token ID if present (set by SDKTokenTrackingMiddleware)
+	// This enables tracking which SDK token was used to create this agent
+	var sdkTokenID *uuid.UUID
+	if sdkTokenIDStr, ok := c.Locals("sdk_token_id").(string); ok && sdkTokenIDStr != "" {
+		if parsed, err := uuid.Parse(sdkTokenIDStr); err == nil {
+			sdkTokenID = &parsed
+		}
+	}
+
+	// ✅ Extract API key ID if present (set by APIKeyMiddleware)
+	// This enables tracking which API key was used to create this agent
+	var apiKeyID *uuid.UUID
+	if apiKeyIDLocal := c.Locals("api_key_id"); apiKeyIDLocal != nil {
+		if apiKeyIDVal, ok := apiKeyIDLocal.(uuid.UUID); ok {
+			apiKeyID = &apiKeyIDVal
+		}
+	}
+
 	var req application.CreateAgentRequest
 	// Use flexible JSON unmarshaling to accept both camelCase and snake_case
 	if err := utils.UnmarshalFlexibleJSON(c.Body(), &req); err != nil {
@@ -150,7 +174,7 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		})
 	}
 
-	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID)
+	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID)
 	if err != nil {
 		// Log the full error for debugging
 		fmt.Printf("ERROR creating agent: %v\n", err)

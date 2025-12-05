@@ -58,6 +58,13 @@ type Agent struct {
 	CreatedAt                time.Time   `json:"createdAt"`
 	UpdatedAt                time.Time   `json:"updatedAt"`
 	CreatedBy                uuid.UUID   `json:"createdBy"`
+	CreatedByName            string      `json:"createdByName"`            // Denormalized for display
+	CreatedByEmail           string      `json:"createdByEmail"`           // Denormalized for display
+	CreatedBySDKTokenID      *uuid.UUID  `json:"createdBySdkTokenId,omitempty"` // SDK token used to create this agent
+	CreatedByAPIKeyID        *uuid.UUID  `json:"createdByApiKeyId,omitempty"`   // API key used to create this agent
+	UpdatedBy                *uuid.UUID  `json:"updatedBy,omitempty"`      // User who last updated this agent
+	UpdatedByName            string      `json:"updatedByName,omitempty"`  // Denormalized for display
+	UpdatedByEmail           string      `json:"updatedByEmail,omitempty"` // Denormalized for display
 	// Tags applied to this agent (populated by join)
 	Tags                     []Tag       `json:"tags"`
 	// Track when agent last performed an action (updated on every verify-action call)

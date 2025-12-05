@@ -201,7 +201,7 @@ func (h *PasswordResetHandler) ResetPassword(c fiber.Ctx) error {
 	var req struct {
 		Email       string `json:"email" validate:"required,email"`
 		Token       string `json:"token" validate:"required"`
-		NewPassword string `json:"new_password" validate:"required,min=8"`
+		NewPassword string `json:"newPassword" validate:"required,min=8"`
 	}
 
 	if err := c.Bind().Body(&req); err != nil {

@@ -32,27 +32,27 @@ func NewPublicAgentHandler(
 
 // PublicRegisterRequest represents a public agent registration request
 type PublicRegisterRequest struct {
-	Name                string           `json:"name" validate:"required"`
-	DisplayName         string           `json:"display_name" validate:"required"`
-	Description         string           `json:"description" validate:"required"`
-	AgentType           domain.AgentType `json:"agent_type" validate:"required"`
-	Version             string           `json:"version"`
-	OrganizationDomain  string           `json:"organization_domain"` // e.g., "example.com"
-	UserEmail           string           `json:"user_email"`          // Optional: for user association
-	RepositoryURL       string           `json:"repository_url"`
-	DocumentationURL    string           `json:"documentation_url"`
+	Name               string           `json:"name" validate:"required"`
+	DisplayName        string           `json:"displayName" validate:"required"`
+	Description        string           `json:"description" validate:"required"`
+	AgentType          domain.AgentType `json:"agentType" validate:"required"`
+	Version            string           `json:"version"`
+	OrganizationDomain string           `json:"organizationDomain"` // e.g., "example.com"
+	UserEmail          string           `json:"userEmail"`          // Optional: for user association
+	RepositoryURL      string           `json:"repositoryUrl"`
+	DocumentationURL   string           `json:"documentationUrl"`
 }
 
 // PublicRegisterResponse includes credentials (private key only returned ONCE)
 type PublicRegisterResponse struct {
-	AgentID     string  `json:"agent_id"`
+	AgentID     string  `json:"agentId"`
 	Name        string  `json:"name"`
-	DisplayName string  `json:"display_name"`
-	PublicKey   string  `json:"public_key"`
-	PrivateKey  string  `json:"private_key"` // ⚠️ ONLY returned on registration
-	AIMURL      string  `json:"aim_url"`
+	DisplayName string  `json:"displayName"`
+	PublicKey   string  `json:"publicKey"`
+	PrivateKey  string  `json:"privateKey"` // ⚠️ ONLY returned on registration
+	AIMURL      string  `json:"aimUrl"`
 	Status      string  `json:"status"`
-	TrustScore  float64 `json:"trust_score"`
+	TrustScore  float64 `json:"trustScore"`
 	Message     string  `json:"message"`
 }
 
@@ -109,6 +109,9 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 	orgID := validation.Organization.ID
 
 	// Create agent (keys generated automatically by AgentService)
+	// Note: Public registration validates API key manually above but doesn't track the key ID
+	// Since validation happens inline (not via middleware), we don't have the API key ID here
+	// Both sdkTokenID and apiKeyID are nil for this flow
 	agent, err := h.agentService.CreateAgent(c.Context(), &application.CreateAgentRequest{
 		Name:             req.Name,
 		DisplayName:      req.DisplayName,
@@ -117,7 +120,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		Version:          req.Version,
 		RepositoryURL:    req.RepositoryURL,
 		DocumentationURL: req.DocumentationURL,
-	}, orgID, userID)
+	}, orgID, userID, nil, nil)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create agent: %v", err),

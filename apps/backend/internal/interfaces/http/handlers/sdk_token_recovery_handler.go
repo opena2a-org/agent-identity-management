@@ -29,14 +29,14 @@ func NewSDKTokenRecoveryHandler(
 }
 
 type RecoverTokenRequest struct {
-	OldRefreshToken string `json:"old_refresh_token" validate:"required"`
+	OldRefreshToken string `json:"oldRefreshToken" validate:"required"`
 }
 
 type RecoverTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	TokenType    string `json:"tokenType"`
+	ExpiresIn    int    `json:"expiresIn"`
 	Message      string `json:"message"`
 }
 

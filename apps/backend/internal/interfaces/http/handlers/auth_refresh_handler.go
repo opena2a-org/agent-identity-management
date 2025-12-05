@@ -169,12 +169,12 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 
 // Request/Response types
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refreshToken" validate:"required"`
 }
 
 type RefreshTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"` // New refresh token (token rotation)
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"` // New refresh token (token rotation)
+	TokenType    string `json:"tokenType"`
+	ExpiresIn    int    `json:"expiresIn"`
 }

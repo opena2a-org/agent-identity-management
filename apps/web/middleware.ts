@@ -10,8 +10,6 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/admin/security-policies': ['admin'],
   '/dashboard/admin/capability-requests': ['admin'],
   '/dashboard/security': ['admin', 'manager', 'member'],
-  '/dashboard/monitoring': ['admin', 'manager', 'member'],
-  '/dashboard/analytics': ['admin', 'manager', 'member'],
 };
 
 export function middleware(request: NextRequest) {

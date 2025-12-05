@@ -131,6 +131,17 @@ interface AgentEntry {
   status: string;
 }
 
+// MCP server entry for risk distribution
+interface MCPServerEntry {
+  id: string;
+  name: string;
+  url: string;
+  status: "active" | "inactive" | "pending" | "verified" | "suspended" | "revoked";
+  isVerified?: boolean;
+  lastVerifiedAt?: string;
+  createdAt: string;
+}
+
 // Helper to format audit action for display
 function formatAuditAction(log: AuditLogEntry): string {
   const actionMap: Record<string, string> = {
@@ -237,9 +248,11 @@ function ComplianceSummaryCard({
       "trustScoreDegradation": "Low Trust Scores",
       "capabilityViolations": "Capability Violations",
       "inactiveAgents": "Inactive Agents",
-      "unverifiedAgentBacklog": "Pending Verifications",
+      "unverifiedAgentBacklog": "Pending Agent Verifications",
       "orphanedResources": "Orphaned Resources",
       "adminAccessReview": "Admin Access Review",
+      "inactiveMCPServers": "Inactive MCP Servers",
+      "unverifiedMCPBacklog": "Pending MCP Verifications",
     };
     return checkLabels[name] || name
       // Convert camelCase to Title Case
@@ -307,6 +320,12 @@ function ComplianceSummaryCard({
             }
             if (check.name === "orphanedResources") {
               return count === 1 ? "1 resource" : `${count} resources`;
+            }
+            if (check.name === "inactiveMCPServers") {
+              return count === 1 ? "1 MCP" : `${count} MCPs`;
+            }
+            if (check.name === "unverifiedMCPBacklog") {
+              return count === 1 ? "1 pending" : `${count} pending`;
             }
             return count === 1 ? "1 issue" : `${count} issues`;
           };
@@ -447,15 +466,16 @@ function StatCard({ stat }: { stat: { name: string; value: string; icon: any; ic
   );
 }
 
-// Component: Risk Distribution Chart (uses actual agent trust scores)
-function RiskDistributionChart({ agents }: { agents: AgentEntry[] }) {
-  // Calculate risk distribution from actual agent trust scores
-  // Trust score is stored as 0-1, so multiply by 100 for percentage
-  // Low Risk: >= 80%, Medium Risk: 60-79%, High Risk: 40-59%, Critical: < 40%
+// Component: Risk Distribution Chart (uses actual agent trust scores and MCP server status)
+function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; mcpServers: MCPServerEntry[] }) {
+  // Calculate risk distribution from actual agent trust scores and MCP server statuses
+  // Agents: Trust score is stored as 0-1, Low Risk: >= 80%, Medium Risk: 60-79%, High Risk: 40-59%, Critical: < 40%
+  // MCPs: verified/active = Low Risk, pending = Medium Risk, inactive = High Risk, suspended/revoked = Critical
   const calculateRiskDistribution = () => {
-    if (agents.length === 0) {
+    const totalItems = agents.length + mcpServers.length;
+    if (totalItems === 0) {
       return [
-        { name: "No Agents", value: 100, color: "#9ca3af", count: 0 },
+        { name: "No Resources", value: 100, color: "#9ca3af", count: 0 },
       ];
     }
 
@@ -464,6 +484,7 @@ function RiskDistributionChart({ agents }: { agents: AgentEntry[] }) {
     let highRisk = 0;
     let critical = 0;
 
+    // Categorize agents by trust score
     for (const agent of agents) {
       const score = agent.trustScore * 100; // Convert 0-1 to 0-100
       if (score >= 80) {
@@ -477,16 +498,30 @@ function RiskDistributionChart({ agents }: { agents: AgentEntry[] }) {
       }
     }
 
-    const total = agents.length;
+    // Categorize MCP servers by status
+    for (const mcp of mcpServers) {
+      if (mcp.status === "verified" || mcp.status === "active") {
+        lowRisk++;
+      } else if (mcp.status === "pending") {
+        mediumRisk++;
+      } else if (mcp.status === "inactive") {
+        highRisk++;
+      } else {
+        // suspended, revoked
+        critical++;
+      }
+    }
+
     return [
-      { name: "Low Risk", value: Math.round((lowRisk / total) * 100), color: "#10b981", count: lowRisk },
-      { name: "Medium Risk", value: Math.round((mediumRisk / total) * 100), color: "#f59e0b", count: mediumRisk },
-      { name: "High Risk", value: Math.round((highRisk / total) * 100), color: "#f97316", count: highRisk },
-      { name: "Critical", value: Math.round((critical / total) * 100), color: "#ef4444", count: critical },
+      { name: "Low Risk", value: Math.round((lowRisk / totalItems) * 100), color: "#10b981", count: lowRisk },
+      { name: "Medium Risk", value: Math.round((mediumRisk / totalItems) * 100), color: "#f59e0b", count: mediumRisk },
+      { name: "High Risk", value: Math.round((highRisk / totalItems) * 100), color: "#f97316", count: highRisk },
+      { name: "Critical", value: Math.round((critical / totalItems) * 100), color: "#ef4444", count: critical },
     ].filter(d => d.count > 0);
   };
 
   const data = calculateRiskDistribution();
+  const totalItems = agents.length + mcpServers.length;
 
   return (
     <div className="flex items-center gap-6">
@@ -517,9 +552,9 @@ function RiskDistributionChart({ agents }: { agents: AgentEntry[] }) {
             <span className="text-sm font-semibold text-gray-900 dark:text-white">{item.value}%</span>
           </div>
         ))}
-        {agents.length > 0 && (
+        {totalItems > 0 && (
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
-            <span className="text-xs text-gray-500">Based on {agents.length} agent{agents.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-gray-500">Based on {agents.length} agent{agents.length !== 1 ? "s" : ""} & {mcpServers.length} MCP{mcpServers.length !== 1 ? "s" : ""}</span>
           </div>
         )}
       </div>
@@ -605,7 +640,12 @@ export default function CompliancePage() {
   const [accessReview, setAccessReview] = useState<AccessReviewUser[]>([]);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
   const [agents, setAgents] = useState<AgentEntry[]>([]);
+  const [mcpServers, setMcpServers] = useState<MCPServerEntry[]>([]);
   const [alerts, setAlerts] = useState<AlertEntry[]>([]);
+  const [activitySummary, setActivitySummary] = useState<{
+    attestationCount: number;
+    verificationCount: number;
+  } | null>(null);
   const [runningCheck, setRunningCheck] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
   // Framework for exports only (not for display)
@@ -615,18 +655,22 @@ export default function CompliancePage() {
     try {
       setLoading(true);
       setError(null);
-      const [statusData, metricsData, accessData, agentsData, alertsData] = await Promise.all([
+      const [statusData, metricsData, accessData, agentsData, mcpData, alertsData, activityData] = await Promise.all([
         api.getComplianceStatus(),
         api.getComplianceMetrics(),
         api.getAccessReview(),
         api.listAgents(),
+        api.listMCPServers(100, 0), // Get MCP servers for compliance tracking
         api.getAlerts(10, 0), // Get 10 most recent alerts
+        api.getActivitySummary(30), // Get last 30 days activity including attestations
       ]);
       setStatus(statusData);
       setMetrics(metricsData);
       setAccessReview(accessData.users || []);
       setAgents(agentsData.agents || []);
+      setMcpServers(mcpData.mcpServers || []);
       setAlerts(alertsData.alerts || []);
+      setActivitySummary(activityData.summary || null);
     } catch (err) {
       console.error("Failed to fetch compliance data:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -712,11 +756,19 @@ export default function CompliancePage() {
   const auditLogCount = status?.recentAuditCount || 0;
   const auditLogDisplay = auditLogCount >= 100 ? "100+" : auditLogCount.toString();
 
+  // Calculate MCP verification stats
+  const verifiedMcps = mcpServers.filter(m => m.isVerified || m.status === "verified").length;
+  const totalMcps = mcpServers.length;
+
+  // Get attestation count from activity summary
+  const attestationCount = activitySummary?.attestationCount || 0;
+
   const stats = [
     { name: "Avg Trust Score", value: `${Math.round(status?.averageTrustScore || 0)}%`, icon: Shield, iconColor: (status?.averageTrustScore || 0) >= 80 ? "text-green-500" : (status?.averageTrustScore || 0) >= 60 ? "text-yellow-500" : "text-red-500" },
-    { name: "Audit Logs (Recent)", value: auditLogDisplay, icon: FileText, iconColor: "text-blue-500" },
     { name: "Verified Agents", value: `${status?.verifiedAgents || 0} / ${status?.totalAgents || 0}`, icon: CheckCircle, iconColor: "text-green-500" },
-    { name: "Compliance Rate", value: `${complianceRate}%`, icon: ShieldCheck, iconColor: complianceRate >= 80 ? "text-green-500" : complianceRate >= 60 ? "text-yellow-500" : "text-red-500" },
+    { name: "Verified MCPs", value: `${verifiedMcps} / ${totalMcps}`, icon: ShieldCheck, iconColor: verifiedMcps === totalMcps && totalMcps > 0 ? "text-green-500" : verifiedMcps > 0 ? "text-yellow-500" : "text-gray-500" },
+    { name: "MCP Attestations", value: `${attestationCount}`, icon: FileCheck, iconColor: attestationCount > 0 ? "text-blue-500" : "text-gray-500" },
+    { name: "Compliance Rate", value: `${complianceRate}%`, icon: FileText, iconColor: complianceRate >= 80 ? "text-green-500" : complianceRate >= 60 ? "text-yellow-500" : "text-red-500" },
   ];
 
   return (
@@ -730,7 +782,7 @@ export default function CompliancePage() {
               Compliance Dashboard
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Monitor agent verification, trust scores, and security compliance for your organization.
+              Monitor agent and MCP server verification, trust scores, and security compliance for your organization.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -771,7 +823,7 @@ export default function CompliancePage() {
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {stats.map((stat) => (
             <StatCard key={stat.name} stat={stat} />
           ))}
@@ -799,12 +851,12 @@ export default function CompliancePage() {
               {/* Operations Checks */}
               <ComplianceSummaryCard
                 title="Operations Compliance"
-                description="Agent activity and verification status"
-                passed={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name) && c.passed).length}
-                total={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name)).length}
+                description="Agent and MCP activity and verification status"
+                passed={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name) && c.passed).length}
+                total={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name)).length}
                 icon={Activity}
                 color="green"
-                checks={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources"].includes(c.name))}
+                checks={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name))}
               />
             </div>
           </div>
@@ -857,7 +909,7 @@ export default function CompliancePage() {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Risk Distribution</h3>
                   <BarChart3 className="h-5 w-5 text-gray-400" />
                 </div>
-                <RiskDistributionChart agents={agents} />
+                <RiskDistributionChart agents={agents} mcpServers={mcpServers} />
               </div>
 
               {/* Compliance Checks */}

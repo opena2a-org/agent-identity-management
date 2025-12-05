@@ -114,6 +114,17 @@ export default function AgentDetailsPage({
       try {
         // Fetch current agent
         const agentData = await api.getAgent(agentId!);
+
+        // Fetch fresh trust score and update agent data for consistency
+        try {
+          const trustBreakdown = await api.getTrustScoreBreakdown(agentId!);
+          if (trustBreakdown?.overall !== undefined) {
+            agentData.trustScore = trustBreakdown.overall;
+          }
+        } catch (e) {
+          // non-fatal - use stored trust score
+        }
+
         setAgent(agentData);
 
         // Fetch all agents (for graph visualization)
@@ -792,7 +803,14 @@ export default function AgentDetailsPage({
         </TabsContent>
 
         <TabsContent value="trust">
-          <TrustScoreBreakdown agentId={agent.id} userRole={userRole} />
+          <TrustScoreBreakdown
+            agentId={agent.id}
+            userRole={userRole}
+            onTrustScoreUpdate={(newScore) => {
+              // Update the agent's displayed trust score for consistency
+              setAgent(prev => prev ? { ...prev, trustScore: newScore } : null);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">
@@ -897,6 +915,68 @@ export default function AgentDetailsPage({
                     {new Date(agent.createdAt).toLocaleString()}
                   </span>
                 </div>
+                <Separator />
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Created By:
+                  </span>
+                  <span className="col-span-2 text-sm">
+                    {agent.createdByName || agent.createdByEmail ? (
+                      <div className="flex flex-col gap-1">
+                        {agent.createdByName && (
+                          <span className="font-medium">{agent.createdByName}</span>
+                        )}
+                        {agent.createdByEmail && (
+                          <span className="text-muted-foreground">{agent.createdByEmail}</span>
+                        )}
+                        {agent.createdBySdkTokenId && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 h-auto text-xs text-primary justify-start"
+                            onClick={() => router.push(`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`)}
+                          >
+                            <KeyRound className="h-3 w-3 mr-1" />
+                            View SDK Token
+                          </Button>
+                        )}
+                        {agent.createdByApiKeyId && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 h-auto text-xs text-orange-600 justify-start"
+                            onClick={() => router.push(`/dashboard/api-keys?highlight=${agent.createdByApiKeyId}`)}
+                          >
+                            <KeyRound className="h-3 w-3 mr-1" />
+                            View API Key
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">System</span>
+                    )}
+                  </span>
+                </div>
+                {agent.updatedByName && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-3 items-center gap-4">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Last Updated By:
+                      </span>
+                      <span className="col-span-2 text-sm">
+                        <div className="flex flex-col gap-1">
+                          {agent.updatedByName && (
+                            <span className="font-medium">{agent.updatedByName}</span>
+                          )}
+                          {agent.updatedByEmail && (
+                            <span className="text-muted-foreground">{agent.updatedByEmail}</span>
+                          )}
+                        </div>
+                      </span>
+                    </div>
+                  </>
+                )}
                 <Separator />
                 <div className="grid grid-cols-3 items-center gap-4">
                   <span className="text-sm font-medium text-muted-foreground">

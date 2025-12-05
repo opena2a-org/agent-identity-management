@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X, ExternalLink, Copy, Check, Shield, Clock, User, Globe, FileText, AlertTriangle } from "lucide-react";
+import { X, ExternalLink, Copy, Check, Shield, Clock, User, Globe, FileText, AlertTriangle, KeyRound, Ban, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { api, Agent } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -85,12 +85,21 @@ export function AlertDetailPanel({
   const [loadingData, setLoadingData] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showFullMetadata, setShowFullMetadata] = useState(false);
+  const [currentTrustScore, setCurrentTrustScore] = useState<number | null>(null);
+  // SDK Token revocation state
+  const [agentDetails, setAgentDetails] = useState<Agent | null>(null);
+  const [revokingToken, setRevokingToken] = useState(false);
+  const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
+  const [revokeSuccess, setRevokeSuccess] = useState(false);
 
-  // Fetch audit log and verification history when alert changes
+  // Fetch audit log, verification history, and current trust score when alert changes
   useEffect(() => {
     if (!alert) {
       setAuditLog(null);
       setVerificationHistory([]);
+      setCurrentTrustScore(null);
+      setAgentDetails(null);
+      setRevokeSuccess(false);
       return;
     }
 
@@ -112,11 +121,49 @@ export function AlertDetailPanel({
       // Always fetch verification history for the agent
       const history = await api.getAgentVerificationHistory(alert.resourceId, 5);
       setVerificationHistory(history);
+
+      // Fetch current trust score from agent trust breakdown
+      try {
+        const trustBreakdown = await api.getTrustScoreBreakdown(alert.resourceId);
+        if (trustBreakdown?.overall !== undefined) {
+          setCurrentTrustScore(trustBreakdown.overall);
+        }
+      } catch (e) {
+        // Non-fatal - current trust score just won't be shown
+        console.log("Could not fetch current trust score:", e);
+      }
+
+      // Fetch agent details to get SDK token info for revocation
+      try {
+        const agent = await api.getAgent(alert.resourceId);
+        setAgentDetails(agent);
+      } catch (e) {
+        console.log("Could not fetch agent details:", e);
+        setAgentDetails(null);
+      }
+
       setLoadingData(false);
     };
 
     fetchData();
   }, [alert?.auditId, alert?.resourceId]);
+
+  // Handle SDK token revocation
+  const handleRevokeSDKToken = async () => {
+    if (!agentDetails?.createdBySdkTokenId) return;
+
+    setRevokingToken(true);
+    try {
+      await api.revokeSDKToken(agentDetails.createdBySdkTokenId, `Security alert: ${alert?.alertType}`);
+      setRevokeSuccess(true);
+      setShowRevokeConfirm(false);
+      toast.success("SDK token revoked successfully");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to revoke SDK token");
+    } finally {
+      setRevokingToken(false);
+    }
+  };
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -209,16 +256,130 @@ export function AlertDetailPanel({
                   </Button>
                 </div>
               </div>
-              {metadata.trustScore !== undefined && (
+              {/* Show current trust score (freshly fetched) */}
+              {currentTrustScore !== null && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Trust Score</span>
+                  <span className="text-sm text-gray-600">Current Trust Score</span>
+                  <span className="font-medium">
+                    {(currentTrustScore * 100).toFixed(1)}%
+                  </span>
+                </div>
+              )}
+              {/* Show historical trust score at alert time if different from current */}
+              {metadata.trustScore !== undefined && currentTrustScore !== null &&
+               Math.abs((metadata.trustScore * 100) - (currentTrustScore * 100)) > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Trust Score at Alert Time</span>
+                  <span className="font-medium text-gray-500">
+                    {(metadata.trustScore * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {/* Fallback: show historical score if current couldn't be fetched */}
+              {metadata.trustScore !== undefined && currentTrustScore === null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Trust Score at Alert Time</span>
                   <span className="font-medium">
                     {(metadata.trustScore * 100).toFixed(0)}%
                   </span>
                 </div>
               )}
+
+              {/* Creator Info */}
+              {agentDetails?.createdByName && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Created By</span>
+                  <span className="font-medium">
+                    {agentDetails.createdByName}
+                    {agentDetails.createdByEmail && (
+                      <span className="text-gray-500 text-xs ml-1">({agentDetails.createdByEmail})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* SDK Token Info */}
+              {agentDetails?.createdBySdkTokenId && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">SDK Token</span>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/sdk-tokens?highlight=${agentDetails.createdBySdkTokenId}`}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <KeyRound className="h-3 w-3" />
+                      View Token
+                    </Link>
+                    {!revokeSuccess ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2"
+                        onClick={() => setShowRevokeConfirm(true)}
+                      >
+                        <Ban className="h-3 w-3 mr-1" />
+                        Revoke
+                      </Button>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                        <Check className="h-3 w-3 mr-1" />
+                        Revoked
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
+
+          {/* SDK Token Revoke Confirmation */}
+          {showRevokeConfirm && agentDetails?.createdBySdkTokenId && (
+            <section className="space-y-3">
+              <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-start gap-3">
+                  <Ban className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-red-900 mb-1">
+                      Confirm SDK Token Revocation
+                    </h4>
+                    <p className="text-xs text-red-800 mb-3">
+                      This will immediately revoke the SDK token used to create this agent.
+                      Any applications using this token will no longer be able to authenticate.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleRevokeSDKToken}
+                        disabled={revokingToken}
+                        className="text-xs"
+                      >
+                        {revokingToken ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Revoking...
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="h-3 w-3 mr-1" />
+                            Yes, Revoke Token
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowRevokeConfirm(false)}
+                        className="text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Alert Details */}
           <section className="space-y-3">

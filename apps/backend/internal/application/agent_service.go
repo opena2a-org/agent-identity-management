@@ -23,6 +23,7 @@ type AgentService struct {
 	capabilityRepo           domain.CapabilityRepository // ✅ For checking agent capabilities
 	verificationEventService *VerificationEventService   // ✅ For creating verification events
 	tagRepo                  domain.TagRepository        // ✅ For tagging agents during registration
+	userRepo                 domain.UserRepository       // ✅ For looking up user details (audit trail)
 }
 
 // NewAgentService creates a new agent service
@@ -36,6 +37,7 @@ func NewAgentService(
 	capabilityRepo domain.CapabilityRepository, // ✅ NEW: CapabilityRepository for capability checks
 	verificationEventService *VerificationEventService, // ✅ NEW: For creating verification events
 	tagRepo domain.TagRepository, // ✅ NEW: For tagging agents during registration
+	userRepo domain.UserRepository, // ✅ NEW: For audit trail (creator/updater info)
 ) *AgentService {
 	return &AgentService{
 		agentRepo:                agentRepo,
@@ -47,6 +49,7 @@ func NewAgentService(
 		capabilityRepo:           capabilityRepo,
 		verificationEventService: verificationEventService,
 		tagRepo:                  tagRepo,
+		userRepo:                 userRepo,
 	}
 }
 
@@ -67,7 +70,10 @@ type CreateAgentRequest struct {
 }
 
 // CreateAgent creates a new agent
-func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest, orgID, userID uuid.UUID) (*domain.Agent, error) {
+// sdkTokenID is optional - if provided, it tracks which SDK token was used to create this agent
+// apiKeyID is optional - if provided, it tracks which API key was used to create this agent
+// This enables admins to easily revoke compromised SDK tokens or API keys
+func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.Agent, error) {
 	// Validate inputs
 	if req.Name == "" || req.DisplayName == "" {
 		return nil, fmt.Errorf("name and display_name are required")
@@ -117,24 +123,38 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	// Admins can still suspend/revoke agents if needed.
 	now := time.Now()
 	keyExpiresAt := now.AddDate(1, 0, 0) // Keys expire in 1 year by default
+
+	// ✅ Look up user details for audit trail
+	var createdByName, createdByEmail string
+	if s.userRepo != nil {
+		if user, err := s.userRepo.GetByID(userID); err == nil && user != nil {
+			createdByName = user.Name
+			createdByEmail = user.Email
+		}
+	}
+
 	agent := &domain.Agent{
-		OrganizationID:   orgID,
-		Name:             req.Name,
-		DisplayName:      req.DisplayName,
-		Description:      req.Description,
-		AgentType:        req.AgentType,
-		Version:          req.Version,
-		PublicKey:        &publicKeyBase64, // ✅ Stored for verification (SDK-provided or generated)
-		KeyAlgorithm:     keyAlgorithm,     // ✅ "Ed25519"
-		KeyCreatedAt:     &now,             // ✅ Track when key was created
-		KeyExpiresAt:     &keyExpiresAt,    // ✅ Keys expire in 1 year
-		CertificateURL:   req.CertificateURL,
-		RepositoryURL:    req.RepositoryURL,
-		DocumentationURL: req.DocumentationURL,
-		TalksTo:          req.TalksTo,      // MCP servers this agent communicates with
-		Capabilities:     req.Capabilities, // ✅ Store detected capabilities from SDK
-		Status:           domain.AgentStatusVerified, // ✅ Auto-verified for authenticated users
-		CreatedBy:        userID,
+		OrganizationID:      orgID,
+		Name:                req.Name,
+		DisplayName:         req.DisplayName,
+		Description:         req.Description,
+		AgentType:           req.AgentType,
+		Version:             req.Version,
+		PublicKey:           &publicKeyBase64, // ✅ Stored for verification (SDK-provided or generated)
+		KeyAlgorithm:        keyAlgorithm,     // ✅ "Ed25519"
+		KeyCreatedAt:        &now,             // ✅ Track when key was created
+		KeyExpiresAt:        &keyExpiresAt,    // ✅ Keys expire in 1 year
+		CertificateURL:      req.CertificateURL,
+		RepositoryURL:       req.RepositoryURL,
+		DocumentationURL:    req.DocumentationURL,
+		TalksTo:             req.TalksTo,      // MCP servers this agent communicates with
+		Capabilities:        req.Capabilities, // ✅ Store detected capabilities from SDK
+		Status:              domain.AgentStatusVerified, // ✅ Auto-verified for authenticated users
+		CreatedBy:           userID,
+		CreatedByName:       createdByName,   // ✅ Denormalized for audit trail
+		CreatedByEmail:      createdByEmail,  // ✅ Denormalized for audit trail
+		CreatedBySDKTokenID: sdkTokenID,      // ✅ Track SDK token for easy revocation if compromised
+		CreatedByAPIKeyID:   apiKeyID,        // ✅ Track API key for easy revocation if compromised
 	}
 
 	// Only set encrypted private key if we generated it server-side
@@ -1233,7 +1253,8 @@ func (s *AgentService) DetectMCPServersFromConfig(
 				URL:         fmt.Sprintf("mcp://%s", detected.Name), // Placeholder URL for local MCP servers
 			}
 
-			_, err := mcpService.CreateMCPServer(ctx, registerReq, orgID, userID, nil)
+			// Note: agentID, sdkTokenID, and apiKeyID are nil for auto-detected MCP servers during agent registration
+			_, err := mcpService.CreateMCPServer(ctx, registerReq, orgID, userID, nil, nil, nil)
 			if err != nil {
 				// If already exists, that's fine - we'll use existing
 				errorsEncountered = append(errorsEncountered,

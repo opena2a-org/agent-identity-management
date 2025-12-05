@@ -64,6 +64,15 @@ export interface Agent {
   capabilities?: any[];
   createdAt: string;
   updatedAt: string;
+  // Audit trail fields
+  createdBy?: string;           // User UUID who created this agent
+  createdByName?: string;       // Name of the creator (denormalized)
+  createdByEmail?: string;      // Email of the creator (denormalized)
+  createdBySdkTokenId?: string; // SDK token used to create this agent (for revocation tracking)
+  createdByApiKeyId?: string;   // API key used to create this agent (for revocation tracking)
+  updatedBy?: string;           // User UUID who last updated this agent
+  updatedByName?: string;       // Name of the updater (denormalized)
+  updatedByEmail?: string;      // Email of the updater (denormalized)
 }
 
 export interface Organization {
@@ -309,8 +318,15 @@ export interface ConnectedMCPServer {
   trustScore?: number;
   registeredByAgent?: string | null;
   createdBy?: string;
+  createdByName?: string;        // ✅ Audit trail: creator name
+  createdByEmail?: string;       // ✅ Audit trail: creator email
+  createdBySdkTokenId?: string;  // ✅ SDK token tracking for revocation
+  createdByApiKeyId?: string;    // ✅ API key tracking for revocation
   createdAt?: string;
   updatedAt?: string;
+  updatedBy?: string;            // ✅ Audit trail: last updater
+  updatedByName?: string;        // ✅ Audit trail: updater name
+  updatedByEmail?: string;       // ✅ Audit trail: updater email
   tags?: string[] | null;
   verificationMethod: string;
   attestationCount: number;
@@ -968,7 +984,7 @@ class APIClient {
         pageSize: 1,
         status: "pending",
       });
-      return response?.status_counts?.pending ?? 0;
+      return response?.statusCounts?.pending ?? 0;
     } catch (error) {
       console.error("Failed to fetch pending verification count:", error);
       return 0;
@@ -1037,19 +1053,28 @@ class APIClient {
     return this.request("/api/v1/admin/dashboard/stats");
   }
 
-  // Verification Activity - Get monthly verification activity data
+  // Verification Activity - Get monthly verification activity data (Agents + MCP)
   async getVerificationActivity(months = 6): Promise<{
     period: string;
     activity: Array<{
       month: string;
       verified: number;
       pending: number;
+      agentsVerified: number;
+      agentsPending: number;
+      mcpVerified: number;
+      mcpPending: number;
       monthYear: string;
     }>;
     currentStats: {
       totalVerified: number;
       totalPending: number;
       totalAgents: number;
+      totalMCP: number;
+      agentsVerified: number;
+      agentsPending: number;
+      mcpVerified: number;
+      mcpPending: number;
     };
   }> {
     return this.request(
@@ -1109,6 +1134,37 @@ class APIClient {
     };
   }> {
     return this.request(`/api/v1/analytics/agents/activity?limit=${limit}`);
+  }
+
+  async getActivitySummary(days = 30): Promise<{
+    period: {
+      startDate: string;
+      endDate: string;
+      days: number;
+    };
+    summary: {
+      totalAgents: number;
+      totalMcpServers: number;
+      verificationCount: number;
+      attestationCount: number;
+      totalActivityEvents: number;
+    };
+    activityByDay: Array<{
+      date: string;
+      count: number;
+    }>;
+    recentActivity: Array<{
+      id: string;
+      agentId: string;
+      agentName: string;
+      actionType: string;
+      status: string;
+      createdAt: string;
+      durationMs?: number;
+    }>;
+    generatedAt: string;
+  }> {
+    return this.request(`/api/v1/analytics/activity?days=${days}`);
   }
 
   // Webhooks
@@ -1261,24 +1317,24 @@ class APIClient {
   }): Promise<{
     verifications: Array<{
       id: string;
-      agent_id: string;
-      agent_name: string;
+      agentId: string;
+      agentName: string;
       capability: string;
       resource: string;
       context: Record<string, any>;
-      risk_level: string;
-      trust_score: number;
+      riskLevel: string;
+      trustScore: number;
       status: string;
-      requested_at: string;
-      expires_at: string;
+      requestedAt: string;
+      expiresAt: string;
     }>;
     pagination: {
       page: number;
-      page_size: number;
+      pageSize: number;
       total: number;
-      total_pages: number;
+      totalPages: number;
     };
-    status_counts: {
+    statusCounts: {
       pending: number;
       approved: number;
       denied: number;
@@ -1469,6 +1525,69 @@ class APIClient {
     return this.request(`/api/v1/mcp-servers/${id}/agents`);
   }
 
+  // MCP-Agent Connection Graph API
+  async getMCPConnectionGraph(): Promise<{
+    nodes: Array<{
+      id: string;
+      type: "mcp" | "agent";
+      label: string;
+      size: number;
+      color: string;
+      status: string;
+      trustScore: number;
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      weight: number;
+      type: "connection" | "attestation";
+    }>;
+  }> {
+    return this.request("/api/v1/mcp-servers/graph");
+  }
+
+  async getMCPServerConnections(id: string): Promise<{
+    nodes: Array<{
+      id: string;
+      type: "mcp" | "agent";
+      label: string;
+      size: number;
+      color: string;
+      status: string;
+      trustScore: number;
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      weight: number;
+      type: "connection" | "attestation";
+    }>;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${id}/connections`);
+  }
+
+  // MCP Discovery API
+  async getDiscoveredMCPs(): Promise<{
+    discovered: Array<{
+      name: string;
+      url: string;
+      detectedBy: string[];
+      detectedByCount: number;
+      detectionMethod: string;
+      firstDetectedAt: string;
+      lastDetectedAt: string;
+      isRegistered: boolean;
+      matchingServerId?: string;
+    }>;
+    totalUnmapped: number;
+    totalAgents: number;
+    registeredServers: number;
+  }> {
+    return this.request("/api/v1/mcp-servers/discovered");
+  }
+
   // ========================================
   // MCP Agent Attestation (New Approach)
   // ========================================
@@ -1506,6 +1625,70 @@ class APIClient {
     mcpServerId: string
   ): Promise<GetConnectedAgentsResponse> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/agents`);
+  }
+
+  /**
+   * Get MCP server attestations (alias for getMCPAttestations)
+   * Used by consensus-progress component
+   */
+  async getMCPServerAttestations(mcpServerId: string): Promise<AttestationWithAgentDetails[]> {
+    const response = await this.getMCPAttestations(mcpServerId);
+    return response.attestations || [];
+  }
+
+  /**
+   * Test connection to an MCP server
+   * @param mcpServerId MCP server ID
+   */
+  async testMCPConnection(mcpServerId: string): Promise<{
+    success: boolean;
+    latencyMs: number;
+    error?: string;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/test-connection`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * Run health check on an MCP server
+   * @param mcpServerId MCP server ID
+   */
+  async healthCheckMCP(mcpServerId: string): Promise<{
+    healthy: boolean;
+    success: boolean;
+    details?: string;
+    error?: string;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/health-check`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * Submit manual attestation for an MCP server
+   * @param mcpServerId MCP server ID
+   * @param data Attestation data
+   */
+  async manualAttestMCP(
+    mcpServerId: string,
+    data: {
+      connectionTested: boolean;
+      connectionLatencyMs: number;
+      healthCheckPassed: boolean;
+      confirmedCapabilities: string[];
+      notes?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    attestationId: string;
+    confidenceScore: number;
+    message: string;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/manual-attest`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   // ========================================
@@ -2063,12 +2246,43 @@ class APIClient {
     checks: Array<{
       name: string;
       passed: boolean;
+      details?: string;
+      count?: number;
+      actionUrl?: string;
+      affectedItems?: Array<{
+        id: string;
+        name: string;
+        score?: number;
+        issue: string;
+        severity?: string;
+      }>;
     }>;
   }> {
     return this.request("/api/v1/compliance/check", {
       method: "POST",
       body: JSON.stringify({ checkType: checkType }),
     });
+  }
+
+  // Export audit logs as CSV
+  async exportAuditLogs(): Promise<Blob> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${this.baseURL}/api/v1/admin/audit-logs/export?format=csv`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status}`);
+    }
+
+    return response.blob();
   }
 
   // Get data retention information
@@ -2145,6 +2359,161 @@ class APIClient {
     });
   }
 
+  // Get compliance score trending
+  async getComplianceTrending(
+    framework: string = "soc2",
+    startDate?: string,
+    endDate?: string
+  ): Promise<{
+    framework: string;
+    startDate: string;
+    endDate: string;
+    snapshots: Array<{
+      id: string;
+      score: number;
+      passedChecks: number;
+      failedChecks: number;
+      totalChecks: number;
+      snapshotDate: string;
+    }>;
+    trend: string; // "improving", "stable", "declining"
+    averageScore: number;
+    changePercent: number;
+  }> {
+    const params = new URLSearchParams();
+    params.append("framework", framework);
+    if (startDate) params.append("start_date", startDate);
+    if (endDate) params.append("end_date", endDate);
+    return this.request(`/api/v1/compliance/trending?${params.toString()}`);
+  }
+
+  // Record compliance snapshot
+  async recordComplianceSnapshot(framework: string = "soc2"): Promise<{
+    id: string;
+    organizationId: string;
+    framework: string;
+    score: number;
+    passedChecks: number;
+    failedChecks: number;
+    totalChecks: number;
+    checkResults: Record<string, boolean>;
+    snapshotDate: string;
+    createdAt: string;
+  }> {
+    return this.request("/api/v1/compliance/snapshot", {
+      method: "POST",
+      body: JSON.stringify({ framework }),
+    });
+  }
+
+  // List compliance evidence
+  async listComplianceEvidence(
+    framework?: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{
+    evidence: Array<{
+      id: string;
+      organizationId: string;
+      framework: string;
+      checkName: string;
+      evidenceType: string;
+      title: string;
+      description: string;
+      data: Record<string, unknown>;
+      fileUrl?: string;
+      collectedAt: string;
+      collectedBy: string;
+      isAutomatic: boolean;
+      validUntil?: string;
+      createdAt: string;
+    }>;
+    count: number;
+  }> {
+    const params = new URLSearchParams();
+    if (framework) params.append("framework", framework);
+    params.append("limit", limit.toString());
+    params.append("offset", offset.toString());
+    return this.request(`/api/v1/compliance/evidence?${params.toString()}`);
+  }
+
+  // Collect compliance evidence for a check
+  async collectComplianceEvidence(
+    framework: string,
+    checkName: string
+  ): Promise<{
+    id: string;
+    organizationId: string;
+    framework: string;
+    checkName: string;
+    evidenceType: string;
+    title: string;
+    description: string;
+    data: Record<string, unknown>;
+    collectedAt: string;
+    collectedBy: string;
+    isAutomatic: boolean;
+    createdAt: string;
+  }> {
+    return this.request("/api/v1/compliance/evidence/collect", {
+      method: "POST",
+      body: JSON.stringify({ framework, checkName }),
+    });
+  }
+
+  // Get evidence for a specific check
+  async getEvidenceForCheck(checkName: string): Promise<{
+    checkName: string;
+    evidence: Array<{
+      id: string;
+      framework: string;
+      evidenceType: string;
+      title: string;
+      description: string;
+      data: Record<string, unknown>;
+      collectedAt: string;
+      isAutomatic: boolean;
+    }>;
+    count: number;
+  }> {
+    return this.request(`/api/v1/compliance/evidence/check/${encodeURIComponent(checkName)}`);
+  }
+
+  // Export compliance report
+  async exportComplianceReport(
+    format: "csv" | "json" = "json",
+    framework: string = "soc2",
+    startDate?: string,
+    endDate?: string
+  ): Promise<Blob | object> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams();
+    params.append("format", format);
+    params.append("framework", framework);
+    if (startDate) params.append("start_date", startDate);
+    if (endDate) params.append("end_date", endDate);
+
+    const response = await fetch(`${this.baseURL}/api/v1/compliance/export?${params.toString()}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status}`);
+    }
+
+    if (format === "csv") {
+      return response.blob();
+    }
+    return response.json();
+  }
+
   // Resolve alert
   async resolveAlert(
     id: string,
@@ -2176,6 +2545,72 @@ class APIClient {
     total: number;
   }> {
     return this.request(`/api/v1/agents/${agentId}/audit-logs?limit=${limit}`);
+  }
+
+  // MCP Server Audit Logs API
+  async getMCPServerAuditLogs(
+    mcpServerId: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{
+    logs: Array<{
+      id: string;
+      action: string;
+      performedBy: string;
+      performedByEmail: string;
+      timestamp: string;
+      details: string;
+      ipAddress?: string;
+      entityType?: string;
+      entityId?: string;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    return this.request(`/api/v1/mcp-servers/${mcpServerId}/audit-logs?limit=${limit}&offset=${offset}`);
+  }
+
+  // ========================================
+  // Attestation Revocation
+  // ========================================
+
+  /**
+   * Revoke a single attestation
+   * @param attestationId The attestation ID to revoke
+   * @param reason Reason for revocation (compromised, outdated, false_positive, other)
+   */
+  async revokeAttestation(
+    attestationId: string,
+    reason: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    revokedAt: string;
+  }> {
+    return this.request(`/api/v1/attestations/${attestationId}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  /**
+   * Revoke all attestations from a specific agent
+   * @param agentId The agent ID whose attestations should be revoked
+   * @param reason Reason for revocation
+   */
+  async revokeAllAgentAttestations(
+    agentId: string,
+    reason: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    revokedCount: number;
+  }> {
+    return this.request(`/api/v1/agents/${agentId}/attestations/revoke-all`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
   }
 }
 

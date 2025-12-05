@@ -63,8 +63,8 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"webhook_name": webhook.Name,
-			"webhook_url":  webhook.URL,
+			"webhookName": webhook.Name,
+			"webhookUrl":  webhook.URL,
 		},
 	)
 
@@ -247,7 +247,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"webhook_name": webhook.Name,
+			"webhookName": webhook.Name,
 			"isActive":    webhook.IsActive,
 		},
 	)
@@ -307,9 +307,9 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":      "test",
-			"status_code": result.StatusCode,
-			"success":     result.Success,
+			"action":     "test",
+			"statusCode": result.StatusCode,
+			"success":    result.Success,
 		},
 	)
 
@@ -320,9 +320,9 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"success":       result.Success,
-		"message":       message,
-		"response_code": result.StatusCode,
+		"success":      result.Success,
+		"message":      message,
+		"responseCode": result.StatusCode,
 		"webhook": fiber.Map{
 			"id":   webhook.ID,
 			"name": webhook.Name,

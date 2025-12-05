@@ -60,8 +60,8 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		                    trust_score, talks_to, capabilities,
 		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
-		                    created_at, updated_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 	`
 
 	now := time.Now()
@@ -116,6 +116,10 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.CreatedAt,
 		agent.UpdatedAt,
 		agent.CreatedBy,
+		agent.CreatedByName,
+		agent.CreatedByEmail,
+		agent.CreatedBySDKTokenID,
+		agent.CreatedByAPIKeyID, // ✅ API key tracking for revocation
 	)
 
 	return err
@@ -127,7 +131,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active,
-		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count
+		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
+		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
+		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, '')
 		FROM agents
 		WHERE id = $1
 	`
@@ -147,6 +153,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var keyExpiresAt sql.NullTime
 	var keyRotationGraceUntil sql.NullTime
 	var previousPublicKey sql.NullString
+	var createdBySDKTokenID sql.NullString
+	var createdByAPIKeyID sql.NullString
+	var updatedBy sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
@@ -176,6 +185,13 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&keyRotationGraceUntil,
 		&previousPublicKey,
 		&agent.RotationCount,
+		&agent.CreatedByName,
+		&agent.CreatedByEmail,
+		&createdBySDKTokenID,
+		&createdByAPIKeyID,
+		&updatedBy,
+		&agent.UpdatedByName,
+		&agent.UpdatedByEmail,
 	)
 
 	if err == sql.ErrNoRows {
@@ -221,6 +237,18 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 	if previousPublicKey.Valid {
 		agent.PreviousPublicKey = &previousPublicKey.String
+	}
+	if createdBySDKTokenID.Valid {
+		sdkTokenID, _ := uuid.Parse(createdBySDKTokenID.String)
+		agent.CreatedBySDKTokenID = &sdkTokenID
+	}
+	if createdByAPIKeyID.Valid {
+		apiKeyID, _ := uuid.Parse(createdByAPIKeyID.String)
+		agent.CreatedByAPIKeyID = &apiKeyID
+	}
+	if updatedBy.Valid {
+		uid, _ := uuid.Parse(updatedBy.String)
+		agent.UpdatedBy = &uid
 	}
 
 	// Unmarshal talks_to from JSONB

@@ -307,9 +307,11 @@ export default function MCPServersPage() {
   }, []);
 
   // Calculate stats
+  // Note: Backend counts "verified" status as "active" for dashboard metrics
+  // We should also count both "active" and "verified" to be consistent
   const stats = {
     total: mcpServers.length,
-    active: mcpServers.filter((s) => s.status === "active").length,
+    active: mcpServers.filter((s) => s.status === "active" || s.status === "verified").length,
     avgTrustScore:
       mcpServers.reduce((sum, s) => sum + (s.trustScore || 0), 0) /
       mcpServers.length,

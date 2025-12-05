@@ -25,6 +25,7 @@ import {
   BarChart3,
   Code,
   Loader2,
+  Search,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -36,7 +37,7 @@ import {
 import { eventEmitter, Events } from "@/lib/events";
 
 // ✅ Navigation with role-based access control
-// Organized by natural user workflow: Core → Development → Monitoring → Configuration → Administration
+// Organized by natural user workflow: Core → Development → Monitoring → Administration → Settings
 const navigationBase: NavSection[] = [
   {
     title: "Core",
@@ -60,18 +61,18 @@ const navigationBase: NavSection[] = [
         icon: Server,
         roles: ["admin", "manager", "member"],
       },
+      {
+        name: "MCP Discovery",
+        href: "/dashboard/mcp/discovery",
+        icon: Search,
+        roles: ["admin", "manager"],
+      },
     ],
   },
   {
     title: "Development",
     items: [
       // Developer resources and tools
-      {
-        name: "Developers",
-        href: "/dashboard/developers",
-        icon: Code,
-        roles: ["admin", "manager", "member", "viewer"],
-      },
       {
         name: "API Keys",
         href: "/dashboard/api-keys",
@@ -95,19 +96,6 @@ const navigationBase: NavSection[] = [
   {
     title: "Monitoring",
     items: [
-      // Analytics and monitoring for managers
-      {
-        name: "Agent Verifications",
-        href: "/dashboard/monitoring",
-        icon: Activity,
-        roles: ["admin", "manager"],
-      },
-      {
-        name: "Usage Statistics",
-        href: "/dashboard/analytics/usage",
-        icon: BarChart3,
-        roles: ["admin", "manager"],
-      },
       {
         name: "Security",
         href: "/dashboard/security",
@@ -117,28 +105,9 @@ const navigationBase: NavSection[] = [
     ],
   },
   {
-    title: "Configuration",
-    items: [
-      // System configuration
-      {
-        name: "Tags",
-        href: "/dashboard/tags",
-        icon: Tag,
-        roles: ["admin", "manager", "member"],
-      },
-      // Webhooks hidden per user requirements
-    ],
-  },
-  {
     title: "Administration",
     items: [
-      // Admin-only access to user management and audit logs
-      {
-        name: "Users",
-        href: "/dashboard/admin/users",
-        icon: Users,
-        roles: ["admin"],
-      },
+      // Admin-only access to alerts, approvals, and policies
       {
         name: "Alerts",
         href: "/dashboard/admin/alerts",
@@ -161,13 +130,37 @@ const navigationBase: NavSection[] = [
         name: "Security Policies",
         href: "/dashboard/admin/security-policies",
         icon: ShieldCheck,
-        roles: ["admin"], // Admin-only policy management
+        roles: ["admin"], // Admin-only policy management (agents + MCP)
       },
       {
         name: "Compliance",
         href: "/dashboard/admin/compliance",
         icon: ClipboardCheck,
         roles: ["admin"], // Admin-only compliance monitoring
+      },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [
+      // Less frequently used pages at the bottom
+      {
+        name: "Users",
+        href: "/dashboard/admin/users",
+        icon: Users,
+        roles: ["admin"],
+      },
+      {
+        name: "Tags",
+        href: "/dashboard/tags",
+        icon: Tag,
+        roles: ["admin", "manager", "member"],
+      },
+      {
+        name: "Developers",
+        href: "/dashboard/developers",
+        icon: Code,
+        roles: ["admin", "manager", "member", "viewer"],
       },
     ],
   },
@@ -294,9 +287,9 @@ export function Sidebar() {
               ) {
                 return { ...item, badge: capabilityRequestCount };
               }
-              // Update Verification Approvals badge
+              // Update JIT Requests badge
               if (
-                item.name === "Verification Approvals" &&
+                item.name === "JIT Requests" &&
                 verificationCount > 0
               ) {
                 return { ...item, badge: verificationCount };
@@ -306,7 +299,7 @@ export function Sidebar() {
                 (item.name === "Alerts" && alertCount === 0) ||
                 (item.name === "Capability Requests" &&
                   capabilityRequestCount === 0) ||
-                (item.name === "Verification Approvals" &&
+                (item.name === "JIT Requests" &&
                   verificationCount === 0)
               ) {
                 const { badge, ...itemWithoutBadge } = item;
@@ -405,7 +398,13 @@ export function Sidebar() {
     if (href === "/dashboard") {
       return pathname === "/dashboard";
     }
-    // Exact match OR starts with href followed by '/' (to avoid partial matches like /dashboard/sdk matching /dashboard/sdk-tokens)
+    // Exact match only for navigation items that have child pages
+    // This prevents /dashboard/mcp from being highlighted when on /dashboard/mcp/discovery
+    const hasChildPages = ["/dashboard/mcp", "/dashboard/admin"];
+    if (hasChildPages.some(parent => href === parent)) {
+      return pathname === href;
+    }
+    // For other items, match exact or children (for dynamic routes like /dashboard/agents/[id])
     return pathname === href || pathname.startsWith(href + "/");
   };
 

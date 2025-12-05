@@ -35,15 +35,15 @@ func NewPublicMCPHandler(
 
 // RegisterMCPServerRequest represents the request to register an MCP server
 type RegisterMCPServerRequest struct {
-	AgentID       string   `json:"agent_id"`       // Agent registering the MCP server
-	ServerName    string   `json:"server_name"`    // Name of MCP server
-	ServerURL     string   `json:"server_url"`     // URL of MCP server
-	PublicKey     string   `json:"public_key"`     // Ed25519 public key of MCP server
-	Capabilities  []string `json:"capabilities"`   // Server capabilities
-	Description   string   `json:"description"`    // Server description
-	Version       string   `json:"version"`        // Server version
-	Timestamp     int64    `json:"timestamp"`      // Request timestamp
-	Signature     string   `json:"signature"`      // Cryptographic signature
+	AgentID      string   `json:"agentId"`      // Agent registering the MCP server
+	ServerName   string   `json:"serverName"`   // Name of MCP server
+	ServerURL    string   `json:"serverUrl"`    // URL of MCP server
+	PublicKey    string   `json:"publicKey"`    // Ed25519 public key of MCP server
+	Capabilities []string `json:"capabilities"` // Server capabilities
+	Description  string   `json:"description"`  // Server description
+	Version      string   `json:"version"`      // Server version
+	Timestamp    int64    `json:"timestamp"`    // Request timestamp
+	Signature    string   `json:"signature"`    // Cryptographic signature
 }
 
 // RegisterMCPServer registers an MCP server using agent authentication
@@ -165,7 +165,8 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 		Capabilities: req.Capabilities,
 	}
 
-	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID, &agentID)
+	// Note: sdkTokenID and apiKeyID are nil for agent-authenticated requests (uses cryptographic signature auth)
+	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID, &agentID, nil, nil)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -299,11 +300,11 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		AgentID    string                 `json:"agent_id"`
-		ActionType string                 `json:"action_type"`
+		AgentID    string                 `json:"agentId"`
+		ActionType string                 `json:"actionType"`
 		Resource   string                 `json:"resource"`
 		Context    map[string]interface{} `json:"context"`
-		RiskLevel  string                 `json:"risk_level"`
+		RiskLevel  string                 `json:"riskLevel"`
 		Timestamp  int64                  `json:"timestamp"`
 		Signature  string                 `json:"signature"`
 	}
@@ -412,24 +413,24 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	verificationID := uuid.New()
 
 	return c.JSON(fiber.Map{
-		"verification_id":    verificationID.String(),
-		"status":             "approved",
-		"mcp_server_id":      serverID.String(),
-		"mcp_server_name":    mcpServer.Name,
+		"verificationId":    verificationID.String(),
+		"status":            "approved",
+		"mcpServerId":       serverID.String(),
+		"mcpServerName":     mcpServer.Name,
 		"agentId":           agentID.String(),
-		"action_type":        req.ActionType,
-		"timestamp":          req.Timestamp,
-		"trust_score_impact": 0.5,
+		"actionType":        req.ActionType,
+		"timestamp":         req.Timestamp,
+		"trustScoreImpact":  0.5,
 	})
 }
 
 // VerifyMCPActionRequest represents an MCP action verification request
 type VerifyMCPActionRequest struct {
-	AgentID    string                 `json:"agent_id"`
-	ActionType string                 `json:"action_type"`
+	AgentID    string                 `json:"agentId"`
+	ActionType string                 `json:"actionType"`
 	Resource   string                 `json:"resource"`
 	Context    map[string]interface{} `json:"context"`
-	RiskLevel  string                 `json:"risk_level"`
+	RiskLevel  string                 `json:"riskLevel"`
 	Timestamp  int64                  `json:"timestamp"`
 	Signature  string                 `json:"signature"`
 }

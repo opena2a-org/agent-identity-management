@@ -12,10 +12,12 @@ import {
   Clock,
   AlertCircle,
   RefreshCw,
-  TrendingUp
+  TrendingUp,
+  ExternalLink
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
 interface ActivityTimelineProps {
   defaultLimit?: number;
@@ -272,9 +274,10 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
         ) : (
           <div className="space-y-3">
             {data.activities.map((activity, index) => (
-              <div
+              <Link
                 key={`${activity.agentId}-${activity.timestamp}-${index}`}
-                className="flex gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                href={`/dashboard/agents/${activity.agentId}`}
+                className="flex gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer group"
               >
                 {/* Status Icon */}
                 <div className="flex-shrink-0 mt-1">
@@ -285,7 +288,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                      <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {activity.agentName}
                       </span>
                       <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -293,11 +296,14 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                       </span>
                       {getStatusBadge(activity.status)}
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {formatDistanceToNow(new Date(activity.timestamp), {
-                        addSuffix: true,
-                      })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {formatDistanceToNow(new Date(activity.timestamp), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                      <ExternalLink className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
 
                   {activity.details && (
@@ -307,10 +313,10 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                   )}
 
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
-                    Agent ID: {activity.agentId.substring(0, 8)}...
+                    Agent ID: {activity.agentId}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

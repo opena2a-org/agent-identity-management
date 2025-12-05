@@ -635,7 +635,7 @@ function AlertsPageContent() {
         <CardHeader>
          
           <CardDescription>
-            Security and operational notifications requiring attention
+            Security and operational notifications for agents and MCP servers requiring attention
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -675,9 +675,17 @@ function AlertsPageContent() {
                         </div>
 
                         <div className="flex items-center gap-4 text-xs">
-                          <span>
-                            {alert.resourceType}:{" "}
-                            {alert.resourceId.substring(0, 8)}...
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            alert.resourceType === 'mcp_server' || alert.resourceType === 'mcp'
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                              : alert.resourceType === 'agent'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>
+                            {alert.resourceType === 'mcp_server' || alert.resourceType === 'mcp' ? 'MCP' : alert.resourceType === 'agent' ? 'Agent' : alert.resourceType}
+                          </span>
+                          <span className="text-gray-500">
+                            {alert.agentName || alert.resourceId.substring(0, 8)}...
                           </span>
                           <span>•</span>
                           <span>{formatDateTime(alert.createdAt)}</span>

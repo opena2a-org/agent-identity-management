@@ -79,9 +79,9 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"agentId":      agentID,
-		"score":         score.Score,
-		"factors":       score.Factors,
-		"calculated_at": score.LastCalculated,
+		"score":        score.Score,
+		"factors":      score.Factors,
+		"calculatedAt": score.LastCalculated,
 	})
 }
 
@@ -164,12 +164,23 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 	// Get latest trust score, or calculate on-the-fly if none exists
 	score, err := h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
 	if err != nil || score == nil {
-		// No stored score - calculate one on-the-fly
+		// No stored score - calculate one on-the-fly (this also updates agent.TrustScore)
 		score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to calculate trust score",
 			})
+		}
+	} else {
+		// We have a stored score - sync it with agent.TrustScore if they differ
+		// This ensures consistency between trust_scores table and agents.trust_score column
+		if agent.TrustScore != score.Score {
+			// Use RecalculateTrustScore to properly update both tables
+			score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+			if err != nil {
+				// Non-fatal: use the stored score but log the error
+				score, _ = h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
+			}
 		}
 	}
 

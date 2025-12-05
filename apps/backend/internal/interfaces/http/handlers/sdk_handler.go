@@ -34,10 +34,10 @@ func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepo
 
 // SDKCredentials represents the credentials file embedded in SDK
 type SDKCredentials struct {
-	AIMUrl       string `json:"aim_url"`
-	RefreshToken string `json:"refresh_token"`
-	SDKTokenID   string `json:"sdk_token_id"` // For usage tracking via X-SDK-Token header
-	UserID       string `json:"user_id"`
+	AIMUrl       string `json:"aimUrl"`
+	RefreshToken string `json:"refreshToken"`
+	SDKTokenID   string `json:"sdkTokenId"` // For usage tracking via X-SDK-Token header
+	UserID       string `json:"userId"`
 	Email        string `json:"email"`
 }
 

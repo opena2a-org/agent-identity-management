@@ -37,7 +37,6 @@ interface FormData {
   description: string;
   agentType: "ai_agent" | "mcp_server";
   version: string;
-  certificateUrl: string;
   repositoryUrl: string;
   documentationUrl: string;
   talksTo: string[]; // MCP server IDs/names
@@ -89,7 +88,6 @@ export function RegisterAgentModal({
     description: "",
     agentType: "ai_agent",
     version: "1.0.0",
-    certificateUrl: "",
     repositoryUrl: "",
     documentationUrl: "",
     talksTo: [],
@@ -101,7 +99,6 @@ export function RegisterAgentModal({
   const displayNameRef = useRef<HTMLInputElement | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   const versionRef = useRef<HTMLInputElement | null>(null);
-  const certificateUrlRef = useRef<HTMLInputElement | null>(null);
   const repositoryUrlRef = useRef<HTMLInputElement | null>(null);
   const documentationUrlRef = useRef<HTMLInputElement | null>(null);
   const [initialFormData, setInitialFormData] = useState<FormData>(
@@ -150,7 +147,6 @@ export function RegisterAgentModal({
         description: initialData.description || "",
         agentType: initialData.agentType || "ai_agent",
         version: initialData.version || "1.0.0",
-        certificateUrl: (initialData as any).certificateUrl || "",
         repositoryUrl: (initialData as any).repositoryUrl || "",
         documentationUrl: (initialData as any).documentationUrl || "",
         talksTo: (initialData as any).talksTo || [],
@@ -188,12 +184,6 @@ export function RegisterAgentModal({
 
     // Validate URLs if provided
     const urlPattern = /^https?:\/\/.+/;
-    if (
-      formData.certificateUrl &&
-      !urlPattern.test(formData.certificateUrl)
-    ) {
-      newErrors.certificateUrl = "Must be a valid HTTP(S) URL";
-    }
     if (formData.repositoryUrl && !urlPattern.test(formData.repositoryUrl)) {
       newErrors.repositoryUrl = "Must be a valid HTTP(S) URL";
     }
@@ -219,9 +209,6 @@ export function RegisterAgentModal({
         } else if (newErrors.version && versionRef.current) {
           versionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           versionRef.current.focus();
-        } else if (newErrors.certificateUrl && certificateUrlRef.current) {
-          certificateUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-          certificateUrlRef.current.focus();
         } else if (newErrors.repositoryUrl && repositoryUrlRef.current) {
           repositoryUrlRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
           repositoryUrlRef.current.focus();
@@ -255,9 +242,6 @@ export function RegisterAgentModal({
       };
 
       // Add optional fields only if they have values
-      if (formData.certificateUrl) {
-        agentData.certificateUrl = formData.certificateUrl;
-      }
       if (formData.repositoryUrl) {
         agentData.repositoryUrl = formData.repositoryUrl;
       }
@@ -1020,35 +1004,6 @@ export function RegisterAgentModal({
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
                   Additional Resources (Optional)
                 </h3>
-
-                {/* Certificate URL */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Certificate URL
-                  </label>
-                  <input
-                    ref={certificateUrlRef}
-                    type="url"
-                    value={formData.certificateUrl}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        certificateUrl: e.target.value,
-                      })
-                    }
-                    placeholder="https://example.com/certs/agent-cert.pem"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.certificateUrl
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
-                      }`}
-                    disabled={loading || success}
-                  />
-                  {errors.certificateUrl && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.certificateUrl}
-                    </p>
-                  )}
-                </div>
 
                 {/* Repository URL */}
                 <div>

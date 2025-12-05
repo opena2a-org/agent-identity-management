@@ -30,10 +30,10 @@ func NewWebhookService(webhookRepo *repository.WebhookRepository) *WebhookServic
 
 // CreateWebhookRequest represents the request to create a webhook
 type CreateWebhookRequest struct {
-	Name     string                 `json:"name" validate:"required"`
-	URL      string                 `json:"url" validate:"required,url"`
-	Events   []domain.WebhookEvent  `json:"events" validate:"required"`
-	IsActive *bool                  `json:"is_active,omitempty"` // Pointer to distinguish between false and not provided
+	Name     string                `json:"name" validate:"required"`
+	URL      string                `json:"url" validate:"required,url"`
+	Events   []domain.WebhookEvent `json:"events" validate:"required"`
+	IsActive *bool                 `json:"isActive,omitempty"` // Pointer to distinguish between false and not provided
 }
 
 // CreateWebhook creates a new webhook subscription

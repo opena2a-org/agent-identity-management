@@ -486,7 +486,9 @@ function AgentsPageContent() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {agent?.version}
+                      {agent?.version || (
+                        <span className="text-gray-400 dark:text-gray-500">—</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

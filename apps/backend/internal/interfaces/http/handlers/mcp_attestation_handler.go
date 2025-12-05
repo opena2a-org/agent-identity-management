@@ -318,10 +318,10 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 
 	// Parse request body
 	type ManualAttestationRequest struct {
-		Notes                string   `json:"notes"`                  // Optional notes from user
-		CapabilitiesVerified []string `json:"capabilities_verified"`  // Capabilities user verified
-		ConnectionTested     bool     `json:"connection_tested"`      // Did user test connection?
-		HealthCheckPassed    bool     `json:"health_check_passed"`    // Did health check pass?
+		Notes                string   `json:"notes"`                 // Optional notes from user
+		CapabilitiesVerified []string `json:"capabilitiesVerified"`  // Capabilities user verified
+		ConnectionTested     bool     `json:"connectionTested"`      // Did user test connection?
+		HealthCheckPassed    bool     `json:"healthCheckPassed"`     // Did health check pass?
 	}
 
 	var req ManualAttestationRequest
@@ -599,11 +599,11 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 
 	// Parse request body
 	type RecordConnectionRequest struct {
-		MCPServerID    string `json:"mcp_server_id"`
-		ToolName       string `json:"tool_name"`
-		MCPURL         string `json:"mcp_url"`
-		MCPName        string `json:"mcp_name"`
-		ConnectionType string `json:"connection_type"`
+		MCPServerID    string `json:"mcpServerId"`
+		ToolName       string `json:"toolName"`
+		MCPURL         string `json:"mcpUrl"`
+		MCPName        string `json:"mcpName"`
+		ConnectionType string `json:"connectionType"`
 	}
 
 	var req RecordConnectionRequest
