@@ -94,9 +94,9 @@ class OAuthTokenManager:
                         sdk_data = json.load(f)
                     with open(home_creds, 'r') as f:
                         home_data = json.load(f)
-                    sdk_token_id = sdk_data.get('sdk_token_id')
-                    home_token_id = home_data.get('sdk_token_id')
-                    if sdk_token_id and sdk_token_id != home_token_id:
+                    sdkTokenId = sdk_data.get('sdkTokenId')
+                    home_token_id = home_data.get('sdkTokenId')
+                    if sdkTokenId and sdkTokenId != home_token_id:
                         should_install = True
                 except:
                     pass
@@ -210,11 +210,13 @@ class OAuthTokenManager:
         Returns:
             New access token or None if refresh failed
         """
-        if not self.credentials or 'refresh_token' not in self.credentials:
+        # Support both camelCase and snake_case for backward compatibility
+        has_refresh_token = 'refreshToken' in self.credentials or 'refresh_token' in self.credentials
+        if not self.credentials or not has_refresh_token:
             return None
 
-        aim_url = self.credentials.get('aim_url', 'http://localhost:8080')
-        refresh_token = self.credentials['refresh_token']
+        aim_url = self.credentials.get('aimUrl') or self.credentials.get('aim_url', 'http://localhost:8080')
+        refresh_token = self.credentials.get('refreshToken') or self.credentials.get('refresh_token')
 
         try:
             # Call token refresh endpoint (with rotation support)
@@ -222,7 +224,7 @@ class OAuthTokenManager:
 
             response = requests.post(
                 refresh_url,
-                json={"refresh_token": refresh_token},
+                json={"refreshToken": refresh_token},
                 timeout=10
             )
 
@@ -245,14 +247,14 @@ class OAuthTokenManager:
 
                         if recovery_response.status_code == 200:
                             recovery_data = recovery_response.json()
-                            self.access_token = recovery_data.get('access_token')
-                            new_refresh_token = recovery_data.get('refresh_token')
+                            self.access_token = recovery_data.get('accessToken')
+                            new_refresh_token = recovery_data.get('refreshToken')
 
                             if new_refresh_token:
                                 # Save recovered credentials
-                                self.credentials['refresh_token'] = new_refresh_token
+                                self.credentials['refreshToken'] = new_refresh_token
 
-                                # Update sdk_token_id
+                                # Update sdkTokenId
                                 import base64
                                 try:
                                     token_parts = new_refresh_token.split('.')
@@ -264,7 +266,7 @@ class OAuthTokenManager:
                                         token_payload = json.loads(base64.b64decode(payload_part))
                                         new_token_id = token_payload.get('jti')
                                         if new_token_id:
-                                            self.credentials['sdk_token_id'] = new_token_id
+                                            self.credentials['sdkTokenId'] = new_token_id
                                 except Exception:
                                     pass
 
@@ -311,15 +313,15 @@ class OAuthTokenManager:
                 return None
 
             data = response.json()
-            self.access_token = data.get('access_token')
+            self.access_token = data.get('accessToken')
 
             # Check if server returned new refresh token (token rotation)
-            new_refresh_token = data.get('refresh_token')
+            new_refresh_token = data.get('refreshToken')
             if new_refresh_token and new_refresh_token != refresh_token:
                 # Token rotation: save new refresh token
-                self.credentials['refresh_token'] = new_refresh_token
+                self.credentials['refreshToken'] = new_refresh_token
 
-                # Also update sdk_token_id if present in the new token
+                # Also update sdkTokenId if present in the new token
                 import base64
                 try:
                     # Decode new refresh token to get JTI
@@ -332,7 +334,7 @@ class OAuthTokenManager:
                         token_payload = json.loads(base64.b64decode(payload_part))
                         new_token_id = token_payload.get('jti')
                         if new_token_id:
-                            self.credentials['sdk_token_id'] = new_token_id
+                            self.credentials['sdkTokenId'] = new_token_id
                 except Exception:
                     pass  # Continue even if JTI extraction fails
 
@@ -395,7 +397,7 @@ class OAuthTokenManager:
             # Call token revocation endpoint (if implemented)
             response = requests.post(
                 f"{aim_url.rstrip('/')}/api/v1/auth/revoke",
-                json={"refresh_token": refresh_token},
+                json={"refreshToken": refresh_token},
                 timeout=10
             )
 
