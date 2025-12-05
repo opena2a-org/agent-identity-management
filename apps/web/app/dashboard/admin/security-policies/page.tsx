@@ -904,112 +904,161 @@ export default function SecurityPoliciesPage() {
     );
   };
 
-  // Render MCP Policy Card
+  // Render MCP Policy Card - consistent with Agent Policy Card design
   const renderMCPPolicyCard = (policy: SecurityPolicy) => {
     const typeConfig = getMCPPolicyTypeConfig(policy.policyType);
     const TypeIcon = typeConfig.icon;
-    const EnforcementIcon = enforcementIcons[policy.enforcementAction];
+    const EnforcementIcon = enforcementIcons[policy.enforcementAction] || Shield;
+    const isBlocking = policy.enforcementAction === "block_and_alert";
 
     return (
-      <Card
+      <div
         key={policy.id}
-        className={`transition-all ${
+        className={`p-6 border rounded-lg transition-all ${
           policy.isEnabled
-            ? "bg-white dark:bg-gray-800"
-            : "bg-gray-50 dark:bg-gray-900 opacity-60"
+            ? "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+            : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60"
         }`}
       >
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${typeConfig.bgColor}`}>
                 <TypeIcon className={`h-5 w-5 ${typeConfig.color}`} />
               </div>
-              <div>
-                <CardTitle className="text-lg">{policy.name}</CardTitle>
-                <CardDescription className="mt-1">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-lg">{policy.name}</h3>
+                  <Badge
+                    className={`${enforcementColors[policy.enforcementAction] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
+                  >
+                    <EnforcementIcon className="h-3 w-3 mr-1" />
+                    {enforcementLabels[policy.enforcementAction] || policy.enforcementAction}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    Priority: {policy.priority}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs bg-purple-50">
+                    {typeConfig.label}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
                   {policy.description}
-                </CardDescription>
+                </p>
               </div>
             </div>
-            <Switch
-              checked={policy.isEnabled}
-              onCheckedChange={() => togglePolicy(policy.id, policy.isEnabled)}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="bg-purple-50">{typeConfig.label}</Badge>
-            <Badge className={`${enforcementColors[policy.enforcementAction]} border`}>
-              <EnforcementIcon className="h-3 w-3 mr-1" />
-              {enforcementLabels[policy.enforcementAction]}
-            </Badge>
-            <Badge variant="outline">Priority: {policy.priority}</Badge>
+
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pl-14">
+              {policy.policyType === "mcp_allowlist" && (
+                <>
+                  {policy.rules?.allowedDomains?.length > 0 && (
+                    <div>
+                      <span className="font-medium">Domains:</span>{" "}
+                      <span>{policy.rules.allowedDomains.slice(0, 3).join(", ")}{policy.rules.allowedDomains.length > 3 ? "..." : ""}</span>
+                    </div>
+                  )}
+                  {policy.rules?.requireVerified && (
+                    <div className="text-green-600 font-medium">Requires verification</div>
+                  )}
+                </>
+              )}
+              {policy.policyType === "mcp_blocklist" && policy.rules?.blockedDomains?.length > 0 && (
+                <div>
+                  <span className="font-medium">Blocked:</span>{" "}
+                  <span>{policy.rules.blockedDomains.slice(0, 3).join(", ")}{policy.rules.blockedDomains.length > 3 ? "..." : ""}</span>
+                </div>
+              )}
+              {policy.policyType === "mcp_capabilities" && (
+                <>
+                  {policy.rules?.requiredCapabilities?.length > 0 && (
+                    <div>
+                      <span className="font-medium">Required:</span>{" "}
+                      <span>{policy.rules.requiredCapabilities.join(", ")}</span>
+                    </div>
+                  )}
+                  {policy.rules?.forbiddenCapabilities?.length > 0 && (
+                    <div className="text-red-600">
+                      <span className="font-medium">Forbidden:</span>{" "}
+                      <span>{policy.rules.forbiddenCapabilities.join(", ")}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {policy.policyType === "mcp_unverified" && (
+                <div>
+                  <span className="font-medium">Action:</span>{" "}
+                  <span>{policy.rules?.action || "alert_only"}, Grace: {policy.rules?.gracePeriodDays || 7} days</span>
+                </div>
+              )}
+            </div>
+
+            {isBlocking && policy.isEnabled && (
+              <div className="flex items-center gap-2 pl-14 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
+                <AlertOctagon className="h-4 w-4 text-red-600" />
+                <p className="text-xs text-red-800 dark:text-red-200 font-medium">
+                  BLOCKING MODE ACTIVE: This policy will block MCP server connections in real-time
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Show key rules */}
-          <div className="text-xs text-muted-foreground space-y-1">
-            {policy.policyType === "mcp_allowlist" && (
-              <>
-                {policy.rules?.allowedDomains?.length > 0 && (
-                  <p>Domains: {policy.rules.allowedDomains.slice(0, 3).join(", ")}{policy.rules.allowedDomains.length > 3 ? "..." : ""}</p>
-                )}
-                {policy.rules?.requireVerified && (
-                  <p className="text-green-600">Requires verification</p>
-                )}
-              </>
-            )}
-            {policy.policyType === "mcp_blocklist" && (
-              <>
-                {policy.rules?.blockedDomains?.length > 0 && (
-                  <p>Blocked: {policy.rules.blockedDomains.slice(0, 3).join(", ")}{policy.rules.blockedDomains.length > 3 ? "..." : ""}</p>
-                )}
-              </>
-            )}
-            {policy.policyType === "mcp_capabilities" && (
-              <>
-                {policy.rules?.requiredCapabilities?.length > 0 && (
-                  <p>Required: {policy.rules.requiredCapabilities.join(", ")}</p>
-                )}
-                {policy.rules?.forbiddenCapabilities?.length > 0 && (
-                  <p className="text-red-600">Forbidden: {policy.rules.forbiddenCapabilities.join(", ")}</p>
-                )}
-              </>
-            )}
-            {policy.policyType === "mcp_unverified" && (
-              <p>Action: {policy.rules?.action || "alert_only"}, Grace: {policy.rules?.gracePeriodDays || 7} days</p>
-            )}
-          </div>
+          <div className="flex flex-col gap-4 ml-6">
+            {/* Enforcement Action Selector */}
+            <div className="min-w-[180px]">
+              <p className="text-xs text-muted-foreground mb-2">Enforcement Mode</p>
+              <Select
+                value={policy.enforcementAction}
+                onValueChange={(value: "alert_only" | "block_and_alert" | "allow") =>
+                  handleEnforcementChange(policy, value)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="alert_only">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-yellow-600" />
+                      <span>Alert Only</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="block_and_alert">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-red-600" />
+                      <span>Block & Alert</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="allow">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-green-600" />
+                      <span>Allow</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditingPolicy(policy);
-                loadPolicyIntoForm(policy);
-                setShowEditDialog(true);
-              }}
-            >
-              <Edit className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-red-600 hover:text-red-700"
-              onClick={() => {
-                setEditingPolicy(policy);
-                setShowDeleteConfirm(true);
-              }}
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
+            {/* Enable/Disable Toggle */}
+            <div className="flex items-center gap-4">
+              <div className="text-right mr-2">
+                <p className="text-xs text-muted-foreground">Status</p>
+                <p
+                  className={`text-sm font-medium ${
+                    policy.isEnabled ? "text-green-600" : "text-gray-500"
+                  }`}
+                >
+                  {policy.isEnabled ? "Enabled" : "Disabled"}
+                </p>
+              </div>
+              <Switch
+                checked={policy.isEnabled}
+                onCheckedChange={(checked) => handlePolicyToggle(policy, checked)}
+                className="data-[state=checked]:bg-green-600"
+              />
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   };
 
@@ -1194,7 +1243,7 @@ export default function SecurityPoliciesPage() {
                     Create MCP Policy
                   </Button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-4">
                   {mcpPolicies.map(renderMCPPolicyCard)}
                 </div>
               </div>
@@ -1236,40 +1285,51 @@ export default function SecurityPoliciesPage() {
 
           {/* MCP Policies Tab */}
           <TabsContent value="mcp" className="space-y-4">
-            {/* MCP Sub-tabs */}
-            <Tabs value={mcpSubFilter} onValueChange={setMcpSubFilter} className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="all">All MCP</TabsTrigger>
-                <TabsTrigger value="mcp_allowlist">Allowlists</TabsTrigger>
-                <TabsTrigger value="mcp_blocklist">Blocklists</TabsTrigger>
-                <TabsTrigger value="mcp_capabilities">Capabilities</TabsTrigger>
-                <TabsTrigger value="mcp_unverified">Unverified</TabsTrigger>
-              </TabsList>
+            <Card>
+              <CardHeader>
+                <CardTitle>MCP Server Policies ({mcpPolicies.length})</CardTitle>
+                <CardDescription>
+                  Policies that control MCP server allowlists, blocklists, and verification requirements.
+                  Toggle policies on/off or adjust enforcement actions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* MCP Sub-tabs */}
+                <Tabs value={mcpSubFilter} onValueChange={setMcpSubFilter} className="space-y-4">
+                  <TabsList>
+                    <TabsTrigger value="all">All MCP</TabsTrigger>
+                    <TabsTrigger value="mcp_allowlist">Allowlists</TabsTrigger>
+                    <TabsTrigger value="mcp_blocklist">Blocklists</TabsTrigger>
+                    <TabsTrigger value="mcp_capabilities">Capabilities</TabsTrigger>
+                    <TabsTrigger value="mcp_unverified">Unverified</TabsTrigger>
+                  </TabsList>
 
-              {["all", "mcp_allowlist", "mcp_blocklist", "mcp_capabilities", "mcp_unverified"].map((tab) => (
-                <TabsContent key={tab} value={tab}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {mcpPolicies
-                      .filter((p) => tab === "all" || p.policyType === tab)
-                      .map(renderMCPPolicyCard)}
+                  {["all", "mcp_allowlist", "mcp_blocklist", "mcp_capabilities", "mcp_unverified"].map((tab) => (
+                    <TabsContent key={tab} value={tab}>
+                      <div className="space-y-4">
+                        {mcpPolicies
+                          .filter((p) => tab === "all" || p.policyType === tab)
+                          .map(renderMCPPolicyCard)}
 
-                    {mcpPolicies.filter((p) => tab === "all" || p.policyType === tab).length === 0 && (
-                      <div className="col-span-2 text-center py-12">
-                        <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-lg font-medium text-muted-foreground">No MCP policies found</p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Create a new MCP policy to get started
-                        </p>
-                        <Button onClick={() => { resetForm(); setShowCreateDialog(true); }} className="mt-4">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create MCP Policy
-                        </Button>
+                        {mcpPolicies.filter((p) => tab === "all" || p.policyType === tab).length === 0 && (
+                          <div className="text-center py-12">
+                            <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                            <p className="text-lg font-medium text-muted-foreground">No MCP policies found</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Create a new MCP policy to get started
+                            </p>
+                            <Button onClick={() => { resetForm(); setShowCreateDialog(true); }} className="mt-4">
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create MCP Policy
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 

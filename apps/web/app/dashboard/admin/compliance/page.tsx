@@ -247,10 +247,11 @@ function ComplianceSummaryCard({
       "apiKeyRotationNeeded": "API Key Rotation",
       "trustScoreDegradation": "Low Trust Scores",
       "capabilityViolations": "Capability Violations",
+      "adminAccessReview": "Admin Access Review",
+      "auditLogGaps": "Audit Log Coverage",
       "inactiveAgents": "Inactive Agents",
       "unverifiedAgentBacklog": "Pending Agent Verifications",
       "orphanedResources": "Orphaned Resources",
-      "adminAccessReview": "Admin Access Review",
       "inactiveMCPServers": "Inactive MCP Servers",
       "unverifiedMCPBacklog": "Pending MCP Verifications",
     };
@@ -326,6 +327,12 @@ function ComplianceSummaryCard({
             }
             if (check.name === "unverifiedMCPBacklog") {
               return count === 1 ? "1 pending" : `${count} pending`;
+            }
+            if (check.name === "adminAccessReview") {
+              return count === 1 ? "1 admin" : `${count} admins`;
+            }
+            if (check.name === "auditLogGaps") {
+              return count === 1 ? "1 gap" : `${count} gaps`;
             }
             return count === 1 ? "1 issue" : `${count} issues`;
           };
@@ -840,12 +847,12 @@ export default function CompliancePage() {
               {/* Security Checks */}
               <ComplianceSummaryCard
                 title="Security Compliance"
-                description="API keys, capability violations, and trust scores"
-                passed={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name) && c.passed).length}
-                total={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name)).length}
+                description="API keys, access controls, and audit logging"
+                passed={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name) && c.passed).length}
+                total={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name)).length}
                 icon={Lock}
                 color="blue"
-                checks={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations"].includes(c.name))}
+                checks={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name))}
               />
 
               {/* Operations Checks */}
