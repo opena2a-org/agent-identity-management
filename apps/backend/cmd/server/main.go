@@ -492,6 +492,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Capability,         // ✅ NEW: Inject CapabilityRepository for capability checks
 		verificationEventService, // ✅ NEW: Inject VerificationEventService for creating verification events
 		repos.Tag,                // ✅ NEW: Inject TagRepository for tagging agents during registration
+		repos.User,               // ✅ NEW: Inject UserRepository for audit trail (creator/updater info)
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -509,6 +510,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.AuditLog,
 		repos.Agent,
 		repos.User,
+		repos.MCPServer,
 	)
 
 	// ✅ Initialize MCP capability service BEFORE MCP service
@@ -637,6 +639,8 @@ type Handlers struct {
 	Capability         *handlers.CapabilityHandler
 	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
 	CapabilityRequest  *handlers.CapabilityRequestHandlers // ✅ For capability request approval
+	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
+	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -762,6 +766,15 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		CapabilityRequest: handlers.NewCapabilityRequestHandlers(
 			services.CapabilityRequest,
+			repos.Agent,
+		),
+		MCPGraph: handlers.NewMCPGraphHandler(
+			services.MCP,
+			repos.Agent,
+			repos.MCPAttestation,
+		),
+		MCPDiscovery: handlers.NewMCPDiscoveryHandler(
+			services.MCP,
 			repos.Agent,
 		),
 	}
@@ -937,6 +950,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)
+	admin.Get("/audit-logs/export", h.Admin.ExportAuditLogs)
 	admin.Get("/audit-logs/:id", h.Admin.GetAuditLogByID)
 
 	// Alerts
@@ -969,18 +983,24 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	admin.Post("/verifications/:id/deny", h.Verification.DenyVerification)
 
 	// Compliance routes (admin only)
-	// Basic compliance features - Advanced features (SOC 2, HIPAA, GDPR, ISO 27001) reserved for premium
+	// SOC 2 and HIPAA compliance features
 	compliance := v1.Group("/compliance")
 	compliance.Use(middleware.AuthMiddleware(jwtService))
 	compliance.Use(middleware.AdminMiddleware())
-	compliance.Use(middleware.RateLimitMiddleware()) // Changed from StrictRateLimitMiddleware to allow multiple simultaneous requests
+	compliance.Use(middleware.RateLimitMiddleware())
 	compliance.Get("/status", h.Compliance.GetComplianceStatus)
 	compliance.Get("/metrics", h.Compliance.GetComplianceMetrics)
 	compliance.Get("/audit-log/access-review", h.Compliance.GetAccessReview)
 	compliance.Get("/access-review", h.Compliance.GetAccessReview)
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
-	compliance.Get("/export", h.Compliance.ExportComplianceReport) // Export compliance report
-	// Data retention and violations endpoints removed
+	compliance.Get("/export", h.Compliance.ExportComplianceReport) // Export compliance report (CSV/JSON)
+	// Compliance score trending - track scores over time
+	compliance.Get("/trending", h.Compliance.GetComplianceTrending)       // Get compliance score history
+	compliance.Post("/snapshot", h.Compliance.RecordComplianceSnapshot)   // Record point-in-time compliance score
+	// Evidence collection for auditors
+	compliance.Get("/evidence", h.Compliance.ListEvidence)                         // List collected evidence
+	compliance.Post("/evidence/collect", h.Compliance.CollectEvidence)             // Collect evidence for a check
+	compliance.Get("/evidence/check/:checkName", h.Compliance.GetEvidenceForCheck) // Get evidence for specific check
 
 	// MCP Server routes (authentication required)
 	// ✅ Agent Attestation endpoints - Revolutionary zero-effort MCP verification
@@ -1000,6 +1020,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Use(middleware.AuthMiddleware(jwtService))
 	mcpServers.Use(middleware.RateLimitMiddleware())
 	mcpServers.Get("/", h.MCP.ListMCPServers)
+	mcpServers.Get("/graph", h.MCPGraph.GetConnectionGraph)         // ✅ MCP-Agent network graph (must be before /:id routes)
+	mcpServers.Get("/discovered", h.MCPDiscovery.GetDiscoveredMCPs) // ✅ MCP Discovery dashboard (must be before /:id routes)
 	mcpServers.Post("/", middleware.MemberMiddleware(), h.MCP.CreateMCPServer)
 	mcpServers.Get("/:id", h.MCP.GetMCPServer)
 	mcpServers.Put("/:id", middleware.MemberMiddleware(), h.MCP.UpdateMCPServer)
@@ -1015,6 +1037,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)  // ✅ Dashboard: Get agents with this MCP in talks_to field
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-capability", h.MCP.VerifyMCPCapability)
+	mcpServers.Get("/:id/connections", h.MCPGraph.GetMCPServerConnections) // ✅ Get connection graph for specific MCP server
+	mcpServers.Get("/:id/audit-logs", h.MCP.GetMCPServerAuditLogs)         // ✅ Get audit logs for specific MCP server
 
 	// Attestation management routes (authentication required)
 	// 🔴 Supply chain security: Revoke attestations when agent keys are compromised

@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -627,6 +629,131 @@ func (h *AdminHandler) GetAuditLogByID(c fiber.Ctx) error {
 	return c.JSON(auditLog)
 }
 
+// ExportAuditLogs exports audit logs as CSV or JSON
+func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
+
+	// Parse format (csv or json, default to csv)
+	format := strings.ToLower(c.Query("format", "csv"))
+	if format != "csv" && format != "json" {
+		format = "csv"
+	}
+
+	// Parse date filters
+	var startDate, endDate *time.Time
+	if startStr := c.Query("start_date"); startStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, startStr); err == nil {
+			startDate = &parsed
+		}
+	}
+	if endStr := c.Query("end_date"); endStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, endStr); err == nil {
+			endDate = &parsed
+		}
+	}
+
+	// Get all audit logs (no pagination for export, up to 10000)
+	logs, total, err := h.auditService.GetAuditLogs(
+		c.Context(),
+		orgID,
+		"", // action filter
+		"", // entity type filter
+		nil, // entity ID
+		nil, // user ID filter
+		startDate,
+		endDate,
+		10000, // max export limit
+		0,     // offset
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch audit logs for export",
+		})
+	}
+
+	// Log the export action
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionView,
+		"audit_logs_export",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"format":        format,
+			"total_records": total,
+			"exported":      len(logs),
+		},
+	)
+
+	if format == "json" {
+		// Return as JSON array
+		c.Set("Content-Type", "application/json")
+		c.Set("Content-Disposition", "attachment; filename=audit-logs.json")
+		return c.JSON(logs)
+	}
+
+	// Return as CSV
+	var csvBuilder strings.Builder
+	csvBuilder.WriteString("ID,Timestamp,Action,ResourceType,ResourceID,UserID,IPAddress,UserAgent,Metadata\n")
+
+	for _, log := range logs {
+		// Serialize metadata to JSON string for CSV
+		metadataJSON := ""
+		if log.Metadata != nil {
+			if jsonBytes, err := json.Marshal(log.Metadata); err == nil {
+				metadataJSON = strings.ReplaceAll(string(jsonBytes), "\"", "\"\"") // Escape quotes for CSV
+			}
+		}
+
+		// Format: escape quotes in fields and wrap in quotes
+		csvBuilder.WriteString(fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+			log.ID.String(),
+			log.Timestamp.Format(time.RFC3339),
+			log.Action,
+			log.ResourceType,
+			log.ResourceID.String(),
+			log.UserID.String(),
+			log.IPAddress,
+			strings.ReplaceAll(log.UserAgent, "\"", "\"\""),
+			metadataJSON,
+		))
+	}
+
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", "attachment; filename=audit-logs.csv")
+	return c.SendString(csvBuilder.String())
+}
+
 // GetAlerts returns all alerts with optional filtering
 func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	// 🔍 Safe type assertion with error checking
@@ -779,7 +906,7 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
-		UserID string `json:"user_id"`
+		UserID string `json:"userId"`
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {

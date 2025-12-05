@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   X,
   AlertTriangle,
@@ -8,9 +9,13 @@ import {
   Activity,
   FileText,
   User,
+  KeyRound,
+  Loader2,
+  Ban,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/date-utils";
+import { api, Agent } from "@/lib/api";
 
 interface SecurityThreat {
   id: string;
@@ -36,6 +41,51 @@ export default function ThreatDetailModal({
   onClose,
   threat,
 }: ThreatDetailModalProps) {
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [loadingAgent, setLoadingAgent] = useState(false);
+  const [revokingToken, setRevokingToken] = useState(false);
+  const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
+  const [revokeSuccess, setRevokeSuccess] = useState(false);
+
+  // Fetch agent details to get SDK token ID
+  useEffect(() => {
+    if (!isOpen || !threat?.targetId) {
+      setAgent(null);
+      setRevokeSuccess(false);
+      return;
+    }
+
+    const fetchAgent = async () => {
+      setLoadingAgent(true);
+      try {
+        const agentData = await api.getAgent(threat.targetId);
+        setAgent(agentData);
+      } catch (error) {
+        console.error("Failed to fetch agent details:", error);
+        setAgent(null);
+      } finally {
+        setLoadingAgent(false);
+      }
+    };
+
+    fetchAgent();
+  }, [isOpen, threat?.targetId]);
+
+  const handleRevokeSDKToken = async () => {
+    if (!agent?.createdBySdkTokenId) return;
+
+    setRevokingToken(true);
+    try {
+      await api.revokeSDKToken(agent.createdBySdkTokenId, `Security threat: ${threat?.threatType}`);
+      setRevokeSuccess(true);
+      setShowRevokeConfirm(false);
+    } catch (error: any) {
+      alert(error?.message || "Failed to revoke SDK token");
+    } finally {
+      setRevokingToken(false);
+    }
+  };
+
   if (!isOpen || !threat) return null;
 
   const getSeverityColor = (severity: string) => {
@@ -95,12 +145,14 @@ export default function ThreatDetailModal({
         {/* Body */}
         <div className="p-6 space-y-6">
           {/* Quick Actions Bar */}
-          <div className="flex items-center gap-2 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
-            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              Quick Actions:
-            </span>
-            <div className="flex items-center gap-2 ml-auto">
+          <div className="flex flex-col gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Quick Actions:
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
               <Link
                 href={`/dashboard/agents?search=${threat.targetId}`}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
@@ -125,8 +177,89 @@ export default function ThreatDetailModal({
                 View Audit Log
                 <ExternalLink className="h-3 w-3" />
               </Link>
+
+              {/* SDK Token Quick Actions */}
+              {loadingAgent ? (
+                <span className="inline-flex items-center gap-1 px-3 py-1 text-xs text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Loading...
+                </span>
+              ) : agent?.createdBySdkTokenId ? (
+                <>
+                  <Link
+                    href={`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 border border-purple-300 dark:border-purple-700 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                  >
+                    <KeyRound className="h-3 w-3" />
+                    View SDK Token
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                  {!revokeSuccess ? (
+                    <button
+                      onClick={() => setShowRevokeConfirm(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-white dark:bg-gray-800 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <Ban className="h-3 w-3" />
+                      Revoke SDK Token
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg">
+                      <Shield className="h-3 w-3" />
+                      Token Revoked
+                    </span>
+                  )}
+                </>
+              ) : null}
             </div>
           </div>
+
+          {/* SDK Token Revoke Confirmation */}
+          {showRevokeConfirm && (
+            <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800">
+              <div className="flex items-start gap-3">
+                <Ban className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-red-900 dark:text-red-100 mb-1">
+                    Confirm SDK Token Revocation
+                  </h4>
+                  <p className="text-xs text-red-800 dark:text-red-200 mb-3">
+                    This will immediately revoke the SDK token used to create this agent.
+                    Any applications using this token will no longer be able to authenticate.
+                    {agent?.createdByName && (
+                      <span className="block mt-1 font-medium">
+                        Token owner: {agent.createdByName} {agent.createdByEmail && `(${agent.createdByEmail})`}
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleRevokeSDKToken}
+                      disabled={revokingToken}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    >
+                      {revokingToken ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Revoking...
+                        </>
+                      ) : (
+                        <>
+                          <Ban className="h-3 w-3" />
+                          Yes, Revoke Token
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowRevokeConfirm(false)}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
@@ -248,6 +381,11 @@ export default function ThreatDetailModal({
                   {!threat.isBlocked && (
                     <li className="font-semibold">
                       Consider blocking this agent if threat persists
+                    </li>
+                  )}
+                  {agent?.createdBySdkTokenId && !revokeSuccess && (
+                    <li className="font-semibold text-red-700 dark:text-red-300">
+                      If compromised, revoke the SDK token used to create this agent
                     </li>
                   )}
                 </ul>

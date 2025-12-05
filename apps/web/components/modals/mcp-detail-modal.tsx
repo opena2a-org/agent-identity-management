@@ -16,10 +16,13 @@ import {
   User,
   Bot,
   Activity,
+  KeyRound,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/date-utils";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 
 interface MCPCapability {
   id: string;
@@ -81,6 +84,16 @@ interface MCPServer {
   attestationCount?: number; // Number of agent attestations
   confidenceScore?: number; // Calculated confidence (0-100) based on attestations
   lastAttestedAt?: string; // Most recent attestation timestamp
+
+  // ✅ Audit trail fields
+  createdBy?: string;           // User UUID who created this server
+  createdByName?: string;       // Name of the creator
+  createdByEmail?: string;      // Email of the creator
+  createdBySdkTokenId?: string; // SDK token used to create this server
+  createdByApiKeyId?: string;   // API key used to create this server
+  updatedBy?: string;           // User UUID who last updated this server
+  updatedByName?: string;       // Name of the updater
+  updatedByEmail?: string;      // Email of the updater
 }
 
 interface MCPDetailModalProps {
@@ -98,6 +111,7 @@ export function MCPDetailModal({
   onEdit,
   onDelete,
 }: MCPDetailModalProps) {
+  const router = useRouter();
   const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [showAttestations, setShowAttestations] = useState(false);
   const [loadingAttestations, setLoadingAttestations] = useState(false);
@@ -610,6 +624,55 @@ export function MCPDetailModal({
               <p className="text-sm text-gray-900 dark:text-gray-100">
                 {formatDateTime(mcp.createdAt)}
               </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Created By
+              </h3>
+              <div className="text-sm text-gray-900 dark:text-gray-100">
+                {mcp.createdByName || mcp.createdByEmail ? (
+                  <div className="flex flex-col gap-1">
+                    {mcp.createdByName && (
+                      <span className="font-medium">{mcp.createdByName}</span>
+                    )}
+                    {mcp.createdByEmail && (
+                      <span className="text-gray-500 dark:text-gray-400">{mcp.createdByEmail}</span>
+                    )}
+                    {mcp.createdBySdkTokenId && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 h-auto text-xs text-blue-600 dark:text-blue-400 justify-start"
+                        onClick={() => {
+                          onClose();
+                          router.push(`/dashboard/sdk-tokens?highlight=${mcp.createdBySdkTokenId}`);
+                        }}
+                      >
+                        <KeyRound className="h-3 w-3 mr-1" />
+                        View SDK Token
+                      </Button>
+                    )}
+                    {mcp.createdByApiKeyId && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 h-auto text-xs text-orange-600 dark:text-orange-400 justify-start"
+                        onClick={() => {
+                          onClose();
+                          router.push(`/dashboard/api-keys?highlight=${mcp.createdByApiKeyId}`);
+                        }}
+                      >
+                        <KeyRound className="h-3 w-3 mr-1" />
+                        View API Key
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-gray-500 dark:text-gray-400">System</span>
+                )}
+              </div>
             </div>
 
             <div>

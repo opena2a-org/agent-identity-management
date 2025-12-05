@@ -41,6 +41,10 @@ func (m *SDKTokenTrackingMiddleware) Handler() fiber.Handler {
 						// Get client IP address
 						ipAddress := c.IP()
 
+						// ✅ Store SDK token ID in context for downstream handlers
+						// This enables tracking which SDK token created each agent
+						c.Locals("sdk_token_id", jti)
+
 						// Record usage asynchronously to avoid blocking the request
 						go func(tokenID, ip string) {
 							if err := m.sdkTokenRepo.RecordUsage(tokenID, ip); err != nil {

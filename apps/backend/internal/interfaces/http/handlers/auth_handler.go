@@ -51,14 +51,14 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"id":              user.ID,
-		"email":           user.Email,
-		"name":            user.Name,
-		"role":            user.Role,
+		"id":             user.ID,
+		"email":          user.Email,
+		"name":           user.Name,
+		"role":           user.Role,
 		"organizationId": user.OrganizationID,
-		"last_login_at":   user.LastLoginAt,
+		"lastLoginAt":    user.LastLoginAt,
 		"createdAt":      user.CreatedAt,
-		"status":          user.Status,
+		"status":         user.Status,
 	})
 }
 
@@ -122,15 +122,15 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 	})
 
 	return c.JSON(fiber.Map{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"accessToken":  accessToken,
+		"refreshToken": refreshToken,
 		"user": fiber.Map{
-			"id":                    user.ID,
-			"email":                 user.Email,
-			"name":                  user.Name,
-			"role":                  user.Role,
-			"organizationId":       user.OrganizationID,
-			"force_password_change": user.ForcePasswordChange,
+			"id":                  user.ID,
+			"email":               user.Email,
+			"name":                user.Name,
+			"role":                user.Role,
+			"organizationId":      user.OrganizationID,
+			"forcePasswordChange": user.ForcePasswordChange,
 		},
 	})
 }
@@ -138,8 +138,8 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 // ChangePassword handles password change requests
 func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 	type ChangePasswordRequest struct {
-		CurrentPassword string `json:"current_password"`
-		NewPassword     string `json:"new_password"`
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
 	}
 
 	var req ChangePasswordRequest
@@ -211,9 +211,9 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 
 	// Return organization info
 	return c.JSON(fiber.Map{
-		"id":         org.ID,
-		"name":       org.Name,
-		"max_agents": org.MaxAgents,
+		"id":        org.ID,
+		"name":      org.Name,
+		"maxAgents": org.MaxAgents,
 		"isActive":  org.IsActive,
 		"createdAt": org.CreatedAt,
 		"updatedAt": org.UpdatedAt,

@@ -17,6 +17,8 @@ import {
   Activity,
   Bot,
   User,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +46,16 @@ import {
 import { MCPServerDetailSkeleton } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
 import { MCPTagsTab } from "@/components/mcp/tags-tab";
+import { ConsensusProgress } from "@/components/mcp/consensus-progress";
+import { ManualAttestationForm } from "@/components/mcp/manual-attestation-form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 interface MCPServer {
   id: string;
@@ -103,6 +115,8 @@ export default function MCPServerDetailsPage({
   const [connectedAgents, setConnectedAgents] = useState<Agent[]>([]);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [attestations, setAttestations] = useState<AttestationWithAgentDetails[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -112,6 +126,12 @@ export default function MCPServerDetailsPage({
   const [verifying, setVerifying] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Attestation revocation state
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [selectedAttestation, setSelectedAttestation] = useState<AttestationWithAgentDetails | null>(null);
+  const [revokeReason, setRevokeReason] = useState<string>("");
+  const [revoking, setRevoking] = useState(false);
 
   // Extract server ID from params Promise
   useEffect(() => {
@@ -225,6 +245,14 @@ export default function MCPServerDetailsPage({
         } catch (err) {
           console.error("Failed to fetch attestations:", err);
         }
+
+        // Fetch audit logs
+        try {
+          const auditData = await api.getMCPServerAuditLogs(serverId!, 50, 0);
+          setAuditLogs(auditData.logs || []);
+        } catch (err) {
+          console.error("Failed to fetch audit logs:", err);
+        }
       } catch (err: any) {
         console.error("Failed to fetch MCP server data:", err);
         setError(err.message || "Failed to load MCP server details");
@@ -266,6 +294,29 @@ export default function MCPServerDetailsPage({
     } finally {
       setShowDeleteConfirm(false);
     }
+  };
+
+  const handleRevokeAttestation = async () => {
+    if (!selectedAttestation || !revokeReason) return;
+    setRevoking(true);
+    try {
+      await api.revokeAttestation(selectedAttestation.id, revokeReason);
+      toast.success("Attestation revoked successfully");
+      handleRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to revoke attestation");
+    } finally {
+      setRevoking(false);
+      setShowRevokeDialog(false);
+      setSelectedAttestation(null);
+      setRevokeReason("");
+    }
+  };
+
+  const openRevokeDialog = (attestation: AttestationWithAgentDetails) => {
+    setSelectedAttestation(attestation);
+    setRevokeReason("");
+    setShowRevokeDialog(true);
   };
 
   // Get trust score color
@@ -558,6 +609,21 @@ export default function MCPServerDetailsPage({
           </Card>
         )}
 
+        {/* Consensus Progress - Multi-Agent Verification */}
+        {server.verificationMethod === "agent_attestation" && (
+          <ConsensusProgress
+            mcpServerId={server.id}
+            currentAgents={server.attestationCount || 0}
+            requiredAgents={3}
+            currentOwners={0}
+            requiredOwners={2}
+            confidenceScore={server.confidenceScore || 0}
+            requiredScore={60}
+            status={server.status}
+            isVerified={isVerified}
+          />
+        )}
+
         {/* Secondary Metrics */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -624,6 +690,10 @@ export default function MCPServerDetailsPage({
             <TabsTrigger value="tags">
               <Tag className="h-4 w-4 mr-2" />
               Tags
+            </TabsTrigger>
+            <TabsTrigger value="audit">
+              <Activity className="h-4 w-4 mr-2" />
+              Audit Trail
             </TabsTrigger>
           </TabsList>
 
@@ -810,7 +880,7 @@ export default function MCPServerDetailsPage({
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="flex items-center gap-2">
                             {attestation.isValid ? (
                               <Badge variant="default" className="bg-green-600">
                                 <CheckCircle className="h-3 w-3 mr-1" />
@@ -818,6 +888,17 @@ export default function MCPServerDetailsPage({
                               </Badge>
                             ) : (
                               <Badge variant="destructive">Expired</Badge>
+                            )}
+                            {canManage && attestation.isValid && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => openRevokeDialog(attestation)}
+                              >
+                                <Ban className="h-3.5 w-3.5 mr-1" />
+                                Revoke
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -869,10 +950,82 @@ export default function MCPServerDetailsPage({
                 )}
               </CardContent>
             </Card>
+
+            {/* Manual Attestation Form */}
+            <ManualAttestationForm
+              mcpServerId={server.id}
+              mcpServerName={server.name}
+              mcpServerUrl={server.url}
+              capabilities={capabilities.map(c => c.name)}
+              onAttestationSubmitted={handleRefresh}
+              userRole={userRole}
+            />
           </TabsContent>
 
           <TabsContent value="tags">
             <MCPTagsTab mcpServerId={server.id} />
+          </TabsContent>
+
+          <TabsContent value="audit" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>
+                  History of all operations performed on this MCP server
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {auditLogs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Activity className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      No audit logs recorded yet
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Operations on this MCP server will appear here
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {auditLogs.map((log, index) => (
+                      <div
+                        key={log.id || index}
+                        className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                          <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {log.action?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Action'}
+                            </p>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown'}
+                            </span>
+                          </div>
+                          {log.performedByEmail && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              By: {log.performedByEmail}
+                            </p>
+                          )}
+                          {log.details && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">
+                              {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                            </p>
+                          )}
+                          {log.ipAddress && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                              IP: {log.ipAddress}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="details" className="space-y-4">
@@ -1103,6 +1256,125 @@ export default function MCPServerDetailsPage({
               >
                 Delete
               </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Attestation Revocation Dialog */}
+        <AlertDialog
+          open={showRevokeDialog}
+          onOpenChange={(open) => {
+            setShowRevokeDialog(open);
+            if (!open) {
+              setSelectedAttestation(null);
+              setRevokeReason("");
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Ban className="h-5 w-5 text-red-600" />
+                Revoke Attestation
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-4">
+                  <p>
+                    You are about to revoke the attestation from{" "}
+                    <span className="font-semibold">
+                      {selectedAttestation?.agentName}
+                    </span>
+                    . This action will reduce the MCP server's confidence score.
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">
+                      Reason for revocation <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={revokeReason}
+                      onValueChange={setRevokeReason}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a reason..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="compromised">
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                            <span>Compromised - Security concern detected</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="outdated">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-yellow-600" />
+                            <span>Outdated - Server changed significantly</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="false_positive">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-orange-600" />
+                            <span>False Positive - Incorrect attestation</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="policy_violation">
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-purple-600" />
+                            <span>Policy Violation - Does not meet requirements</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="other">
+                          <div className="flex items-center gap-2">
+                            <Edit className="h-4 w-4 text-gray-600" />
+                            <span>Other</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedAttestation && (
+                    <div className="bg-muted rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Agent:</span>
+                        <span className="font-medium">{selectedAttestation.agentName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Agent Trust:</span>
+                        <span className="font-medium">
+                          {(selectedAttestation.agentTrustScore * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Attested:</span>
+                        <span className="font-medium">
+                          {new Date(selectedAttestation.verifiedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+              <Button
+                variant="destructive"
+                onClick={handleRevokeAttestation}
+                disabled={!revokeReason || revoking}
+              >
+                {revoking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Revoking...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="h-4 w-4 mr-2" />
+                    Revoke Attestation
+                  </>
+                )}
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

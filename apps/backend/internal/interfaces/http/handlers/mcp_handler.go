@@ -66,25 +66,31 @@ func (h *MCPHandler) enrichMCPServerResponse(c fiber.Ctx, server *domain.MCPServ
 	}
 
 	return fiber.Map{
-		"id":                server.ID,
-		"organizationId":    server.OrganizationID,
-		"name":              server.Name,
-		"description":       server.Description,
-		"url":               server.URL,
-		"version":           server.Version,
-		"publicKey":         server.PublicKey,
-		"status":            server.Status,
-		"isVerified":        server.IsVerified,
-		"verificationUrl":   server.VerificationURL,
-		"trustScore":        server.TrustScore,
-		"capabilities":      server.Capabilities,
-		"tags":              tags, // ✅ Include tags in response
-		"createdAt":         server.CreatedAt,
-		"updatedAt":         server.UpdatedAt,
-		"createdBy":         server.CreatedBy,
-		"lastVerifiedAt":    server.LastVerifiedAt,
-		"verificationCount": server.VerificationCount,
-		"registeredByAgent": server.RegisteredByAgent,
+		"id":                  server.ID,
+		"organizationId":      server.OrganizationID,
+		"name":                server.Name,
+		"description":         server.Description,
+		"url":                 server.URL,
+		"version":             server.Version,
+		"publicKey":           server.PublicKey,
+		"status":              server.Status,
+		"isVerified":          server.IsVerified,
+		"verificationUrl":     server.VerificationURL,
+		"trustScore":          server.TrustScore,
+		"capabilities":        server.Capabilities,
+		"tags":                tags, // ✅ Include tags in response
+		"createdAt":           server.CreatedAt,
+		"updatedAt":           server.UpdatedAt,
+		"createdBy":           server.CreatedBy,
+		"createdByName":       server.CreatedByName,       // ✅ Audit trail: creator name
+		"createdByEmail":      server.CreatedByEmail,      // ✅ Audit trail: creator email
+		"createdBySdkTokenId": server.CreatedBySDKTokenID, // ✅ SDK token tracking
+		"updatedBy":           server.UpdatedBy,           // ✅ Audit trail: last updater
+		"updatedByName":       server.UpdatedByName,       // ✅ Audit trail: updater name
+		"updatedByEmail":      server.UpdatedByEmail,      // ✅ Audit trail: updater email
+		"lastVerifiedAt":      server.LastVerifiedAt,
+		"verificationCount":   server.VerificationCount,
+		"registeredByAgent":   server.RegisteredByAgent,
 	}
 }
 
@@ -136,7 +142,25 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		})
 	}
 
-	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID)
+	// ✅ Extract SDK token ID from context (set by SDK token tracking middleware)
+	var sdkTokenID *uuid.UUID
+	if sdkTokenIDLocal := c.Locals("sdk_token_id"); sdkTokenIDLocal != nil {
+		if tokenIDStr, ok := sdkTokenIDLocal.(string); ok && tokenIDStr != "" {
+			if parsedID, err := uuid.Parse(tokenIDStr); err == nil {
+				sdkTokenID = &parsedID
+			}
+		}
+	}
+
+	// ✅ Extract API key ID from context (set by API key middleware)
+	var apiKeyID *uuid.UUID
+	if apiKeyIDLocal := c.Locals("api_key_id"); apiKeyIDLocal != nil {
+		if apiKeyIDVal, ok := apiKeyIDLocal.(uuid.UUID); ok {
+			apiKeyID = &apiKeyIDVal
+		}
+	}
+
+	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
 	if err != nil {
 		// Log the actual error for debugging
 		fmt.Printf("❌ Error creating MCP server: %v\n", err)
@@ -164,9 +188,9 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"serverName":  server.Name,
-			"serverUrl":   server.URL,
-			"auth_method":  c.Locals("auth_method"), // Ed25519 or JWT
+			"serverName": server.Name,
+			"serverUrl":  server.URL,
+			"authMethod": c.Locals("auth_method"), // Ed25519 or JWT
 		},
 	)
 
@@ -430,11 +454,11 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"verified":         true,
+		"verified":        true,
 		"trustScore":      server.TrustScore,
 		"verifiedAt":      server.LastVerifiedAt,
-		"challenge":        challenge,
-		"verification_url": server.VerificationURL,
+		"challenge":       challenge,
+		"verificationUrl": server.VerificationURL,
 	})
 }
 
@@ -497,15 +521,15 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":   "add_public_key",
-			"key_type": req.KeyType,
+			"action":  "add_public_key",
+			"keyType": req.KeyType,
 		},
 	)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message":   "Public key added successfully",
+		"message":  "Public key added successfully",
 		"serverId": serverID,
-		"key_type":  req.KeyType,
+		"keyType":  req.KeyType,
 	})
 }
 
@@ -841,9 +865,9 @@ func (h *MCPHandler) VerifyMCPCapability(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		Capability    string                 `json:"capability"`     // "db:query", "api:call", "file:access"
-		Resource      string                 `json:"resource"`       // e.g., "SELECT * FROM table" or "POST /api/endpoint"
-		TargetService string                 `json:"target_service"` // e.g., "postgresql://prod-db"
+		Capability    string                 `json:"capability"`    // "db:query", "api:call", "file:access"
+		Resource      string                 `json:"resource"`      // e.g., "SELECT * FROM table" or "POST /api/endpoint"
+		TargetService string                 `json:"targetService"` // e.g., "postgresql://prod-db"
 		Metadata      map[string]interface{} `json:"metadata"`
 	}
 
@@ -871,16 +895,16 @@ func (h *MCPHandler) VerifyMCPCapability(c fiber.Ctx) error {
 
 	if !decision {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"allowed":  false,
-			"reason":   reason,
-			"audit_id": auditID,
+			"allowed": false,
+			"reason":  reason,
+			"auditId": auditID,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"allowed":  true,
-		"reason":   reason,
-		"audit_id": auditID,
+		"allowed": true,
+		"reason":  reason,
+		"auditId": auditID,
 	})
 }
 
@@ -911,7 +935,93 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"connected_agents": agents,
-		"count":            len(agents),
+		"connectedAgents": agents,
+		"count":           len(agents),
+	})
+}
+
+// GetMCPServerAuditLogs returns audit logs for a specific MCP server
+// @Summary Get MCP server audit logs
+// @Description Get audit logs for a specific MCP server with pagination support
+// @Tags mcp-servers
+// @Produce json
+// @Param id path string true "MCP Server ID"
+// @Param limit query int false "Number of logs to return (default: 50, max: 100)"
+// @Param offset query int false "Offset for pagination (default: 0)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string "Invalid MCP server ID"
+// @Failure 404 {object} map[string]string "MCP server not found"
+// @Failure 403 {object} map[string]string "Access denied"
+// @Router /api/v1/mcp-servers/{id}/audit-logs [get]
+func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	mcpServerID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid MCP server ID",
+		})
+	}
+
+	// Parse pagination parameters
+	limit := 50 // default
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil {
+			if limit > 100 {
+				limit = 100 // enforce max
+			}
+			if limit < 1 {
+				limit = 50 // reset to default
+			}
+		}
+	}
+
+	offset := 0 // default
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		fmt.Sscanf(offsetStr, "%d", &offset)
+	}
+
+	// Verify MCP server belongs to organization
+	mcpServer, err := h.mcpService.GetMCPServer(c.Context(), mcpServerID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "MCP server not found",
+		})
+	}
+	if mcpServer.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Get audit logs filtered by MCP server ID (entity_id)
+	logs, total, err := h.auditService.GetAuditLogs(
+		c.Context(),
+		orgID,
+		"",           // action filter (empty = all)
+		"mcp_server", // entity_type
+		&mcpServerID, // entity_id filter
+		nil,          // user_id filter (nil = all users)
+		nil,          // start_date
+		nil,          // end_date
+		limit,
+		offset,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch audit logs",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"logs":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
 	})
 }

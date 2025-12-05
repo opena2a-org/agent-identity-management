@@ -319,7 +319,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				"weekStart":  weekStart.Format("2006-01-02"),
 				"avgScore":   avgScore,
 				"agentCount": agentCount,
-				"scores_by_range": map[string]interface{}{
+				"scoresByRange": map[string]interface{}{
 					"excellent": excellent,
 					"good":      good,
 					"fair":      fair,
@@ -345,8 +345,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 
 		if len(trends) >= 2 {
 			// Compare first and last data points
-			firstScore := trends[0]["avg_score"].(float64)
-			lastScore := trends[len(trends)-1]["avg_score"].(float64)
+			firstScore := trends[0]["avgScore"].(float64)
+			lastScore := trends[len(trends)-1]["avgScore"].(float64)
 
 			if lastScore > firstScore {
 				changePercentage = ((lastScore - firstScore) / firstScore) * 100
@@ -474,7 +474,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				"date":        date.Format("2006-01-02"),
 				"avgScore":   avgScore,
 				"agentCount": agentCount,
-				"scores_by_range": map[string]interface{}{
+				"scoresByRange": map[string]interface{}{
 					"excellent": excellent,
 					"good":      good,
 					"fair":      fair,
@@ -500,8 +500,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 
 		if len(trends) >= 2 {
 			// Compare first and last data points
-			firstScore := trends[0]["avg_score"].(float64)
-			lastScore := trends[len(trends)-1]["avg_score"].(float64)
+			firstScore := trends[0]["avgScore"].(float64)
+			lastScore := trends[len(trends)-1]["avgScore"].(float64)
 
 			if lastScore > firstScore {
 				changePercentage = ((lastScore - firstScore) / firstScore) * 100
@@ -554,6 +554,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	}
 	months, _ := strconv.Atoi(c.Query("months", "6"))
 
+	// Fetch agents
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -561,95 +562,187 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 		})
 	}
 
-	// Calculate current verified and pending counts
-	verifiedCount := 0
-	pendingCount := 0
+	// Fetch MCP servers
+	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	if err != nil {
+		// Continue without MCP servers if fetch fails
+		mcpServers = []*domain.MCPServer{}
+	}
+
+	// Calculate current verified and pending counts for AGENTS
+	agentVerifiedCount := 0
+	agentPendingCount := 0
 	for _, agent := range agents {
 		if agent.Status == "verified" {
-			verifiedCount++
+			agentVerifiedCount++
 		} else if agent.Status == "pending" {
-			pendingCount++
+			agentPendingCount++
 		}
 	}
 
-	// Get verification activity from agents table based on created_at and verified_at
+	// Calculate current verified and pending counts for MCP SERVERS
+	mcpVerifiedCount := 0
+	mcpPendingCount := 0
+	for _, mcp := range mcpServers {
+		if mcp.Status == "verified" {
+			mcpVerifiedCount++
+		} else if mcp.Status == "pending" {
+			mcpPendingCount++
+		}
+	}
+
+	// Combined totals
+	totalVerified := agentVerifiedCount + mcpVerifiedCount
+	totalPending := agentPendingCount + mcpPendingCount
+
 	activity := []map[string]interface{}{}
 
-	// Query to get monthly agent creation and verification activity
+	// Query to get monthly verification activity for BOTH agents AND MCP servers
 	query := `
-		WITH monthly_activity AS (
+		WITH agent_activity AS (
 			SELECT
 				DATE_TRUNC('month', created_at) as month_start,
 				COUNT(*) FILTER (WHERE status = 'verified') as verified,
-				COUNT(*) FILTER (WHERE status = 'pending') as pending
+				COUNT(*) FILTER (WHERE status = 'pending') as pending,
+				'agent' as entity_type
 			FROM agents
 			WHERE organization_id = $1
 				AND created_at >= NOW() - INTERVAL '1 month' * $2
 			GROUP BY DATE_TRUNC('month', created_at)
+		),
+		mcp_activity AS (
+			SELECT
+				DATE_TRUNC('month', created_at) as month_start,
+				COUNT(*) FILTER (WHERE status = 'verified') as verified,
+				COUNT(*) FILTER (WHERE status = 'pending') as pending,
+				'mcp' as entity_type
+			FROM mcp_servers
+			WHERE organization_id = $1
+				AND created_at >= NOW() - INTERVAL '1 month' * $2
+			GROUP BY DATE_TRUNC('month', created_at)
+		),
+		combined AS (
+			SELECT * FROM agent_activity
+			UNION ALL
+			SELECT * FROM mcp_activity
+		),
+		monthly_totals AS (
+			SELECT
+				month_start,
+				SUM(verified) as verified,
+				SUM(pending) as pending,
+				SUM(CASE WHEN entity_type = 'agent' THEN verified ELSE 0 END) as agents_verified,
+				SUM(CASE WHEN entity_type = 'agent' THEN pending ELSE 0 END) as agents_pending,
+				SUM(CASE WHEN entity_type = 'mcp' THEN verified ELSE 0 END) as mcp_verified,
+				SUM(CASE WHEN entity_type = 'mcp' THEN pending ELSE 0 END) as mcp_pending
+			FROM combined
+			GROUP BY month_start
 			ORDER BY month_start ASC
 		)
-		SELECT month_start, verified, pending
-		FROM monthly_activity
+		SELECT month_start, verified, pending, agents_verified, agents_pending, mcp_verified, mcp_pending
+		FROM monthly_totals
 	`
 
 	rows, err := h.db.Query(query, orgID, months)
 	if err != nil {
-		// Fallback: if query fails, generate activity based on current agents
-		// Group agents by creation month
+		// Fallback: if query fails, generate activity based on current data
 		monthlyData := make(map[string]map[string]int)
 		now := time.Now()
 		startDate := now.AddDate(0, -months, 0)
 
+		// Process agents
 		for _, agent := range agents {
 			if agent.CreatedAt.After(startDate) {
 				monthKey := agent.CreatedAt.Format("2006-01")
 				if monthlyData[monthKey] == nil {
-					monthlyData[monthKey] = map[string]int{"verified": 0, "pending": 0}
+					monthlyData[monthKey] = map[string]int{
+						"verified": 0, "pending": 0,
+						"agentsVerified": 0, "agentsPending": 0,
+						"mcpVerified": 0, "mcpPending": 0,
+					}
 				}
 				if agent.Status == "verified" {
 					monthlyData[monthKey]["verified"]++
+					monthlyData[monthKey]["agentsVerified"]++
 				} else if agent.Status == "pending" {
 					monthlyData[monthKey]["pending"]++
+					monthlyData[monthKey]["agentsPending"]++
+				}
+			}
+		}
+
+		// Process MCP servers
+		for _, mcp := range mcpServers {
+			if mcp.CreatedAt.After(startDate) {
+				monthKey := mcp.CreatedAt.Format("2006-01")
+				if monthlyData[monthKey] == nil {
+					monthlyData[monthKey] = map[string]int{
+						"verified": 0, "pending": 0,
+						"agentsVerified": 0, "agentsPending": 0,
+						"mcpVerified": 0, "mcpPending": 0,
+					}
+				}
+				if mcp.Status == "verified" {
+					monthlyData[monthKey]["verified"]++
+					monthlyData[monthKey]["mcpVerified"]++
+				} else if mcp.Status == "pending" {
+					monthlyData[monthKey]["pending"]++
+					monthlyData[monthKey]["mcpPending"]++
 				}
 			}
 		}
 
 		// Convert map to sorted array
 		type monthData struct {
-			date     time.Time
-			verified int
-			pending  int
+			date           time.Time
+			verified       int
+			pending        int
+			agentsVerified int
+			agentsPending  int
+			mcpVerified    int
+			mcpPending     int
 		}
 		var sortedMonths []monthData
 		for monthKey, counts := range monthlyData {
 			t, _ := time.Parse("2006-01", monthKey)
 			sortedMonths = append(sortedMonths, monthData{
-				date:     t,
-				verified: counts["verified"],
-				pending:  counts["pending"],
+				date:           t,
+				verified:       counts["verified"],
+				pending:        counts["pending"],
+				agentsVerified: counts["agentsVerified"],
+				agentsPending:  counts["agentsPending"],
+				mcpVerified:    counts["mcpVerified"],
+				mcpPending:     counts["mcpPending"],
 			})
 		}
-		// Sort by date
 		sort.Slice(sortedMonths, func(i, j int) bool {
 			return sortedMonths[i].date.Before(sortedMonths[j].date)
 		})
 
 		for _, data := range sortedMonths {
 			activity = append(activity, map[string]interface{}{
-				"month":      data.date.Format("Jan"),
-				"verified":   data.verified,
-				"pending":    data.pending,
-				"monthYear": data.date.Format("2006-01"),
+				"month":          data.date.Format("Jan"),
+				"verified":       data.verified,
+				"pending":        data.pending,
+				"agentsVerified": data.agentsVerified,
+				"agentsPending":  data.agentsPending,
+				"mcpVerified":    data.mcpVerified,
+				"mcpPending":     data.mcpPending,
+				"monthYear":      data.date.Format("2006-01"),
 			})
 		}
 
 		// If no activity data, add current month
 		if len(activity) == 0 {
 			activity = append(activity, map[string]interface{}{
-				"month":      now.Format("Jan"),
-				"verified":   verifiedCount,
-				"pending":    pendingCount,
-				"monthYear": now.Format("2006-01"),
+				"month":          now.Format("Jan"),
+				"verified":       totalVerified,
+				"pending":        totalPending,
+				"agentsVerified": agentVerifiedCount,
+				"agentsPending":  agentPendingCount,
+				"mcpVerified":    mcpVerifiedCount,
+				"mcpPending":     mcpPendingCount,
+				"monthYear":      now.Format("2006-01"),
 			})
 		}
 
@@ -657,9 +750,14 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 			"period":   fmt.Sprintf("Last %d months", months),
 			"activity": activity,
 			"currentStats": map[string]interface{}{
-				"totalVerified": verifiedCount,
-				"totalPending":  pendingCount,
-				"totalAgents":   len(agents),
+				"totalVerified":  totalVerified,
+				"totalPending":   totalPending,
+				"totalAgents":    len(agents),
+				"totalMCP":       len(mcpServers),
+				"agentsVerified": agentVerifiedCount,
+				"agentsPending":  agentPendingCount,
+				"mcpVerified":    mcpVerifiedCount,
+				"mcpPending":     mcpPendingCount,
 			},
 		})
 	}
@@ -667,67 +765,109 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 
 	for rows.Next() {
 		var monthStart time.Time
-		var verified, pending int
+		var verified, pending, agentsVerified, agentsPending, mcpVerified, mcpPending int
 
-		if err := rows.Scan(&monthStart, &verified, &pending); err != nil {
+		if err := rows.Scan(&monthStart, &verified, &pending, &agentsVerified, &agentsPending, &mcpVerified, &mcpPending); err != nil {
 			continue
 		}
 
 		activity = append(activity, map[string]interface{}{
-			"month":      monthStart.Format("Jan"),
-			"verified":   verified,
-			"pending":    pending,
-			"monthYear": monthStart.Format("2006-01"),
+			"month":          monthStart.Format("Jan"),
+			"verified":       verified,
+			"pending":        pending,
+			"agentsVerified": agentsVerified,
+			"agentsPending":  agentsPending,
+			"mcpVerified":    mcpVerified,
+			"mcpPending":     mcpPending,
+			"monthYear":      monthStart.Format("2006-01"),
 		})
 	}
 
-	// If no activity from database, generate from agents list
+	// If no activity from database, generate from current data
 	if len(activity) == 0 {
-		// Group agents by creation month
 		monthlyData := make(map[string]map[string]int)
 		now := time.Now()
 		startDate := now.AddDate(0, -months, 0)
 
+		// Process agents
 		for _, agent := range agents {
 			if agent.CreatedAt.After(startDate) {
 				monthKey := agent.CreatedAt.Format("2006-01")
 				if monthlyData[monthKey] == nil {
-					monthlyData[monthKey] = map[string]int{"verified": 0, "pending": 0}
+					monthlyData[monthKey] = map[string]int{
+						"verified": 0, "pending": 0,
+						"agentsVerified": 0, "agentsPending": 0,
+						"mcpVerified": 0, "mcpPending": 0,
+					}
 				}
 				if agent.Status == "verified" {
 					monthlyData[monthKey]["verified"]++
+					monthlyData[monthKey]["agentsVerified"]++
 				} else if agent.Status == "pending" {
 					monthlyData[monthKey]["pending"]++
+					monthlyData[monthKey]["agentsPending"]++
+				}
+			}
+		}
+
+		// Process MCP servers
+		for _, mcp := range mcpServers {
+			if mcp.CreatedAt.After(startDate) {
+				monthKey := mcp.CreatedAt.Format("2006-01")
+				if monthlyData[monthKey] == nil {
+					monthlyData[monthKey] = map[string]int{
+						"verified": 0, "pending": 0,
+						"agentsVerified": 0, "agentsPending": 0,
+						"mcpVerified": 0, "mcpPending": 0,
+					}
+				}
+				if mcp.Status == "verified" {
+					monthlyData[monthKey]["verified"]++
+					monthlyData[monthKey]["mcpVerified"]++
+				} else if mcp.Status == "pending" {
+					monthlyData[monthKey]["pending"]++
+					monthlyData[monthKey]["mcpPending"]++
 				}
 			}
 		}
 
 		// Convert map to sorted array
 		type monthData struct {
-			date     time.Time
-			verified int
-			pending  int
+			date           time.Time
+			verified       int
+			pending        int
+			agentsVerified int
+			agentsPending  int
+			mcpVerified    int
+			mcpPending     int
 		}
 		var sortedMonths []monthData
 		for monthKey, counts := range monthlyData {
 			t, _ := time.Parse("2006-01", monthKey)
 			sortedMonths = append(sortedMonths, monthData{
-				date:     t,
-				verified: counts["verified"],
-				pending:  counts["pending"],
+				date:           t,
+				verified:       counts["verified"],
+				pending:        counts["pending"],
+				agentsVerified: counts["agentsVerified"],
+				agentsPending:  counts["agentsPending"],
+				mcpVerified:    counts["mcpVerified"],
+				mcpPending:     counts["mcpPending"],
 			})
 		}
-		// Sort by date
 		sort.Slice(sortedMonths, func(i, j int) bool {
 			return sortedMonths[i].date.Before(sortedMonths[j].date)
 		})
 
 		for _, data := range sortedMonths {
 			activity = append(activity, map[string]interface{}{
-				"month":      data.date.Format("Jan"),
-				"verified":   data.verified,
-				"pending":    data.pending,
-				"monthYear": data.date.Format("2006-01"),
+				"month":          data.date.Format("Jan"),
+				"verified":       data.verified,
+				"pending":        data.pending,
+				"agentsVerified": data.agentsVerified,
+				"agentsPending":  data.agentsPending,
+				"mcpVerified":    data.mcpVerified,
+				"mcpPending":     data.mcpPending,
+				"monthYear":      data.date.Format("2006-01"),
 			})
 		}
 
@@ -735,10 +875,14 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 		if len(activity) == 0 {
 			now := time.Now()
 			activity = append(activity, map[string]interface{}{
-				"month":      now.Format("Jan"),
-				"verified":   verifiedCount,
-				"pending":    pendingCount,
-				"monthYear": now.Format("2006-01"),
+				"month":          now.Format("Jan"),
+				"verified":       totalVerified,
+				"pending":        totalPending,
+				"agentsVerified": agentVerifiedCount,
+				"agentsPending":  agentPendingCount,
+				"mcpVerified":    mcpVerifiedCount,
+				"mcpPending":     mcpPendingCount,
+				"monthYear":      now.Format("2006-01"),
 			})
 		}
 	}
@@ -747,9 +891,14 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 		"period":   fmt.Sprintf("Last %d months", months),
 		"activity": activity,
 		"currentStats": map[string]interface{}{
-			"totalVerified": verifiedCount,
-			"totalPending":  pendingCount,
-			"totalAgents":   len(agents),
+			"totalVerified":  totalVerified,
+			"totalPending":   totalPending,
+			"totalAgents":    len(agents),
+			"totalMCP":       len(mcpServers),
+			"agentsVerified": agentVerifiedCount,
+			"agentsPending":  agentPendingCount,
+			"mcpVerified":    mcpVerifiedCount,
+			"mcpPending":     mcpPendingCount,
 		},
 	})
 }
@@ -1193,12 +1342,12 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	// Get recent activity events (last 20)
 	type RecentActivity struct {
 		ID            string    `json:"id"`
-		AgentID       string    `json:"agent_id"`
-		AgentName     string    `json:"agent_name"`
-		ActionType    string    `json:"action_type"`
+		AgentID       string    `json:"agentId"`
+		AgentName     string    `json:"agentName"`
+		ActionType    string    `json:"actionType"`
 		Status        string    `json:"status"`
-		CreatedAt     time.Time `json:"created_at"`
-		DurationMs    int       `json:"duration_ms,omitempty"`
+		CreatedAt     time.Time `json:"createdAt"`
+		DurationMs    int       `json:"durationMs,omitempty"`
 	}
 	var recentActivity []RecentActivity
 
@@ -1262,14 +1411,14 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 			"days":       days,
 		},
 		"summary": fiber.Map{
-			"totalAgents":           len(agents),
-			"totalMcpServers":      len(mcpServers),
-			"verification_count":     verificationCount,
-			"attestation_count":      attestationCount,
-			"total_activity_events":  verificationCount + attestationCount,
+			"totalAgents":         len(agents),
+			"totalMcpServers":     len(mcpServers),
+			"verificationCount":   verificationCount,
+			"attestationCount":    attestationCount,
+			"totalActivityEvents": verificationCount + attestationCount,
 		},
-		"activity_by_day": activityByDay,
-		"recent_activity": recentActivity,
-		"generatedAt":    time.Now().UTC(),
+		"activityByDay":   activityByDay,
+		"recentActivity":  recentActivity,
+		"generatedAt":     time.Now().UTC(),
 	})
 }

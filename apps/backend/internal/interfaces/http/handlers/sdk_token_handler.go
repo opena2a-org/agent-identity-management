@@ -85,7 +85,7 @@ func (h *SDKTokenHandler) GetActiveTokenCount(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"active_count": count,
+		"activeCount": count,
 	})
 }
 

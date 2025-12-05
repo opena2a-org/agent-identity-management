@@ -24,8 +24,10 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		INSERT INTO mcp_servers (
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, verification_url,
-			capabilities, trust_score, registered_by_agent, created_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			capabilities, trust_score, registered_by_agent, created_by,
+			created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -50,7 +52,11 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		capabilitiesJSON, // Use JSON bytes instead of pq.Array
 		server.TrustScore,
 		server.RegisteredByAgent, // Can be nil for user-registered servers
-		server.CreatedBy,          // ✅ FIXED: Added created_by field
+		server.CreatedBy,         // User who created this server
+		server.CreatedByName,      // ✅ Audit trail: creator name
+		server.CreatedByEmail,     // ✅ Audit trail: creator email
+		server.CreatedBySDKTokenID, // ✅ SDK token tracking
+		server.CreatedByAPIKeyID,   // ✅ API key tracking
 		time.Now().UTC(),
 		time.Now().UTC(),
 	).Scan(&server.ID, &server.CreatedAt, &server.UpdatedAt)
@@ -68,7 +74,9 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 			id, organization_id, name, description, url, version,
 			public_key, status, is_verified, last_verified_at, verification_url,
 			capabilities, trust_score, registered_by_agent, created_by, created_at, updated_at,
-			verification_method, attestation_count, confidence_score, last_attested_at
+			verification_method, attestation_count, confidence_score, last_attested_at,
+			COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
+			updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, '')
 		FROM mcp_servers
 		WHERE id = $1
 	`
@@ -79,6 +87,9 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 	var version sql.NullString
 	var publicKey sql.NullString
 	var verificationURL sql.NullString
+	var createdBySDKTokenID sql.NullString
+	var createdByAPIKeyID sql.NullString
+	var updatedBy sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&server.ID,
@@ -102,6 +113,13 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 		&server.AttestationCount,
 		&server.ConfidenceScore,
 		&server.LastAttestedAt,
+		&server.CreatedByName,
+		&server.CreatedByEmail,
+		&createdBySDKTokenID,
+		&createdByAPIKeyID,
+		&updatedBy,
+		&server.UpdatedByName,
+		&server.UpdatedByEmail,
 	)
 
 	if err == sql.ErrNoRows {
@@ -123,6 +141,18 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 	}
 	if verificationURL.Valid {
 		server.VerificationURL = verificationURL.String
+	}
+	if createdBySDKTokenID.Valid {
+		sdkTokenID, _ := uuid.Parse(createdBySDKTokenID.String)
+		server.CreatedBySDKTokenID = &sdkTokenID
+	}
+	if createdByAPIKeyID.Valid {
+		apiKeyID, _ := uuid.Parse(createdByAPIKeyID.String)
+		server.CreatedByAPIKeyID = &apiKeyID
+	}
+	if updatedBy.Valid {
+		uid, _ := uuid.Parse(updatedBy.String)
+		server.UpdatedBy = &uid
 	}
 
 	// Unmarshal capabilities from JSONB

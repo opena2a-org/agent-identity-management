@@ -525,8 +525,8 @@ export default function SecurityPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[30%]">
                   Threat Type
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">
-                  Agent
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%]">
+                  Target
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">
                   Severity
@@ -557,12 +557,21 @@ export default function SecurityPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div
-                      className="text-sm text-gray-900 dark:text-gray-100 truncate"
-                      title={threat?.targetName || threat?.targetId}
-                    >
-                      {threat?.targetName ||
-                        `ID: ${threat?.targetId?.substring(0, 8)}...`}
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        threat?.targetType === 'mcp_server' || threat?.targetType === 'mcp'
+                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                      }`}>
+                        {threat?.targetType === 'mcp_server' || threat?.targetType === 'mcp' ? 'MCP' : 'Agent'}
+                      </span>
+                      <div
+                        className="text-sm text-gray-900 dark:text-gray-100 truncate"
+                        title={threat?.targetName || threat?.targetId}
+                      >
+                        {threat?.targetName ||
+                          `${threat?.targetId?.substring(0, 8)}...`}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

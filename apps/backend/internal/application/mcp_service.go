@@ -78,20 +78,22 @@ type UpdateMCPServerRequest struct {
 	Description     string   `json:"description"`
 	URL             string   `json:"url"`
 	Version         string   `json:"version"`
-	PublicKey       string   `json:"public_key"`
-	VerificationURL string   `json:"verification_url"`
+	PublicKey       string   `json:"publicKey"`
+	VerificationURL string   `json:"verificationUrl"`
 	Capabilities    []string `json:"capabilities"`
 }
 
 // AddPublicKeyRequest represents the request to add a public key
 type AddPublicKeyRequest struct {
-	PublicKey string `json:"public_key" validate:"required"`
-	KeyType   string `json:"key_type" validate:"required"` // e.g., "rsa", "ed25519"
+	PublicKey string `json:"publicKey" validate:"required"`
+	KeyType   string `json:"keyType" validate:"required"` // e.g., "rsa", "ed25519"
 }
 
 // CreateMCPServer creates a new MCP server
 // agentID is optional - if provided (SDK registration), creates agent-MCP connection automatically
-func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID) (*domain.MCPServer, error) {
+// sdkTokenID is optional - tracks which SDK token was used to create this server
+// apiKeyID is optional - tracks which API key was used to create this server
+func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error) {
 	// Check if MCP server with this URL already exists
 	existing, _ := s.mcpRepo.GetByURL(req.URL)
 	if existing != nil {
@@ -118,20 +120,34 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		fmt.Printf("✅ Generated Ed25519 keys for MCP server %s\n", req.Name)
 	}
 
+	// ✅ Fetch user details for audit trail
+	var createdByName, createdByEmail string
+	if s.userRepo != nil {
+		user, err := s.userRepo.GetByID(userID)
+		if err == nil && user != nil {
+			createdByName = user.Name
+			createdByEmail = user.Email
+		}
+	}
+
 	server := &domain.MCPServer{
-		ID:              uuid.New(),
-		OrganizationID:  orgID,
-		Name:            strings.TrimSpace(req.Name),
-		Description:     req.Description,
-		URL:             strings.TrimSpace(req.URL), // ✅ Trim spaces from URL
-		Version:         req.Version,
-		PublicKey:       publicKey, // ✅ Auto-generated if not provided
-		Status:          domain.MCPServerStatusPending,
-		IsVerified:      false,
-		VerificationURL: strings.TrimSpace(req.VerificationURL), // ✅ Trim spaces
-		Capabilities:    req.Capabilities,
-		TrustScore:      0.0,
-		CreatedBy:       userID,
+		ID:                  uuid.New(),
+		OrganizationID:      orgID,
+		Name:                strings.TrimSpace(req.Name),
+		Description:         req.Description,
+		URL:                 strings.TrimSpace(req.URL), // ✅ Trim spaces from URL
+		Version:             req.Version,
+		PublicKey:           publicKey, // ✅ Auto-generated if not provided
+		Status:              domain.MCPServerStatusPending,
+		IsVerified:          false,
+		VerificationURL:     strings.TrimSpace(req.VerificationURL), // ✅ Trim spaces
+		Capabilities:        req.Capabilities,
+		TrustScore:          0.0,
+		CreatedBy:           userID,
+		CreatedByName:       createdByName,   // ✅ Audit trail: creator name
+		CreatedByEmail:      createdByEmail,  // ✅ Audit trail: creator email
+		CreatedBySDKTokenID: sdkTokenID,      // ✅ SDK token tracking for revocation
+		CreatedByAPIKeyID:   apiKeyID,        // ✅ API key tracking for revocation
 	}
 
 	if err := s.mcpRepo.Create(server); err != nil {
@@ -363,7 +379,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	}
 
 	var verifyResp struct {
-		SignedChallenge string `json:"signed_challenge"`
+		SignedChallenge string `json:"signedChallenge"`
 	}
 	if err := json.Unmarshal(respBody, &verifyResp); err != nil {
 		return fmt.Errorf("failed to parse verification response: %w", err)
@@ -634,10 +650,10 @@ func (s *MCPService) VerifyMCPCapability(
 type ConnectedAgent struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
+	DisplayName string    `json:"displayName"`
 	Status      string    `json:"status"`
-	TrustScore  float64   `json:"trust_score"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	TrustScore  float64   `json:"trustScore"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // GetConnectedAgents returns all agents that use a specific MCP server

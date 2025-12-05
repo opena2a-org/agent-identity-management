@@ -53,7 +53,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 
 	// Parse request body
 	type RequestBody struct {
-		CapabilityType string `json:"capability_type" validate:"required"`
+		CapabilityType string `json:"capabilityType" validate:"required"`
 		Reason         string `json:"reason" validate:"required,min=10"`
 	}
 

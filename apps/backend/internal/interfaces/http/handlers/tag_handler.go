@@ -32,7 +32,7 @@ type CreateTagRequest struct {
 
 // AddTagsRequest represents the request body for adding tags to an asset
 type AddTagsRequest struct {
-	TagIDs []string `json:"tag_ids" validate:"required,min=1,max=3,dive,uuid"`
+	TagIDs []string `json:"tagIds" validate:"required,min=1,max=3,dive,uuid"`
 }
 
 // CreateTag godoc

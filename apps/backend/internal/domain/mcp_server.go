@@ -34,6 +34,13 @@ type MCPServer struct {
 	VerificationCount    int             `json:"verificationCount,omitempty"` // Fetched via JOIN/COUNT
 	RegisteredByAgent    *uuid.UUID      `json:"registeredByAgent"`           // Agent that registered this server (nullable)
 	CreatedBy            uuid.UUID       `json:"createdBy"`                   // User who created this server
+	CreatedByName        string          `json:"createdByName"`               // Denormalized for audit trail
+	CreatedByEmail       string          `json:"createdByEmail"`              // Denormalized for audit trail
+	CreatedBySDKTokenID  *uuid.UUID      `json:"createdBySdkTokenId,omitempty"` // SDK token used to create this server
+	CreatedByAPIKeyID    *uuid.UUID      `json:"createdByApiKeyId,omitempty"`   // API key used to create this server
+	UpdatedBy            *uuid.UUID      `json:"updatedBy,omitempty"`         // User who last updated this server
+	UpdatedByName        string          `json:"updatedByName,omitempty"`     // Denormalized for audit trail
+	UpdatedByEmail       string          `json:"updatedByEmail,omitempty"`    // Denormalized for audit trail
 	CreatedAt            time.Time       `json:"createdAt"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 	// ✅ NEW: Tags applied to this MCP server (populated by join)

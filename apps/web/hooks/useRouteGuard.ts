@@ -19,8 +19,6 @@ const PROTECTED_ROUTES: RouteConfig[] = [
   { path: "/dashboard/admin/security-policies", requiredPermission: "canViewAdmin" },
   { path: "/dashboard/admin/capability-requests", requiredPermission: "canViewCapabilityRequests" },
   { path: "/dashboard/security", requiredPermission: "canViewSecurity" },
-  { path: "/dashboard/monitoring", requiredPermission: "canViewMonitoring" },
-  { path: "/dashboard/analytics", requiredPermission: "canViewAnalytics" },
 ];
 
 export function useRouteGuard() {

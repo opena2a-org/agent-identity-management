@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
 import {
   Shield,
   Users,
@@ -13,10 +15,17 @@ import {
   Network,
   Loader2,
   AlertCircle,
+  ExternalLink,
+  XCircle,
+  Server,
+  Bot,
+  Key,
+  FileCheck,
+  ShieldCheck,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -24,6 +33,10 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Legend,
+  Cell,
+  PieChart,
+  Pie,
 } from "recharts";
 import { api } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
@@ -35,45 +48,22 @@ import {
 } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
+import { MCPNetworkGraph } from "@/components/mcp/network-graph";
 
 interface DashboardStats {
-  // Backend returns these exact fields (camelCase from Go JSON tags)
-  // Agent metrics
   totalAgents: number;
   verifiedAgents: number;
   pendingAgents: number;
   verificationRate: number;
   avgTrustScore: number;
-
-  // MCP Server metrics
   totalMcpServers: number;
   activeMcpServers: number;
-
-  // User metrics
   totalUsers: number;
   activeUsers: number;
-
-  // Security metrics
   activeAlerts: number;
   criticalAlerts: number;
   securityIncidents: number;
-
-  // Organization
   organizationId: string;
-}
-
-interface TrustScoreTrend {
-  date: string;
-  weekStart?: string; // Only for weekly data
-  avgScore: number;
-  agentCount: number;
-}
-
-interface TrustScoreTrendsData {
-  period: string;
-  currentAverage: number;
-  dataType: "weekly" | "daily";
-  trends: TrustScoreTrend[];
 }
 
 interface VerificationActivityData {
@@ -82,56 +72,67 @@ interface VerificationActivityData {
     month: string;
     verified: number;
     pending: number;
+    agentsVerified: number;
+    agentsPending: number;
+    mcpVerified: number;
+    mcpPending: number;
     monthYear: string;
   }>;
   currentStats: {
     totalVerified: number;
     totalPending: number;
     totalAgents: number;
+    totalMCP: number;
+    agentsVerified: number;
+    agentsPending: number;
+    mcpVerified: number;
+    mcpPending: number;
   };
 }
 
-function StatCard({ stat }: { stat: any }) {
+interface MCPServerEntry {
+  id: string;
+  name: string;
+  url: string;
+  status: "active" | "inactive" | "pending" | "verified" | "suspended" | "revoked";
+  isVerified?: boolean;
+  confidenceScore?: number;
+  attestationCount?: number;
+  lastVerifiedAt?: string;
+  createdAt: string;
+}
+
+// Compact stat card for key metrics
+function KeyMetricCard({ label, value, icon: Icon, color, trend }: {
+  label: string;
+  value: string | number;
+  icon: any;
+  color: string;
+  trend?: { value: string; positive: boolean };
+}) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-      <div className="flex items-center">
-        <div className="flex-shrink-0">
-          <stat.icon className="h-6 w-6 text-gray-400" />
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${color}`}>
+            <Icon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+          </div>
         </div>
-        <div className="ml-5 w-0 flex-1">
-          <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-              {stat.name}
-            </dt>
-            <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                {stat.value}
-              </div>
-              {stat.change && (
-                <div
-                  className={`ml-2 flex items-baseline text-sm font-semibold ${stat.changeType === "positive"
-                      ? "text-green-600"
-                      : "text-red-600"
-                    }`}
-                >
-                  {stat.change}
-                </div>
-              )}
-            </dd>
-          </dl>
-        </div>
+        {trend && (
+          <div className={`text-xs font-medium ${trend.positive ? "text-green-600" : "text-red-600"}`}>
+            {trend.value}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ErrorDisplay({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
+function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
@@ -151,47 +152,24 @@ function ErrorDisplay({
   );
 }
 
-interface AuditLog {
-  id: string;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  userId: string;
-  metadata: any;
-  timestamp: string;
-}
-
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(
-    null
-  );
-  const [verificationActivity, setVerificationActivity] =
-    useState<VerificationActivityData | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
+  const [verificationActivity, setVerificationActivity] = useState<VerificationActivityData | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
   const [userRole, setUserRole] = useState<UserRole>("viewer");
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [recentVerificationEvents, setRecentVerificationEvents] = useState<any[]>([]);
-  const [currentUser, setCurrentUser] = useState<{
-    id: string;
-    email: string;
-  } | null>(null);
+  const [mcpServers, setMcpServers] = useState<MCPServerEntry[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(true);
 
-  // Extract user info from JWT token
   useEffect(() => {
     const token = api.getToken();
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         setUserRole((payload.role as UserRole) || "viewer");
-        // Extract user ID and email from JWT
-        setCurrentUser({
-          id: payload.sub || payload.userId || "",
-          email: payload.email || "",
-        });
       } catch (e) {
         console.error("Failed to decode JWT token:", e);
         setUserRole("viewer");
@@ -207,108 +185,51 @@ function DashboardContent() {
       setDashboardData(data);
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
-      const errorMessage = getErrorMessage(err, {
-        resource: "dashboard data",
-        action: "load",
-      });
+      const errorMessage = getErrorMessage(err, { resource: "dashboard data", action: "load" });
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-
   const fetchVerificationActivity = async () => {
     try {
       setActivityLoading(true);
-      console.log(
-        "fetchVerificationActivity: Fetching verification activity data"
-      );
-      const data = await api.getVerificationActivity(6); // Request 6 months of data
-      console.log("fetchVerificationActivity data:", data);
-
-      // Check if we actually have valid data
+      const data = await api.getVerificationActivity(6);
       if (data && data.activity && data.activity.length > 0) {
         setVerificationActivity(data);
       } else {
-        console.warn("No verification activity data returned from API");
-        setVerificationActivity(null); // Set to null to show "no data" state
+        setVerificationActivity(null);
       }
     } catch (err) {
       console.error("Failed to fetch verification activity:", err);
-      setVerificationActivity(null); // Set to null to show error state
+      setVerificationActivity(null);
     } finally {
       setActivityLoading(false);
     }
   };
 
-  const fetchAuditLogs = async () => {
+  const fetchMcpServers = async () => {
     try {
-      setLogsLoading(true);
-      // Fetch more logs to get past the excessive "view" actions
-      // Most recent 50 logs are mostly "view + alerts" (automated polling)
-      // Need to fetch 500+ to get interesting integration test data (create, verify, etc.)
-      const logs = await api.getAuditLogs(500, 0);
-
-      // Filter out ALL "view" actions - they're not meaningful for Recent Activity
-      // Only show actual changes: create, update, delete, verify, grant, revoke, etc.
-      const filtered = logs.filter((log: AuditLog) => {
-        // Exclude ALL view actions completely
-        if (log.action === "view") return false;
-
-        // Also exclude automated system actions that aren't interesting
-        if (log.resourceType === "dashboard_stats") return false;
-        if (
-          log.resourceType === "organization_settings" &&
-          log.action === "view"
-        )
-          return false;
-
-        // Keep only meaningful actions: create, update, delete, verify, grant, revoke, suspend, acknowledge
-        return true;
-      });
-
-      // Sort by timestamp DESC (most recent first) to show latest activities
-      const sorted = filtered.sort((a, b) => {
-        return (
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-      });
-
-      // Take first 10 most recent activities (agent/MCP creates, verifications, etc.)
-      setAuditLogs(sorted.slice(0, 10));
+      setMcpLoading(true);
+      const data = await api.listMCPServers(100, 0);
+      setMcpServers(data.mcpServers || []);
     } catch (err) {
-      console.error("Failed to fetch audit logs:", err);
-      // Fail silently - keep empty array
+      console.error("Failed to fetch MCP servers:", err);
     } finally {
-      setLogsLoading(false);
-    }
-  };
-
-  const fetchRecentVerificationEvents = async () => {
-    try {
-      // Fetch verification events from the last 15 minutes
-      const data = await api.getRecentVerificationEvents(15);
-      setRecentVerificationEvents(data.events || []);
-    } catch (err) {
-      console.error("Failed to fetch recent verification events:", err);
-      // Fail silently - keep empty array
+      setMcpLoading(false);
     }
   };
 
   useEffect(() => {
-    // Check if OAuth returned with a token
     const token = searchParams.get("token");
     if (token) {
       api.setToken(token);
-      // Clean up URL
       window.history.replaceState({}, "", "/dashboard");
     }
-    console.log("runing useEffect");
     fetchDashboardData();
     fetchVerificationActivity();
-    fetchAuditLogs();
-    fetchRecentVerificationEvents();
+    fetchMcpServers();
   }, [searchParams]);
 
   if (loading) {
@@ -320,605 +241,526 @@ function DashboardContent() {
   }
 
   const data = dashboardData!;
-
-  // Get role-based permissions
   const permissions = getDashboardPermissions(userRole);
 
-  // Helper function to format audit log event name with entity details
-  const formatEventName = (log: AuditLog): string => {
-    const action = log.action.charAt(0).toUpperCase() + log.action.slice(1);
-    const resource = log.resourceType.replace(/_/g, " ");
+  // Calculate derived metrics
+  const verifiedMcps = mcpServers.filter((m) => m.isVerified || m.status === "verified").length;
+  const pendingMcps = mcpServers.filter((m) => m.status === "pending").length;
 
-    // Extract entity name from metadata for more meaningful display
-    let entityName = "";
-    if (log.metadata) {
-      // Try to get specific entity name from metadata
-      entityName =
-        log.metadata.agent_name ||
-        log.metadata.server_name ||
-        log.metadata.mcp_name ||
-        log.metadata.key_name ||
-        log.metadata.tag_name ||
-        "";
-    }
+  // Verification status data for pie charts
+  const agentStatusData = [
+    { name: "Verified", value: data?.verifiedAgents || 0, color: "#22c55e" },
+    { name: "Pending", value: data?.pendingAgents || 0, color: "#f59e0b" },
+    { name: "Other", value: Math.max(0, (data?.totalAgents || 0) - (data?.verifiedAgents || 0) - (data?.pendingAgents || 0)), color: "#6b7280" },
+  ].filter((d) => d.value > 0);
 
-    // Format with entity name if available
-    const entityDisplay = entityName ? ` "${entityName}"` : "";
-
-    // Special handling for specific action types
-    if (log.action === "view") {
-      return `Viewed ${resource}${entityDisplay}`;
-    } else if (log.action === "create") {
-      return `Created ${resource}${entityDisplay}`;
-    } else if (log.action === "verify") {
-      return `Verified ${resource}${entityDisplay}`;
-    } else if (log.action === "update") {
-      return `Updated ${resource}${entityDisplay}`;
-    } else if (log.action === "delete") {
-      return `Deleted ${resource}${entityDisplay}`;
-    } else if (log.action === "grant") {
-      return `Granted ${resource}${entityDisplay}`;
-    } else if (log.action === "revoke") {
-      return `Revoked ${resource}${entityDisplay}`;
-    } else if (log.action === "suspend") {
-      return `Suspended ${resource}${entityDisplay}`;
-    } else if (log.action === "acknowledge") {
-      return `Acknowledged ${resource}${entityDisplay}`;
-    } else if (log.resourceType === "agent_action") {
-      // For agent actions, use the action name as the event
-      return action.replace(/_/g, " ");
-    }
-
-    return `${action} ${resource}${entityDisplay}`;
-  };
-
-  // Helper function to get WHO initiated the action (user, agent, or MCP)
-  const getInitiatedBy = (log: AuditLog): string => {
-    // Check metadata for agent or MCP context
-    if (log.metadata) {
-      // If action was initiated by an agent
-      if (log.metadata.registered_by_agent || log.metadata.acting_agent_name) {
-        return `Agent: ${log.metadata.registered_by_agent || log.metadata.acting_agent_name}`;
-      }
-      // If action was initiated by an MCP server
-      if (log.metadata.mcp_server || log.metadata.server_name) {
-        return `MCP: ${log.metadata.mcp_server || log.metadata.server_name}`;
-      }
-      // If we have user email in metadata
-      if (log.metadata.user_email) {
-        return log.metadata.user_email;
-      }
-      // If we have display_name in metadata
-      if (log.metadata.displayName) {
-        return log.metadata.displayName;
-      }
-    }
-
-    // Check if this is the current user and show their email
-    if (log.userId && currentUser) {
-      if (log.userId === currentUser.id) {
-        return currentUser.email;
-      }
-    }
-
-    // Fallback: show user ID if available
-    if (log.userId) {
-      const shortId = log.userId.split("-")[0];
-      return `User ${shortId}`;
-    }
-
-    // Last resort
-    return "System";
-  };
-
-  // Helper function to categorize the event type
-  const getEventType = (log: AuditLog): string => {
-    if (log.resourceType.includes("agent")) {
-      return "Agent Management";
-    } else if (log.resourceType.includes("mcp")) {
-      return "MCP Servers";
-    } else if (log.resourceType.includes("auth") || log.action === "login") {
-      return "Authentication";
-    } else if (
-      log.resourceType.includes("alert") ||
-      log.resourceType.includes("security")
-    ) {
-      return "Security";
-    } else if (log.resourceType.includes("api_key")) {
-      return "API Keys";
-    } else if (log.resourceType.includes("user")) {
-      return "User Management";
-    } else if (log.action === "view") {
-      return "View";
-    }
-    return "System";
-  };
-
-  // Helper function to format relative time
-  const formatRelativeTime = (timestamp: string): string => {
-    const now = new Date();
-    const then = new Date(timestamp);
-    const diffMs = now.getTime() - then.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
-    const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffSecs < 10) return "Just now";
-    if (diffSecs < 60) return `${diffSecs} seconds ago`;
-    if (diffMins < 60)
-      return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-    if (diffHours < 24)
-      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
-
-    return then.toLocaleDateString();
-  };
-
-  // Prepare required stat cards
-  const allStats = [
-    {
-      name: "Total Agents",
-      value: data?.totalAgents?.toLocaleString() || 0,
-      icon: Users,
-      permission: "canViewAgentStats" as const,
-    },
-    {
-      name: "Verified Agents",
-      value: data?.verifiedAgents?.toLocaleString() || 0,
-      icon: CheckCircle,
-      permission: "canViewAgentStats" as const,
-    },
-    {
-      name: "Trust Score Average",
-      value: data?.avgTrustScore
-        ? `${(data.avgTrustScore * 100).toFixed(0)}%`
-        : "0%",
-      icon: TrendingUp,
-      permission: "canViewTrustScore" as const,
-    },
-    {
-      name: "Recent Activity Count",
-      value: recentVerificationEvents?.length?.toLocaleString() || 0,
-      icon: Activity,
-      permission: "canViewRecentActivity" as const,
-    },
-  ];
-
-  // Filter stats based on role permissions
-  const stats = allStats.filter((stat) => permissions[stat.permission]);
+  const mcpStatusData = [
+    { name: "Verified", value: verifiedMcps, color: "#22c55e" },
+    { name: "Active", value: mcpServers.filter((m) => m.status === "active" && !m.isVerified).length, color: "#3b82f6" },
+    { name: "Pending", value: pendingMcps, color: "#f59e0b" },
+    { name: "Inactive", value: mcpServers.filter((m) => m.status === "inactive" || m.status === "suspended").length, color: "#ef4444" },
+  ].filter((d) => d.value > 0);
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Dashboard Overview
-            </h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Monitor agent verification activities and system performance
-              across all protocols.
-            </p>
-          </div>
-          <TimezoneIndicator />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Executive Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Security posture overview for agents and MCP servers
+          </p>
         </div>
+        <TimezoneIndicator />
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.name} stat={stat} />
-        ))}
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 gap-6">{/* Trust Score Trend card removed (premium feature) */}
-
-        {/* Agent Activity - All roles can see */}
-        {permissions.canViewActivityChart && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Agent Verification Activity
-              </h3>
-              <Activity className="h-5 w-5 text-gray-400" />
-            </div>
-            <div className="h-64">
-              {activityLoading ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                  </div>
-                  <div className="h-56 flex items-end justify-between gap-2">
-                    {[
-                      [90, 60],
-                      [110, 80],
-                      [70, 50],
-                      [120, 90],
-                      [100, 70],
-                    ].map(([verifiedHeight, pendingHeight], i) => (
-                      <div
-                        key={i}
-                        className="flex flex-col items-center gap-2 flex-1"
-                      >
-                        <div className="w-full flex gap-1">
-                          <div
-                            className="w-1/2 animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
-                            style={{ height: `${verifiedHeight}px` }}
-                          />
-                          <div
-                            className="w-1/2 animate-pulse bg-gray-200 dark:bg-gray-700 rounded"
-                            style={{ height: `${pendingHeight}px` }}
-                          />
-                        </div>
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-12 rounded"></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : verificationActivity &&
-                verificationActivity.activity &&
-                verificationActivity.activity.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={verificationActivity.activity.slice(-3)} // Show last 3 months
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      className="text-xs text-gray-500 dark:text-gray-400"
-                      stroke="#9CA3AF"
-                    />
-                    <YAxis
-                      className="text-xs text-gray-500 dark:text-gray-400"
-                      stroke="#9CA3AF"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-                      }}
-                      formatter={(value: number, name: string) => [
-                        value,
-                        name === "Verified"
-                          ? "Verified Agents"
-                          : "Pending Agents",
-                      ]}
-                      labelFormatter={(label) => `Month: ${label}`}
-                    />
-                    <Bar dataKey="verified" fill="#22c55e" name="Verified" />
-                    <Bar dataKey="pending" fill="#eab308" name="Pending" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-                  <AlertCircle className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
-                  <div className="text-center">
-                    <p className="text-base font-medium mb-1">
-                      No Activity Data
-                    </p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500">
-                      Verification activity will appear here once agents are
-                      registered
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Show activity stats */}
-            {verificationActivity && verificationActivity.currentStats && (
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                Total: {verificationActivity.currentStats.totalAgents} agents
-                • Verified: {verificationActivity.currentStats.totalVerified}{" "}
-                • Pending: {verificationActivity.currentStats.totalPending}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Metrics Grid */}
-      <div
-        className={`grid grid-cols-1 gap-6 ${permissions.canViewSecurityMetrics ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
-      >
-        {/* Agent Metrics - All roles can see */}
-        {permissions.canViewDetailedMetrics && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-500" />
-              Agent Metrics
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Total Agents
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.totalAgents}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Verified
-                </span>
-                <span className="text-sm font-medium text-green-600">
-                  {data?.verifiedAgents}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Pending
-                </span>
-                <span className="text-sm font-medium text-yellow-600">
-                  {data?.pendingAgents}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Verification Rate
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.verificationRate?.toFixed(1)}%
-                </span>
+      {/* Security Alert Banner (if critical) */}
+      {data?.criticalAlerts > 0 && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+              <div>
+                <p className="font-medium text-red-800 dark:text-red-200">
+                  {data.criticalAlerts} Critical Security Alert{data.criticalAlerts > 1 ? "s" : ""}
+                </p>
+                <p className="text-sm text-red-600 dark:text-red-300">
+                  Immediate attention required
+                </p>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Security Metrics - Manager+ Only */}
-        {permissions.canViewSecurityMetrics && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              Security Status
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Active Alerts
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.activeAlerts}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Critical
-                </span>
-                <span className="text-sm font-medium text-red-600">
-                  {data?.criticalAlerts}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Incidents
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {data?.securityIncidents}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  System Status
-                </span>
-                <div className="flex items-center gap-1">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span className="text-sm font-medium text-green-600">
-                    Operational
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Platform/MCP Metrics - All roles see this */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            {permissions.canViewUserStats ? (
-              <Users className="h-5 w-5 text-purple-500" />
-            ) : (
-              <Network className="h-5 w-5 text-purple-500" />
-            )}
-            {permissions.canViewUserStats ? "Platform Metrics" : "MCP Servers"}
-          </h3>
-          <div className="space-y-3">
-            {permissions.canViewUserStats && (
-              <>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Total Users
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.totalUsers}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Active Users
-                  </span>
-                  <span className="text-sm font-medium text-green-600">
-                    {data?.activeUsers}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    MCP Servers
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.totalMcpServers}
-                  </span>
-                </div>
-              </>
-            )}
-            {!permissions.canViewUserStats && (
-              <>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Total MCP Servers
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data.totalMcpServers}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Active MCP Servers
-                  </span>
-                  <span className="text-sm font-medium text-green-600">
-                    {data.activeMcpServers}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Total Agents
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {data?.totalAgents}
-                  </span>
-                </div>
-              </>
-            )}
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {permissions.canViewUserStats
-                  ? "Active MCPs"
-                  : "Verified Agents"}
-              </span>
-              <span className="text-sm font-medium text-green-600">
-                {permissions.canViewUserStats
-                  ? data?.activeMcpServers
-                  : data?.verifiedAgents}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Activity Table - All roles can see */}
-      {permissions.canViewRecentActivity && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Recent Activity
-              </h3>
-              <Clock className="h-5 w-5 text-gray-400" />
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Event
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Initiated By
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Resource ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Timestamp
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {logsLoading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i}>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-28 rounded"></div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-16 rounded-full"></div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
-                      </td>
-                    </tr>
-                  ))
-                ) : auditLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        No recent activity found
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  auditLogs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {formatEventName(log)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-700 dark:text-gray-300">
-                          {getInitiatedBy(log)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={log.resourceId}>
-                          {log.resourceId ? `${log.resourceId.substring(0, 8)}...` : 'N/A'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                          {getEventType(log)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                          ✓ success
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {formatRelativeTime(log.timestamp)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <Link
+              href="/dashboard/security"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+            >
+              View Alerts
+            </Link>
           </div>
         </div>
       )}
 
-      {/* Analytics Sections */}
-      <div className="grid grid-cols-1 gap-6">
-        <ActivityTimeline defaultLimit={20} />
+      {/* Key Metrics Row - 6 cards balanced between agents, MCPs, and security */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <KeyMetricCard
+          label="Total Agents"
+          value={data?.totalAgents || 0}
+          icon={Bot}
+          color="bg-blue-500"
+        />
+        <KeyMetricCard
+          label="Verified Agents"
+          value={data?.verifiedAgents || 0}
+          icon={CheckCircle}
+          color="bg-green-500"
+        />
+        <KeyMetricCard
+          label="Avg Trust Score"
+          value={data?.avgTrustScore ? `${(data.avgTrustScore * 100).toFixed(0)}%` : "0%"}
+          icon={TrendingUp}
+          color="bg-purple-500"
+        />
+        <KeyMetricCard
+          label="MCP Servers"
+          value={data?.totalMcpServers || 0}
+          icon={Server}
+          color="bg-indigo-500"
+        />
+        <KeyMetricCard
+          label="Verified MCPs"
+          value={verifiedMcps}
+          icon={ShieldCheck}
+          color="bg-emerald-500"
+        />
+        <KeyMetricCard
+          label="Active Alerts"
+          value={data?.activeAlerts || 0}
+          icon={AlertTriangle}
+          color={data?.activeAlerts > 0 ? "bg-yellow-500" : "bg-gray-400"}
+        />
       </div>
+
+      {/* Main Content Grid - Side by Side Agent vs MCP */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Agent Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Bot className="h-5 w-5 text-blue-500" />
+                Agent Verification Status
+              </h3>
+              <Link href="/dashboard/agents" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                View All <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-6">
+              {/* Pie Chart */}
+              <div className="w-32 h-32 flex-shrink-0">
+                {agentStatusData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={agentStatusData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={50}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {agentStatusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Bot className="h-12 w-12 text-gray-300" />
+                  </div>
+                )}
+              </div>
+              {/* Stats */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Verified</span>
+                  </div>
+                  <span className="font-semibold text-gray-900 dark:text-white">{data?.verifiedAgents || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Pending</span>
+                  </div>
+                  <span className="font-semibold text-gray-900 dark:text-white">{data?.pendingAgents || 0}</span>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Verification Rate</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{data?.verificationRate?.toFixed(1) || 0}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* MCP Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Server className="h-5 w-5 text-indigo-500" />
+                MCP Server Status
+              </h3>
+              <Link href="/dashboard/mcp" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                View All <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-6">
+              {/* Pie Chart */}
+              <div className="w-32 h-32 flex-shrink-0">
+                {mcpLoading ? (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                  </div>
+                ) : mcpStatusData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={mcpStatusData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={50}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {mcpStatusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Server className="h-12 w-12 text-gray-300" />
+                  </div>
+                )}
+              </div>
+              {/* Stats */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Verified</span>
+                  </div>
+                  <span className="font-semibold text-gray-900 dark:text-white">{verifiedMcps}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
+                  </div>
+                  <span className="font-semibold text-gray-900 dark:text-white">{data?.activeMcpServers || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Pending</span>
+                  </div>
+                  <span className="font-semibold text-gray-900 dark:text-white">{pendingMcps}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Network Graph - Shows relationship between Agents and MCPs */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Network className="h-5 w-5 text-purple-500" />
+              Agent-MCP Connection Network
+            </h3>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Click nodes to view details
+            </span>
+          </div>
+        </div>
+        <div className="p-2">
+          <MCPNetworkGraph
+            height="300px"
+            showControls={true}
+            showLegend={true}
+            onNodeClick={(id, type) => {
+              if (type === "mcp") {
+                router.push(`/dashboard/mcp/${id}`);
+              } else {
+                router.push(`/dashboard/agents/${id}`);
+              }
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Verification Activity - Historical trend (Agents + MCP Servers) */}
+      {permissions.canViewActivityChart && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-blue-500" />
+                Verification Activity Trend
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Agents & MCP Servers Combined
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {verificationActivity?.currentStats && (
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-1">
+                    <Bot className="h-3 w-3 text-emerald-500" />
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {verificationActivity.currentStats.agentsVerified || 0} agents
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Server className="h-3 w-3 text-blue-500" />
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {verificationActivity.currentStats.mcpVerified || 0} MCP
+                    </span>
+                  </div>
+                </div>
+              )}
+              <span className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                Last 6 Months
+              </span>
+            </div>
+          </div>
+          <div className="h-64">
+            {activityLoading ? (
+              <ChartSkeleton />
+            ) : verificationActivity && verificationActivity.activity.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={verificationActivity.activity.slice(-6)} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="agentsVerifiedGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#059669" stopOpacity={0.8} />
+                    </linearGradient>
+                    <linearGradient id="mcpVerifiedGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0.8} />
+                    </linearGradient>
+                    <linearGradient id="agentsPendingGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.8} />
+                    </linearGradient>
+                    <linearGradient id="mcpPendingGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.8} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={{ stroke: "#e5e7eb" }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip
+                    cursor={{ fill: "rgba(0, 0, 0, 0.04)" }}
+                    contentStyle={{
+                      backgroundColor: "#fff",
+                      border: "none",
+                      borderRadius: "0.5rem",
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                    }}
+                    formatter={(value: number, name: string) => {
+                      const labels: Record<string, string> = {
+                        agentsVerified: "Agents Verified",
+                        mcpVerified: "MCP Verified",
+                        agentsPending: "Agents Pending",
+                        mcpPending: "MCP Pending",
+                      };
+                      return [value, labels[name] || name];
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    wrapperStyle={{ paddingBottom: "10px" }}
+                    formatter={(value: string) => {
+                      const labels: Record<string, string> = {
+                        agentsVerified: "Agents ✓",
+                        mcpVerified: "MCP ✓",
+                        agentsPending: "Agents ⏳",
+                        mcpPending: "MCP ⏳",
+                      };
+                      return labels[value] || value;
+                    }}
+                  />
+                  <Bar dataKey="agentsVerified" stackId="verified" fill="url(#agentsVerifiedGradient)" name="agentsVerified" radius={[0, 0, 0, 0]} maxBarSize={35} />
+                  <Bar dataKey="mcpVerified" stackId="verified" fill="url(#mcpVerifiedGradient)" name="mcpVerified" radius={[4, 4, 0, 0]} maxBarSize={35} />
+                  <Bar dataKey="agentsPending" stackId="pending" fill="url(#agentsPendingGradient)" name="agentsPending" radius={[0, 0, 0, 0]} maxBarSize={35} />
+                  <Bar dataKey="mcpPending" stackId="pending" fill="url(#mcpPendingGradient)" name="mcpPending" radius={[4, 4, 0, 0]} maxBarSize={35} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <AlertCircle className="h-10 w-10 mb-2 text-gray-300" />
+                <p className="text-sm">No verification activity data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Security Overview and Quick Links */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Security Status */}
+        {permissions.canViewSecurityMetrics && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Shield className="h-5 w-5 text-yellow-500" />
+                Security Status
+              </h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                <span className="text-sm text-gray-600 dark:text-gray-400">System Status</span>
+                {data?.criticalAlerts > 0 ? (
+                  <span className="flex items-center gap-1 text-red-600 font-medium">
+                    <XCircle className="h-4 w-4" /> Critical
+                  </span>
+                ) : data?.activeAlerts > 0 ? (
+                  <span className="flex items-center gap-1 text-yellow-600 font-medium">
+                    <AlertTriangle className="h-4 w-4" /> Warning
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-green-600 font-medium">
+                    <CheckCircle className="h-4 w-4" /> Healthy
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{data?.activeAlerts || 0}</p>
+                  <p className="text-xs text-gray-500">Active Alerts</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                  <p className="text-2xl font-bold text-red-600">{data?.criticalAlerts || 0}</p>
+                  <p className="text-xs text-gray-500">Critical</p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/security"
+                className="block w-full py-2 text-center text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                View Security Dashboard
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-500" />
+              Quick Actions
+            </h3>
+          </div>
+          <div className="p-4 space-y-2">
+            <Link
+              href="/dashboard/agents"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Bot className="h-5 w-5 text-blue-500" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage Agents</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400" />
+            </Link>
+            <Link
+              href="/dashboard/mcp"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Server className="h-5 w-5 text-indigo-500" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage MCP Servers</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400" />
+            </Link>
+            <Link
+              href="/dashboard/admin/verifications"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Eye className="h-5 w-5 text-green-500" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Review Requests</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400" />
+            </Link>
+            <Link
+              href="/dashboard/compliance"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-purple-500" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Compliance Reports</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Platform Summary */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Users className="h-5 w-5 text-green-500" />
+              Platform Summary
+            </h3>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Total Users</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{data?.totalUsers || 0}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Active Users</span>
+              <span className="font-semibold text-green-600">{data?.activeUsers || 0}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Total Agents</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{data?.totalAgents || 0}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Total MCP Servers</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{data?.totalMcpServers || 0}</span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Security Incidents</span>
+              <span className={`font-semibold ${data?.securityIncidents > 0 ? "text-red-600" : "text-green-600"}`}>
+                {data?.securityIncidents || 0}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity Timeline */}
+      <ActivityTimeline defaultLimit={10} />
     </div>
   );
 }

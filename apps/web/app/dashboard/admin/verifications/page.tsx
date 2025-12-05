@@ -109,7 +109,7 @@ export default function PendingVerificationsPage() {
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "denied">("pending");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "denied">("all");
   const [riskFilter, setRiskFilter] = useState<"all" | "low" | "medium" | "high" | "critical">("all");
   const [searchField, setSearchField] = useState<"all" | "agent" | "action" | "resource">("all");
   const [searchInput, setSearchInput] = useState("");
@@ -185,18 +185,18 @@ export default function PendingVerificationsPage() {
         setVerifications(
           (payload?.verifications || []).map((item: any) => ({
             ...item,
-            riskLevel: (item?.riskLevel || item?.risk_level || "medium").toLowerCase(),
+            riskLevel: (item?.riskLevel || "medium").toLowerCase(),
             status: (item?.status || "pending").toLowerCase(),
           }))
         );
         setStatusCounts({
-          pending: payload?.status_counts?.pending ?? 0,
-          approved: payload?.status_counts?.approved ?? 0,
-          denied: payload?.status_counts?.denied ?? 0,
+          pending: payload?.statusCounts?.pending ?? 0,
+          approved: payload?.statusCounts?.approved ?? 0,
+          denied: payload?.statusCounts?.denied ?? 0,
         });
         const responseTotal = payload?.pagination?.total ?? 0;
         const responseTotalPages =
-          payload?.pagination?.total_pages ??
+          payload?.pagination?.totalPages ??
           Math.max(1, Math.ceil(responseTotal / pageSize));
         setTotal(responseTotal);
         setTotalPages(Math.max(1, responseTotalPages));
@@ -380,7 +380,9 @@ export default function PendingVerificationsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{total}</div>
+              <div className="text-2xl font-bold">
+                {statusCounts.pending + statusCounts.approved + statusCounts.denied}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -558,10 +560,16 @@ export default function PendingVerificationsPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-muted-foreground">
-                          Trust score (adjusted)
+                          Trust Score
                         </p>
                         <p className="text-xl font-semibold">
-                          {(verification.trustScore * 100).toFixed(1)}%
+                          {(() => {
+                            const metadata = verification.context as Record<string, any> | undefined;
+                            const score = metadata?.trustScore ?? verification.trustScore;
+                            return typeof score === "number" && Number.isFinite(score)
+                              ? `${(score * 100).toFixed(1)}%`
+                              : "—";
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -570,10 +578,10 @@ export default function PendingVerificationsPage() {
                       <div className="space-y-4 rounded-xl border bg-card/60 p-4 text-sm">
                         <div className="flex flex-col gap-1">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Context
+                            Request Details
                           </p>
-                          <p className="text-base font-semibold text-foreground">
-                            Runtime metadata captured for this request
+                          <p className="text-sm text-muted-foreground">
+                            Information about the action the agent is requesting to perform
                           </p>
                         </div>
                         {(() => {

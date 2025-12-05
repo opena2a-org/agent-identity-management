@@ -82,9 +82,9 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
-		AgentID   string  `json:"agent_id"`
+		AgentID   string  `json:"agentId"`
 		Name      string  `json:"name"`
-		ExpiresAt *string `json:"expires_at"`
+		ExpiresAt *string `json:"expiresAt"`
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
