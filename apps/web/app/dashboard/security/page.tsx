@@ -12,7 +12,6 @@ import {
   CheckCircle,
   AlertCircle,
   Bell,
-  FileText,
   Clock,
   ChevronRight,
 } from "lucide-react";
@@ -403,6 +402,12 @@ export default function SecurityPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={metrics?.threatTrend || []}>
+                <defs>
+                  <linearGradient id="threatGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   className="stroke-gray-200 dark:stroke-gray-700"
@@ -411,17 +416,19 @@ export default function SecurityPage() {
                   dataKey="date"
                   className="text-xs text-gray-500 dark:text-gray-400"
                   stroke="#9CA3AF"
+                  tick={{ fontSize: 11 }}
                 />
                 <YAxis
                   className="text-xs text-gray-500 dark:text-gray-400"
                   stroke="#9CA3AF"
+                  tick={{ fontSize: 11 }}
                 />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#fff",
                     border: "1px solid #e5e7eb",
                     borderRadius: "0.5rem",
-                    boxShadow: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                   }}
                 />
                 <Line
@@ -430,6 +437,9 @@ export default function SecurityPage() {
                   stroke="#ef4444"
                   strokeWidth={2}
                   name="Threats"
+                  dot={{ fill: "#ef4444", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, fill: "#ef4444", stroke: "#fff", strokeWidth: 2 }}
+                  fill="url(#threatGradient)"
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -469,18 +479,24 @@ export default function SecurityPage() {
                   }}
                 />
                 <Bar dataKey="count" name="Count" radius={[4, 4, 0, 0]}>
-                  {(metrics?.severity_distribution || []).map(
+                  {(metrics?.severityDistribution || []).map(
                     (entry: any, index: number) => {
                       const colors: Record<string, string> = {
+                        critical: "#dc2626",
                         Critical: "#dc2626",
-                        High: "#ea580c",
-                        Medium: "#f59e0b",
-                        Low: "#3b82f6",
+                        high: "#f97316",
+                        High: "#f97316",
+                        medium: "#eab308",
+                        Medium: "#eab308",
+                        low: "#22c55e",
+                        Low: "#22c55e",
+                        warning: "#8b5cf6",
+                        Warning: "#8b5cf6",
                       };
                       return (
                         <Cell
                           key={`cell-${index}`}
-                          fill={colors[entry.severity] || "#3b82f6"}
+                          fill={colors[entry.severity] || "#6366f1"}
                         />
                       );
                     }
@@ -652,62 +668,73 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        {/* Audit Activity */}
+        {/* Activities */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                  Audit Activity
+                  Activities
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Recent security-related actions
+                  Latest verification events and actions
                 </p>
               </div>
-              <FileText className="h-5 w-5 text-gray-400" />
+              <Activity className="h-5 w-5 text-gray-400" />
             </div>
           </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {auditLogs.length === 0 ? (
-              <div className="p-8 text-center">
-                <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No recent audit activity</p>
-              </div>
-            ) : (
-              auditLogs.slice(0, 5).map((log) => (
-                <div key={log.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 p-1.5 rounded-full bg-gray-100 dark:bg-gray-700">
-                      <Activity className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {log.action}
-                        </p>
-                        <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
-                          {log.resourceType}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {log.userEmail || 'System'}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-gray-400" />
-                        <span className="text-xs text-gray-400">
-                          {formatDateTime(log.createdAt)}
-                        </span>
-                        {log.ipAddress && (
-                          <span className="text-xs text-gray-400">
-                            from {log.ipAddress}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    When
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    Type
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    Resource
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    Actor
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                {auditLogs.slice(0, 5).map((log) => (
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {formatDateTime(log.timestamp || log.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {log.action}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        log.resourceType === 'agent'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : log.resourceType === 'mcp_server'
+                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                      }`}>
+                        {log.resourceType === 'mcp_server' ? 'MCP' : log.resourceType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {log.userEmail || 'System'}
+                    </td>
+                  </tr>
+                ))}
+                {auditLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      No recent activity
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
