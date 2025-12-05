@@ -46,24 +46,24 @@ func NewVerificationHandler(
 
 // VerificationRequest represents a capability verification request from an agent
 type VerificationRequest struct {
-	AgentID    string                 `json:"agent_id" validate:"required"`
+	AgentID    string                 `json:"agentId" validate:"required"`
 	Capability string                 `json:"capability" validate:"required"`
 	Resource   string                 `json:"resource"`
 	Context    map[string]interface{} `json:"context"`
 	Timestamp  string                 `json:"timestamp" validate:"required"`
-	RiskLevel  string                 `json:"risk_level,omitempty"` // Optional risk assessment
+	RiskLevel  string                 `json:"riskLevel,omitempty"` // Optional risk assessment
 	Signature  string                 `json:"signature" validate:"required"`
-	PublicKey  string                 `json:"public_key" validate:"required"`
+	PublicKey  string                 `json:"publicKey" validate:"required"`
 }
 
 // VerificationResponse represents the verification result
 type VerificationResponse struct {
 	ID           string    `json:"id"`
 	Status       string    `json:"status"` // "approved", "denied", "pending"
-	ApprovedBy   string    `json:"approved_by,omitempty"`
-	ExpiresAt    time.Time `json:"expires_at,omitempty"`
-	DenialReason string    `json:"denial_reason,omitempty"`
-	TrustScore   float64   `json:"trust_score"`
+	ApprovedBy   string    `json:"approvedBy,omitempty"`
+	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
+	DenialReason string    `json:"denialReason,omitempty"`
+	TrustScore   float64   `json:"trustScore"`
 }
 
 // CreateVerification handles POST /api/v1/verifications
@@ -90,7 +90,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Validate required fields
 	if req.AgentID == "" || req.Capability == "" || req.Signature == "" || req.PublicKey == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "agent_id, capability, signature, and public_key are required",
+			"error": "agentId, capability, signature, and publicKey are required",
 		})
 	}
 
@@ -98,7 +98,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(req.AgentID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent_id format",
+			"error": "Invalid agentId format",
 		})
 	}
 
@@ -134,8 +134,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 	signatureVerified = true
 
-	// Calculate trust score for this capability
-	trustScore := h.calculateCapabilityTrustScore(agent, req.Capability, req.Resource)
+	// Use agent's base trust score for display/storage (consistency across app)
+	// The risk-adjusted calculation is used internally for security decisions
+	trustScore := agent.TrustScore / 100.0 // Normalize to 0-1 range for frontend display
 
 	// ============================================================================
 	// ✅ CRITICAL: Use AgentService.VerifyCapability for PROPER capability-based access control
@@ -148,6 +149,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		req.Capability,
 		req.Resource,
 		req.Context,
+		c.IP(), // Capture source IP for security tracking
 	)
 
 	// Check if this is a JIT (Just-In-Time) access request that needs admin approval
@@ -216,18 +218,18 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		IPAddress:      c.IP(),
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
-			"verification_id": verificationID.String(),
-			"trustScore":      trustScore,
-			"auto_approved":   status == "approved",
-			"action_type":     req.Capability,
-			"resource":        req.Resource,
-			"context":         req.Context,
+			"verificationId": verificationID.String(),
+			"trustScore":     trustScore,
+			"autoApproved":   status == "approved",
+			"actionType":     req.Capability,
+			"resource":       req.Resource,
+			"context":        req.Context,
 		},
 		Timestamp: time.Now(),
 	}
 
 	if status == "denied" {
-		auditEntry.Metadata["denial_reason"] = denialReason
+		auditEntry.Metadata["denialReason"] = denialReason
 	}
 
 	// Save audit log
@@ -336,15 +338,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Create verification event metadata
 	eventMetadata := map[string]interface{}{
-		"verification_id": verificationID.String(),
-		"action_type":     req.Capability,
-		"resource":        req.Resource,
-		"context":         req.Context,
-		"trustScore":      trustScore,
-		"auto_approved":   status == "approved",
+		"verificationId": verificationID.String(),
+		"actionType":     req.Capability,
+		"resource":       req.Resource,
+		"context":        req.Context,
+		"trustScore":     trustScore,
+		"autoApproved":   status == "approved",
 	}
 	if status == "denied" {
-		eventMetadata["denial_reason"] = denialReason
+		eventMetadata["denialReason"] = denialReason
 	}
 
 	// Create verification event using service
@@ -767,7 +769,7 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 	verificationID := c.Params("id")
 	if verificationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verification_id is required",
+			"error": "verificationId is required",
 		})
 	}
 
@@ -775,7 +777,7 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 	vid, err := uuid.Parse(verificationID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verification_id format",
+			"error": "Invalid verificationId format",
 		})
 	}
 
@@ -836,7 +838,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 	verificationID := c.Params("id")
 	if verificationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verification_id is required",
+			"error": "verificationId is required",
 		})
 	}
 
@@ -856,7 +858,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 	vid, err := uuid.Parse(verificationID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verification_id format",
+			"error": "Invalid verificationId format",
 		})
 	}
 
@@ -1028,27 +1030,27 @@ func (h *VerificationHandler) calculateVerificationConfidence(agent *domain.Agen
 // PendingVerificationResponse represents a pending verification for admin review
 type PendingVerificationResponse struct {
 	ID          string                 `json:"id"`
-	AgentID     string                 `json:"agent_id"`
-	AgentName   string                 `json:"agent_name"`
-	ActionType  string                 `json:"action_type"`
+	AgentID     string                 `json:"agentId"`
+	AgentName   string                 `json:"agentName"`
+	ActionType  string                 `json:"capability"`
 	Resource    string                 `json:"resource"`
 	Context     map[string]interface{} `json:"context"`
-	RiskLevel   string                 `json:"risk_level"`
-	TrustScore  float64                `json:"trust_score"`
+	RiskLevel   string                 `json:"riskLevel"`
+	TrustScore  float64                `json:"trustScore"`
 	Status      string                 `json:"status"`
-	RequestedAt time.Time              `json:"requested_at"`
-	ExpiresAt   time.Time              `json:"expires_at"`
+	RequestedAt time.Time              `json:"requestedAt"`
+	ExpiresAt   time.Time              `json:"expiresAt"`
 }
 
 type PendingVerificationListResponse struct {
 	Verifications []PendingVerificationResponse `json:"verifications"`
 	Pagination    struct {
 		Page       int `json:"page"`
-		PageSize   int `json:"page_size"`
+		PageSize   int `json:"pageSize"`
 		Total      int `json:"total"`
-		TotalPages int `json:"total_pages"`
+		TotalPages int `json:"totalPages"`
 	} `json:"pagination"`
-	StatusCounts domain.VerificationStatusCounts `json:"status_counts"`
+	StatusCounts domain.VerificationStatusCounts `json:"statusCounts"`
 }
 
 // ListPendingVerifications returns all pending verifications awaiting admin approval
@@ -1114,9 +1116,23 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 
 	var responseItems []PendingVerificationResponse
 	for _, event := range events {
+		// Get agent name with fallbacks
 		agentName := ""
-		if event.InitiatorName != nil {
+		if event.InitiatorName != nil && *event.InitiatorName != "" {
 			agentName = *event.InitiatorName
+		} else if event.AgentName != nil && *event.AgentName != "" {
+			agentName = *event.AgentName
+		}
+
+		// If still no name, try to get from agent repo
+		if agentName == "" && event.AgentID != nil {
+			if agent, err := h.agentService.GetAgent(c.Context(), *event.AgentID); err == nil {
+				if agent.DisplayName != "" {
+					agentName = agent.DisplayName
+				} else {
+					agentName = agent.Name
+				}
+			}
 		}
 
 		actionType := ""
@@ -1142,6 +1158,14 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 			}
 		}
 
+		// Get trust score with fallback to metadata
+		trustScore := event.TrustScore
+		if trustScore == 0 && event.Metadata != nil {
+			if ts, ok := event.Metadata["trustScore"].(float64); ok {
+				trustScore = ts
+			}
+		}
+
 		agentIDStr := ""
 		if event.AgentID != nil {
 			agentIDStr = event.AgentID.String()
@@ -1155,7 +1179,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 			Resource:    resource,
 			Context:     event.Metadata,
 			RiskLevel:   riskLevel,
-			TrustScore:  event.TrustScore,
+			TrustScore:  trustScore, // Use computed trustScore with fallback
 			Status:      normalizeVerificationStatus(event.Status),
 			RequestedAt: event.CreatedAt,
 			ExpiresAt:   event.CreatedAt.Add(1 * time.Hour), // Default 1 hour expiry
@@ -1201,7 +1225,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	verificationID := c.Params("id")
 	if verificationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verification_id is required",
+			"error": "verificationId is required",
 		})
 	}
 
@@ -1209,7 +1233,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	vid, err := uuid.Parse(verificationID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verification_id format",
+			"error": "Invalid verificationId format",
 		})
 	}
 
@@ -1227,11 +1251,11 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	// Update verification to approved status
 	result := domain.VerificationResultVerified
 	metadata := map[string]interface{}{
-		"approved_by":     userName,
-		"approved_by_id":  userID.String(),
-		"approved_at":     time.Now().Format(time.RFC3339),
-		"approval_reason": req.Reason,
-		"manual_approval": true,
+		"approvedBy":     userName,
+		"approvedById":   userID.String(),
+		"approvedAt":     time.Now().Format(time.RFC3339),
+		"approvalReason": req.Reason,
+		"manualApproval": true,
 	}
 
 	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, nil, metadata)
@@ -1253,9 +1277,9 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 		IPAddress:      c.IP(),
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
-			"action":          "approve_verification",
-			"verification_id": vid.String(),
-			"approval_reason": req.Reason,
+			"action":         "approve_verification",
+			"verificationId": vid.String(),
+			"approvalReason": req.Reason,
 		},
 		Timestamp: time.Now(),
 	}
@@ -1264,11 +1288,11 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	fmt.Printf("✅ Verification %s APPROVED by %s\n", vid.String(), userName)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"id":          vid.String(),
-		"status":      "approved",
-		"approved_by": userName,
-		"approved_at": time.Now().Format(time.RFC3339),
-		"message":     "Verification approved - agent action can now proceed",
+		"id":         vid.String(),
+		"status":     "approved",
+		"approvedBy": userName,
+		"approvedAt": time.Now().Format(time.RFC3339),
+		"message":    "Verification approved - agent action can now proceed",
 	})
 }
 
@@ -1294,7 +1318,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	verificationID := c.Params("id")
 	if verificationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verification_id is required",
+			"error": "verificationId is required",
 		})
 	}
 
@@ -1302,7 +1326,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	vid, err := uuid.Parse(verificationID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verification_id format",
+			"error": "Invalid verificationId format",
 		})
 	}
 
@@ -1330,11 +1354,11 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	// Update verification to denied status
 	result := domain.VerificationResultDenied
 	metadata := map[string]interface{}{
-		"denied_by":     userName,
-		"denied_by_id":  userID.String(),
-		"denied_at":     time.Now().Format(time.RFC3339),
-		"denial_reason": req.Reason,
-		"manual_denial": true,
+		"deniedBy":     userName,
+		"deniedById":   userID.String(),
+		"deniedAt":     time.Now().Format(time.RFC3339),
+		"denialReason": req.Reason,
+		"manualDenial": true,
 	}
 
 	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, &req.Reason, metadata)
@@ -1356,9 +1380,9 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 		IPAddress:      c.IP(),
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
-			"action":          "deny_verification",
-			"verification_id": vid.String(),
-			"denial_reason":   req.Reason,
+			"action":         "deny_verification",
+			"verificationId": vid.String(),
+			"denialReason":   req.Reason,
 		},
 		Timestamp: time.Now(),
 	}
@@ -1367,11 +1391,11 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	fmt.Printf("❌ Verification %s DENIED by %s: %s\n", vid.String(), userName, req.Reason)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"id":            vid.String(),
-		"status":        "denied",
-		"denied_by":     userName,
-		"denied_at":     time.Now().Format(time.RFC3339),
-		"denial_reason": req.Reason,
-		"message":       "Verification denied - agent action blocked",
+		"id":           vid.String(),
+		"status":       "denied",
+		"deniedBy":     userName,
+		"deniedAt":     time.Now().Format(time.RFC3339),
+		"denialReason": req.Reason,
+		"message":      "Verification denied - agent action blocked",
 	})
 }

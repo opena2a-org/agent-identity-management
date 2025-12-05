@@ -21,7 +21,7 @@ interface SecurityThreat {
   description: string;
   isBlocked: boolean;
   createdAt: string;
-  sourceIp?: string;
+  source?: string; // IP address or agent ID
   metadata?: Record<string, any>;
 }
 
@@ -110,11 +110,11 @@ export default function ThreatDetailModal({
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <Link
-                href={`/dashboard/monitoring?agent=${threat.targetId}`}
+                href={`/dashboard/agents/${threat.targetId}`}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               >
                 <Activity className="h-3 w-3" />
-                View Activity
+                View Details
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <Link
@@ -187,10 +187,10 @@ export default function ThreatDetailModal({
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Source IP
+                Source
               </label>
               <p className="mt-1 text-sm text-gray-900 dark:text-white font-mono">
-                {threat.sourceIp || "N/A"}
+                {threat.source || "N/A"}
               </p>
             </div>
           </div>

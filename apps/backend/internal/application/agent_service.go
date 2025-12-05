@@ -578,6 +578,7 @@ func (s *AgentService) VerifyCapability(
 	capability string,
 	resource string,
 	metadata map[string]interface{},
+	sourceIP string,
 ) (allowed bool, reason string, auditID uuid.UUID, err error) {
 	auditID = uuid.New()
 
@@ -673,6 +674,7 @@ func (s *AgentService) VerifyCapability(
 				Description:    alertDescription,
 				ResourceType:   "agent",
 				ResourceID:     agentID,
+				SourceIP:       sourceIP,
 				IsAcknowledged: false,
 				CreatedAt:      time.Now(),
 			}
@@ -691,14 +693,14 @@ func (s *AgentService) VerifyCapability(
 			AgentID:             agentID,
 			AttemptedCapability: capability,
 			RegisteredCapabilities: map[string]interface{}{
-				"allowed_capabilities":  capabilityTypes,
-				"attempted_capability":  capability,
-				"resource":              resource,
+				"allowedCapabilities":  capabilityTypes,
+				"attemptedCapability":  capability,
+				"resource":             resource,
 			},
 			Severity:         s.calculateViolationSeverity(agent, shouldBlock),
 			TrustScoreImpact: s.calculateTrustScoreImpact(shouldBlock),
 			IsBlocked:        shouldBlock,
-			SourceIP:         nil, // Could be passed from context if available
+			SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
 			RequestMetadata:  metadata,
 		}
 
@@ -902,7 +904,7 @@ func (s *AgentService) LogCapabilityResult(
 	if errorMsg != "" {
 		metadata["error"] = errorMsg
 	}
-	metadata["audit_id"] = auditID.String()
+	metadata["auditId"] = auditID.String()
 
 	// Create the verification event for audit trail
 	if s.verificationEventService != nil {
@@ -980,8 +982,8 @@ func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUI
 
 // AddMCPServersRequest represents request to add MCP servers to agent's talks_to list
 type AddMCPServersRequest struct {
-	MCPServerIDs   []string               `json:"mcp_server_ids"`  // MCP server IDs or names
-	DetectedMethod string                 `json:"detected_method"` // "manual", "auto_sdk", "auto_config", "cli"
+	MCPServerIDs   []string               `json:"mcpServerIds"`    // MCP server IDs or names
+	DetectedMethod string                 `json:"detectedMethod"`  // "manual", "auto_sdk", "auto_config", "cli"
 	Confidence     float64                `json:"confidence"`      // Detection confidence (0-100)
 	Metadata       map[string]interface{} `json:"metadata"`        // Additional context
 }
@@ -993,9 +995,9 @@ type MCPServerDetail struct {
 	Description    string    `json:"description"`
 	URL            string    `json:"url"`
 	Status         string    `json:"status"`
-	TrustScore     float64   `json:"trust_score"`
-	AddedAt        time.Time `json:"added_at"`
-	DetectedMethod string    `json:"detected_method"`
+	TrustScore     float64   `json:"trustScore"`
+	AddedAt        time.Time `json:"addedAt"`
+	DetectedMethod string    `json:"detectedMethod"`
 }
 
 // AddMCPServers adds MCP servers to an agent's talks_to list
@@ -1161,9 +1163,9 @@ func (s *AgentService) GetAgentMCPServers(
 
 // DetectMCPServersRequest represents request to auto-detect MCP servers from config
 type DetectMCPServersRequest struct {
-	ConfigPath   string `json:"config_path"`   // Path to Claude Desktop config file
-	AutoRegister bool   `json:"auto_register"` // Whether to auto-register discovered MCPs
-	DryRun       bool   `json:"dry_run"`       // Preview changes without applying
+	ConfigPath   string `json:"configPath"`   // Path to Claude Desktop config file
+	AutoRegister bool   `json:"autoRegister"` // Whether to auto-register discovered MCPs
+	DryRun       bool   `json:"dryRun"`       // Preview changes without applying
 }
 
 // DetectedMCPServer represents an MCP server detected from config
@@ -1179,12 +1181,12 @@ type DetectedMCPServer struct {
 
 // DetectMCPServersResult represents the result of auto-detection
 type DetectMCPServersResult struct {
-	DetectedServers   []DetectedMCPServer `json:"detected_servers"`
-	RegisteredCount   int                 `json:"registered_count"`
-	MappedCount       int                 `json:"mapped_count"`
-	TotalTalksTo      int                 `json:"total_talks_to"`
-	DryRun            bool                `json:"dry_run"`
-	ErrorsEncountered []string            `json:"errors_encountered,omitempty"`
+	DetectedServers   []DetectedMCPServer `json:"detectedServers"`
+	RegisteredCount   int                 `json:"registeredCount"`
+	MappedCount       int                 `json:"mappedCount"`
+	TotalTalksTo      int                 `json:"totalTalksTo"`
+	DryRun            bool                `json:"dryRun"`
+	ErrorsEncountered []string            `json:"errorsEncountered,omitempty"`
 }
 
 // DetectMCPServersFromConfig auto-detects MCP servers from Claude Desktop config

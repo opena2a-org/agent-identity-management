@@ -45,6 +45,12 @@ func (s *SecurityService) GetThreats(ctx context.Context, orgID uuid.UUID, limit
 		// Create target name (short ID for display)
 		targetName := alert.ResourceID.String()[:8] + "..."
 
+		// Use source IP if available, otherwise fallback to resource ID
+		source := alert.SourceIP
+		if source == "" {
+			source = alert.ResourceID.String()
+		}
+
 		// Create threat from alert
 		threat := &domain.Threat{
 			ID:             alert.ID,
@@ -53,7 +59,7 @@ func (s *SecurityService) GetThreats(ctx context.Context, orgID uuid.UUID, limit
 			Severity:       alert.Severity,
 			Title:          alert.Title,
 			Description:    alert.Description,
-			Source:         alert.ResourceID.String(),
+			Source:         source,
 			TargetType:     alert.ResourceType,
 			TargetID:       alert.ResourceID,
 			TargetName:     &targetName, // Pointer to short ID for display
