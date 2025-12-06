@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Network,
   Loader2,
   AlertCircle,
   ExternalLink,
@@ -48,7 +47,6 @@ import {
 } from "@/components/ui/content-loaders";
 import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
-import { MCPNetworkGraph } from "@/components/mcp/network-graph";
 
 interface DashboardStats {
   totalAgents: number;
@@ -482,35 +480,6 @@ function DashboardContent() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Network Graph - Shows relationship between Agents and MCPs */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <Network className="h-5 w-5 text-purple-500" />
-              Agent-MCP Connection Network
-            </h3>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Click nodes to view details
-            </span>
-          </div>
-        </div>
-        <div className="p-2">
-          <MCPNetworkGraph
-            height="300px"
-            showControls={true}
-            showLegend={true}
-            onNodeClick={(id, type) => {
-              if (type === "mcp") {
-                router.push(`/dashboard/mcp/${id}`);
-              } else {
-                router.push(`/dashboard/agents/${id}`);
-              }
-            }}
-          />
         </div>
       </div>
 
