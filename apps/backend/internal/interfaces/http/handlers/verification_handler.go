@@ -1004,8 +1004,8 @@ func (h *VerificationHandler) calculateVerificationConfidence(agent *domain.Agen
 	}
 
 	// Trust score contributes to confidence (20% of total)
-	// Trust score ranges from 0-100, normalize to 0-0.20
-	trustScoreContribution := (agent.TrustScore / 100.0) * 0.20
+	// Trust score is stored as 0-1 in database (e.g., 0.88 = 88%)
+	trustScoreContribution := agent.TrustScore * 0.20
 	confidence += trustScoreContribution
 
 	// Final verification status can reduce confidence
