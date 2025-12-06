@@ -14,6 +14,10 @@ import {
   Bell,
   Clock,
   ChevronRight,
+  Filter,
+  X,
+  Bot,
+  Server,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -292,6 +296,13 @@ export default function SecurityPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [alertCounts, setAlertCounts] = useState({ all: 0, acknowledged: 0, unacknowledged: 0 });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [agentActivities, setAgentActivities] = useState<any[]>([]);
+
+  // Filter states
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [targetTypeFilter, setTargetTypeFilter] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Modal states
   const [selectedThreat, setSelectedThreat] = useState<SecurityThreat | null>(
@@ -303,11 +314,12 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       setError(null);
-      const [threatsData, metricsData, alertsData, auditData] = await Promise.all([
+      const [threatsData, metricsData, alertsData, auditData, activitiesData] = await Promise.all([
         api.getSecurityThreats(),
         api.getSecurityMetrics(),
         api.getAlerts(10, 0),
         api.getAuditLogs(10, 0),
+        api.getVerifications ? api.getVerifications(10, 0).catch(() => ({ verifications: [] })) : Promise.resolve({ verifications: [] }),
       ]);
       setThreats(threatsData.threats || []);
       setMetrics(metricsData);
@@ -318,6 +330,7 @@ export default function SecurityPage() {
         unacknowledged: alertsData.unacknowledgedCount || 0,
       });
       setAuditLogs(auditData || []);
+      setAgentActivities(activitiesData.verifications || []);
     } catch (err) {
       console.error("Failed to fetch security data:", err);
       const errorMessage = getErrorMessage(err, {
@@ -328,6 +341,30 @@ export default function SecurityPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Filter threats based on selected filters
+  const filteredThreats = threats.filter((threat) => {
+    if (severityFilter !== "all" && threat.severity !== severityFilter) return false;
+    if (statusFilter !== "all") {
+      const isResolved = threat.isBlocked || !!threat.resolvedAt;
+      if (statusFilter === "active" && isResolved) return false;
+      if (statusFilter === "resolved" && !isResolved) return false;
+    }
+    if (targetTypeFilter !== "all") {
+      const targetType = threat.targetType?.toLowerCase() || "agent";
+      if (targetTypeFilter === "agent" && (targetType === "mcp_server" || targetType === "mcp")) return false;
+      if (targetTypeFilter === "mcp" && targetType !== "mcp_server" && targetType !== "mcp") return false;
+    }
+    return true;
+  });
+
+  const activeFiltersCount = [severityFilter, statusFilter, targetTypeFilter].filter(f => f !== "all").length;
+
+  const clearAllFilters = () => {
+    setSeverityFilter("all");
+    setStatusFilter("all");
+    setTargetTypeFilter("all");
   };
 
   useEffect(() => {
@@ -512,11 +549,99 @@ export default function SecurityPage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              Recent Threats
-            </h3>
-            <AlertTriangle className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Recent Threats
+              </h3>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                ({filteredThreats.length} of {threats.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  showFilters || activeFiltersCount > 0
+                    ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400'
+                    : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <span className="flex items-center justify-center w-5 h-5 text-xs font-medium bg-blue-600 text-white rounded-full">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+              {activeFiltersCount > 0 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                >
+                  <X className="h-4 w-4" />
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Filter Panel */}
+          {showFilters && (
+            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Severity Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                    Severity
+                  </label>
+                  <select
+                    value={severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                    Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="resolved">Resolved/Blocked</option>
+                  </select>
+                </div>
+
+                {/* Target Type Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                    Target Type
+                  </label>
+                  <select
+                    value={targetTypeFilter}
+                    onChange={(e) => setTargetTypeFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="agent">Agents Only</option>
+                    <option value="mcp">MCP Servers Only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="overflow-hidden">
           <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -543,7 +668,25 @@ export default function SecurityPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {threats?.slice(0, 5)?.map((threat) => (
+              {filteredThreats.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center">
+                    <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {threats.length === 0 ? "No threats detected" : "No threats match the current filters"}
+                    </p>
+                    {activeFiltersCount > 0 && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Clear all filters
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {filteredThreats?.slice(0, 10)?.map((threat) => (
                 <tr
                   key={threat?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -677,73 +820,94 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        {/* Activities */}
+        {/* Agent/MCP Activities */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                  Activities
+                  Agent & MCP Activities
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Latest verification events and actions
+                  Recent verification requests from agents and MCP servers
                 </p>
               </div>
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    When
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Type
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Resource
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Actor
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {auditLogs.slice(0, 5).map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {formatDateTime(log.timestamp || log.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                      {log.action}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        log.resourceType === 'agent'
-                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                          : log.resourceType === 'mcp_server'
-                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                          : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
-                      }`}>
-                        {log.resourceType === 'mcp_server' ? 'MCP' : log.resourceType}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {log.userEmail || 'System'}
-                    </td>
-                  </tr>
-                ))}
-                {auditLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                      No recent activity
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {agentActivities.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">No recent agent activities</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  Verification requests from agents and MCPs will appear here
+                </p>
+              </div>
+            ) : (
+              agentActivities.slice(0, 5).map((activity) => (
+                <div key={activity.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 p-1.5 rounded-full ${
+                      activity.verified
+                        ? 'bg-green-100 dark:bg-green-900/30'
+                        : 'bg-red-100 dark:bg-red-900/30'
+                    }`}>
+                      {activity.verified ? (
+                        <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          activity.mcpServerId
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        }`}>
+                          {activity.mcpServerId ? (
+                            <span className="flex items-center gap-1">
+                              <Server className="h-3 w-3" />
+                              MCP
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <Bot className="h-3 w-3" />
+                              Agent
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {activity.agentName || activity.mcpServerName || 'Unknown'}
+                        </span>
+                        {activity.riskLevel && (
+                          <SeverityBadge severity={activity.riskLevel} />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {activity.capability || 'Unknown capability'}
+                        {activity.resource && ` → ${activity.resource}`}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="h-3 w-3 text-gray-400" />
+                        <span className="text-xs text-gray-400">
+                          {formatDateTime(activity.createdAt)}
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          activity.verified
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        }`}>
+                          {activity.verified ? 'Allowed' : 'Denied'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
           </div>
         </div>
       </div>

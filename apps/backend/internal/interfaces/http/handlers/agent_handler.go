@@ -411,10 +411,11 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		Capability string                 `json:"capability"`         // "file:read", "file:write", "code:execute", "api:call", "db:query"
-		Resource   string                 `json:"resource"`           // e.g., "/data/file.csv" or "SELECT * FROM users"
-		Metadata   map[string]interface{} `json:"metadata"`           // Additional context
-		Protocol   *string                `json:"protocol,omitempty"` // Optional: "mcp", "a2a", "acp", "did", "oauth", "saml" - SDK auto-detects or user declares
+		Capability string                 `json:"capability"`          // "file:read", "file:write", "code:execute", "api:call", "db:query"
+		Resource   string                 `json:"resource"`            // e.g., "/data/file.csv" or "SELECT * FROM users"
+		Metadata   map[string]interface{} `json:"metadata"`            // Additional context
+		Protocol   *string                `json:"protocol,omitempty"`  // Optional: "mcp", "a2a", "acp", "did", "oauth", "saml" - SDK auto-detects or user declares
+		RiskLevel  *string                `json:"riskLevel,omitempty"` // Optional: "low", "medium", "high", "critical" - auto-detected if not provided
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
@@ -422,6 +423,14 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 			"error": "Invalid request body",
 		})
 	}
+
+	// Auto-detect risk level from capability if not explicitly provided
+	var riskOverride string
+	if req.RiskLevel != nil {
+		riskOverride = *req.RiskLevel
+	}
+	detectedRiskLevel := domain.DetectRiskLevel(req.Capability, riskOverride)
+	riskAutoDetected := req.RiskLevel == nil || *req.RiskLevel == ""
 
 	// Get agent and organization details for logging
 	agent, err := h.agentService.GetAgent(c.Context(), agentID)
@@ -455,14 +464,16 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 
 	// 1. LOG AUDIT ENTRY (for all verification attempts)
 	auditMetadata := map[string]interface{}{
-		"capability": req.Capability,
-		"resource":   req.Resource,
-		"allowed":    decision,
-		"reason":     reason,
-		"audit_id":   auditID,
+		"capability":       req.Capability,
+		"resource":         req.Resource,
+		"allowed":          decision,
+		"reason":           reason,
+		"auditId":          auditID,
+		"riskLevel":        detectedRiskLevel,
+		"riskAutoDetected": riskAutoDetected,
 	}
 	if req.Metadata != nil {
-		auditMetadata["request_metadata"] = req.Metadata
+		auditMetadata["requestMetadata"] = req.Metadata
 	}
 
 	userID := uuid.Nil // System action - no specific user
@@ -523,10 +534,12 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		domain.InitiatorTypeAgent,
 		nil, // No specific initiator ID for agent self-verification
 		map[string]interface{}{
-			"capability": req.Capability,
-			"resource":   req.Resource,
-			"allowed":    decision,
-			"reason":     reason,
+			"capability":       req.Capability,
+			"resource":         req.Resource,
+			"allowed":          decision,
+			"reason":           reason,
+			"riskLevel":        detectedRiskLevel,
+			"riskAutoDetected": riskAutoDetected,
 		},
 	)
 
@@ -535,13 +548,27 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		reason == "Agent has no granted capabilities - action denied (admin must grant capabilities first)" ||
 		reason == "Agent has no granted capabilities - action denied") {
 
+		// Map detected risk level to alert severity
+		// Higher risk capabilities result in higher severity alerts when violated
+		alertSeverity := domain.AlertSeverityWarning // Default
+		switch detectedRiskLevel {
+		case domain.RiskLevelLow:
+			alertSeverity = domain.AlertSeverityInfo
+		case domain.RiskLevelMedium:
+			alertSeverity = domain.AlertSeverityWarning
+		case domain.RiskLevelHigh:
+			alertSeverity = domain.AlertSeverityHigh
+		case domain.RiskLevelCritical:
+			alertSeverity = domain.AlertSeverityCritical
+		}
+
 		alert := &domain.Alert{
 			OrganizationID: orgID,
 			AlertType:      domain.AlertSecurityBreach, // Using security_breach for capability violations
-			Severity:       domain.AlertSeverityHigh,
+			Severity:       alertSeverity,              // Severity based on risk level of attempted action
 			Title:          fmt.Sprintf("Capability Violation: %s attempted %s", agent.DisplayName, req.Capability),
-			Description: fmt.Sprintf("Agent '%s' attempted capability '%s' on resource '%s' without authorization. Reason: %s",
-				agent.DisplayName, req.Capability, req.Resource, reason),
+			Description: fmt.Sprintf("Agent '%s' attempted capability '%s' (risk: %s) on resource '%s' without authorization. Reason: %s",
+				agent.DisplayName, req.Capability, detectedRiskLevel, req.Resource, reason),
 			ResourceType: "agent",
 			ResourceID:   agentID,
 		}
@@ -568,18 +595,22 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 
 	if !decision {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"allowed":         false,
-			"reason":          reason,
-			"audit_id":        auditID,
-			"enforcementMode": enforcementMode,
+			"allowed":          false,
+			"reason":           reason,
+			"auditId":          auditID,
+			"enforcementMode":  enforcementMode,
+			"riskLevel":        detectedRiskLevel,
+			"riskAutoDetected": riskAutoDetected,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"allowed":         true,
-		"reason":          reason,
-		"audit_id":        auditID,
-		"enforcementMode": enforcementMode,
+		"allowed":          true,
+		"reason":           reason,
+		"auditId":          auditID,
+		"enforcementMode":  enforcementMode,
+		"riskLevel":        detectedRiskLevel,
+		"riskAutoDetected": riskAutoDetected,
 	})
 }
 

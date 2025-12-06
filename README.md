@@ -54,7 +54,7 @@ from aim_sdk import secure, perform_action
 
 agent = secure("my-agent")
 
-@perform_action(capability="api:call", risk_level="low")
+@perform_action(capability="api:call")  # risk_level auto-detected as "low"
 def call_api(data):
     return requests.get(data["url"])  # Verified, logged, monitored
 ```
@@ -64,6 +64,24 @@ That's it. Your agent now has:
 - ✅ **Capability enforcement** (blocks unauthorized actions)
 - ✅ **Trust scoring** (behavioral risk assessment)
 - ✅ **Complete audit trail** (who did what, when)
+- ✅ **Automatic risk detection** (from capability patterns)
+
+### Risk Level Auto-Detection
+
+The SDK automatically determines risk levels from capability patterns:
+
+```python
+# Auto-detected risk levels - no need to specify!
+@perform_action(capability="weather:fetch")      # → low (read-only, public data)
+@perform_action(capability="db:write")           # → medium (modification)
+@perform_action(capability="file:delete")        # → high (destructive)
+@perform_action(capability="payment:process")    # → critical (financial)
+
+# Override when you know better
+@perform_action(capability="api:internal", risk_level="critical")
+```
+
+Detection priority: **Specific mappings** → **Action patterns** → **Namespace patterns** → Default (medium)
 
 ---
 
@@ -101,6 +119,7 @@ That's it. Your agent now has:
 - **🚨 Security Dashboard** — Alerts, threat detection, IP tracking
 - **✅ 10 Compliance Checks** — Automated security & operations checks
 - **📝 Complete Audit Trail** — Who did what, when, why
+- **🎯 Risk Level Auto-Detection** — Automatically determines risk from capability patterns
 
 ---
 

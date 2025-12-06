@@ -322,9 +322,30 @@ export default function ThreatDetailModal({
               <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Source
               </label>
-              <p className="mt-1 text-sm text-gray-900 dark:text-white font-mono">
-                {threat.source || "N/A"}
-              </p>
+              {threat.source ? (
+                // Check if source is a UUID pattern (agent ID) or an IP address
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threat.source) ? (
+                  <div className="mt-1">
+                    <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded mr-2">
+                      Agent ID
+                    </span>
+                    <span className="text-sm text-gray-900 dark:text-white font-mono">
+                      {threat.source.substring(0, 8)}...
+                    </span>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Source IP not captured - this may be from an older event or internal request
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-900 dark:text-white font-mono">
+                    {threat.source}
+                  </p>
+                )
+              ) : (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Not available
+                </p>
+              )}
             </div>
           </div>
 
