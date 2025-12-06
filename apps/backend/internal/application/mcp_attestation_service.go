@@ -389,10 +389,11 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	}
 
 	// Factor 3: Average trust score of attesting agents (0-50 points)
+	// Trust score is stored as 0-1 in database (e.g., 0.88 = 88%)
 	var trustPoints float64
 	if sdkAttestations > 0 {
 		avgTrust := totalTrust / float64(sdkAttestations)
-		trustPoints = (avgTrust / 100.0) * 50.0 // Scale to 0-50
+		trustPoints = avgTrust * 50.0 // Scale 0-1 trust to 0-50 points
 	}
 
 	// Factor 4: Recency factor (% of attestations in last 7 days, 0-25 points)

@@ -180,7 +180,8 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 			pendingAgents++
 		}
 
-		if agent.TrustScore < 50.0 {
+		// Trust score is stored as 0-1 (e.g., 0.50 = 50%)
+		if agent.TrustScore < 0.50 {
 			lowTrustAgents++
 		}
 	}
