@@ -136,16 +136,18 @@ func (s *SecurityService) performSecurityScan(scan *domain.SecurityScanResult) {
 	vulnerabilitiesFound := 0
 
 	// Check for low trust scores (potential threats)
+	// Trust score is stored as 0-1 in database (e.g., 0.50 = 50%)
 	for _, agent := range agents {
-		if agent.TrustScore < 50 {
+		if agent.TrustScore < 0.50 {
 			threatsFound++
 		}
-		if agent.TrustScore < 70 && agent.TrustScore >= 50 {
+		if agent.TrustScore < 0.70 && agent.TrustScore >= 0.50 {
 			anomaliesFound++
 		}
 	}
 
-	// Calculate security score
+	// Calculate security score (0-100 scale)
+	// Trust score is stored as 0-1 in database, so multiply by 100 for display
 	securityScore := 100.0
 	if len(agents) > 0 {
 		avgTrustScore := 0.0
@@ -153,7 +155,7 @@ func (s *SecurityService) performSecurityScan(scan *domain.SecurityScanResult) {
 			avgTrustScore += agent.TrustScore
 		}
 		avgTrustScore /= float64(len(agents))
-		securityScore = avgTrustScore
+		securityScore = avgTrustScore * 100.0 // Convert 0-1 to 0-100
 	}
 
 	// Update scan results

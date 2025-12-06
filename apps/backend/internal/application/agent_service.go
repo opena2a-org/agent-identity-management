@@ -1495,20 +1495,21 @@ func (s *AgentService) UpdateLastActive(ctx context.Context, agentID uuid.UUID) 
 // calculateViolationSeverity determines the severity level for a capability violation
 func (s *AgentService) calculateViolationSeverity(agent *domain.Agent, isBlocked bool) string {
 	// Base severity on trust score and whether action was blocked
-	if agent.TrustScore < 30 || agent.IsCompromised {
+	// Trust score is stored as 0-1 in database (e.g., 0.30 = 30%)
+	if agent.TrustScore < 0.30 || agent.IsCompromised {
 		return "critical"
 	}
 
 	if isBlocked {
 		// Blocked violations are more severe
-		if agent.TrustScore < 50 {
+		if agent.TrustScore < 0.50 {
 			return "high"
 		}
 		return "medium"
 	}
 
 	// Alert-only violations (not blocked) are lower severity
-	if agent.TrustScore < 50 {
+	if agent.TrustScore < 0.50 {
 		return "medium"
 	}
 	return "low"

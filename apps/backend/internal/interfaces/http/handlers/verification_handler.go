@@ -140,7 +140,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Use agent's base trust score for display/storage (consistency across app)
 	// The risk-adjusted calculation is used internally for security decisions
-	trustScore := agent.TrustScore / 100.0 // Normalize to 0-1 range for frontend display
+	// Trust score is already stored as 0-1 in database (e.g., 0.88 = 88%)
+	trustScore := agent.TrustScore
 
 	// ============================================================================
 	// ✅ CRITICAL: Use AgentService.VerifyCapability for PROPER capability-based access control
