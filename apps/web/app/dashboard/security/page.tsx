@@ -319,7 +319,7 @@ export default function SecurityPage() {
         api.getSecurityMetrics(),
         api.getAlerts(10, 0),
         api.getAuditLogs(10, 0),
-        api.getVerifications ? api.getVerifications(10, 0).catch(() => ({ verifications: [] })) : Promise.resolve({ verifications: [] }),
+        api.listVerifications ? api.listVerifications(10, 0).catch(() => ({ verifications: [] })) : Promise.resolve({ verifications: [] }),
       ]);
       setThreats(threatsData.threats || []);
       setMetrics(metricsData);
@@ -412,13 +412,11 @@ export default function SecurityPage() {
     <AuthGuard>
       <div className="space-y-6">
         {/* Header */}
-        <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Security Dashboard
           </h1>
         </div>
-      </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
@@ -907,7 +905,6 @@ export default function SecurityPage() {
                 </div>
               ))
             )}
-          </div>
           </div>
         </div>
       </div>
