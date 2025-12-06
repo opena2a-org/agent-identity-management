@@ -623,21 +623,46 @@ export default function MCPServersPage() {
           </table>
         </div>
         {mcpServers.length === 0 && (
-          <div className="text-center py-12">
+          <div className="text-center py-12 space-y-6">
             <Server className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-              No MCP servers registered
-            </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Get started by registering your first MCP server.
-            </p>
+            <div>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                No MCP servers registered
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Get started by registering your first MCP server.
+              </p>
+            </div>
+
+            <div className="max-w-lg mx-auto space-y-3">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-4 text-left">
+                <p className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Option 1: Register via SDK</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Use the AIM SDK to automatically register MCP servers when your agent connects to them.
+                </p>
+                <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded block mt-2 text-gray-700 dark:text-gray-300">
+                  agent.attest_mcp("server-name", "https://mcp.example.com")
+                </code>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-4 text-left">
+                <p className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Option 2: Manual registration</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Click the button below to manually register an MCP server with its URL and details.
+                </p>
+              </div>
+            </div>
+
             <button
               onClick={() => setShowRegisterModal(true)}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Register MCP Server
             </button>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-gray-700 dark:hover:text-gray-300">SDK documentation</a> for more details.
+            </p>
           </div>
         )}
         {mcpServers.length > 0 && filteredServers.length === 0 && (

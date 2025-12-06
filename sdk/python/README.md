@@ -354,29 +354,52 @@ Credentials are automatically saved to `~/.aim/credentials.json` with secure per
 }
 ```
 
-## Auto-Detection Magic 🎯
+## Capability Declaration 🎯
 
-AIM automatically detects everything about your agent:
+AIM uses two reliable methods to detect your agent's capabilities:
 
-### What Gets Detected
+### How to Declare Capabilities
 
-| Source | What It Finds | Confidence |
-|--------|--------------|------------|
-| **Python Imports** | `requests` → API calls, `psycopg2` → Database access | 95% |
-| **Claude Desktop Config** | MCP servers from `~/.claude/claude_desktop_config.json` | 100% |
-| **Decorators** | `@agent.perform_action()` calls in your code | 100% |
-| **Config Files** | Explicit capabilities in `~/.aim/capabilities.json` | 100% |
+| Method | Description | Confidence |
+|--------|-------------|------------|
+| **Decorators** | Use `@agent.perform_action(capability="...")` in your code | 100% |
+| **Config File** | Explicit capabilities in `~/.aim/capabilities.json` | 100% |
 
-### Override When Needed
+> **Note**: Import-based detection (scanning `sys.modules`) is disabled by default because it's too noisy—almost every Python agent would show the same generic capabilities. Use decorators or config files for accurate capability declaration.
+
+### Option 1: Use Decorators (Recommended)
 
 ```python
-# Full auto-detection (default)
+from aim_sdk import secure
+
 agent = secure("my-agent")
 
-# Partial override - add specific capabilities
+# Declare capabilities with decorators
+@agent.perform_action(capability="db:read")
+def read_database():
+    pass
+
+@agent.perform_action(capability="email:send")
+def send_email():
+    pass
+```
+
+### Option 2: Use Config File
+
+Create `~/.aim/capabilities.json`:
+```json
+{
+  "capabilities": ["db:read", "db:write", "email:send"]
+}
+```
+
+### Option 3: Explicit Declaration
+
+```python
+# Declare capabilities at registration time
 agent = secure("my-agent", capabilities=["api:call", "db:read"])
 
-# Complete manual control - disable auto-detection
+# Or disable auto-detection entirely
 agent = secure("my-agent", auto_detect=False, capabilities=["db:read", "db:write"])
 ```
 

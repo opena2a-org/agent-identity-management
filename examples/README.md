@@ -8,7 +8,8 @@ This directory contains real-world examples demonstrating how to integrate AI ag
 
 A complete AI agent that searches flights and demonstrates:
 - ✅ Auto-registration with AIM using `secure("agent-name")`
-- ✅ Auto-detection of capabilities and MCPs
+- ✅ Capability declaration with `@perform_action` decorators
+- ✅ Auto-detection of MCP servers
 - ✅ Ed25519 cryptographic signatures
 - ✅ Action verification workflow
 - ✅ Activity logging and audit trail

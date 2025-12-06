@@ -92,25 +92,33 @@ except Exception as e:
         sys.exit(1)
 
 # ============================================================================
-# PART 2: AUTOMATIC CAPABILITY DETECTION
+# PART 2: CAPABILITY DECLARATION
 # ============================================================================
 
 print("=" * 70)
-print("🔍 AUTOMATIC CAPABILITY DETECTION")
+print("🔍 CAPABILITY DECLARATION")
 print("=" * 70)
+print()
+
+print("Capabilities are declared via decorators or config files:")
+print()
+print("  Option 1: Use @agent.perform_action(capability='...')")
+print("  Option 2: Create ~/.aim/capabilities.json")
 print()
 
 from aim_sdk import auto_detect_capabilities
 
-# Import some packages to demonstrate detection
-import requests  # → Should detect "make_api_calls"
-import smtplib   # → Should detect "send_email"
-
+# Note: Import-based detection is disabled by default (too noisy)
+# To enable it, pass include_imports=True
 capabilities = auto_detect_capabilities()
 
-print("Detected capabilities from your imports:")
-for cap in capabilities:
-    print(f"  ✅ {cap}")
+if capabilities:
+    print("Detected capabilities from decorators/config:")
+    for cap in capabilities:
+        print(f"  ✅ {cap}")
+else:
+    print("ℹ️  No capabilities detected yet")
+    print("   Use @agent.perform_action(capability='...') to declare capabilities")
 print()
 
 # ============================================================================
@@ -225,7 +233,7 @@ print()
 print("📝 Next Steps:")
 print("   1. Check AIM dashboard for your registered agent")
 print("   2. View audit logs for verified actions")
-print("   3. See auto-detected capabilities and MCP servers")
+print("   3. Declare capabilities using @agent.perform_action() decorators")
 print("   4. Integrate into your production agent code")
 print()
 
