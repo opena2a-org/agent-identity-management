@@ -56,7 +56,7 @@ func (s *VerificationEventService) LogVerificationEvent(
 	// Since this is automatic logging without cryptographic verification,
 	// we use a simplified calculation:
 	// - Agent status contributes 40% (verified=0.40, pending=0.20, other=0)
-	// - Trust score contributes 40% (normalized from 0-100 to 0-0.40)
+	// - Trust score contributes 40% (trust score is already 0-1 in database)
 	// - Event success contributes 20% (success=0.20, failed=0)
 	confidence := 0.0
 	switch agent.Status {
@@ -65,7 +65,8 @@ func (s *VerificationEventService) LogVerificationEvent(
 	case domain.AgentStatusPending:
 		confidence += 0.20
 	}
-	confidence += (agent.TrustScore / 100.0) * 0.40
+	// Trust score is stored as 0-1 in database (e.g., 0.88 = 88%)
+	confidence += agent.TrustScore * 0.40
 	if status == domain.VerificationEventStatusSuccess {
 		confidence += 0.20
 	}
