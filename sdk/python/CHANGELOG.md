@@ -12,6 +12,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GraphQL API support
 - CLI tool for automation
 
+## [1.4.0] - 2025-12-05
+
+### Added
+- **Server-Side Enforcement Control**: Admins can now configure enforcement mode in the dashboard UI (Settings → Security → Policies)
+  - **Monitoring Mode** (default): Actions are logged but allowed to proceed when verification fails
+  - **Strict Mode**: Actions are blocked immediately when verification fails
+- SDK now respects the organization's enforcement mode from the backend
+- Environment variable `AIM_STRICT_MODE` can still override the backend setting for testing purposes
+
+### Changed
+- Verification response now includes `enforcementMode` field to inform SDK of the organization's setting
+- `@aim_verify` decorator uses backend enforcement mode by default, with env var as optional override
+- Dashboard Policies page now shows enforcement mode toggle with clear explanations of each mode
+
+### Fixed
+- SDK no longer requires `AIM_STRICT_MODE` environment variable - it now reads the setting from the backend
+
+## [1.3.0] - 2025-12-05
+
+### Added
+- **Execution Status Reporting**: SDK now reports whether decorated functions actually executed back to the backend
+  - New `report_execution_status()` method on `AIMClient`
+  - Decorators automatically report execution status after function calls
+  - Dashboard shows accurate status: "Executed", "Blocked", or "Executed despite denial"
+- **Strict Mode Documentation**: Comprehensive documentation for `AIM_STRICT_MODE` environment variable
+  - Explains difference between monitoring mode (default) and strict mode (production)
+  - Code examples for production deployments
+
+### Changed
+- `@aim_verify` decorator now tracks and reports:
+  - Whether function was executed
+  - Whether strict mode was enabled
+  - Any execution errors that occurred
+- Alert detail panel now displays execution status with clear messaging
+
+### Fixed
+- Dashboard alert messaging now accurately reflects what actually happened (blocked vs allowed)
+
+## [1.2.4] - 2025-12-04
+
+### Fixed
+- OAuth token refresh flow fixed (camelCase consistency)
+- Improved error handling in credential storage
+
 ## [1.1.0] - 2025-12-03
 
 ### Added

@@ -187,6 +187,98 @@ def deploy_to_production(service_name, version):
 - ✅ Executes only if approved
 - ❌ Raises `ActionDeniedError` if rejected
 
+## Enforcement Mode: Strict vs Monitoring
+
+AIM supports two enforcement modes that control what happens when verification fails. **As of v1.4.0, enforcement mode is configured by admins in the dashboard**, not via environment variables.
+
+### Configure in Dashboard (Recommended)
+
+Go to **Settings → Security → Policies** in your AIM dashboard to set your organization's enforcement mode:
+
+| Mode | What Happens on Verification Failure | Best For |
+|------|-------------------------------------|----------|
+| **Monitoring** (default) | ⚠️ Warning logged, function executes anyway | Development, testing, gradual rollout |
+| **Strict** | ❌ Exception raised, function blocked | Production, compliance (SOC 2, HIPAA) |
+
+The SDK automatically reads your organization's enforcement setting from the backend - no code changes needed.
+
+### Monitoring Mode (Default)
+
+In **monitoring mode**, verification failures are logged but **functions still execute**:
+- ⚠️ Verification failures log a warning
+- ✅ Functions execute anyway (safe for testing)
+- 📊 All events are tracked in the dashboard
+- 🔔 Dashboard shows: "Executed despite denial (monitoring mode)"
+
+This is ideal for:
+- Development and testing
+- Gradual rollout of verification
+- Understanding your agent's behavior before enforcement
+
+### Strict Mode (Production)
+
+In **strict mode**, verification failures **block execution**:
+- ❌ Verification failures raise `PermissionError`
+- 🛑 Functions are NOT executed if verification fails
+- 📊 Dashboard shows: "Action BLOCKED (strict mode enforced)"
+- 🔐 Provides actual security enforcement
+
+This is required for:
+- Production deployments
+- Security-critical applications
+- Compliance requirements (SOC 2, HIPAA)
+
+### Environment Variable Override (Testing Only)
+
+For local testing, you can override the backend setting with the `AIM_STRICT_MODE` environment variable:
+
+```bash
+# Force strict mode locally (overrides backend setting)
+export AIM_STRICT_MODE=true
+python my_agent.py
+
+# Force monitoring mode locally (overrides backend setting)
+export AIM_STRICT_MODE=false
+python my_agent.py
+
+# Use backend setting (default - no env var needed)
+unset AIM_STRICT_MODE
+python my_agent.py
+```
+
+**Note**: The environment variable is for testing purposes only. In production, configure enforcement mode in the dashboard for consistent behavior across all agents.
+
+### Example Code
+
+```python
+from aim_sdk import secure
+from aim_sdk.decorators import aim_verify
+
+agent = secure("my-agent")
+
+@aim_verify(agent, action_type="database_delete", risk_level="critical")
+def delete_all_records():
+    """Behavior depends on org's enforcement mode (set in dashboard)"""
+    db.execute("DELETE FROM records")
+
+# If org is in strict mode, this raises PermissionError on verification failure
+# If org is in monitoring mode, this logs a warning but executes anyway
+try:
+    delete_all_records()
+except PermissionError as e:
+    print(f"Action blocked by strict mode: {e}")
+```
+
+### Execution Status Tracking
+
+The SDK automatically reports execution status back to the AIM backend, so you can see exactly what happened:
+
+1. **Verified + Executed**: Action was approved and ran successfully
+2. **Denied + Executed (Monitoring Mode)**: Action was denied but ran anyway (warning logged)
+3. **Denied + Blocked (Strict Mode)**: Action was denied and prevented from running
+
+This information is visible in the AIM dashboard's verification history and alert details.
+
 ## Capability Management
 
 ### How It Works
@@ -307,7 +399,7 @@ sdk/python/
 ├── demos/                # Demo projects
 ├── README.md             # This file
 ├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.1.0)
+├── VERSION               # Current SDK version (1.4.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -366,7 +458,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.1.0
+**Current Version**: 1.4.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -375,7 +467,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.1.0"
+print(aim_sdk.__version__)  # "1.4.0"
 ```
 
 **See Also**:

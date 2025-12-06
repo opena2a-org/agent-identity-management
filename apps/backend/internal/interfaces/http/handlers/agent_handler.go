@@ -20,7 +20,8 @@ type AgentHandler struct {
 	alertService             *application.AlertService
 	verificationEventService *application.VerificationEventService
 	capabilityService        *application.CapabilityService
-	tagService               *application.TagService // ✅ For fetching agent tags in responses
+	tagService               *application.TagService              // ✅ For fetching agent tags in responses
+	orgRepo                  domain.OrganizationRepository        // ✅ For enforcement mode lookup
 }
 
 func NewAgentHandler(
@@ -32,7 +33,8 @@ func NewAgentHandler(
 	alertService *application.AlertService,
 	verificationEventService *application.VerificationEventService,
 	capabilityService *application.CapabilityService,
-	tagService *application.TagService, // ✅ For fetching agent tags in responses
+	tagService *application.TagService,
+	orgRepo domain.OrganizationRepository, // ✅ For enforcement mode lookup
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -44,6 +46,7 @@ func NewAgentHandler(
 		verificationEventService: verificationEventService,
 		capabilityService:        capabilityService,
 		tagService:               tagService,
+		orgRepo:                  orgRepo,
 	}
 }
 
@@ -553,18 +556,30 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	// SECURITY: No logging to prevent information leakage
 	_ = h.agentService.UpdateLastActive(c.Context(), agentID)
 
+	// 5. GET ENFORCEMENT MODE from organization settings
+	// This tells the SDK whether to block or allow execution on denial
+	enforcementMode := "monitoring" // Safe default
+	if h.orgRepo != nil {
+		org, err := h.orgRepo.GetByID(orgID)
+		if err == nil && org != nil && org.EnforcementMode != "" {
+			enforcementMode = string(org.EnforcementMode)
+		}
+	}
+
 	if !decision {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"allowed":  false,
-			"reason":   reason,
-			"audit_id": auditID,
+			"allowed":         false,
+			"reason":          reason,
+			"audit_id":        auditID,
+			"enforcementMode": enforcementMode,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"allowed":  true,
-		"reason":   reason,
-		"audit_id": auditID,
+		"allowed":         true,
+		"reason":          reason,
+		"audit_id":        auditID,
+		"enforcementMode": enforcementMode,
 	})
 }
 

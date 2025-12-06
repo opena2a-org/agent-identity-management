@@ -102,6 +102,13 @@ def aim_verify(
                 "risk_level": risk_level,
             }
 
+            # Environment variable override for strict mode (useful for testing)
+            # If set to 'true', always use strict mode regardless of backend setting
+            # If set to 'false', always use monitoring mode regardless of backend setting
+            # If not set or any other value, use backend's enforcement mode
+            env_strict_override = os.getenv("AIM_STRICT_MODE")
+            verification_id = None
+
             # Perform verification
             try:
                 verification = client.verify_capability(
@@ -110,23 +117,113 @@ def aim_verify(
                     context=context,
                 )
 
+                # Capture verification ID for execution status reporting
+                verification_id = verification.get("verificationId") or verification.get("id")
+
+                # Determine enforcement mode from backend response (or env override)
+                backend_enforcement_mode = verification.get("enforcementMode", "monitoring")
+
+                if env_strict_override is not None:
+                    # Environment override takes precedence
+                    strict_mode = env_strict_override.lower() == "true"
+                else:
+                    # Use backend enforcement mode setting
+                    strict_mode = backend_enforcement_mode == "strict"
+
                 # Check if verification succeeded
                 if not verification.get("verified", False):
-                    raise PermissionError(
-                        f"AIM verification failed for {func.__name__}: "
-                        f"{verification.get('reason', verification.get('error', 'Unknown reason'))}"
+                    denial_reason = verification.get('reason', verification.get('error', 'Unknown reason'))
+
+                    if strict_mode:
+                        # Strict mode: block execution and report it
+                        client.report_execution_status(
+                            verification_id=verification_id,
+                            executed=False,
+                            strict_mode=True,
+                            execution_error=f"Blocked by strict mode: {denial_reason}"
+                        )
+                        raise PermissionError(
+                            f"AIM verification failed for {func.__name__}: {denial_reason}"
+                        )
+                    else:
+                        # Monitoring mode: warn but continue execution
+                        print(f"⚠️  AIM verification warning: {denial_reason}")
+                        try:
+                            result = func(*args, **kwargs)
+                            # Report that we executed despite denial (monitoring mode)
+                            client.report_execution_status(
+                                verification_id=verification_id,
+                                executed=True,
+                                strict_mode=False
+                            )
+                            return result
+                        except Exception as exec_error:
+                            # Report execution failure
+                            client.report_execution_status(
+                                verification_id=verification_id,
+                                executed=True,
+                                strict_mode=False,
+                                execution_error=str(exec_error)
+                            )
+                            raise
+
+                # Verification succeeded - execute the original function
+                try:
+                    result = func(*args, **kwargs)
+                    # Report successful execution
+                    client.report_execution_status(
+                        verification_id=verification_id,
+                        executed=True,
+                        strict_mode=strict_mode
                     )
+                    return result
+                except Exception as exec_error:
+                    # Report execution failure (function threw an error)
+                    client.report_execution_status(
+                        verification_id=verification_id,
+                        executed=True,
+                        strict_mode=strict_mode,
+                        execution_error=str(exec_error)
+                    )
+                    raise
 
-                # Execute the original function
-                return func(*args, **kwargs)
-
+            except PermissionError:
+                # Re-raise permission errors (already reported above)
+                raise
             except Exception as e:
-                # Log verification failure but don't block execution in development
-                if os.getenv("AIM_STRICT_MODE", "false").lower() == "true":
-                    raise  # Strict mode: block execution on verification failure
+                # Verification itself failed (network error, etc.)
+                # Determine strict mode for error case (use env override or default to monitoring for safety)
+                strict_mode = env_strict_override.lower() == "true" if env_strict_override else False
+
+                if strict_mode:
+                    # In strict mode, verification failure blocks execution
+                    client.report_execution_status(
+                        verification_id=verification_id,
+                        executed=False,
+                        strict_mode=True,
+                        execution_error=f"Verification error: {str(e)}"
+                    )
+                    raise
                 else:
+                    # Monitoring mode: warn but continue execution
                     print(f"⚠️  AIM verification warning: {e}")
-                    return func(*args, **kwargs)  # Continue execution
+                    try:
+                        result = func(*args, **kwargs)
+                        # Report that we executed despite verification error
+                        client.report_execution_status(
+                            verification_id=verification_id,
+                            executed=True,
+                            strict_mode=False
+                        )
+                        return result
+                    except Exception as exec_error:
+                        client.report_execution_status(
+                            verification_id=verification_id,
+                            executed=True,
+                            strict_mode=False,
+                            execution_error=str(exec_error)
+                        )
+                        raise
 
         return wrapper
 

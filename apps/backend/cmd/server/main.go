@@ -256,6 +256,7 @@ func main() {
 	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
 	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerification)
 	app.Post("/api/v1/sdk-api/verifications/:id/result", middleware.RateLimitMiddleware(), h.Verification.SubmitVerificationResult)
+	app.Post("/api/v1/sdk-api/verifications/:id/execution-status", middleware.RateLimitMiddleware(), h.Verification.UpdateExecutionStatus)
 
 	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
 	// These routes use Ed25519 agent authentication for SDK/programmatic access
@@ -663,7 +664,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Alert,             // ✅ For creating security alerts on capability violations
 			services.VerificationEvent, // ✅ For recording action verification attempts in Security Dashboard
 			services.Capability,
-			services.Tag, // ✅ For fetching agent tags in responses
+			services.Tag,              // ✅ For fetching agent tags in responses
+			repos.Organization,        // ✅ For enforcement mode lookup in verify-capability
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
@@ -729,6 +731,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Alert,
 			services.Trust,
 			services.VerificationEvent,
+			repos.Organization,
 		),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
@@ -951,6 +954,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Organization settings (read-only - no SSO auto-approve in Community)
 	admin.Get("/organization/settings", h.Admin.GetOrganizationSettings)
+
+	// Enforcement settings (Security → Enforcement Mode)
+	admin.Get("/enforcement-settings", h.Admin.GetEnforcementSettings)
+	admin.Put("/enforcement-settings", h.Admin.UpdateEnforcementSettings)
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)
