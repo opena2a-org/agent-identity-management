@@ -707,12 +707,26 @@ export default function MCPServerDetailsPage({
               </CardHeader>
               <CardContent>
                 {capabilities.length === 0 ? (
-                  <div className="text-center py-8">
+                  <div className="text-center py-8 space-y-4">
                     <p className="text-muted-foreground">
                       No capabilities detected yet
                     </p>
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                        <p className="font-medium text-sm mb-1">Option 1: Auto-detect via SDK</p>
+                        <p className="text-xs text-muted-foreground">
+                          When an agent attests to this MCP server, capabilities are automatically detected.
+                        </p>
+                      </div>
+                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                        <p className="font-medium text-sm mb-1">Option 2: Manual verification</p>
+                        <p className="text-xs text-muted-foreground">
+                          Click "Verify" above to query the MCP server directly.
+                        </p>
+                      </div>
+                    </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Click "Verify" to automatically detect capabilities from the MCP server
+                      See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
                     </p>
                   </div>
                 ) : (
@@ -854,10 +868,35 @@ export default function MCPServerDetailsPage({
               </CardHeader>
               <CardContent>
                 {attestations.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-sm text-muted-foreground">
-                      No attestations yet
+                  <div className="text-center py-12 space-y-4">
+                    <Activity className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        No attestations yet
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Attestations verify the identity and capabilities of this MCP server.
+                      </p>
+                    </div>
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                        <p className="font-medium text-sm mb-1">Option 1: Agent attestation (recommended)</p>
+                        <p className="text-xs text-muted-foreground">
+                          When an agent connects to this MCP server via the SDK, it automatically creates a cryptographically-signed attestation.
+                        </p>
+                        <code className="text-xs bg-background px-2 py-1 rounded block mt-2">
+                          agent.attest_mcp("{server.name}", "{server.url}")
+                        </code>
+                      </div>
+                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                        <p className="font-medium text-sm mb-1">Option 2: Manual attestation</p>
+                        <p className="text-xs text-muted-foreground">
+                          Admins can manually attest to this server using the form below.
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
                     </p>
                   </div>
                 ) : (

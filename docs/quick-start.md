@@ -459,17 +459,21 @@ agent = secure("my-agent")
 agent = secure("my-agent", api_key="aim_abc123")
 ```
 
-### Tip 2: Auto-Detection Works Out of the Box
+### Tip 2: Declare Capabilities with Decorators
 
-**MCP servers and capabilities are auto-detected by default**:
+**Capabilities are detected from decorators and config files**:
 ```python
-# Auto-detection is enabled by default!
 agent = secure("my-agent")
-# ✅ Auto-detects capabilities from your code
-# ✅ Auto-detects MCP servers from ~/.claude/claude_desktop_config.json
 
-# Want to disable it? (rare)
-agent = secure("my-agent", auto_detect=False)
+# ✅ Declare capabilities using decorators (recommended)
+@agent.perform_action(capability="db:read")
+def read_database():
+    pass
+
+# ✅ Or use a config file: ~/.aim/capabilities.json
+# { "capabilities": ["db:read", "db:write"] }
+
+# ✅ MCP servers are auto-detected from ~/.claude/claude_desktop_config.json
 ```
 
 ### Tip 3: Use Decorators for Actions

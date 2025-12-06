@@ -268,8 +268,25 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
           <Alert>
             <Brain className="h-4 w-4" />
             <AlertTitle>No Capabilities Detected</AlertTitle>
-            <AlertDescription>
-              This agent hasn't reported its capabilities yet. Install the AIM SDK in your agent application to enable automatic capability detection and risk assessment.
+            <AlertDescription className="space-y-3">
+              <p>This agent hasn't declared its capabilities yet. There are two ways to declare capabilities:</p>
+              <div className="space-y-2 mt-2">
+                <div className="bg-muted/50 rounded-md p-3">
+                  <p className="font-medium text-sm mb-1">Option 1: Use decorators in your code</p>
+                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1">
+                    @client.perform_action(capability="file:read")
+                  </code>
+                </div>
+                <div className="bg-muted/50 rounded-md p-3">
+                  <p className="font-medium text-sm mb-1">Option 2: Create a config file</p>
+                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1">
+                    ~/.aim/capabilities.json
+                  </code>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
+              </p>
             </AlertDescription>
           </Alert>
         )}

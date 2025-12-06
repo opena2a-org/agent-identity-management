@@ -117,24 +117,35 @@ class CapabilityDetector:
             "browse_web": "web_automation",
         }
 
-    def detect_all(self) -> List[str]:
+    def detect_all(self, include_imports: bool = False) -> List[str]:
         """
         Run all detection methods and return combined unique capabilities.
+
+        Args:
+            include_imports: If True, include import-based detection (disabled by default
+                           because it's too noisy - detects what Python CAN do, not what
+                           the agent WILL do)
 
         Returns:
             List of unique capability strings
         """
         capabilities: Set[str] = set()
 
-        # 1. Detect from imports
-        import_caps = self.detect_from_imports()
-        capabilities.update(import_caps)
+        # 1. Detect from imports (DISABLED BY DEFAULT - too noisy)
+        # This detects capabilities based on loaded Python modules, but almost every
+        # agent ends up with the same generic capabilities (read_files, make_api_calls, etc.)
+        # because Python's stdlib loads these modules automatically.
+        if include_imports:
+            import_caps = self.detect_from_imports()
+            capabilities.update(import_caps)
 
-        # 2. Detect from config file
+        # 2. Detect from config file (~/.aim/capabilities.json)
+        # This is the recommended way to declare capabilities explicitly
         config_caps = self.detect_from_config()
         capabilities.update(config_caps)
 
-        # 3. Detect from decorators (if called from within agent code)
+        # 3. Detect from decorators (@client.perform_action())
+        # This scans the calling module's source code for decorator usage
         try:
             decorator_caps = self.detect_from_decorators()
             capabilities.update(decorator_caps)
