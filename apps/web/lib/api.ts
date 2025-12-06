@@ -394,8 +394,8 @@ class APIClient {
 
   // Refresh access token using refresh token
   async refreshAccessToken(): Promise<{
-    access_token: string;
-    refresh_token: string;
+    accessToken: string;
+    refreshToken: string;
   } | null> {
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) {
@@ -409,7 +409,7 @@ class APIClient {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        body: JSON.stringify({ refreshToken }),
       });
 
       if (!response.ok) {
@@ -420,7 +420,7 @@ class APIClient {
 
       const data = await response.json();
       // Store new tokens (token rotation - old refresh token is now invalid)
-      this.setToken(data?.access_token, data?.refresh_token);
+      this.setToken(data?.accessToken, data?.refreshToken);
       return data;
     } catch (error) {
       // Network error or other issue
@@ -737,7 +737,7 @@ class APIClient {
   ): Promise<{ apiKey: string; id: string }> {
     return this.request("/api/v1/api-keys", {
       method: "POST",
-      body: JSON.stringify({ agent_id: agentId, name }),
+      body: JSON.stringify({ agentId, name }),
     });
   }
 
