@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Lock, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, LogOut, Lock, Loader2, Bell } from "lucide-react";
 import { api } from "@/lib/api";
 import { type UserRole } from "@/lib/permissions";
+import { eventEmitter } from "@/lib/event-emitter";
 
 export function DashboardHeader() {
   const router = useRouter();
@@ -16,6 +18,28 @@ export function DashboardHeader() {
     role?: UserRole;
     provider?: string;
   } | null>(null);
+  const [alertCounts, setAlertCounts] = useState({
+    critical: 0,
+    high: 0,
+    unacknowledged: 0,
+  });
+
+  // Fetch high-priority alert counts for notification badge
+  const fetchAlertCounts = useCallback(async () => {
+    try {
+      const data = await api.getAlerts(1, 0); // Just need the counts
+      setAlertCounts({
+        critical: data.criticalCount || 0,
+        high: data.highCount || 0,
+        unacknowledged: data.unacknowledgedCount || 0,
+      });
+    } catch (error) {
+      // Silently fail - user may not have permission to view alerts
+    }
+  }, []);
+
+  // Calculate the priority alert count (critical + high unacknowledged)
+  const priorityAlertCount = alertCounts.critical + alertCounts.high;
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -66,6 +90,30 @@ export function DashboardHeader() {
     fetchUser();
   }, [router]);
 
+  // Fetch alert counts on mount and listen for updates
+  useEffect(() => {
+    fetchAlertCounts();
+
+    // Refresh alert counts every 30 seconds
+    const interval = setInterval(fetchAlertCounts, 30000);
+
+    // Listen for alert-related events to refresh counts
+    const handleAlertEvent = () => {
+      fetchAlertCounts();
+    };
+
+    eventEmitter.on("ALERT_ACKNOWLEDGED", handleAlertEvent);
+    eventEmitter.on("ALERT_RESOLVED", handleAlertEvent);
+    eventEmitter.on("ALERT_CREATED", handleAlertEvent);
+
+    return () => {
+      clearInterval(interval);
+      eventEmitter.off("ALERT_ACKNOWLEDGED", handleAlertEvent);
+      eventEmitter.off("ALERT_RESOLVED", handleAlertEvent);
+      eventEmitter.off("ALERT_CREATED", handleAlertEvent);
+    };
+  }, [fetchAlertCounts]);
+
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -113,6 +161,20 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
       <div className="flex items-center justify-end h-16 px-4 sm:px-6 lg:px-8">
+        {/* Security Alert Bell */}
+        {priorityAlertCount > 0 && (
+          <Link
+            href="/dashboard/security"
+            className="relative p-2 mr-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title={`${priorityAlertCount} high-priority alert${priorityAlertCount > 1 ? 's' : ''}`}
+          >
+            <Bell className="h-5 w-5 text-red-500 dark:text-red-400" />
+            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-white bg-red-500 rounded-full">
+              {priorityAlertCount > 99 ? '99+' : priorityAlertCount}
+            </span>
+          </Link>
+        )}
+
         {/* User Profile Dropdown */}
         <div className="relative">
           <button

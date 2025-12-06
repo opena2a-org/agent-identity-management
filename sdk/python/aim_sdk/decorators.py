@@ -10,13 +10,26 @@ Usage:
     # Initialize AIM client (auto-loads credentials)
     aim_client = AIMClient.from_credentials("my-agent")
 
-    @aim_verify(aim_client, action_type="api_call", risk_level="medium")
-    def fetch_user_data(user_id: str):
-        # Your function code here
-        return {"user_id": user_id, "name": "John Doe"}
+    # Risk level is auto-detected from capability name!
+    @aim_verify(aim_client, action_type="weather:fetch")  # auto: low
+    def get_weather(city: str):
+        return {"city": city, "temp": 72}
+
+    @aim_verify(aim_client, action_type="db:delete")  # auto: high
+    def delete_record(id: str):
+        pass
+
+    @aim_verify(aim_client, action_type="payment:process")  # auto: critical
+    def charge_customer(amount: float):
+        pass
+
+    # You can still override when needed
+    @aim_verify(aim_client, action_type="api:internal", risk_level="critical")
+    def call_secret_api():
+        pass
 
     # Function automatically verifies with AIM before execution
-    result = fetch_user_data("user123")
+    result = get_weather("NYC")
 """
 
 import functools
@@ -24,12 +37,13 @@ import time
 import os
 from typing import Any, Callable, Optional, Dict
 from aim_sdk.client import AIMClient
+from aim_sdk.risk_detector import detect_risk_level
 
 
 def aim_verify(
     aim_client: Optional[AIMClient] = None,
     action_type: str = "function_call",
-    risk_level: str = "low",
+    risk_level: Optional[str] = None,
     resource: Optional[str] = None,
     auto_init: bool = True,
     agent_name: Optional[str] = None,
@@ -41,10 +55,20 @@ def aim_verify(
     This decorator can be applied to ANY Python function to automatically verify
     execution with the AIM backend before the function runs.
 
+    Risk Level Auto-Detection:
+        If risk_level is not specified, it's automatically detected from the action_type
+        based on well-established patterns:
+        - ":read", ":fetch", ":list" -> "low"
+        - ":write", ":update", ":create" -> "medium"
+        - ":delete", ":send", ":execute" -> "high"
+        - "payment:", "admin:", "system:" -> "critical"
+
     Args:
         aim_client: AIMClient instance (if None, will auto-initialize from env vars)
-        action_type: Type of action being performed (e.g., "api_call", "database_query")
-        risk_level: Risk level of the action ("low", "medium", "high", "critical")
+        action_type: Capability being performed in namespace:action format
+                    (e.g., "weather:fetch", "db:read", "payment:process")
+        risk_level: Risk level override ("low", "medium", "high", "critical")
+                   If None, auto-detected from action_type
         resource: Resource being accessed (defaults to function name)
         auto_init: If True, automatically initialize AIM client from environment variables
         agent_name: Agent name for auto-initialization (uses AIM_AGENT_NAME env var if not provided)
@@ -58,18 +82,19 @@ def aim_verify(
     Example:
         >>> from aim_sdk.decorators import aim_verify
         >>>
-        >>> # Option 1: Explicit client
-        >>> aim_client = AIMClient.auto_register_or_load("my-agent", "http://localhost:8080")
-        >>> @aim_verify(aim_client, action_type="database_query", risk_level="high")
+        >>> # Risk level auto-detected from capability name
+        >>> @aim_verify(aim_client, action_type="weather:fetch")  # auto: low
+        >>> def get_weather(city: str):
+        >>>     return weather_api.fetch(city)
+        >>>
+        >>> @aim_verify(aim_client, action_type="db:delete")  # auto: high
         >>> def delete_user(user_id: str):
         >>>     db.execute("DELETE FROM users WHERE id = ?", user_id)
         >>>
-        >>> # Option 2: Auto-initialization from environment
-        >>> os.environ["AIM_AGENT_NAME"] = "my-agent"
-        >>> os.environ["AIM_URL"] = "http://localhost:8080"
-        >>> @aim_verify(auto_init=True)
-        >>> def send_email(to: str, subject: str):
-        >>>     email_service.send(to, subject)
+        >>> # Override when you know better
+        >>> @aim_verify(aim_client, action_type="api:internal", risk_level="critical")
+        >>> def call_secret_api():
+        >>>     return internal_api.call()
 
     Returns:
         Decorated function that performs AIM verification before execution
@@ -92,6 +117,10 @@ def aim_verify(
             # Determine resource name
             resource_name = resource or f"{func.__module__}.{func.__name__}"
 
+            # Auto-detect risk level from action_type if not explicitly provided
+            # This uses the capability name to determine appropriate risk level
+            effective_risk_level = detect_risk_level(action_type, override=risk_level)
+
             # Build context with function metadata and risk level
             context = {
                 "function": func.__name__,
@@ -99,7 +128,8 @@ def aim_verify(
                 "args_count": len(args),
                 "kwargs_keys": list(kwargs.keys()),
                 "timestamp": int(time.time()),
-                "risk_level": risk_level,
+                "risk_level": effective_risk_level,
+                "risk_auto_detected": risk_level is None,  # Track if auto-detected
             }
 
             # Environment variable override for strict mode (useful for testing)

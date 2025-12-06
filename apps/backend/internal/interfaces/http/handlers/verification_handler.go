@@ -61,13 +61,15 @@ type VerificationRequest struct {
 
 // VerificationResponse represents the verification result
 type VerificationResponse struct {
-	ID              string    `json:"id"`
-	Status          string    `json:"status"` // "approved", "denied", "pending"
-	ApprovedBy      string    `json:"approvedBy,omitempty"`
-	ExpiresAt       time.Time `json:"expiresAt,omitempty"`
-	DenialReason    string    `json:"denialReason,omitempty"`
-	TrustScore      float64   `json:"trustScore"`
-	EnforcementMode string    `json:"enforcementMode"` // "strict" or "monitoring" - tells SDK what to do on denial
+	ID               string    `json:"id"`
+	Status           string    `json:"status"` // "approved", "denied", "pending"
+	ApprovedBy       string    `json:"approvedBy,omitempty"`
+	ExpiresAt        time.Time `json:"expiresAt,omitempty"`
+	DenialReason     string    `json:"denialReason,omitempty"`
+	TrustScore       float64   `json:"trustScore"`
+	EnforcementMode  string    `json:"enforcementMode"` // "strict" or "monitoring" - tells SDK what to do on denial
+	RiskLevel        string    `json:"riskLevel"`        // Detected or provided risk level
+	RiskAutoDetected bool      `json:"riskAutoDetected"` // Whether risk was auto-detected from capability
 }
 
 // CreateVerification handles POST /api/v1/verifications
@@ -105,6 +107,10 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"error": "Invalid agentId format",
 		})
 	}
+
+	// Auto-detect risk level from capability if not explicitly provided
+	detectedRiskLevel := domain.DetectRiskLevel(req.Capability, req.RiskLevel)
+	riskAutoDetected := req.RiskLevel == ""
 
 	// Get agent from database
 	agent, err := h.agentService.GetAgent(c.Context(), agentID)
@@ -214,12 +220,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		IPAddress:      c.IP(),
 		UserAgent:      c.Get("User-Agent"),
 		Metadata: map[string]interface{}{
-			"verificationId": verificationID.String(),
-			"trustScore":     trustScore,
-			"autoApproved":   status == "approved",
-			"actionType":     req.Capability,
-			"resource":       req.Resource,
-			"context":        req.Context,
+			"verificationId":   verificationID.String(),
+			"trustScore":       trustScore,
+			"autoApproved":     status == "approved",
+			"actionType":       req.Capability,
+			"resource":         req.Resource,
+			"context":          req.Context,
+			"riskLevel":        detectedRiskLevel,
+			"riskAutoDetected": riskAutoDetected,
 		},
 		Timestamp: time.Now(),
 	}
@@ -253,7 +261,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		} else {
 			// Real security concern - create breach alert
 			alertType = domain.AlertSecurityBreach
-			severity = h.determineAlertSeverity(req.Capability, req.Context, req.RiskLevel)
+			severity = h.determineAlertSeverity(req.Capability, req.Context, detectedRiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 			alertDescription = fmt.Sprintf(
 				"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
@@ -274,13 +282,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			AuditID:        &auditEntry.ID, // Link to the audit log entry
 			AgentName:      agent.Name,
 			Metadata: map[string]interface{}{
-				"capability":     req.Capability,
-				"resource":       req.Resource,
-				"trustScore":     trustScore,
-				"verificationId": verificationID.String(),
-				"riskLevel":      req.RiskLevel,
-				"status":         status,
-				"ipAddress":      c.IP(),
+				"capability":       req.Capability,
+				"resource":         req.Resource,
+				"trustScore":       trustScore,
+				"verificationId":   verificationID.String(),
+				"riskLevel":        detectedRiskLevel,
+				"riskAutoDetected": riskAutoDetected,
+				"status":           status,
+				"ipAddress":        c.IP(),
 			},
 			IsAcknowledged: false,
 			CreatedAt:      time.Now(),
@@ -330,12 +339,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Create verification event metadata
 	eventMetadata := map[string]interface{}{
-		"verificationId": verificationID.String(),
-		"actionType":     req.Capability,
-		"resource":       req.Resource,
-		"context":        req.Context,
-		"trustScore":     trustScore,
-		"autoApproved":   status == "approved",
+		"verificationId":   verificationID.String(),
+		"actionType":       req.Capability,
+		"resource":         req.Resource,
+		"context":          req.Context,
+		"trustScore":       trustScore,
+		"autoApproved":     status == "approved",
+		"riskLevel":        detectedRiskLevel,
+		"riskAutoDetected": riskAutoDetected,
 	}
 	if status == "denied" {
 		eventMetadata["denialReason"] = denialReason
@@ -407,10 +418,12 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Build response
 	response := VerificationResponse{
-		ID:              verificationID.String(),
-		Status:          status,
-		TrustScore:      trustScore,
-		EnforcementMode: enforcementMode,
+		ID:               verificationID.String(),
+		Status:           status,
+		TrustScore:       trustScore,
+		EnforcementMode:  enforcementMode,
+		RiskLevel:        detectedRiskLevel,
+		RiskAutoDetected: riskAutoDetected,
 	}
 
 	if status == "approved" {
