@@ -186,6 +186,12 @@ export default function SecurityPoliciesPage() {
     newAction: "alert_only" | "block_and_alert" | "allow";
   } | null>(null);
 
+  // Global enforcement mode state
+  const [globalEnforcementMode, setGlobalEnforcementMode] = useState<"strict" | "monitoring">("monitoring");
+  const [enforcementLoading, setEnforcementLoading] = useState(true);
+  const [enforcementUpdating, setEnforcementUpdating] = useState(false);
+  const [showGlobalEnforcementWarning, setShowGlobalEnforcementWarning] = useState(false);
+
   // MCP Form state
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
@@ -247,6 +253,7 @@ export default function SecurityPoliciesPage() {
 
   useEffect(() => {
     fetchPolicies();
+    fetchEnforcementSettings();
   }, []);
 
   const fetchPolicies = async () => {
@@ -259,6 +266,41 @@ export default function SecurityPoliciesPage() {
       console.error("Failed to fetch security policies:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEnforcementSettings = async () => {
+    try {
+      setEnforcementLoading(true);
+      const settings = await api.getEnforcementSettings();
+      setGlobalEnforcementMode(settings.enforcementMode);
+    } catch (error) {
+      console.error("Failed to fetch enforcement settings:", error);
+    } finally {
+      setEnforcementLoading(false);
+    }
+  };
+
+  const handleGlobalEnforcementToggle = () => {
+    if (globalEnforcementMode === "monitoring") {
+      // Switching to strict mode - show warning
+      setShowGlobalEnforcementWarning(true);
+    } else {
+      // Switching to monitoring mode - no warning needed
+      updateGlobalEnforcement("monitoring");
+    }
+  };
+
+  const updateGlobalEnforcement = async (mode: "strict" | "monitoring") => {
+    try {
+      setEnforcementUpdating(true);
+      await api.updateEnforcementSettings(mode);
+      setGlobalEnforcementMode(mode);
+      setShowGlobalEnforcementWarning(false);
+    } catch (error) {
+      console.error("Failed to update enforcement settings:", error);
+    } finally {
+      setEnforcementUpdating(false);
     }
   };
 
@@ -1170,6 +1212,59 @@ export default function SecurityPoliciesPage() {
           </Card>
         </div>
 
+        {/* Global Enforcement Mode Toggle */}
+        <Card className={`border-2 ${globalEnforcementMode === 'strict' ? 'border-red-300 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20' : 'border-blue-300 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20'}`}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {globalEnforcementMode === 'strict' ? (
+                  <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
+                    <Lock className="h-6 w-6 text-red-600" />
+                  </div>
+                ) : (
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                    <Eye className="h-6 w-6 text-blue-600" />
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Global Enforcement Mode</h3>
+                    <Badge variant={globalEnforcementMode === 'strict' ? 'destructive' : 'secondary'}>
+                      {globalEnforcementMode === 'strict' ? 'STRICT' : 'MONITORING'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {globalEnforcementMode === 'strict'
+                      ? 'SDK will block actions that fail verification. Unauthorized actions are prevented in real-time.'
+                      : 'SDK allows all actions but logs violations. Use this to test policies before enforcing.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {enforcementLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : enforcementUpdating ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Updating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className={`text-sm font-medium ${globalEnforcementMode === 'strict' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                      {globalEnforcementMode === 'strict' ? 'Strict' : 'Monitoring'}
+                    </span>
+                    <Switch
+                      checked={globalEnforcementMode === 'strict'}
+                      onCheckedChange={handleGlobalEnforcementToggle}
+                      disabled={enforcementUpdating}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Info Banner */}
         <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-6">
@@ -1377,6 +1472,56 @@ export default function SecurityPoliciesPage() {
               >
                 <AlertOctagon className="h-4 w-4 mr-2" />
                 {pendingEnforcementChange ? "Switch to Blocking Mode" : "Enable Blocking Mode"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Global Enforcement Mode Warning Dialog */}
+        <Dialog open={showGlobalEnforcementWarning} onOpenChange={setShowGlobalEnforcementWarning}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                Enable Global Strict Mode?
+              </DialogTitle>
+              <div className="text-sm text-muted-foreground space-y-3 pt-4">
+                <div className="font-medium text-foreground">
+                  You are about to enable <strong>Global Strict Enforcement Mode</strong> for all SDK operations.
+                </div>
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4 rounded-md space-y-2">
+                  <div className="text-sm font-semibold text-red-800 dark:text-red-200">
+                    Warning: Production Impact
+                  </div>
+                  <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
+                    <li>ALL agents using the SDK will have enforcement enabled</li>
+                    <li>Actions that fail verification will be blocked in real-time</li>
+                    <li>Agents without proper capabilities will be denied</li>
+                    <li>This affects all environments using this AIM instance</li>
+                  </ul>
+                </div>
+                <div className="text-sm">
+                  <strong>Recommended:</strong> Test with individual policy blocking first before enabling global strict mode.
+                </div>
+              </div>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowGlobalEnforcementWarning(false)}>
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => updateGlobalEnforcement("strict")}
+                disabled={enforcementUpdating}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {enforcementUpdating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Lock className="h-4 w-4 mr-2" />
+                )}
+                Enable Strict Mode
               </Button>
             </DialogFooter>
           </DialogContent>
