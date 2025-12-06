@@ -52,6 +52,28 @@ func (s *VerificationEventService) LogVerificationEvent(
 	agentIDPtr := &agentID
 	agentNamePtr := &agent.DisplayName
 
+	// Calculate confidence based on agent status and trust score
+	// Since this is automatic logging without cryptographic verification,
+	// we use a simplified calculation:
+	// - Agent status contributes 40% (verified=0.40, pending=0.20, other=0)
+	// - Trust score contributes 40% (normalized from 0-100 to 0-0.40)
+	// - Event success contributes 20% (success=0.20, failed=0)
+	confidence := 0.0
+	switch agent.Status {
+	case domain.AgentStatusVerified:
+		confidence += 0.40
+	case domain.AgentStatusPending:
+		confidence += 0.20
+	}
+	confidence += (agent.TrustScore / 100.0) * 0.40
+	if status == domain.VerificationEventStatusSuccess {
+		confidence += 0.20
+	}
+	// Ensure confidence is between 0.0 and 1.0
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+
 	event := &domain.VerificationEvent{
 		OrganizationID:   orgID,
 		AgentID:          agentIDPtr,
@@ -59,6 +81,7 @@ func (s *VerificationEventService) LogVerificationEvent(
 		Protocol:         protocol,
 		VerificationType: verificationType,
 		Status:           status,
+		Confidence:       confidence,
 		TrustScore:       agent.TrustScore,
 		DurationMs:       durationMs,
 		InitiatorType:    initiatorType,
