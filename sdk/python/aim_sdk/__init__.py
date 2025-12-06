@@ -66,7 +66,7 @@ from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 
-__version__ = "1.2.4"
+__version__ = "1.4.0"
 __all__ = [
     "AIMClient",
     "register_agent",

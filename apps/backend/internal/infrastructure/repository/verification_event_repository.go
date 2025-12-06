@@ -842,6 +842,34 @@ func (r *VerificationEventRepositorySimple) UpdateResult(id uuid.UUID, result do
 	return nil
 }
 
+// UpdateExecutionStatus updates the execution status reported by the SDK
+func (r *VerificationEventRepositorySimple) UpdateExecutionStatus(id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
+	query := `
+    UPDATE verification_events
+    SET
+        executed = $1,
+        strict_mode = $2,
+        executed_at = $3,
+        execution_error = $4
+    WHERE id = $5`
+
+	execResult, err := r.db.Exec(query, executed, strictMode, executedAt, executionError, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := execResult.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("verification event not found")
+	}
+
+	return nil
+}
+
 // Delete removes a verification event
 func (r *VerificationEventRepositorySimple) Delete(id uuid.UUID) error {
 	query := `DELETE FROM verification_events WHERE id = $1`

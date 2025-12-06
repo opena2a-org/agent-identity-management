@@ -71,6 +71,11 @@ interface VerificationEvent {
   createdAt: string;
   allowed?: boolean;
   reason?: string;
+  // SDK Execution Status fields
+  executed?: boolean;
+  strictMode?: boolean;
+  executedAt?: string;
+  executionError?: string;
 }
 
 export function AlertDetailPanel({
@@ -502,6 +507,40 @@ export function AlertDetailPanel({
                           <p className="text-sm text-red-600 mt-2">
                             <span className="font-medium">Denied:</span> {event.reason}
                           </p>
+                        )}
+
+                        {/* Execution Status - Shows what actually happened after verification */}
+                        {event.executed !== undefined && (
+                          <div className={`mt-2 p-2 rounded text-xs ${
+                            event.executed
+                              ? event.strictMode
+                                ? "bg-green-50 border border-green-200 text-green-700"
+                                : isDenied
+                                  ? "bg-yellow-50 border border-yellow-200 text-yellow-700"
+                                  : "bg-green-50 border border-green-200 text-green-700"
+                              : "bg-red-50 border border-red-200 text-red-700"
+                          }`}>
+                            <span className="font-medium">
+                              {event.executed ? (
+                                event.strictMode ? (
+                                  "✓ Action executed (strict mode)"
+                                ) : isDenied ? (
+                                  "⚠ Action executed despite denial (monitoring mode)"
+                                ) : (
+                                  "✓ Action executed successfully"
+                                )
+                              ) : (
+                                event.strictMode ? (
+                                  "✗ Action BLOCKED (strict mode enforced)"
+                                ) : (
+                                  "✗ Action not executed"
+                                )
+                              )}
+                            </span>
+                            {event.executionError && (
+                              <p className="mt-1 text-red-600">Error: {event.executionError}</p>
+                            )}
+                          </div>
                         )}
 
                         <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">

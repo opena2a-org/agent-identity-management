@@ -113,6 +113,12 @@ type VerificationEvent struct {
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 
+	// SDK Execution Status (reported by SDK after verification decision)
+	Executed     *bool      `json:"executed,omitempty"`     // Whether the function was actually executed
+	StrictMode   *bool      `json:"strictMode,omitempty"`   // Whether SDK was in strict mode
+	ExecutedAt   *time.Time `json:"executedAt,omitempty"`   // When execution occurred
+	ExecutionError *string  `json:"executionError,omitempty"` // Error if execution failed
+
 	// Additional data
 	Details  *string                `json:"details,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
@@ -148,6 +154,7 @@ type VerificationEventRepository interface {
 	GetStatistics(orgID uuid.UUID, startTime, endTime time.Time) (*VerificationStatistics, error)
 	GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*AgentVerificationStatistics, error)
 	UpdateResult(id uuid.UUID, result VerificationResult, reason *string, metadata map[string]interface{}) error
+	UpdateExecutionStatus(id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
 	Delete(id uuid.UUID) error
 }
 

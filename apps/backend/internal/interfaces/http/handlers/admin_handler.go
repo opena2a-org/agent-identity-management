@@ -1464,6 +1464,121 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	})
 }
 
+// GetEnforcementSettings returns the enforcement settings for the organization
+func (h *AdminHandler) GetEnforcementSettings(c fiber.Ctx) error {
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	settings, err := h.adminService.GetEnforcementSettings(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch enforcement settings",
+		})
+	}
+
+	return c.JSON(settings)
+}
+
+// UpdateEnforcementSettingsRequest represents the request body for updating enforcement settings
+type UpdateEnforcementSettingsRequest struct {
+	EnforcementMode string `json:"enforcementMode" validate:"required"`
+}
+
+// UpdateEnforcementSettings updates the enforcement mode for the organization
+func (h *AdminHandler) UpdateEnforcementSettings(c fiber.Ctx) error {
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
+
+	var req UpdateEnforcementSettingsRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Convert string to EnforcementMode
+	var mode domain.EnforcementMode
+	switch req.EnforcementMode {
+	case "strict":
+		mode = domain.EnforcementModeStrict
+	case "monitoring":
+		mode = domain.EnforcementModeMonitoring
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid enforcement mode. Must be 'strict' or 'monitoring'",
+		})
+	}
+
+	if err := h.adminService.UpdateEnforcementMode(c.Context(), orgID, mode); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"enforcement_settings",
+		orgID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"newEnforcementMode": req.EnforcementMode,
+		},
+	)
+
+	// Return updated settings
+	settings, err := h.adminService.GetEnforcementSettings(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch updated settings",
+		})
+	}
+
+	return c.JSON(settings)
+}
+
 // isSuperAdmin checks if the given user is the super admin (first admin user created in the organization)
 // Super admin is protected from deactivation and deletion to ensure system access
 func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID) (bool, error) {

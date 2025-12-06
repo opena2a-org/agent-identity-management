@@ -896,6 +896,11 @@ class APIClient {
     createdAt: string;
     allowed?: boolean;
     reason?: string;
+    // SDK Execution Status fields
+    executed?: boolean;
+    strictMode?: boolean;
+    executedAt?: string;
+    executionError?: string;
   }[]> {
     try {
       const response = await this.request<{ events: any[] }>(
@@ -916,6 +921,11 @@ class APIClient {
         createdAt: event.createdAt,
         allowed: event.metadata?.allowed,
         reason: event.metadata?.reason,
+        // SDK Execution Status fields
+        executed: event.executed,
+        strictMode: event.strictMode,
+        executedAt: event.executedAt,
+        executionError: event.executionError,
       }));
     } catch (error) {
       console.error("Failed to fetch agent verification history:", error);
@@ -2618,6 +2628,28 @@ class APIClient {
     return this.request(`/api/v1/agents/${agentId}/attestations/revoke-all`, {
       method: "POST",
       body: JSON.stringify({ reason }),
+    });
+  }
+
+  // Enforcement Settings
+  async getEnforcementSettings(): Promise<{
+    enforcementMode: "strict" | "monitoring";
+    description: string;
+    explanation: string;
+    impact: string;
+  }> {
+    return this.request("/api/v1/admin/enforcement-settings");
+  }
+
+  async updateEnforcementSettings(mode: "strict" | "monitoring"): Promise<{
+    enforcementMode: "strict" | "monitoring";
+    description: string;
+    explanation: string;
+    impact: string;
+  }> {
+    return this.request("/api/v1/admin/enforcement-settings", {
+      method: "PUT",
+      body: JSON.stringify({ enforcementMode: mode }),
     });
   }
 }

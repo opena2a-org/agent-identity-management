@@ -25,6 +25,7 @@ type VerificationHandler struct {
 	alertService             *application.AlertService
 	trustService             *application.TrustCalculator
 	verificationEventService *application.VerificationEventService
+	orgRepo                  domain.OrganizationRepository
 }
 
 // NewVerificationHandler creates a new verification handler
@@ -34,6 +35,7 @@ func NewVerificationHandler(
 	alertService *application.AlertService,
 	trustService *application.TrustCalculator,
 	verificationEventService *application.VerificationEventService,
+	orgRepo domain.OrganizationRepository,
 ) *VerificationHandler {
 	return &VerificationHandler{
 		agentService:             agentService,
@@ -41,6 +43,7 @@ func NewVerificationHandler(
 		alertService:             alertService,
 		trustService:             trustService,
 		verificationEventService: verificationEventService,
+		orgRepo:                  orgRepo,
 	}
 }
 
@@ -58,12 +61,13 @@ type VerificationRequest struct {
 
 // VerificationResponse represents the verification result
 type VerificationResponse struct {
-	ID           string    `json:"id"`
-	Status       string    `json:"status"` // "approved", "denied", "pending"
-	ApprovedBy   string    `json:"approvedBy,omitempty"`
-	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
-	DenialReason string    `json:"denialReason,omitempty"`
-	TrustScore   float64   `json:"trustScore"`
+	ID              string    `json:"id"`
+	Status          string    `json:"status"` // "approved", "denied", "pending"
+	ApprovedBy      string    `json:"approvedBy,omitempty"`
+	ExpiresAt       time.Time `json:"expiresAt,omitempty"`
+	DenialReason    string    `json:"denialReason,omitempty"`
+	TrustScore      float64   `json:"trustScore"`
+	EnforcementMode string    `json:"enforcementMode"` // "strict" or "monitoring" - tells SDK what to do on denial
 }
 
 // CreateVerification handles POST /api/v1/verifications
@@ -391,11 +395,21 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		}()
 	}
 
+	// Get organization to determine enforcement mode
+	enforcementMode := "monitoring" // Default to safe mode
+	if h.orgRepo != nil {
+		org, err := h.orgRepo.GetByID(agent.OrganizationID)
+		if err == nil && org != nil {
+			enforcementMode = string(org.EnforcementMode)
+		}
+	}
+
 	// Build response
 	response := VerificationResponse{
-		ID:         verificationID.String(),
-		Status:     status,
-		TrustScore: trustScore,
+		ID:              verificationID.String(),
+		Status:          status,
+		TrustScore:      trustScore,
+		EnforcementMode: enforcementMode,
 	}
 
 	if status == "approved" {
@@ -767,10 +781,20 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 		})
 	}
 
+	// Get organization to determine enforcement mode
+	enforcementMode := "monitoring" // Default to safe mode
+	if h.orgRepo != nil {
+		org, err := h.orgRepo.GetByID(event.OrganizationID)
+		if err == nil && org != nil {
+			enforcementMode = string(org.EnforcementMode)
+		}
+	}
+
 	// Build response
 	response := VerificationResponse{
-		ID:         event.ID.String(),
-		TrustScore: event.TrustScore,
+		ID:              event.ID.String(),
+		TrustScore:      event.TrustScore,
+		EnforcementMode: enforcementMode,
 	}
 
 	// Map event status and result to verification status
@@ -1375,5 +1399,94 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 		"deniedAt":     time.Now().Format(time.RFC3339),
 		"denialReason": req.Reason,
 		"message":      "Verification denied - agent action blocked",
+	})
+}
+
+// ============================================================================
+// SDK EXECUTION STATUS REPORTING
+// Allows the SDK to report whether a function was actually executed after verification
+// ============================================================================
+
+// UpdateExecutionStatusRequest represents the request body for reporting execution status
+type UpdateExecutionStatusRequest struct {
+	Executed       bool    `json:"executed"`                 // Whether the function was executed
+	StrictMode     bool    `json:"strictMode"`               // Whether SDK was in strict mode
+	ExecutedAt     string  `json:"executedAt"`               // Timestamp of execution (RFC3339)
+	ExecutionError *string `json:"executionError,omitempty"` // Error message if execution failed
+}
+
+// UpdateExecutionStatus reports the SDK execution status for a verification event
+// @Summary Report SDK execution status
+// @Description SDK reports whether the decorated function was actually executed after verification
+// @Tags sdk-api,verifications
+// @Accept json
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Param request body UpdateExecutionStatusRequest true "Execution status"
+// @Success 200 {object} map[string]interface{} "Status recorded"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /api/v1/sdk-api/verifications/{id}/execution-status [post]
+func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
+	verificationID := c.Params("id")
+	if verificationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verificationId is required",
+		})
+	}
+
+	// Parse UUID
+	vid, err := uuid.Parse(verificationID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verificationId format",
+		})
+	}
+
+	// Parse request body
+	var req UpdateExecutionStatusRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Parse execution timestamp
+	var executedAt time.Time
+	if req.ExecutedAt != "" {
+		executedAt, err = time.Parse(time.RFC3339, req.ExecutedAt)
+		if err != nil {
+			// Try parsing without timezone
+			executedAt, err = time.Parse("2006-01-02T15:04:05", req.ExecutedAt)
+			if err != nil {
+				executedAt = time.Now() // Default to now if parsing fails
+			}
+		}
+	} else {
+		executedAt = time.Now()
+	}
+
+	// Update execution status in database
+	err = h.verificationEventService.UpdateExecutionStatus(
+		c.Context(),
+		vid,
+		req.Executed,
+		req.StrictMode,
+		executedAt,
+		req.ExecutionError,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or update failed",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"id":         vid.String(),
+		"status":     "execution_status_recorded",
+		"executed":   req.Executed,
+		"strictMode": req.StrictMode,
+		"executedAt": executedAt.Format(time.RFC3339),
 	})
 }

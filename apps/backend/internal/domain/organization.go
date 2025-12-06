@@ -6,18 +6,29 @@ import (
 	"github.com/google/uuid"
 )
 
+// EnforcementMode represents how the SDK handles verification failures
+type EnforcementMode string
+
+const (
+	// EnforcementModeStrict blocks execution when verification fails
+	EnforcementModeStrict EnforcementMode = "strict"
+	// EnforcementModeMonitoring logs failures but allows execution (default)
+	EnforcementModeMonitoring EnforcementMode = "monitoring"
+)
+
 // Organization represents a tenant organization
 type Organization struct {
-	ID        uuid.UUID              `json:"id"`
-	Name      string                 `json:"name"`
-	Domain    string                 `json:"domain"`
-	PlanType  string                 `json:"-"` // internal use only, not exposed via API
-	MaxAgents int                    `json:"maxAgents"`
-	MaxUsers  int                    `json:"maxUsers"`
-	IsActive  bool                   `json:"isActive"`
-	Settings  map[string]interface{} `json:"settings"` // Additional org settings
-	CreatedAt time.Time              `json:"createdAt"`
-	UpdatedAt time.Time              `json:"updatedAt"`
+	ID              uuid.UUID              `json:"id"`
+	Name            string                 `json:"name"`
+	Domain          string                 `json:"domain"`
+	PlanType        string                 `json:"-"` // internal use only, not exposed via API
+	MaxAgents       int                    `json:"maxAgents"`
+	MaxUsers        int                    `json:"maxUsers"`
+	IsActive        bool                   `json:"isActive"`
+	EnforcementMode EnforcementMode        `json:"enforcementMode"` // strict or monitoring
+	Settings        map[string]interface{} `json:"settings"`        // Additional org settings
+	CreatedAt       time.Time              `json:"createdAt"`
+	UpdatedAt       time.Time              `json:"updatedAt"`
 }
 
 // OrganizationRepository defines the interface for organization persistence

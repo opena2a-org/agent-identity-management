@@ -228,6 +228,18 @@ func (s *VerificationEventService) UpdateVerificationResult(
 	return s.eventRepo.UpdateResult(id, result, reason, metadata)
 }
 
+// UpdateExecutionStatus updates the SDK execution status for a verification event
+func (s *VerificationEventService) UpdateExecutionStatus(
+	ctx context.Context,
+	id uuid.UUID,
+	executed bool,
+	strictMode bool,
+	executedAt time.Time,
+	executionError *string,
+) error {
+	return s.eventRepo.UpdateExecutionStatus(id, executed, strictMode, executedAt, executionError)
+}
+
 // DeleteVerificationEvent deletes a verification event
 func (s *VerificationEventService) DeleteVerificationEvent(ctx context.Context, id uuid.UUID) error {
 	return s.eventRepo.Delete(id)

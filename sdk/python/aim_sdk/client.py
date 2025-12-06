@@ -703,13 +703,13 @@ class AIMClient:
         try:
             # Use direct HTTP call to avoid signature issues
             url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/result"
-            
+
             # Prepare headers - use API key if available, otherwise OAuth
             headers = {
                 'Content-Type': 'application/json',
                 'User-Agent': f'AIM-Python-SDK/1.0.0'
             }
-            
+
             if self.api_key:
                 headers['X-API-Key'] = self.api_key
             elif self.oauth_token_manager:
@@ -719,11 +719,11 @@ class AIMClient:
                         headers['Authorization'] = f'Bearer {access_token}'
                 except Exception:
                     pass  # Continue without OAuth if it fails
-            
+
             # Add SDK token header if available
             if self.sdk_token_id:
                 headers['X-SDK-Token'] = self.sdk_token_id
-            
+
             response = self.session.request(
                 method="POST",
                 url=url,
@@ -736,11 +736,83 @@ class AIMClient:
                 headers=headers,
                 timeout=self.timeout
             )
-            
+
             # Don't raise on errors for logging - just continue
             response.raise_for_status()
         except Exception:
             # Don't fail the action if logging fails
+            pass
+
+    def report_execution_status(
+        self,
+        verification_id: str,
+        executed: bool,
+        strict_mode: bool,
+        execution_error: Optional[str] = None
+    ):
+        """
+        Report execution status to AIM backend.
+
+        This method is called by decorators after a function execution attempt to report
+        whether the function was actually executed. This enables accurate dashboard messaging:
+        - If strict_mode=True and verification denied: executed=False (blocked)
+        - If strict_mode=False and verification denied: executed=True (logged but allowed)
+        - If verification approved: executed=True (normal execution)
+
+        Args:
+            verification_id: ID from verify_capability response
+            executed: Whether the decorated function was actually executed
+            strict_mode: Whether SDK was in strict mode (AIM_STRICT_MODE env var)
+            execution_error: Error message if execution failed
+
+        Note:
+            This method is fire-and-forget - it won't raise exceptions on failure.
+        """
+        if not verification_id:
+            return  # Can't report without verification ID
+
+        try:
+            url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/execution-status"
+
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': f'AIM-Python-SDK/1.0.0'
+            }
+
+            if self.api_key:
+                headers['X-API-Key'] = self.api_key
+            elif self.oauth_token_manager:
+                try:
+                    access_token = self.oauth_token_manager.get_access_token()
+                    if access_token:
+                        headers['Authorization'] = f'Bearer {access_token}'
+                except Exception:
+                    pass  # Continue without OAuth if it fails
+
+            if self.sdk_token_id:
+                headers['X-SDK-Token'] = self.sdk_token_id
+
+            payload = {
+                "executed": executed,
+                "strictMode": strict_mode,
+                "executedAt": datetime.now(timezone.utc).isoformat()
+            }
+
+            if execution_error:
+                payload["executionError"] = execution_error
+
+            response = self.session.request(
+                method="POST",
+                url=url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+
+            # Don't raise on errors - this is fire-and-forget
+            response.raise_for_status()
+        except Exception:
+            # Don't fail the action if reporting fails
             pass
 
     # Backwards compatibility alias

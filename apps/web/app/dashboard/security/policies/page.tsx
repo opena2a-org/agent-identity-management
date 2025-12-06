@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Shield, Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Shield, Plus, Edit, Trash2, AlertCircle, ShieldAlert, Eye, Lock, Loader2, Info } from 'lucide-react';
+import { api } from '@/lib/api';
 
 interface SecurityPolicy {
   id: string;
@@ -19,14 +21,56 @@ interface SecurityPolicy {
   updatedAt: string;
 }
 
+interface EnforcementSettings {
+  enforcementMode: 'strict' | 'monitoring';
+  description: string;
+  explanation: string;
+  impact: string;
+}
+
 export default function SecurityPoliciesPage() {
   const [policies, setPolicies] = useState<SecurityPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Enforcement mode state
+  const [enforcementSettings, setEnforcementSettings] = useState<EnforcementSettings | null>(null);
+  const [enforcementLoading, setEnforcementLoading] = useState(true);
+  const [enforcementUpdating, setEnforcementUpdating] = useState(false);
+  const [enforcementError, setEnforcementError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchPolicies();
+    fetchEnforcementSettings();
   }, []);
+
+  const fetchEnforcementSettings = async () => {
+    try {
+      const settings = await api.getEnforcementSettings();
+      setEnforcementSettings(settings);
+      setEnforcementError(null);
+    } catch (err) {
+      console.error('Error fetching enforcement settings:', err);
+      setEnforcementError('Failed to load enforcement settings');
+    } finally {
+      setEnforcementLoading(false);
+    }
+  };
+
+  const handleEnforcementModeChange = async (checked: boolean) => {
+    const newMode = checked ? 'strict' : 'monitoring';
+    setEnforcementUpdating(true);
+    try {
+      const settings = await api.updateEnforcementSettings(newMode);
+      setEnforcementSettings(settings);
+      setEnforcementError(null);
+    } catch (err) {
+      console.error('Error updating enforcement mode:', err);
+      setEnforcementError('Failed to update enforcement mode');
+    } finally {
+      setEnforcementUpdating(false);
+    }
+  };
 
   const fetchPolicies = async () => {
     try {
@@ -115,6 +159,115 @@ export default function SecurityPoliciesPage() {
           Create Policy
         </Button>
       </div>
+
+      {/* Enforcement Mode Section */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {enforcementSettings?.enforcementMode === 'strict' ? (
+                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                  <Lock className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+              ) : (
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Eye className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+              )}
+              <div>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  Enforcement Mode
+                  {enforcementSettings && (
+                    <Badge variant={enforcementSettings.enforcementMode === 'strict' ? 'destructive' : 'secondary'}>
+                      {enforcementSettings.enforcementMode === 'strict' ? 'Strict' : 'Monitoring'}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Control how the SDK handles verification failures
+                </CardDescription>
+              </div>
+            </div>
+            {enforcementLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : enforcementUpdating ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Updating...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-medium ${enforcementSettings?.enforcementMode === 'strict' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                  {enforcementSettings?.enforcementMode === 'strict' ? 'Strict' : 'Monitoring'}
+                </span>
+                <Switch
+                  checked={enforcementSettings?.enforcementMode === 'strict'}
+                  onCheckedChange={handleEnforcementModeChange}
+                  disabled={enforcementUpdating}
+                />
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {enforcementError ? (
+            <div className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">{enforcementError}</span>
+            </div>
+          ) : enforcementSettings ? (
+            <div className="space-y-4">
+              {/* Mode explanation */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Monitoring Mode */}
+                <div className={`p-4 rounded-lg border ${enforcementSettings.enforcementMode === 'monitoring' ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye className={`h-5 w-5 ${enforcementSettings.enforcementMode === 'monitoring' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    <h4 className={`font-semibold ${enforcementSettings.enforcementMode === 'monitoring' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}>
+                      Monitoring Mode
+                      {enforcementSettings.enforcementMode === 'monitoring' && (
+                        <Badge variant="outline" className="ml-2 text-xs">Active</Badge>
+                      )}
+                    </h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    When verification fails, actions are <strong>logged but allowed</strong> to proceed.
+                  </p>
+                  <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                    <Info className="h-3 w-3 inline mr-1" />
+                    Use during initial deployment to understand agent behavior before enforcing strict policies.
+                  </div>
+                </div>
+
+                {/* Strict Mode */}
+                <div className={`p-4 rounded-lg border ${enforcementSettings.enforcementMode === 'strict' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Lock className={`h-5 w-5 ${enforcementSettings.enforcementMode === 'strict' ? 'text-red-600' : 'text-gray-400'}`} />
+                    <h4 className={`font-semibold ${enforcementSettings.enforcementMode === 'strict' ? 'text-red-700 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}>
+                      Strict Mode
+                      {enforcementSettings.enforcementMode === 'strict' && (
+                        <Badge variant="destructive" className="ml-2 text-xs">Active</Badge>
+                      )}
+                    </h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    When verification fails, actions are <strong>blocked immediately</strong>.
+                  </p>
+                  <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                    <ShieldAlert className="h-3 w-3 inline mr-1" />
+                    Use in production for maximum security. Unauthorized actions will not execute.
+                  </div>
+                </div>
+              </div>
+
+              {/* Current impact */}
+              <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                <strong>Current Impact:</strong> {enforcementSettings.impact}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {/* Stats Overview */}
       <div className="grid gap-4 md:grid-cols-4">

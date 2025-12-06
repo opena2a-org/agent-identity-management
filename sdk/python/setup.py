@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="aim-sdk",
-    version="1.2.4",
+    version="1.4.0",
     author="OpenA2A",
     author_email="info@opena2a.org",
     description="Python SDK for AIM (Agent Identity Management) - Automatic identity verification for AI agents",

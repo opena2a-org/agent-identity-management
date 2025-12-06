@@ -197,3 +197,64 @@ func (s *AdminService) PermanentlyDeleteUser(ctx context.Context, userID, adminI
 func (s *AdminService) GetOrganizationSettings(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error) {
 	return s.orgRepo.GetByID(orgID)
 }
+
+// EnforcementSettings represents the enforcement configuration for an organization
+type EnforcementSettings struct {
+	EnforcementMode domain.EnforcementMode `json:"enforcementMode"`
+	Description     string                 `json:"description"`
+	Explanation     string                 `json:"explanation"`
+	Impact          string                 `json:"impact"`
+}
+
+// GetEnforcementSettings retrieves the enforcement settings for an organization
+func (s *AdminService) GetEnforcementSettings(ctx context.Context, orgID uuid.UUID) (*EnforcementSettings, error) {
+	org, err := s.orgRepo.GetByID(orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	settings := &EnforcementSettings{
+		EnforcementMode: org.EnforcementMode,
+	}
+
+	// Add descriptions based on mode
+	switch org.EnforcementMode {
+	case domain.EnforcementModeStrict:
+		settings.Description = "Strict Mode"
+		settings.Explanation = "When verification fails, agent actions are blocked. This provides maximum security by preventing any unauthorized operations."
+		settings.Impact = "Agents cannot execute actions that fail verification. Use this in production environments where security is critical."
+	case domain.EnforcementModeMonitoring:
+		settings.Description = "Monitoring Mode"
+		settings.Explanation = "When verification fails, actions are logged but allowed to proceed. This helps you understand agent behavior before enforcing strict policies."
+		settings.Impact = "Agents can execute all actions, but verification failures are logged as alerts. Use this during initial deployment to gather data."
+	default:
+		// Default to monitoring if unknown
+		settings.EnforcementMode = domain.EnforcementModeMonitoring
+		settings.Description = "Monitoring Mode"
+		settings.Explanation = "When verification fails, actions are logged but allowed to proceed."
+		settings.Impact = "Agents can execute all actions, but verification failures are logged."
+	}
+
+	return settings, nil
+}
+
+// UpdateEnforcementMode updates the enforcement mode for an organization
+func (s *AdminService) UpdateEnforcementMode(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error {
+	// Validate mode
+	if mode != domain.EnforcementModeStrict && mode != domain.EnforcementModeMonitoring {
+		return fmt.Errorf("invalid enforcement mode: %s (must be 'strict' or 'monitoring')", mode)
+	}
+
+	org, err := s.orgRepo.GetByID(orgID)
+	if err != nil {
+		return fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	org.EnforcementMode = mode
+
+	if err := s.orgRepo.Update(org); err != nil {
+		return fmt.Errorf("failed to update organization: %w", err)
+	}
+
+	return nil
+}
