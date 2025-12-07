@@ -285,7 +285,7 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
+                See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-foreground">SDK documentation</a> for more details.
               </p>
             </AlertDescription>
           </Alert>
