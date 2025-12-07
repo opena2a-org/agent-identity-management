@@ -73,6 +73,17 @@ export interface Agent {
   updatedBy?: string;           // User UUID who last updated this agent
   updatedByName?: string;       // Name of the updater (denormalized)
   updatedByEmail?: string;      // Email of the updater (denormalized)
+  // Auto-generated API key (only present on creation response, never stored)
+  apiKey?: {
+    key: string;       // Full API key (only shown once!)
+    id: string;
+    name: string;
+    prefix: string;
+    expiresAt: string | null;
+    createdAt: string;
+  };
+  apiKeyWarning?: string;  // Warning to store the API key securely
+  apiKeyError?: string;    // Error message if API key generation failed
 }
 
 export interface Organization {
@@ -431,7 +442,8 @@ class APIClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetry: boolean = false
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {
@@ -450,6 +462,16 @@ class APIClient {
     });
 
     if (response.status === 401) {
+      // Try to refresh the token if we haven't already
+      if (!isRetry) {
+        const refreshResult = await this.refreshAccessToken();
+        if (refreshResult) {
+          // Retry the request with new token
+          return this.request<T>(endpoint, options, true);
+        }
+      }
+
+      // Refresh failed or already retried - redirect to login
       this.clearToken();
       if (typeof window !== "undefined") {
         toast.error("Session expired", {
@@ -1789,6 +1811,37 @@ class APIClient {
       method: "POST",
       body: JSON.stringify(data),
     });
+  }
+
+  // ========================================
+  // Single Agent Activity (Audit Trail)
+  // ========================================
+
+  /**
+   * Get activity for a specific agent (actions the agent has performed)
+   * @param agentId Agent ID
+   * @param limit Max number of activities to return
+   * @param offset Pagination offset
+   */
+  async getSingleAgentActivity(
+    agentId: string,
+    limit = 50,
+    offset = 0
+  ): Promise<{
+    activities: Array<{
+      id: string;
+      action: string;
+      resourceType: string;
+      resourceId: string;
+      timestamp: string;
+      details: string;
+      metadata: Record<string, any>;
+    }>;
+    total: number;
+  }> {
+    return this.request(
+      `/api/v1/agents/${agentId}/activity?limit=${limit}&offset=${offset}`
+    );
   }
 
   // Verification Events (Real-time Monitoring)

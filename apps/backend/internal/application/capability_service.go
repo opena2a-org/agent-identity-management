@@ -130,7 +130,6 @@ func (s *CapabilityService) VerifyAction(
 		}
 
 		// 6. Log to audit trail
-		zeroUUID := uuid.Nil
 		ipAddr := ""
 		if sourceIP != nil {
 			ipAddr = *sourceIP
@@ -145,7 +144,7 @@ func (s *CapabilityService) VerifyAction(
 
 		auditLog := &domain.AuditLog{
 			OrganizationID: agent.OrganizationID,
-			UserID:         zeroUUID,
+			AgentID:        &agentID, // Agent-initiated capability check
 			Action:         "capability_violation",
 			ResourceType:   "agent",
 			ResourceID:     agentID,
@@ -213,13 +212,9 @@ func (s *CapabilityService) GrantCapability(
 
 	// Log to audit trail
 	description := fmt.Sprintf("Capability '%s' granted to agent %s", capabilityType, agent.DisplayName)
-	grantedByID := uuid.Nil
-	if grantedBy != nil {
-		grantedByID = *grantedBy
-	}
 	auditLog := &domain.AuditLog{
 		OrganizationID: agent.OrganizationID,
-		UserID:         grantedByID,
+		UserID:         grantedBy, // grantedBy is already a *uuid.UUID
 		Action:         "capability_granted",
 		ResourceType:   "agent",
 		ResourceID:     agentID,
@@ -273,13 +268,9 @@ func (s *CapabilityService) RevokeCapability(
 
 	// Log to audit trail
 	description := fmt.Sprintf("Capability '%s' revoked from agent %s", capability.CapabilityType, agent.DisplayName)
-	revokedByID := uuid.Nil
-	if revokedBy != nil {
-		revokedByID = *revokedBy
-	}
 	auditLog := &domain.AuditLog{
 		OrganizationID: agent.OrganizationID,
-		UserID:         revokedByID,
+		UserID:         revokedBy, // revokedBy is already a *uuid.UUID
 		Action:         "capability_revoked",
 		ResourceType:   "agent",
 		ResourceID:     capability.AgentID,

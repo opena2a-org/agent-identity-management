@@ -25,7 +25,7 @@ func (s *AuditService) Log(ctx context.Context, log *domain.AuditLog) error {
 	return s.auditRepo.Create(log)
 }
 
-// LogAction is a convenience method to log an action
+// LogAction is a convenience method to log a user-initiated action
 func (s *AuditService) LogAction(
 	ctx context.Context,
 	orgID, userID uuid.UUID,
@@ -37,7 +37,33 @@ func (s *AuditService) LogAction(
 ) error {
 	log := &domain.AuditLog{
 		OrganizationID: orgID,
-		UserID:         userID,
+		UserID:         &userID,
+		Action:         action,
+		ResourceType:   resourceType,
+		ResourceID:     resourceID,
+		IPAddress:      ipAddress,
+		UserAgent:      userAgent,
+		Metadata:       metadata,
+	}
+
+	return s.auditRepo.Create(log)
+}
+
+// LogAgentAction logs an action initiated by an agent (not a user)
+// Use this for SDK-initiated actions like attestations
+func (s *AuditService) LogAgentAction(
+	ctx context.Context,
+	orgID uuid.UUID,
+	agentID uuid.UUID,
+	action domain.AuditAction,
+	resourceType string,
+	resourceID uuid.UUID,
+	ipAddress, userAgent string,
+	metadata map[string]interface{},
+) error {
+	log := &domain.AuditLog{
+		OrganizationID: orgID,
+		AgentID:        &agentID,
 		Action:         action,
 		ResourceType:   resourceType,
 		ResourceID:     resourceID,
@@ -57,6 +83,12 @@ func (s *AuditService) GetLogs(ctx context.Context, orgID uuid.UUID, limit, offs
 // GetUserLogs retrieves audit logs for a specific user
 func (s *AuditService) GetUserLogs(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	return s.auditRepo.GetByUser(userID, limit, offset)
+}
+
+// GetAgentActivity retrieves audit logs for actions performed BY a specific agent
+// This includes attestations, verifications, and other agent-initiated actions
+func (s *AuditService) GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	return s.auditRepo.GetByAgent(agentID, limit, offset)
 }
 
 // GetResourceLogs retrieves audit logs for a specific resource
@@ -87,8 +119,35 @@ func (s *AuditService) GetAuditLogs(
 	limit int,
 	offset int,
 ) ([]*domain.AuditLog, int, error) {
-	// For now, just return organization logs
-	// TODO: Implement full filtering in repository layer
+	// If filtering by specific entity (e.g., MCP server), use GetByResource
+	if entityType != "" && entityID != nil {
+		logs, err := s.auditRepo.GetByResource(entityType, *entityID)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// Apply pagination manually (repository returns all matching)
+		total := len(logs)
+		if offset >= total {
+			return []*domain.AuditLog{}, total, nil
+		}
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		return logs[offset:end], total, nil
+	}
+
+	// If filtering by user
+	if userID != nil {
+		logs, err := s.auditRepo.GetByUser(*userID, limit, offset)
+		if err != nil {
+			return nil, 0, err
+		}
+		return logs, len(logs), nil
+	}
+
+	// Default: return all organization logs
 	logs, err := s.auditRepo.GetByOrganization(orgID, limit, offset)
 	if err != nil {
 		return nil, 0, err

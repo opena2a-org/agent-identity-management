@@ -13,10 +13,10 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
-  User,
-  Bot,
-  Activity,
   KeyRound,
+  Activity,
+  Bot,
+  User,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/date-utils";
 import { useState, useEffect } from "react";
@@ -56,6 +56,23 @@ interface Attestation {
   connectionSuccessful: boolean;
   agentOwnerName?: string; // Name of user who owns the agent (for SDK attestations)
   agentOwnerId?: string; // ID of user who owns the agent (for SDK attestations)
+}
+
+interface AuditLog {
+  id: string;
+  organizationId: string;
+  userId?: string;
+  agentId?: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  ipAddress: string;
+  userAgent: string;
+  metadata: Record<string, any>;
+  timestamp: string;
+  // Populated via JOIN queries (from backend)
+  agentName?: string;
+  userName?: string;
 }
 
 interface MCPServer {
@@ -115,6 +132,8 @@ export function MCPDetailModal({
   const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [showAttestations, setShowAttestations] = useState(false);
   const [loadingAttestations, setLoadingAttestations] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
 
   // Fetch detailed attestations when modal opens and MCP has attestations
   useEffect(() => {
@@ -123,12 +142,24 @@ export function MCPDetailModal({
     }
   }, [isOpen, mcp]);
 
+  // Fetch audit logs when modal opens
+  useEffect(() => {
+    if (isOpen && mcp) {
+      fetchAuditLogs();
+    }
+  }, [isOpen, mcp]);
+
   const fetchAttestations = async () => {
     if (!mcp) return;
     setLoadingAttestations(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8080/api/v1/mcp-servers/${mcp.id}/attestations`, {
+      // Dynamic API URL based on environment
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? `${window.location.protocol}//${window.location.hostname}:8080`
+          : `${window.location.protocol}//${window.location.host}`);
+      const response = await fetch(`${apiUrl}/api/v1/mcp-servers/${mcp.id}/attestations`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -143,6 +174,57 @@ export function MCPDetailModal({
     } finally {
       setLoadingAttestations(false);
     }
+  };
+
+  const fetchAuditLogs = async () => {
+    if (!mcp) return;
+    setLoadingAuditLogs(true);
+    try {
+      const token = localStorage.getItem("token");
+      // Dynamic API URL based on environment
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? `${window.location.protocol}//${window.location.hostname}:8080`
+          : `${window.location.protocol}//${window.location.host}`);
+      const response = await fetch(`${apiUrl}/api/v1/mcp-servers/${mcp.id}/audit-logs?limit=50`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAuditLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch audit logs:", error);
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  };
+
+  // Helper to get action display info
+  const getActionDisplayInfo = (action: string) => {
+    const actionMap: Record<string, { label: string; color: string }> = {
+      // Standard action names from backend
+      "create": { label: "Created", color: "text-green-600 dark:text-green-400" },
+      "update": { label: "Updated", color: "text-blue-600 dark:text-blue-400" },
+      "delete": { label: "Deleted", color: "text-red-600 dark:text-red-400" },
+      "verify": { label: "Verified", color: "text-green-600 dark:text-green-400" },
+      "attest": { label: "Attestation Recorded", color: "text-purple-600 dark:text-purple-400" },
+      "view": { label: "Viewed", color: "text-gray-600 dark:text-gray-400" },
+      // Legacy/alternative action names for compatibility
+      "mcp.created": { label: "MCP Created", color: "text-green-600 dark:text-green-400" },
+      "mcp.updated": { label: "MCP Updated", color: "text-blue-600 dark:text-blue-400" },
+      "mcp.deleted": { label: "MCP Deleted", color: "text-red-600 dark:text-red-400" },
+      "mcp.attestation.created": { label: "Attestation Created", color: "text-purple-600 dark:text-purple-400" },
+      "mcp.attestation.verified": { label: "Attestation Verified", color: "text-purple-600 dark:text-purple-400" },
+      "mcp.capability.detected": { label: "Capability Detected", color: "text-indigo-600 dark:text-indigo-400" },
+      "mcp.capability.created": { label: "Capability Added", color: "text-indigo-600 dark:text-indigo-400" },
+      "mcp.connection.created": { label: "Agent Connected", color: "text-cyan-600 dark:text-cyan-400" },
+      "mcp.verified": { label: "MCP Verified", color: "text-green-600 dark:text-green-400" },
+    };
+    return actionMap[action] || { label: action, color: "text-gray-600 dark:text-gray-400" };
   };
 
   if (!isOpen || !mcp) return null;
@@ -271,7 +353,7 @@ export function MCPDetailModal({
               </TabsTrigger>
               <TabsTrigger value="activity" className="flex items-center gap-2">
                 <Activity className="h-4 w-4" />
-                Attestations
+                Audit Trail
               </TabsTrigger>
             </TabsList>
 
@@ -754,37 +836,76 @@ export function MCPDetailModal({
             </TabsContent>
 
             <TabsContent value="activity" className="space-y-4">
-              {/* Attestations for this MCP */}
+              {/* Audit Trail for this MCP */}
               <div>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Attestations
+                  Audit Trail
                 </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        MCP server registered
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatDateTime(mcp.createdAt)}
-                      </p>
-                    </div>
+
+                {loadingAuditLogs ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    Loading audit logs...
                   </div>
-                  {mcp.lastVerifiedAt && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900 dark:text-gray-100">
-                          Last activity
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDateTime(mcp.lastVerifiedAt)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                ) : auditLogs.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <p>No audit events recorded yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {auditLogs.map((log) => {
+                      const actionInfo = getActionDisplayInfo(log.action);
+                      return (
+                        <div
+                          key={log.id}
+                          className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className={`text-sm font-medium ${actionInfo.color}`}>
+                                {actionInfo.label}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                {formatDateTime(log.timestamp)}
+                              </p>
+                            </div>
+                            <div className="mt-1 text-sm">
+                              {log.agentId ? (
+                                <span className="font-medium text-purple-600 dark:text-purple-400">
+                                  Agent: {log.agentName || log.metadata?.agentName || log.agentId.slice(0, 8)}
+                                </span>
+                              ) : log.userId ? (
+                                <span className="font-medium text-blue-600 dark:text-blue-400">
+                                  User: {log.userName || log.metadata?.userName || log.userId.slice(0, 8)}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 dark:text-gray-400">System</span>
+                              )}
+                            </div>
+                            {log.metadata && Object.keys(log.metadata).length > 0 && (
+                              <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded p-2">
+                                {log.metadata.auth_method && (
+                                  <p>Auth: {log.metadata.auth_method === "ed25519" ? "Ed25519 Signature" : log.metadata.auth_method}</p>
+                                )}
+                                {(log.metadata.capabilities_found || log.metadata.capabilitiesFound) && (
+                                  <p>Capabilities: {(log.metadata.capabilities_found || log.metadata.capabilitiesFound).length} detected</p>
+                                )}
+                                {log.metadata.confidence_score !== undefined && (
+                                  <p>Confidence: {log.metadata.confidence_score.toFixed(1)}%</p>
+                                )}
+                                {log.metadata.attestation_count !== undefined && (
+                                  <p>Total Attestations: {log.metadata.attestation_count}</p>
+                                )}
+                                {log.ipAddress && log.ipAddress !== "" && (
+                                  <p>IP: {log.ipAddress}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </TabsContent>
           </Tabs>

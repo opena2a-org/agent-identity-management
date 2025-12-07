@@ -370,7 +370,8 @@ type Repositories struct {
 	MCPAttestation     *repository.MCPAttestationRepository      // ✅ For agent attestation of MCPs
 	AgentMCPConnection *repository.AgentMCPConnectionRepository  // ✅ For agent-MCP connections
 	Security           *repository.SecurityRepository
-	SecurityPolicy     *repository.SecurityPolicyRepository // ✅ For configurable security policies
+	SecurityPolicy     *repository.SecurityPolicyRepository   // ✅ For configurable security policies
+	BehaviorBaseline   *repository.BehaviorBaselineRepository // ✅ For intelligent behavioral anomaly detection
 	Webhook            *repository.WebhookRepository
 	VerificationEvent  *repository.VerificationEventRepositorySimple
 	Tag                *repository.TagRepository
@@ -399,7 +400,8 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		MCPAttestation:     repository.NewMCPAttestationRepository(db),      // ✅ For agent attestation of MCPs
 		AgentMCPConnection: repository.NewAgentMCPConnectionRepository(dbx), // ✅ For agent-MCP connections
 		Security:           repository.NewSecurityRepository(db),
-		SecurityPolicy:     repository.NewSecurityPolicyRepository(db), // ✅ For configurable security policies
+		SecurityPolicy:     repository.NewSecurityPolicyRepository(db),   // ✅ For configurable security policies
+		BehaviorBaseline:   repository.NewBehaviorBaselineRepository(db), // ✅ For intelligent behavioral anomaly detection
 		Webhook:            repository.NewWebhookRepository(db),
 		VerificationEvent:  repository.NewVerificationEventRepository(db),
 		Tag:                repository.NewTagRepository(db),
@@ -419,10 +421,11 @@ type Services struct {
 	Alert             *application.AlertService
 	Compliance        *application.ComplianceService
 	MCP               *application.MCPService
-	MCPCapability     *application.MCPCapabilityService  // ✅ For MCP server capability management
-	MCPAttestation    *application.MCPAttestationService // ✅ For agent attestation of MCPs
+	MCPCapability     *application.MCPCapabilityService     // ✅ For MCP server capability management
+	MCPAttestation    *application.MCPAttestationService    // ✅ For agent attestation of MCPs
 	Security          *application.SecurityService
-	SecurityPolicy    *application.SecurityPolicyService // ✅ For policy-based enforcement
+	SecurityPolicy    *application.SecurityPolicyService    // ✅ For policy-based enforcement
+	BehaviorAnalysis  *application.BehaviorAnalysisService  // ✅ For intelligent behavioral anomaly detection
 	Webhook           *application.WebhookService
 	VerificationEvent *application.VerificationEventService
 	Registration      *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
@@ -511,6 +514,16 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		db,
 	)
 
+	// ✅ Initialize BehaviorAnalysisService for intelligent anomaly detection
+	behaviorAnalysisService := application.NewBehaviorAnalysisService(
+		db,
+		repos.BehaviorBaseline,
+		alertService,
+	)
+
+	// ✅ Wire BehaviorAnalysisService into SecurityPolicyService for smart detection
+	securityPolicyService.SetBehaviorAnalysis(behaviorAnalysisService)
+
 	complianceService := application.NewComplianceService(
 		repos.AuditLog,
 		repos.Agent,
@@ -543,6 +556,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPServer,
 		repos.User,
 		repos.AgentMCPConnection,
+		repos.MCPCapability, // ✅ For syncing capabilities from attestations
 	)
 
 	securityService := application.NewSecurityService(
@@ -604,10 +618,11 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Alert:             alertService,
 		Compliance:        complianceService,
 		MCP:               mcpService,
-		MCPCapability:     mcpCapabilityService,  // ✅ For MCP server capability management
-		MCPAttestation:    mcpAttestationService, // ✅ For agent attestation of MCPs
+		MCPCapability:     mcpCapabilityService,     // ✅ For MCP server capability management
+		MCPAttestation:    mcpAttestationService,    // ✅ For agent attestation of MCPs
 		Security:          securityService,
-		SecurityPolicy:    securityPolicyService, // ✅ For policy-based enforcement
+		SecurityPolicy:    securityPolicyService,    // ✅ For policy-based enforcement
+		BehaviorAnalysis:  behaviorAnalysisService,  // ✅ For intelligent behavioral anomaly detection
 		Webhook:           webhookService,
 		VerificationEvent: verificationEventService,
 		Registration:      registrationService, // ✅ Email/password registration workflow (replaced OAuth)
@@ -654,6 +669,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Auth,
 			jwtService,
 			repos.Organization,
+			services.Audit, // ✅ For audit logging login/logout events
 		),
 		Agent: handlers.NewAgentHandler(
 			services.Agent,
@@ -912,6 +928,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agent security endpoints - Key vault and audit logs per agent
 	agents.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)   // Get agent's key vault info (public key, expiration, rotation status)
 	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
+	agents.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")

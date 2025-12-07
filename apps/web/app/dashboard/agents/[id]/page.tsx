@@ -96,6 +96,7 @@ export default function AgentDetailsPage({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
+  const [agentActivity, setAgentActivity] = useState<any[]>([]);
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
@@ -139,6 +140,14 @@ export default function AgentDetailsPage({
         try {
           const ev = await api.getRecentVerificationEvents(60);
           setEvents(ev.events?.filter((e: any) => e.agentId === agentId) || []);
+        } catch (e) {
+          // non-fatal
+        }
+
+        // Fetch agent activity (actions the agent has performed)
+        try {
+          const activityResponse = await api.getSingleAgentActivity(agentId!);
+          setAgentActivity(activityResponse.activities || []);
         } catch (e) {
           // non-fatal
         }
@@ -748,55 +757,131 @@ export default function AgentDetailsPage({
             <CardHeader>
               <CardTitle>Recent Activity</CardTitle>
               <CardDescription>
-                Latest verification events and actions
+                Latest verification events and agent actions
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        When
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Type
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Status
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Confidence
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {events.slice(0, 10).map((ev) => (
-                      <tr key={ev.id}>
-                        <td className="px-4 py-2 text-sm">
-                          {new Date(ev.startedAt).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
-                          {ev.verificationType}
-                        </td>
-                        <td className="px-4 py-2 text-sm">{ev.status}</td>
-                        <td className="px-4 py-2 text-sm">
-                          {(ev.confidence * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                    {events.length === 0 && (
+              {/* Agent Actions Section */}
+              {agentActivity.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Bot className="h-4 w-4" />
+                    Agent Actions
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            When
+                          </th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Action
+                          </th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Resource
+                          </th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Details
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        {agentActivity.slice(0, 10).map((activity) => (
+                          <tr key={activity.id}>
+                            <td className="px-4 py-2 text-sm">
+                              {new Date(activity.timestamp).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              <Badge variant={
+                                activity.action.includes('attestation') ? 'default' :
+                                activity.action.includes('create') ? 'secondary' :
+                                activity.action.includes('verify') ? 'outline' : 'secondary'
+                              }>
+                                {activity.action.replace(/_/g, ' ')}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2 text-sm font-mono text-xs">
+                              {activity.resourceType}
+                              {activity.resourceId && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({activity.resourceId.substring(0, 8)}...)
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-muted-foreground">
+                              {activity.details || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Verification Events Section */}
+              <div>
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Verification Events
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>
-                        <td
-                          colSpan={4}
-                          className="px-4 py-6 text-center text-sm text-muted-foreground"
-                        >
-                          No recent activity
-                        </td>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          When
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Type
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Status
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Confidence
+                        </th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                      {events.slice(0, 10).map((ev) => (
+                        <tr key={ev.id}>
+                          <td className="px-4 py-2 text-sm">
+                            {new Date(ev.startedAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {ev.verificationType}
+                          </td>
+                          <td className="px-4 py-2 text-sm">{ev.status}</td>
+                          <td className="px-4 py-2 text-sm">
+                            {(ev.confidence * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                      {events.length === 0 && agentActivity.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-4 py-6 text-center text-sm text-muted-foreground"
+                          >
+                            No recent activity
+                          </td>
+                        </tr>
+                      )}
+                      {events.length === 0 && agentActivity.length > 0 && (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-4 py-6 text-center text-sm text-muted-foreground"
+                          >
+                            No recent verification events
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </CardContent>
           </Card>

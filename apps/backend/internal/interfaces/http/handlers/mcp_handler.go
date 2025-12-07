@@ -91,6 +91,9 @@ func (h *MCPHandler) enrichMCPServerResponse(c fiber.Ctx, server *domain.MCPServ
 		"lastVerifiedAt":      server.LastVerifiedAt,
 		"verificationCount":   server.VerificationCount,
 		"registeredByAgent":   server.RegisteredByAgent,
+		"attestationCount":    server.AttestationCount,    // ✅ MCP attestation count
+		"confidenceScore":     server.ConfidenceScore,     // ✅ MCP confidence score
+		"lastAttestedAt":      server.LastAttestedAt,      // ✅ Last attestation timestamp
 	}
 }
 

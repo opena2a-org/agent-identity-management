@@ -172,11 +172,19 @@ func (s *ComplianceService) analyzeAuditActivity(logs []*domain.AuditLog) AuditA
 	}
 
 	uniqueUsers := make(map[uuid.UUID]bool)
+	uniqueAgents := make(map[uuid.UUID]bool)
 	now := time.Now()
 	twentyFourHoursAgo := now.Add(-24 * time.Hour)
 
 	for _, log := range logs {
-		uniqueUsers[log.UserID] = true
+		// Track unique users (when UserID is not nil)
+		if log.UserID != nil {
+			uniqueUsers[*log.UserID] = true
+		}
+		// Track unique agents (when AgentID is not nil)
+		if log.AgentID != nil {
+			uniqueAgents[*log.AgentID] = true
+		}
 		summary.TopActions[string(log.Action)]++
 
 		if log.Timestamp.After(twentyFourHoursAgo) {
@@ -184,7 +192,8 @@ func (s *ComplianceService) analyzeAuditActivity(logs []*domain.AuditLog) AuditA
 		}
 	}
 
-	summary.UniqueUsers = len(uniqueUsers)
+	// UniqueUsers now represents unique actors (users + agents)
+	summary.UniqueUsers = len(uniqueUsers) + len(uniqueAgents)
 	return summary
 }
 
@@ -2590,12 +2599,21 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 		userEmails[user.ID] = user.Email
 	}
 
-	// Track unique users and their activity
-	uniqueUsers := make(map[uuid.UUID]bool)
+	// Track unique users/agents and their activity
+	uniqueActors := make(map[uuid.UUID]bool)
 	userActivity := make(map[uuid.UUID]*domain.UserActivitySummary)
 
 	for _, log := range logs {
-		uniqueUsers[log.UserID] = true
+		// Get actor ID (user or agent)
+		var actorID uuid.UUID
+		if log.UserID != nil {
+			actorID = *log.UserID
+		} else if log.AgentID != nil {
+			actorID = *log.AgentID
+		} else {
+			continue // Skip logs without an actor
+		}
+		uniqueActors[actorID] = true
 
 		// Count by time period
 		if log.Timestamp.After(twentyFourHoursAgo) {
@@ -2614,20 +2632,24 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 		// Resource breakdown
 		report.ResourceBreakdown[log.ResourceType]++
 
-		// Track user activity
-		if _, exists := userActivity[log.UserID]; !exists {
-			userActivity[log.UserID] = &domain.UserActivitySummary{
-				UserID:    log.UserID.String(),
-				UserEmail: userEmails[log.UserID],
+		// Track actor activity
+		if _, exists := userActivity[actorID]; !exists {
+			actorEmail := userEmails[actorID]
+			if actorEmail == "" && log.AgentID != nil {
+				actorEmail = "agent:" + actorID.String()[:8]
+			}
+			userActivity[actorID] = &domain.UserActivitySummary{
+				UserID:    actorID.String(),
+				UserEmail: actorEmail,
 			}
 		}
-		ua := userActivity[log.UserID]
+		ua := userActivity[actorID]
 		ua.ActionCount++
 		ua.LastAction = string(log.Action)
 		ua.LastActionTime = log.Timestamp.Format(time.RFC3339)
 	}
 
-	report.UniqueUsers = len(uniqueUsers)
+	report.UniqueUsers = len(uniqueActors)
 
 	// Get top 10 users by activity
 	type userActivitySort struct {
@@ -2653,13 +2675,23 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 	// Get last 50 actions
 	for i := 0; i < len(logs) && i < 50; i++ {
 		log := logs[i]
+		// Get actor ID (user or agent)
+		var actorID uuid.UUID
+		var actorEmail string
+		if log.UserID != nil {
+			actorID = *log.UserID
+			actorEmail = userEmails[actorID]
+		} else if log.AgentID != nil {
+			actorID = *log.AgentID
+			actorEmail = "agent:" + actorID.String()[:8]
+		}
 		entry := domain.AuditLogEntry{
 			ID:           log.ID.String(),
 			Action:       string(log.Action),
 			ResourceType: log.ResourceType,
 			ResourceID:   log.ResourceID.String(),
-			UserID:       log.UserID.String(),
-			UserEmail:    userEmails[log.UserID],
+			UserID:       actorID.String(),
+			UserEmail:    actorEmail,
 			IPAddress:    log.IPAddress,
 			Timestamp:    log.Timestamp.Format(time.RFC3339),
 		}

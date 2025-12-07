@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="aim-sdk",
-    version="1.5.0",
+    version="1.6.0",
     author="OpenA2A",
     author_email="info@opena2a.org",
     description="Python SDK for AIM (Agent Identity Management) - Automatic identity verification for AI agents",
@@ -45,6 +45,10 @@ setup(
             "black>=23.0.0",
             "flake8>=6.0.0",
             "mypy>=1.0.0",
+        ],
+        "mcp": [
+            "mcp>=1.0.0",  # Official MCP SDK for auto-discovery
+            "anyio>=4.0.0",  # Async runtime for MCP client
         ]
     },
     keywords="aim agent identity management verification security cryptography ed25519",

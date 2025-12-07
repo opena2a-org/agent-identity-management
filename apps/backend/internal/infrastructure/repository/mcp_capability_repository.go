@@ -273,3 +273,53 @@ func (r *MCPServerCapabilityRepository) DeleteByServerID(serverID uuid.UUID) err
 
 	return nil
 }
+
+// UpsertFromAttestation syncs capabilities discovered during attestation
+// Creates new capabilities if they don't exist, or updates last_verified_at if they do
+func (r *MCPServerCapabilityRepository) UpsertFromAttestation(serverID uuid.UUID, capabilityNames []string) error {
+	if len(capabilityNames) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+
+	for _, name := range capabilityNames {
+		// Skip generic capability types (these aren't real tool names)
+		if name == "tools" || name == "resources" || name == "prompts" {
+			continue
+		}
+
+		// Use upsert (ON CONFLICT) to either insert new or update existing
+		// Unique constraint is on (mcp_server_id, name, capability_type)
+		query := `
+			INSERT INTO mcp_server_capabilities (
+				id, mcp_server_id, name, capability_type, description,
+				detected_at, last_verified_at, is_active, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			ON CONFLICT (mcp_server_id, name, capability_type) DO UPDATE SET
+				last_verified_at = EXCLUDED.last_verified_at,
+				is_active = true,
+				updated_at = EXCLUDED.updated_at
+		`
+
+		_, err := r.db.Exec(
+			query,
+			uuid.New(),                                    // id
+			serverID,                                      // mcp_server_id
+			name,                                          // name (e.g., "brave_web_search")
+			domain.MCPCapabilityTypeTool,                  // capability_type (assume tools for attestations)
+			fmt.Sprintf("Verified via agent attestation"), // description
+			now,            // detected_at
+			now,            // last_verified_at
+			true,           // is_active
+			now,            // created_at
+			now,            // updated_at
+		)
+
+		if err != nil {
+			return fmt.Errorf("failed to upsert capability %s: %w", name, err)
+		}
+	}
+
+	return nil
+}

@@ -56,7 +56,8 @@ const (
 type AuditLog struct {
 	ID             uuid.UUID              `json:"id"`
 	OrganizationID uuid.UUID              `json:"organizationId"`
-	UserID         uuid.UUID              `json:"userId"`
+	UserID         *uuid.UUID             `json:"userId,omitempty"`  // Nullable for agent-initiated actions
+	AgentID        *uuid.UUID             `json:"agentId,omitempty"` // For agent-initiated actions (attestations, etc.)
 	Action         AuditAction            `json:"action"`
 	ResourceType   string                 `json:"resourceType"` // agent, api_key, user, etc.
 	ResourceID     uuid.UUID              `json:"resourceId"`
@@ -64,6 +65,10 @@ type AuditLog struct {
 	UserAgent      string                 `json:"userAgent"`
 	Metadata       map[string]interface{} `json:"metadata"`
 	Timestamp      time.Time              `json:"timestamp"`
+
+	// Populated via JOIN queries (not stored in DB)
+	AgentName string `json:"agentName,omitempty"` // Name of agent that performed the action
+	UserName  string `json:"userName,omitempty"`  // Name of user that performed the action
 }
 
 // AuditLogRepository defines the interface for audit log persistence
@@ -74,6 +79,9 @@ type AuditLogRepository interface {
 	GetByUser(userID uuid.UUID, limit, offset int) ([]*AuditLog, error)
 	GetByResource(resourceType string, resourceID uuid.UUID) ([]*AuditLog, error)
 	Search(query string, limit, offset int) ([]*AuditLog, error)
+
+	// Agent activity methods - logs actions performed BY an agent
+	GetByAgent(agentID uuid.UUID, limit, offset int) ([]*AuditLog, error)
 
 	// Security policy query methods
 	CountActionsByAgentInTimeWindow(agentID uuid.UUID, action AuditAction, windowMinutes int) (int, error)

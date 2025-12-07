@@ -1297,8 +1297,9 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	var attestationCount int64
 	attestationQuery := `
 		SELECT COUNT(*)
-		FROM agent_mcp_attestations
-		WHERE organization_id = $1 AND attested_at >= $2
+		FROM mcp_attestations ma
+		JOIN mcp_servers ms ON ma.mcp_server_id = ms.id
+		WHERE ms.organization_id = $1 AND ma.created_at >= $2
 	`
 	err = h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount)
 	if err != nil {

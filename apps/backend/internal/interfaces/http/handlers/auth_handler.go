@@ -12,17 +12,20 @@ type AuthHandler struct {
 	authService  *application.AuthService
 	jwtService   *auth.JWTService
 	orgRepo      domain.OrganizationRepository
+	auditService *application.AuditService
 }
 
 func NewAuthHandler(
 	authService *application.AuthService,
 	jwtService *auth.JWTService,
 	orgRepo domain.OrganizationRepository,
+	auditService *application.AuditService,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:  authService,
 		jwtService:   jwtService,
 		orgRepo:      orgRepo,
+		auditService: auditService,
 	}
 }
 
@@ -120,6 +123,23 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 		Secure:   false,
 		SameSite: "Lax",
 	})
+
+	// Audit log successful login
+	h.auditService.LogAction(
+		c.Context(),
+		user.OrganizationID,
+		user.ID,
+		domain.AuditActionLogin,
+		"user",
+		user.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		fiber.Map{
+			"email":     user.Email,
+			"role":      user.Role,
+			"method":    "password",
+		},
+	)
 
 	return c.JSON(fiber.Map{
 		"accessToken":  accessToken,
@@ -222,6 +242,25 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 
 // Logout clears authentication
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
+	// Get user info for audit logging (if authenticated)
+	userID, _ := c.Locals("user_id").(uuid.UUID)
+	orgID, _ := c.Locals("organization_id").(uuid.UUID)
+
+	// Audit log logout
+	if userID != uuid.Nil {
+		h.auditService.LogAction(
+			c.Context(),
+			orgID,
+			userID,
+			domain.AuditActionLogout,
+			"user",
+			userID,
+			c.IP(),
+			c.Get("User-Agent"),
+			fiber.Map{},
+		)
+	}
+
 	// Clear cookies
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",

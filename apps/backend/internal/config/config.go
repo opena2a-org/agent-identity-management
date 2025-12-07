@@ -86,7 +86,7 @@ func Load() (*Config, error) {
 		Host:            getEnvRequired("POSTGRES_HOST"),
 		Port:            getEnvAsInt("POSTGRES_PORT", 5432),
 		User:            getEnvRequired("POSTGRES_USER"),
-		Password:        getEnvRequired("POSTGRES_PASSWORD"),
+		Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
 		Database:        getEnvRequired("POSTGRES_DB"),
 		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
 		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),

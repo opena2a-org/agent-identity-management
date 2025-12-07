@@ -111,21 +111,28 @@ export function AlertDetailPanel({
     setLoadingData(true);
 
     const fetchData = async () => {
-      // Try to fetch the linked audit log
+      // Try to fetch the linked audit log (non-fatal if not found)
       if (alert.auditId) {
-        const log = await api.getAuditLogById(alert.auditId);
-        if (log) {
-          setAuditLog(log);
-        } else {
+        try {
+          const log = await api.getAuditLogById(alert.auditId);
+          setAuditLog(log || null);
+        } catch (e) {
+          // Audit log may not exist - this is non-fatal
+          console.log("Could not fetch audit log:", e);
           setAuditLog(null);
         }
       } else {
         setAuditLog(null);
       }
 
-      // Always fetch verification history for the agent
-      const history = await api.getAgentVerificationHistory(alert.resourceId, 5);
-      setVerificationHistory(history);
+      // Try to fetch verification history for the agent (non-fatal if not found)
+      try {
+        const history = await api.getAgentVerificationHistory(alert.resourceId, 5);
+        setVerificationHistory(history || []);
+      } catch (e) {
+        console.log("Could not fetch verification history:", e);
+        setVerificationHistory([]);
+      }
 
       // Fetch current trust score from agent trust breakdown
       try {
@@ -150,7 +157,10 @@ export function AlertDetailPanel({
       setLoadingData(false);
     };
 
-    fetchData();
+    fetchData().catch((e) => {
+      console.error("Error in fetchData:", e);
+      setLoadingData(false);
+    });
   }, [alert?.auditId, alert?.resourceId]);
 
   // Handle SDK token revocation

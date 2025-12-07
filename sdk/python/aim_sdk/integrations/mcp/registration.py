@@ -349,11 +349,13 @@ def attest_mcp_server(
     server_id: str,
     mcp_url: str,
     mcp_name: str,
-    capabilities_found: List[str],
+    capabilities_found: Optional[List[str]] = None,
     connection_successful: bool = True,
     health_check_passed: bool = True,
     connection_latency_ms: float = 0.0,
-    use_challenge: bool = True
+    use_challenge: bool = True,
+    auto_discover: bool = False,
+    discovery_timeout: float = 30.0
 ) -> Dict[str, Any]:
     """
     Submit cryptographically signed attestation for an MCP server.
@@ -367,16 +369,24 @@ def attest_mcp_server(
     2. Include the challenge in the signed attestation payload
     3. Server validates the challenge hasn't been used (prevents replay attacks)
 
+    Capability Discovery:
+    - By default, you must provide capabilities_found manually
+    - Set auto_discover=True to automatically query the MCP server for capabilities
+    - Auto-discovery uses the official MCP protocol (tools/list) - lightweight, on-demand only
+    - Discovery only happens at attestation time, no background processes
+
     Args:
         aim_client: AIMClient instance for authentication and signing
         server_id: UUID of the MCP server to attest
-        mcp_url: URL of the MCP server
+        mcp_url: URL/command of the MCP server (e.g., "npx -y @modelcontextprotocol/server-filesystem /tmp")
         mcp_name: Name of the MCP server
-        capabilities_found: List of capabilities detected on the MCP server
+        capabilities_found: List of capabilities detected on the MCP server (required unless auto_discover=True)
         connection_successful: Whether connection to MCP was successful (default: True)
         health_check_passed: Whether health check passed (default: True)
         connection_latency_ms: Connection latency in milliseconds (default: 0.0)
         use_challenge: Whether to use challenge-response for proof of key possession (default: True)
+        auto_discover: If True, automatically query MCP server for capabilities using MCP protocol (default: False)
+        discovery_timeout: Timeout for auto-discovery in seconds (default: 30.0)
 
     Returns:
         Dictionary containing attestation response:
@@ -385,12 +395,13 @@ def attest_mcp_server(
             "attestation_id": "attestation-uuid",
             "mcp_confidence_score": 85.5,
             "attestation_count": 3,
+            "discovered_capabilities": [...],  # If auto_discover=True
             ...
         }
 
     Raises:
         requests.exceptions.RequestException: If attestation fails
-        ValueError: If server_id is invalid or attestation is rejected
+        ValueError: If server_id is invalid, attestation is rejected, or capabilities not provided
 
     Example:
         from aim_sdk import AIMClient
@@ -398,15 +409,22 @@ def attest_mcp_server(
 
         aim_client = AIMClient.auto_register_or_load("my-agent", "http://localhost:8080")
 
+        # Manual capability list (default, no extra overhead)
         response = attest_mcp_server(
             aim_client=aim_client,
             server_id="04531081-dd02-43aa-9067-a4e656de5591",
-            mcp_url="http://localhost:3000",
-            mcp_name="research-mcp",
-            capabilities_found=["read_file", "write_file", "search"],
-            connection_successful=True,
-            health_check_passed=True,
-            connection_latency_ms=45.2
+            mcp_url="npx -y @modelcontextprotocol/server-filesystem /tmp",
+            mcp_name="filesystem-mcp",
+            capabilities_found=["read_file", "write_file", "search"]
+        )
+
+        # OR with auto-discovery (opt-in, queries MCP server once)
+        response = attest_mcp_server(
+            aim_client=aim_client,
+            server_id="04531081-dd02-43aa-9067-a4e656de5591",
+            mcp_url="npx -y @modelcontextprotocol/server-filesystem /tmp",
+            mcp_name="filesystem-mcp",
+            auto_discover=True  # Will query server for all capabilities
         )
 
         print(f"Attestation successful! New confidence score: {response['mcp_confidence_score']}%")
@@ -416,6 +434,35 @@ def attest_mcp_server(
 
     if not server_id:
         raise ValueError("server_id cannot be empty")
+
+    # Step 0: Handle capability discovery
+    discovery_result = None
+    if auto_discover:
+        # Import discovery module (lazy import to avoid overhead when not used)
+        from aim_sdk.integrations.mcp.discovery import discover_capabilities
+
+        print(f"🔍 Auto-discovering capabilities from MCP server: {mcp_url}")
+        discovery_result = discover_capabilities(mcp_url, timeout_seconds=discovery_timeout)
+
+        if discovery_result.error:
+            if capabilities_found:
+                print(f"⚠️  Auto-discovery failed ({discovery_result.error}), using provided capabilities")
+            else:
+                raise ValueError(
+                    f"Auto-discovery failed and no capabilities_found provided: {discovery_result.error}"
+                )
+        else:
+            # Use discovered capabilities
+            capabilities_found = discovery_result.tool_names
+            connection_latency_ms = discovery_result.connection_latency_ms
+            print(f"✅ Discovered {len(capabilities_found)} tools: {capabilities_found}")
+
+    # Validate capabilities are provided
+    if not capabilities_found:
+        raise ValueError(
+            "capabilities_found is required. Either provide a list of capabilities "
+            "or set auto_discover=True to query the MCP server."
+        )
 
     # Step 1: Get challenge from server (proof of key possession)
     challenge = None
@@ -478,5 +525,18 @@ def attest_mcp_server(
         print(f"✅ Attestation submitted with proof of key possession")
     else:
         print(f"✅ Attestation submitted (legacy mode, no challenge)")
+
+    # Add discovery information to response if auto_discover was used
+    if discovery_result and not discovery_result.error:
+        response["discovery"] = {
+            "serverName": discovery_result.server_name,
+            "serverVersion": discovery_result.server_version,
+            "protocolVersion": discovery_result.protocol_version,
+            "discoveredTools": discovery_result.tool_names,
+            "discoveredResources": discovery_result.resource_uris,
+            "discoveredPrompts": discovery_result.prompt_names,
+            "discoveryTimeMs": discovery_result.discovery_time_ms,
+            "connectionLatencyMs": discovery_result.connection_latency_ms
+        }
 
     return response

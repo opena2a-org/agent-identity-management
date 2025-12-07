@@ -19,6 +19,7 @@ import {
   User,
   XCircle,
   Ban,
+  Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { MCPTagsTab } from "@/components/mcp/tags-tab";
 import { ConsensusProgress } from "@/components/mcp/consensus-progress";
 import { ManualAttestationForm } from "@/components/mcp/manual-attestation-form";
+import { MCPSetupGuide } from "@/components/mcp/mcp-setup-guide";
 import {
   Select,
   SelectContent,
@@ -625,7 +627,7 @@ export default function MCPServerDetailsPage({
         )}
 
         {/* Secondary Metrics */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -651,6 +653,20 @@ export default function MCPServerDetailsPage({
               <p className="text-xs text-muted-foreground mt-1">
                 Tool{capabilities.length !== 1 ? "s" : ""} and resource
                 {capabilities.length !== 1 ? "s" : ""}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Attestations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{attestations.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cryptographic verification{attestations.length !== 1 ? "s" : ""}
               </p>
             </CardContent>
           </Card>
@@ -694,6 +710,10 @@ export default function MCPServerDetailsPage({
             <TabsTrigger value="audit">
               <Activity className="h-4 w-4 mr-2" />
               Audit Trail
+            </TabsTrigger>
+            <TabsTrigger value="integration">
+              <Code2 className="h-4 w-4 mr-2" />
+              Integration
             </TabsTrigger>
           </TabsList>
 
@@ -868,35 +888,90 @@ export default function MCPServerDetailsPage({
               </CardHeader>
               <CardContent>
                 {attestations.length === 0 ? (
-                  <div className="text-center py-12 space-y-4">
-                    <Activity className="h-12 w-12 text-muted-foreground mx-auto" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">
+                  <div className="py-6">
+                    {/* Header */}
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-3">
+                        <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">
                         No attestations yet
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Attestations verify the identity and capabilities of this MCP server.
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                        Build trust by having agents verify this MCP server
                       </p>
                     </div>
-                    <div className="max-w-md mx-auto space-y-3">
-                      <div className="bg-muted/50 rounded-md p-3 text-left">
-                        <p className="font-medium text-sm mb-1">Option 1: Agent attestation (recommended)</p>
-                        <p className="text-xs text-muted-foreground">
-                          When an agent connects to this MCP server via the SDK, it automatically creates a cryptographically-signed attestation.
-                        </p>
-                        <code className="text-xs bg-background px-2 py-1 rounded block mt-2">
-                          agent.attest_mcp("{server.name}", "{server.url}")
-                        </code>
+
+                    {/* Options Grid */}
+                    <div className="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                      {/* Option 1: SDK */}
+                      <div className="relative group">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg opacity-20 group-hover:opacity-30 transition" />
+                        <div className="relative bg-card border rounded-lg p-4 h-full">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                              <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Recommended</span>
+                              <h4 className="font-semibold text-sm">Agent Attestation</h4>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Agents automatically create cryptographically-signed attestations via the SDK.
+                          </p>
+                          <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-md p-2 overflow-x-auto">
+                            <code className="text-xs text-blue-700 dark:text-blue-300 whitespace-nowrap font-mono">
+                              agent.attest_mcp("{server.name}")
+                            </code>
+                          </div>
+                        </div>
                       </div>
-                      <div className="bg-muted/50 rounded-md p-3 text-left">
-                        <p className="font-medium text-sm mb-1">Option 2: Manual attestation</p>
-                        <p className="text-xs text-muted-foreground">
-                          Admins can manually attest to this server using the form below.
-                        </p>
+
+                      {/* Option 2: Manual */}
+                      <div className="relative group">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-gray-400 to-gray-500 rounded-lg opacity-10 group-hover:opacity-20 transition" />
+                        <div className="relative bg-card border rounded-lg p-4 h-full">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-gray-100 dark:bg-gray-800">
+                              <User className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-muted-foreground">Alternative</span>
+                              <h4 className="font-semibold text-sm">Manual Attestation</h4>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            {canManage
+                              ? "Verify this server manually using the attestation form below."
+                              : "Contact an admin or manager to manually verify this server."}
+                          </p>
+                          {canManage ? (
+                            <div className="flex items-center text-xs text-muted-foreground">
+                              <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+                              <span>You have permission to attest</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-xs text-muted-foreground">
+                              <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                              <span>Requires admin/manager role</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
+
+                    {/* Footer link */}
+                    <p className="text-xs text-center text-muted-foreground mt-5">
+                      Learn more in the{" "}
+                      <a
+                        href="https://opena2a.org/docs/sdk"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        SDK documentation
+                      </a>
                     </p>
                   </div>
                 ) : (
@@ -1025,42 +1100,79 @@ export default function MCPServerDetailsPage({
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {auditLogs.map((log, index) => (
-                      <div
-                        key={log.id || index}
-                        className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                      >
-                        <div className="flex-shrink-0 w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                          <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {log.action?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Action'}
-                            </p>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown'}
-                            </span>
+                  <div className="space-y-3">
+                    {auditLogs.map((log, index) => {
+                      const action = log.action || 'unknown';
+                      const actionLabel = action.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+                      const metadata = log.metadata || {};
+
+                      return (
+                        <div
+                          key={log.id || index}
+                          className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                        >
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                            <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                           </div>
-                          {log.performedByEmail && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              By: {log.performedByEmail}
-                            </p>
-                          )}
-                          {log.details && (
-                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">
-                              {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
-                            </p>
-                          )}
-                          {log.ipAddress && (
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                              IP: {log.ipAddress}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {actionLabel}
+                              </p>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown'}
+                              </span>
+                            </div>
+
+                            {/* Show agent/user who performed the action */}
+                            <div className="mt-1 text-sm">
+                              {log.agentId ? (
+                                <span className="font-medium text-purple-600 dark:text-purple-400">
+                                  Agent: {log.agentName || (log.metadata as Record<string, unknown>)?.agentName as string || log.agentId.slice(0, 8)}
+                                </span>
+                              ) : log.userId ? (
+                                <span className="font-medium text-blue-600 dark:text-blue-400">
+                                  User: {log.userName || (log.metadata as Record<string, unknown>)?.userName as string || log.userId.slice(0, 8)}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 dark:text-gray-400">System</span>
+                              )}
+                            </div>
+
+                            {/* Show relevant metadata */}
+                            {metadata.serverName && (
+                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                {metadata.serverName}
+                              </p>
+                            )}
+
+                            {metadata.confidence_score && (
+                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                Confidence: {metadata.confidence_score.toFixed(1)}%
+                              </p>
+                            )}
+
+                            {metadata.trustScore && (
+                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                Trust score: {metadata.trustScore.toFixed(1)}%
+                              </p>
+                            )}
+
+                            {metadata.reason && (
+                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                Reason: {metadata.reason}
+                              </p>
+                            )}
+
+                            {log.ipAddress && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                IP: {log.ipAddress}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1259,6 +1371,14 @@ export default function MCPServerDetailsPage({
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="integration" className="space-y-4">
+            <MCPSetupGuide
+              mcpServerId={server.id}
+              mcpServerName={server.name}
+              mcpServerUrl={server.url}
+            />
           </TabsContent>
         </Tabs>
 

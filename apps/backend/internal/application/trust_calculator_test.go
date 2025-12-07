@@ -98,6 +98,53 @@ func (m *MockCapabilityRepository) GetViolationsByOrganization(orgID uuid.UUID, 
 	return args.Get(0).([]*domain.CapabilityViolation), args.Int(1), args.Error(2)
 }
 
+func (m *MockCapabilityRepository) CreateCapabilityDefinition(def *domain.CapabilityDefinition) error {
+	args := m.Called(def)
+	return args.Error(0)
+}
+
+func (m *MockCapabilityRepository) GetCapabilityDefinitions(orgID uuid.UUID) ([]*domain.CapabilityDefinition, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.CapabilityDefinition), args.Error(1)
+}
+
+func (m *MockCapabilityRepository) GetCapabilityDefinitionByID(id uuid.UUID) (*domain.CapabilityDefinition, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.CapabilityDefinition), args.Error(1)
+}
+
+func (m *MockCapabilityRepository) UpdateCapabilityDefinition(def *domain.CapabilityDefinition) error {
+	args := m.Called(def)
+	return args.Error(0)
+}
+
+func (m *MockCapabilityRepository) DeleteCapabilityDefinition(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockCapabilityRepository) GetCapabilityDefinition(namespace, action string, orgID *uuid.UUID) (*domain.CapabilityDefinition, error) {
+	args := m.Called(namespace, action, orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.CapabilityDefinition), args.Error(1)
+}
+
+func (m *MockCapabilityRepository) ListCapabilityDefinitions(orgID *uuid.UUID) ([]*domain.CapabilityDefinition, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.CapabilityDefinition), args.Error(1)
+}
+
 // Note: AgentServiceMockTrustScoreRepository and MockAPIKeyRepository
 // are defined in other test files (agent_service_test.go, auth_service_test.go)
 
@@ -336,6 +383,11 @@ func (m *TrustCalcMockAlertRepository) CountByOrganizationFiltered(orgID uuid.UU
 func (m *TrustCalcMockAlertRepository) BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error) {
 	args := m.Called(orgID, userID)
 	return args.Int(0), args.Error(1)
+}
+
+func (m *TrustCalcMockAlertRepository) CountBySeverity(orgID uuid.UUID, status string) (critical, high, warning, info int, err error) {
+	args := m.Called(orgID, status)
+	return args.Int(0), args.Int(1), args.Int(2), args.Int(3), args.Error(4)
 }
 
 // Helper function to generate a valid X.509 certificate

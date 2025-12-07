@@ -16,6 +16,9 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Terminal,
+  Key,
+  ChevronDown,
 } from "lucide-react";
 import { api, Agent, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
@@ -76,12 +79,22 @@ export function RegisterAgentModal({
     privateKey: string;
   } | null>(null);
   const [loadingKeys, setLoadingKeys] = useState(false);
+  // API key received from agent creation (auto-generated)
+  const [createdApiKey, setCreatedApiKey] = useState<{
+    key: string;
+    id: string;
+    name: string;
+    prefix: string;
+    expiresAt: string | null;
+    createdAt: string;
+  } | null>(null);
   // Capability definitions from API
   const [capabilityDefinitions, setCapabilityDefinitions] = useState<CapabilityDefinition[]>([]);
   const [reservedNamespaces, setReservedNamespaces] = useState<string[]>([]);
   const [loadingCapabilities, setLoadingCapabilities] = useState(false);
   const [customCapability, setCustomCapability] = useState("");
   const [customCapabilityError, setCustomCapabilityError] = useState<string | null>(null);
+  const [showAdvancedKeys, setShowAdvancedKeys] = useState(false);
   const createEmptyFormData = (): FormData => ({
     name: "",
     displayName: "",
@@ -194,6 +207,11 @@ export function RegisterAgentModal({
       newErrors.documentationUrl = "Must be a valid HTTP(S) URL";
     }
 
+    // Require at least 1 capability
+    if (formData.capabilities.length === 0) {
+      newErrors.capabilities = "At least one capability is required";
+    }
+
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
       requestAnimationFrame(() => {
@@ -260,6 +278,11 @@ export function RegisterAgentModal({
 
       setSuccess(true);
       setCreatedAgent(result);
+
+      // ✅ Capture auto-generated API key (only available on creation, not edit)
+      if (!editMode && result.apiKey) {
+        setCreatedApiKey(result.apiKey);
+      }
 
       if (editMode) {
         toast.success("Agent updated successfully", {
@@ -378,6 +401,7 @@ export function RegisterAgentModal({
     setError(null);
     setSuccess(false);
     setCreatedAgent(null);
+    setCreatedApiKey(null);
     setDownloadingSDK(false);
     setIntegrationMethod(null);
     setShowPrivateKey(false);
@@ -386,6 +410,7 @@ export function RegisterAgentModal({
     setLoadingKeys(false);
     setCustomCapability("");
     setCustomCapabilityError(null);
+    setShowAdvancedKeys(false);
   };
 
   const handleClose = () => {
@@ -542,10 +567,69 @@ export function RegisterAgentModal({
               <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
                 <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                 <p className="text-sm text-green-800 dark:text-green-300">
-                  Agent registered successfully! Cryptographic keys generated
+                  Agent registered successfully! Cryptographic keys and API key generated
                   automatically.
                 </p>
               </div>
+
+              {/* ✅ API KEY DISPLAY - Show immediately after creation */}
+              {createdApiKey && (
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg space-y-3">
+                  <div>
+                    <p className="text-sm font-bold text-yellow-900 dark:text-yellow-300">
+                      🔑 Your API Key (for Manual Integration)
+                    </p>
+                    <p className="text-xs text-yellow-800 dark:text-yellow-400 mt-1">
+                      SDK users can skip this. Only needed for manual API calls. You can always create a new key later.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-1">
+                      Your API Key
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type={showPrivateKey ? "text" : "password"}
+                        value={createdApiKey.key}
+                        readOnly
+                        className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border-2 border-yellow-500 dark:border-yellow-600 rounded text-xs font-mono text-gray-900 dark:text-gray-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPrivateKey(!showPrivateKey)}
+                        className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                      >
+                        {showPrivateKey ? (
+                          <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(createdApiKey.key, "api_key")}
+                        className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors flex items-center gap-2"
+                      >
+                        {copiedField === "api_key" ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="text-xs font-bold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4" />
+                            <span className="text-xs font-bold">Copy Key</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">
+                      Key: {createdApiKey.name} • Expires: {createdApiKey.expiresAt ? new Date(createdApiKey.expiresAt).toLocaleDateString() : "Never"}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Integration Method Selection - Show if no method chosen yet */}
               {!integrationMethod && (
@@ -631,33 +715,80 @@ export function RegisterAgentModal({
                   </div>
 
                   {/* Security Warning */}
-                  <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
-                    <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h5 className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
-                        ⚠️ Security Notice: Contains Private Key
-                      </h5>
-                      <ul className="text-xs text-red-800 dark:text-red-200 space-y-1">
-                        <li>
-                          • This SDK contains your agent's{" "}
-                          <strong>private cryptographic key</strong>
-                        </li>
-                        <li>
-                          • <strong>Never</strong> commit this SDK to version
-                          control (Git, GitHub, etc.)
-                        </li>
-                        <li>
-                          • <strong>Never</strong> share this SDK publicly or
-                          with untrusted parties
-                        </li>
-                        <li>
-                          • Store it securely and use environment variables in
-                          production
-                        </li>
-                        <li>• Regenerate keys immediately if compromised</li>
-                      </ul>
-                    </div>
+                  <div className="flex items-start gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+                    <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-red-800 dark:text-red-200">
+                      <strong>Contains private key.</strong> Never commit to Git or share publicly.
+                    </p>
                   </div>
+
+                  {/* Sample Python Script */}
+                  {formData.capabilities.length > 0 && (
+                    <div className="pt-3 border-t border-blue-200 dark:border-blue-700">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Terminal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <label className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                          Quick Start: Python SDK Example
+                        </label>
+                      </div>
+                      <div className="relative">
+                        <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap">
+{`from aim_sdk import secure, require_capability
+
+# Initialize your agent (auto-loads credentials from SDK)
+agent = secure("${formData.name}")
+
+# Use decorators to protect your functions
+@require_capability("${formData.capabilities[0]}")
+def my_protected_function():
+    """This function requires the ${formData.capabilities[0]} capability"""
+    print("✅ Capability verified! Executing protected action...")
+    return {"status": "success"}
+
+# Run your function - AIM will verify the capability first
+result = my_protected_function()
+print(f"Result: {result}")`}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const pythonCode = `from aim_sdk import secure, require_capability
+
+# Initialize your agent (auto-loads credentials from SDK)
+agent = secure("${formData.name}")
+
+# Use decorators to protect your functions
+@require_capability("${formData.capabilities[0]}")
+def my_protected_function():
+    """This function requires the ${formData.capabilities[0]} capability"""
+    print("✅ Capability verified! Executing protected action...")
+    return {"status": "success"}
+
+# Run your function - AIM will verify the capability first
+result = my_protected_function()
+print(f"Result: {result}")`;
+                            copyToClipboard(pythonCode, "python_code");
+                          }}
+                          className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                        >
+                          {copiedField === "python_code" ? (
+                            <>
+                              <CheckCircle className="h-3 w-3" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3 w-3" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                        After downloading the SDK, extract it and run: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">pip install -e .</code> then use the code above.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Change Method */}
                   <div className="text-center">
@@ -720,89 +851,53 @@ export function RegisterAgentModal({
                             </div>
                           </div>
 
-                          {/* Public Key */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Public Key (Ed25519)
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={agentKeys.publicKey}
-                                readOnly
-                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  copyToClipboard(
-                                    agentKeys.publicKey,
-                                    "public_key"
-                                  )
-                                }
-                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-                              >
-                                {copiedField === "public_key" ? (
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
-                                ) : (
-                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                )}
-                              </button>
+                          {/* ✅ Pre-filled Curl Command for Verification */}
+                          {createdApiKey && formData.capabilities.length > 0 && (
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Terminal className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                  Verify Your Agent (Ready to Copy & Paste)
+                                </label>
+                              </div>
+                              <div className="relative">
+                                <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap break-all">
+{`curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\
+  -H "Authorization: Bearer ${createdApiKey.key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`}
+                                </pre>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const curlCmd = `curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
+                                    copyToClipboard(curlCmd, "curl_cmd");
+                                  }}
+                                  className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                                >
+                                  {copiedField === "curl_cmd" ? (
+                                    <>
+                                      <CheckCircle className="h-3 w-3" />
+                                      Copied!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3" />
+                                      Copy
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                                Run this command in your terminal to verify your agent can use the <code className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-semibold">{formData.capabilities[0]}</code> capability.
+                              </p>
                             </div>
-                          </div>
-
-                          {/* Private Key */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Private Key (Ed25519) - ⚠️ Keep Secret!
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type={showPrivateKey ? "text" : "password"}
-                                value={agentKeys.privateKey}
-                                readOnly
-                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setShowPrivateKey(!showPrivateKey)
-                                }
-                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-                              >
-                                {showPrivateKey ? (
-                                  <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                ) : (
-                                  <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  copyToClipboard(
-                                    agentKeys.privateKey,
-                                    "private_key"
-                                  )
-                                }
-                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-                              >
-                                {copiedField === "private_key" ? (
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
-                                ) : (
-                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                )}
-                              </button>
-                            </div>
-                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                              Never commit this to version control or share
-                              publicly
-                            </p>
-                          </div>
+                          )}
 
                           {/* API Documentation Link */}
                           <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                             <a
-                              href="https://docs.aim.dev/api/authentication"
+                              href="https://opena2a.org/docs"
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
@@ -810,6 +905,89 @@ export function RegisterAgentModal({
                               <ExternalLink className="h-4 w-4" />
                               View Full API Documentation →
                             </a>
+                          </div>
+
+                          {/* Advanced: Cryptographic Keys (Collapsible) */}
+                          <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <button
+                              type="button"
+                              onClick={() => setShowAdvancedKeys(!showAdvancedKeys)}
+                              className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                            >
+                              <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedKeys ? 'rotate-180' : ''}`} />
+                              Advanced: Cryptographic Keys (Ed25519)
+                            </button>
+
+                            {showAdvancedKeys && (
+                              <div className="mt-3 space-y-3 p-3 bg-gray-100 dark:bg-gray-900 rounded-lg">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  For custom integrations with request signing. Most users don't need these.
+                                </p>
+
+                                {/* Public Key */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Public Key
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={agentKeys.publicKey}
+                                      readOnly
+                                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => copyToClipboard(agentKeys.publicKey, "public_key")}
+                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                    >
+                                      {copiedField === "public_key" ? (
+                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                      ) : (
+                                        <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Private Key */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Private Key - ⚠️ Keep Secret
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type={showPrivateKey ? "text" : "password"}
+                                      value={agentKeys.privateKey}
+                                      readOnly
+                                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowPrivateKey(!showPrivateKey)}
+                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                    >
+                                      {showPrivateKey ? (
+                                        <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                      ) : (
+                                        <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyToClipboard(agentKeys.privateKey, "private_key")}
+                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                    >
+                                      {copiedField === "private_key" ? (
+                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                      ) : (
+                                        <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -1068,12 +1246,15 @@ export function RegisterAgentModal({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Capabilities
+                    Capabilities <span className="text-red-500">*</span>
                   </label>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Select the capabilities this agent has. These define what
+                    Select at least one capability this agent has. These define what
                     actions the agent can perform. Format: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">namespace:action</code>
                   </p>
+                  {errors.capabilities && (
+                    <p className="text-xs text-red-500 mb-2">{errors.capabilities}</p>
+                  )}
                 </div>
 
                 {/* Loading state */}

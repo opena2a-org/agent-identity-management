@@ -133,26 +133,66 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 		})
 	}
 
-	// Audit log
-	userID := c.Locals("user_id")
-	orgID := c.Locals("organization_id")
-	if userID != nil && orgID != nil {
+	// Audit log - support both user auth (JWT) and agent auth (Ed25519)
+	userIDLocal := c.Locals("user_id")
+	agentIDLocal := c.Locals("agent_id")
+	orgIDLocal := c.Locals("organization_id")
+
+	// Get org ID (set by both JWT and Ed25519 middleware)
+	var actorOrgID uuid.UUID
+	if orgIDLocal != nil {
+		actorOrgID = orgIDLocal.(uuid.UUID)
+	}
+
+	// Always log attestation events - this is a critical security action
+	// Use appropriate method based on whether this is a user or agent action
+	if userIDLocal != nil {
+		// User-initiated action (JWT auth)
 		h.auditService.LogAction(
 			c.Context(),
-			orgID.(uuid.UUID),  // Organization ID first
-			userID.(uuid.UUID), // Then user ID
+			actorOrgID,
+			userIDLocal.(uuid.UUID),
 			domain.AuditActionAttest,
 			"mcp_server",
 			mcpServerID,
-			c.IP(),              // IP address
-			c.Get("User-Agent"), // User agent
+			c.IP(),
+			c.Get("User-Agent"),
 			fiber.Map{
-				"attestation_id":       response.AttestationID,
-				"confidence_score":     response.MCPConfidenceScore,
-				"attestation_count":    response.AttestationCount,
-				"agentId":             req.Attestation.AgentID,
-				"capabilities_found":   req.Attestation.CapabilitiesFound,
+				"attestation_id":        response.AttestationID,
+				"confidence_score":      response.MCPConfidenceScore,
+				"attestation_count":     response.AttestationCount,
+				"agentId":               req.Attestation.AgentID,
+				"capabilities_found":    req.Attestation.CapabilitiesFound,
 				"connection_latency_ms": req.Attestation.ConnectionLatencyMs,
+				"auth_method":           "jwt",
+			},
+		)
+	} else {
+		// Agent-initiated action (Ed25519 SDK auth)
+		var agentID uuid.UUID
+		if agentIDLocal != nil {
+			agentID = agentIDLocal.(uuid.UUID)
+		} else if parsedID, err := uuid.Parse(req.Attestation.AgentID); err == nil {
+			agentID = parsedID
+		}
+
+		h.auditService.LogAgentAction(
+			c.Context(),
+			actorOrgID,
+			agentID,
+			domain.AuditActionAttest,
+			"mcp_server",
+			mcpServerID,
+			c.IP(),
+			c.Get("User-Agent"),
+			fiber.Map{
+				"attestation_id":        response.AttestationID,
+				"confidence_score":      response.MCPConfidenceScore,
+				"attestation_count":     response.AttestationCount,
+				"agentId":               req.Attestation.AgentID,
+				"capabilities_found":    req.Attestation.CapabilitiesFound,
+				"connection_latency_ms": req.Attestation.ConnectionLatencyMs,
+				"auth_method":           "ed25519",
 			},
 		)
 	}

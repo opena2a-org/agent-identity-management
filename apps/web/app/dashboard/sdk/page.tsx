@@ -49,7 +49,7 @@ export default function SDKDownloadPage() {
           Open Source Agent Security
         </h1>
         <p className="text-gray-600 dark:text-gray-400 text-lg">
-          Secure your agents with 1 line of code. Zero configuration required.
+          Secure your agents with minimal code. Zero configuration required.
         </p>
       </div>
 

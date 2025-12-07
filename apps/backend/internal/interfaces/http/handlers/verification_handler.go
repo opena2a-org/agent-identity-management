@@ -213,7 +213,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	auditEntry := &domain.AuditLog{
 		ID:             auditIDFromVerify, // Use same ID so alerts link correctly
 		OrganizationID: agent.OrganizationID,
-		UserID:         agent.CreatedBy, // Creator of the agent
+		UserID:         &agent.CreatedBy, // Creator of the agent (now a pointer)
 		Action:         domain.AuditAction(req.Capability),
 		ResourceType:   "agent_action",
 		ResourceID:     agentID,
@@ -1286,7 +1286,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 	auditEntry := &domain.AuditLog{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
-		UserID:         userID,
+		UserID:         &userID,
 		Action:         domain.AuditActionUpdate,
 		ResourceType:   "verification",
 		ResourceID:     vid,
@@ -1389,7 +1389,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 	auditEntry := &domain.AuditLog{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
-		UserID:         userID,
+		UserID:         &userID,
 		Action:         domain.AuditActionUpdate,
 		ResourceType:   "verification",
 		ResourceID:     vid,

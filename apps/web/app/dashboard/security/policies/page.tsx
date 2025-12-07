@@ -81,7 +81,12 @@ export default function SecurityPoliciesPage() {
         return;
       }
 
-      const response = await fetch('http://localhost:8080/api/v1/admin/security-policies', {
+      // Dynamic API URL based on environment
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? `${window.location.protocol}//${window.location.hostname}:8080`
+          : `${window.location.protocol}//${window.location.host}`);
+      const response = await fetch(`${apiUrl}/api/v1/admin/security-policies`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

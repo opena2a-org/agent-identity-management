@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -146,7 +147,8 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	})
 }
 
-// CreateAgent creates a new agent
+// CreateAgent creates a new agent and automatically generates an API key for it
+// This is a streamlined 1-step process: create agent + create API key in one operation
 func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
@@ -185,7 +187,20 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		})
 	}
 
-	// Log audit
+	// ✅ AUTO-CREATE API KEY: Streamlined 1-step process
+	// Automatically generate an API key for the new agent so users can start using it immediately
+	// The API key is only shown once in this response - it cannot be retrieved later
+	apiKeyName := fmt.Sprintf("%s-default-key", agent.Name)
+	fullAPIKey, apiKeyRecord, apiKeyErr := h.apiKeyService.GenerateAPIKey(
+		c.Context(),
+		agent.ID,
+		orgID,
+		userID,
+		apiKeyName,
+		365, // Default: 1 year expiration
+	)
+
+	// Log audit for agent creation
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -196,12 +211,33 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName": agent.Name,
-			"agentType": agent.AgentType,
+			"agentName":      agent.Name,
+			"agentType":      agent.AgentType,
+			"apiKeyCreated":  apiKeyErr == nil,
 		},
 	)
 
-	return c.Status(fiber.StatusCreated).JSON(agent)
+	// Build response with agent details and API key
+	response := h.enrichAgentResponse(c, agent)
+
+	// ✅ Include API key in response (only shown once!)
+	if apiKeyErr == nil && fullAPIKey != "" {
+		response["apiKey"] = fiber.Map{
+			"key":       fullAPIKey,           // ⚠️ SENSITIVE: Only shown once, never stored in plaintext
+			"id":        apiKeyRecord.ID,
+			"name":      apiKeyRecord.Name,
+			"prefix":    apiKeyRecord.Prefix,
+			"expiresAt": apiKeyRecord.ExpiresAt,
+			"createdAt": apiKeyRecord.CreatedAt,
+		}
+		response["apiKeyWarning"] = "Store this API key securely. It will never be shown again!"
+	} else if apiKeyErr != nil {
+		// API key creation failed, but agent was created successfully
+		// User can create API key manually from the dashboard
+		response["apiKeyError"] = "API key generation failed. You can create one manually from the API Keys page."
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
 // GetAgent returns a single agent
@@ -1776,5 +1812,87 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 		"rotationCount":       agent.RotationCount,
 		"keyCreatedAt":        agent.KeyCreatedAt,
 		"keyExpiresAt":        agent.KeyExpiresAt,
+	})
+}
+
+// ========================================
+// Agent Activity & Audit Logs
+// ========================================
+
+// GetAgentActivity retrieves all actions performed BY an agent
+// This includes attestations, verifications, and other agent-initiated actions
+// @Summary Get agent activity
+// @Description Retrieve all actions performed by an agent (attestations, verifications, etc.)
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param limit query int false "Maximum number of results (default 50)"
+// @Param offset query int false "Pagination offset (default 0)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/activity [get]
+func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Parse pagination parameters (Fiber v3 uses Query with strconv)
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	// Limit maximum to prevent abuse
+	if limit > 100 {
+		limit = 100
+	}
+
+	// Get agent activity from audit logs
+	activities, err := h.auditService.GetAgentActivity(c.Context(), agentID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch agent activity",
+		})
+	}
+
+	// Transform audit logs to activity response format
+	activityList := make([]fiber.Map, 0, len(activities))
+	for _, log := range activities {
+		activityList = append(activityList, fiber.Map{
+			"id":           log.ID,
+			"action":       log.Action,
+			"resourceType": log.ResourceType,
+			"resourceId":   log.ResourceID,
+			"timestamp":    log.Timestamp,
+			"ipAddress":    log.IPAddress,
+			"userAgent":    log.UserAgent,
+			"metadata":     log.Metadata,
+			"agentName":    log.AgentName,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"activity": activityList,
+		"total":    len(activityList),
+		"limit":    limit,
+		"offset":   offset,
+		"agentId":  agentID,
 	})
 }

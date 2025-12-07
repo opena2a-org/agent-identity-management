@@ -19,8 +19,8 @@ func NewAuditLogRepository(db *sql.DB) *AuditLogRepository {
 
 func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 	query := `
-		INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO audit_logs (id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	if log.ID == uuid.Nil {
@@ -39,6 +39,7 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 		log.ID,
 		log.OrganizationID,
 		log.UserID,
+		log.AgentID,
 		log.Action,
 		log.ResourceType,
 		log.ResourceID,
@@ -52,7 +53,7 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 
 func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE id = $1
 	`
@@ -64,6 +65,7 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 		&log.ID,
 		&log.OrganizationID,
 		&log.UserID,
+		&log.AgentID,
 		&log.Action,
 		&log.ResourceType,
 		&log.ResourceID,
@@ -91,7 +93,7 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 
 func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE organization_id = $1
 		ORDER BY timestamp DESC
@@ -109,7 +111,7 @@ func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset in
 
 func (r *AuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE user_id = $1
 		ORDER BY timestamp DESC
@@ -125,12 +127,46 @@ func (r *AuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) ([]*
 	return r.scanLogs(rows)
 }
 
+// GetByAgent retrieves audit logs for actions performed BY a specific agent
+// This queries by agent_id field (the agent that performed the action), not resource_id
+func (r *AuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	query := `
+		SELECT
+			al.id, al.organization_id, al.user_id, al.agent_id, al.action,
+			al.resource_type, al.resource_id, al.ip_address, al.user_agent,
+			al.metadata, al.timestamp,
+			COALESCE(a.name, '') as agent_name,
+			COALESCE(u.name, '') as user_name
+		FROM audit_logs al
+		LEFT JOIN agents a ON al.agent_id = a.id
+		LEFT JOIN users u ON al.user_id = u.id
+		WHERE al.agent_id = $1
+		ORDER BY al.timestamp DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(query, agentID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanLogsWithNames(rows)
+}
+
 func (r *AuditLogRepository) GetByResource(resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
-		FROM audit_logs
-		WHERE resource_type = $1 AND resource_id = $2
-		ORDER BY timestamp DESC
+		SELECT
+			al.id, al.organization_id, al.user_id, al.agent_id, al.action,
+			al.resource_type, al.resource_id, al.ip_address, al.user_agent,
+			al.metadata, al.timestamp,
+			COALESCE(a.name, '') as agent_name,
+			COALESCE(u.name, '') as user_name
+		FROM audit_logs al
+		LEFT JOIN agents a ON al.agent_id = a.id
+		LEFT JOIN users u ON al.user_id = u.id
+		WHERE al.resource_type = $1 AND al.resource_id = $2
+		ORDER BY al.timestamp DESC
 	`
 
 	rows, err := r.db.Query(query, resourceType, resourceID)
@@ -139,14 +175,14 @@ func (r *AuditLogRepository) GetByResource(resourceType string, resourceID uuid.
 	}
 	defer rows.Close()
 
-	return r.scanLogs(rows)
+	return r.scanLogsWithNames(rows)
 }
 
 func (r *AuditLogRepository) Search(query string, limit, offset int) ([]*domain.AuditLog, error) {
 	// This would integrate with Elasticsearch for full-text search
 	// For now, implement basic SQL search
 	sqlQuery := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE action LIKE $1 OR resource_type LIKE $1
 		ORDER BY timestamp DESC
@@ -174,6 +210,7 @@ func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error
 			&log.ID,
 			&log.OrganizationID,
 			&log.UserID,
+			&log.AgentID,
 			&log.Action,
 			&log.ResourceType,
 			&log.ResourceID,
@@ -181,6 +218,45 @@ func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error
 			&log.UserAgent,
 			&metadataJSON,
 			&log.Timestamp,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {
+				return nil, err
+			}
+		}
+
+		logs = append(logs, log)
+	}
+
+	return logs, nil
+}
+
+// scanLogsWithNames scans rows that include agent_name and user_name from JOINs
+func (r *AuditLogRepository) scanLogsWithNames(rows *sql.Rows) ([]*domain.AuditLog, error) {
+	var logs []*domain.AuditLog
+
+	for rows.Next() {
+		log := &domain.AuditLog{}
+		var metadataJSON []byte
+
+		err := rows.Scan(
+			&log.ID,
+			&log.OrganizationID,
+			&log.UserID,
+			&log.AgentID,
+			&log.Action,
+			&log.ResourceType,
+			&log.ResourceID,
+			&log.IPAddress,
+			&log.UserAgent,
+			&metadataJSON,
+			&log.Timestamp,
+			&log.AgentName,
+			&log.UserName,
 		)
 		if err != nil {
 			return nil, err
@@ -217,7 +293,7 @@ func (r *AuditLogRepository) CountActionsByAgentInTimeWindow(agentID uuid.UUID, 
 // GetRecentActionsByAgent gets the most recent actions by an agent
 func (r *AuditLogRepository) GetRecentActionsByAgent(agentID uuid.UUID, limit int) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE resource_id = $1 AND resource_type = 'agent'
 		ORDER BY timestamp DESC
@@ -236,7 +312,7 @@ func (r *AuditLogRepository) GetRecentActionsByAgent(agentID uuid.UUID, limit in
 // GetAgentActionsByIPAddress gets actions by an agent from a specific IP address
 func (r *AuditLogRepository) GetAgentActionsByIPAddress(agentID uuid.UUID, ipAddress string, limit int) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
+		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
 		WHERE resource_id = $1
 		  AND resource_type = 'agent'

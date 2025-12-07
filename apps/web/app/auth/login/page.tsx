@@ -111,8 +111,12 @@ function LoginPageContent() {
       <div className="w-full max-w-md">
         {/* Logo and Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
-            <Shield className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
+            <img
+              src="/opena2a-logo.svg"
+              alt="OpenA2A Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome Back

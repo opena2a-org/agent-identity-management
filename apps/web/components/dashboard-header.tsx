@@ -161,20 +161,6 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
       <div className="flex items-center justify-end h-16 px-4 sm:px-6 lg:px-8">
-        {/* Security Alert Bell */}
-        {priorityAlertCount > 0 && (
-          <Link
-            href="/dashboard/security"
-            className="relative p-2 mr-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            title={`${priorityAlertCount} high-priority alert${priorityAlertCount > 1 ? 's' : ''}`}
-          >
-            <Bell className="h-5 w-5 text-red-500 dark:text-red-400" />
-            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-white bg-red-500 rounded-full">
-              {priorityAlertCount > 99 ? '99+' : priorityAlertCount}
-            </span>
-          </Link>
-        )}
-
         {/* User Profile Dropdown */}
         <div className="relative">
           <button
