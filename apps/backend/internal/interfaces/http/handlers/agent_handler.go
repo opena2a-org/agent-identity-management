@@ -607,6 +607,7 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 				agent.DisplayName, req.Capability, detectedRiskLevel, req.Resource, reason),
 			ResourceType: "agent",
 			ResourceID:   agentID,
+			AgentName:    agent.DisplayName, // Denormalized for display in alerts
 		}
 
 		// Create alert (non-blocking - don't fail the verification if alert creation fails)
@@ -1889,10 +1890,10 @@ func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"activity": activityList,
-		"total":    len(activityList),
-		"limit":    limit,
-		"offset":   offset,
-		"agentId":  agentID,
+		"activities": activityList,
+		"total":      len(activityList),
+		"limit":      limit,
+		"offset":     offset,
+		"agentId":    agentID,
 	})
 }

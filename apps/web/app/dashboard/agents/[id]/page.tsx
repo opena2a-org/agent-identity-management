@@ -149,7 +149,7 @@ export default function AgentDetailsPage({
           const activityResponse = await api.getSingleAgentActivity(agentId!);
           setAgentActivity(activityResponse.activities || []);
         } catch (e) {
-          // non-fatal
+          // Activity fetch is non-fatal - agent page still works without it
         }
 
         // Fetch detection status (for detected MCP servers)
@@ -839,9 +839,6 @@ export default function AgentDetailsPage({
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Status
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                          Confidence
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -854,15 +851,12 @@ export default function AgentDetailsPage({
                             {ev.verificationType}
                           </td>
                           <td className="px-4 py-2 text-sm">{ev.status}</td>
-                          <td className="px-4 py-2 text-sm">
-                            {(ev.confidence * 100).toFixed(1)}%
-                          </td>
                         </tr>
                       ))}
                       {events.length === 0 && agentActivity.length === 0 && (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={3}
                             className="px-4 py-6 text-center text-sm text-muted-foreground"
                           >
                             No recent activity
@@ -872,7 +866,7 @@ export default function AgentDetailsPage({
                       {events.length === 0 && agentActivity.length > 0 && (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={3}
                             className="px-4 py-6 text-center text-sm text-muted-foreground"
                           >
                             No recent verification events

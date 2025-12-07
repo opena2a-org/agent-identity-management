@@ -115,9 +115,12 @@ func (s *CapabilityService) VerifyAction(
 			newTrustScore = 0
 		}
 
-		// Update violation count
+		// Update violation count and trust score
 		newViolationCount := agent.CapabilityViolationCount + 1
 		if err := s.agentRepo.UpdateTrustScore(agentID, newTrustScore); err != nil {
+			return nil, err
+		}
+		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
 			return nil, err
 		}
 

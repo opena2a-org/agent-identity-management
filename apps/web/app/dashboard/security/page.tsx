@@ -296,7 +296,6 @@ export default function SecurityPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [alertCounts, setAlertCounts] = useState({ all: 0, acknowledged: 0, unacknowledged: 0 });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [agentActivities, setAgentActivities] = useState<any[]>([]);
 
   // Filter states
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -314,12 +313,11 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       setError(null);
-      const [threatsData, metricsData, alertsData, auditData, activitiesData] = await Promise.all([
+      const [threatsData, metricsData, alertsData, auditData] = await Promise.all([
         api.getSecurityThreats(),
         api.getSecurityMetrics(),
         api.getAlerts(10, 0),
-        api.getAuditLogs(10, 0),
-        api.listVerifications ? api.listVerifications(10, 0).catch(() => ({ verifications: [] })) : Promise.resolve({ verifications: [] }),
+        api.getAuditLogs(100, 0), // Fetch more to filter meaningful activities
       ]);
       setThreats(threatsData.threats || []);
       setMetrics(metricsData);
@@ -329,8 +327,16 @@ export default function SecurityPage() {
         acknowledged: alertsData.acknowledgedCount || 0,
         unacknowledged: alertsData.unacknowledgedCount || 0,
       });
-      setAuditLogs(auditData || []);
-      setAgentActivities(activitiesData.verifications || []);
+
+      // Filter for meaningful agent/MCP activities (exclude dashboard view events)
+      const meaningfulResourceTypes = ['agent', 'mcp_server', 'api_key', 'verification', 'agent_capability'];
+      const meaningfulActions = ['create', 'update', 'delete', 'verify', 'attest', 'register', 'revoke', 'approve', 'deny'];
+      const filteredLogs = (auditData || []).filter((log: any) =>
+        meaningfulResourceTypes.includes(log.resourceType) ||
+        meaningfulActions.includes(log.action) ||
+        log.agentId || log.agentName // Include any agent-initiated activity
+      );
+      setAuditLogs(filteredLogs);
     } catch (err) {
       console.error("Failed to fetch security data:", err);
       const errorMessage = getErrorMessage(err, {
@@ -827,83 +833,94 @@ export default function SecurityPage() {
                   Agent & MCP Activities
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Recent verification requests from agents and MCP servers
+                  Recent agent and MCP server actions
                 </p>
               </div>
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
           </div>
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {agentActivities.length === 0 ? (
+            {auditLogs.length === 0 ? (
               <div className="p-8 text-center">
                 <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No recent agent activities</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No agent activities recorded</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Verification requests from agents and MCPs will appear here
+                  Agent and MCP actions will appear here
                 </p>
               </div>
             ) : (
-              agentActivities.slice(0, 5).map((activity) => (
-                <div key={activity.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 p-1.5 rounded-full ${
-                      activity.verified
-                        ? 'bg-green-100 dark:bg-green-900/30'
-                        : 'bg-red-100 dark:bg-red-900/30'
-                    }`}>
-                      {activity.verified ? (
-                        <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          activity.mcpServerId
-                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                        }`}>
-                          {activity.mcpServerId ? (
-                            <span className="flex items-center gap-1">
-                              <Server className="h-3 w-3" />
-                              MCP
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <Bot className="h-3 w-3" />
-                              Agent
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {activity.agentName || activity.mcpServerName || 'Unknown'}
-                        </span>
-                        {activity.riskLevel && (
-                          <SeverityBadge severity={activity.riskLevel} />
+              auditLogs.slice(0, 5).map((log) => {
+                const isPositiveAction = ['create', 'register', 'verify', 'approve', 'attest'].includes(log.action);
+                const isNegativeAction = ['delete', 'revoke', 'deny', 'suspend'].includes(log.action);
+                const isMcpRelated = log.resourceType === 'mcp_server' || log.resourceType?.includes('mcp');
+                const actorName = log.agentName || log.userName || (log.agentId ? `Agent ${log.agentId.substring(0, 8)}...` : 'System');
+
+                return (
+                  <div key={log.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 p-1.5 rounded-full ${
+                        isPositiveAction
+                          ? 'bg-green-100 dark:bg-green-900/30'
+                          : isNegativeAction
+                          ? 'bg-red-100 dark:bg-red-900/30'
+                          : 'bg-blue-100 dark:bg-blue-900/30'
+                      }`}>
+                        {isPositiveAction ? (
+                          <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        ) : isNegativeAction ? (
+                          <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                        ) : (
+                          <Activity className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                        {activity.capability || 'Unknown capability'}
-                        {activity.resource && ` → ${activity.resource}`}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-gray-400" />
-                        <span className="text-xs text-gray-400">
-                          {formatDateTime(activity.createdAt)}
-                        </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${
-                          activity.verified
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        }`}>
-                          {activity.verified ? 'Allowed' : 'Denied'}
-                        </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            isMcpRelated
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                            {isMcpRelated ? (
+                              <span className="flex items-center gap-1">
+                                <Server className="h-3 w-3" />
+                                MCP
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <Bot className="h-3 w-3" />
+                                Agent
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {actorName}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                          <span className="font-medium capitalize">{log.action}</span>
+                          <span className="text-gray-400"> on </span>
+                          <span>{log.resourceType?.replace(/_/g, ' ')}</span>
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Clock className="h-3 w-3 text-gray-400" />
+                          <span className="text-xs text-gray-400">
+                            {formatDateTime(log.createdAt || log.timestamp)}
+                          </span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${
+                            isPositiveAction
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              : isNegativeAction
+                              ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                              : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                          }`}>
+                            {log.action}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

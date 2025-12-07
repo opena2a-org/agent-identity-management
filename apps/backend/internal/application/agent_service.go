@@ -531,6 +531,7 @@ func (s *AgentService) checkAndCreateTrustScoreDropAlert(ctx context.Context, ag
 			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). This may indicate a security issue or policy violation.", previousScore*100, currentScore*100, drop*100),
 			ResourceType:   "agent",
 			ResourceID:     agent.ID,
+			AgentName:      agentName, // Denormalized for display in alerts
 		}
 	} else if dropPercentage >= significantDropThreshold {
 		// Significant drop (>10%)
@@ -542,6 +543,7 @@ func (s *AgentService) checkAndCreateTrustScoreDropAlert(ctx context.Context, ag
 			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). Monitor this agent's behavior.", previousScore*100, currentScore*100, drop*100),
 			ResourceType:   "agent",
 			ResourceID:     agent.ID,
+			AgentName:      agentName, // Denormalized for display in alerts
 		}
 	}
 
