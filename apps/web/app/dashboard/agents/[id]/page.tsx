@@ -16,6 +16,10 @@ import {
   Tag,
   Ban,
   Play,
+  TrendingDown,
+  TrendingUp,
+  Bell,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,6 +102,8 @@ export default function AgentDetailsPage({
   const [events, setEvents] = useState<any[]>([]);
   const [agentActivity, setAgentActivity] = useState<any[]>([]);
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
+  const [agentAlerts, setAgentAlerts] = useState<any[]>([]);
+  const [trustScoreHistory, setTrustScoreHistory] = useState<any[]>([]);
 
   // Extract agent ID from params Promise
   useEffect(() => {
@@ -156,6 +162,22 @@ export default function AgentDetailsPage({
         try {
           const detectionStatus = await api.getDetectionStatus(agentId!);
           setDetectedMCPs(detectionStatus.detectedMCPs || []);
+        } catch (e) {
+          // non-fatal
+        }
+
+        // Fetch agent-specific alerts (security events, trust score drops, etc.)
+        try {
+          const alertsResponse = await api.getAgentAlerts(agentId!, 50, 0);
+          setAgentAlerts(alertsResponse.alerts || []);
+        } catch (e) {
+          // non-fatal - alerts are supplementary
+        }
+
+        // Fetch trust score history (for timeline)
+        try {
+          const historyResponse = await api.getAgentTrustScoreHistory(agentId!);
+          setTrustScoreHistory(historyResponse.history || []);
         } catch (e) {
           // non-fatal
         }
@@ -688,16 +710,16 @@ export default function AgentDetailsPage({
                   <div className="grid gap-3">
                     {detectedMCPs.map((detection: any) => (
                       <div key={detection.name} className="p-4 rounded-lg border bg-card">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-sm">{detection.name}</h4>
+                        <div className="flex items-center justify-between gap-4 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-sm truncate">{detection.name}</h4>
                           </div>
-                          <div className="flex gap-2">
-                            <Badge variant="secondary" className="text-xs">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="secondary" className="text-xs whitespace-nowrap">
                               {Math.round(detection.confidenceScore)}% confidence
                             </Badge>
                             {detection.detectedBy && detection.detectedBy.length > 0 && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs whitespace-nowrap min-w-[90px] justify-center">
                                 {detection.detectedBy[0].replace(/_/g, ' ')}
                               </Badge>
                             )}
@@ -755,128 +777,225 @@ export default function AgentDetailsPage({
         <TabsContent value="activity">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Activity Timeline
+              </CardTitle>
               <CardDescription>
-                Latest verification events and agent actions
+                Unified view of trust score changes, security alerts, verifications, and agent actions
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Agent Actions Section */}
-              {agentActivity.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                    <Bot className="h-4 w-4" />
-                    Agent Actions
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                            When
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                            Action
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                            Resource
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                            Details
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                        {agentActivity.slice(0, 10).map((activity) => (
-                          <tr key={activity.id}>
-                            <td className="px-4 py-2 text-sm">
-                              {new Date(activity.timestamp).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              <Badge variant={
-                                activity.action.includes('attestation') ? 'default' :
-                                activity.action.includes('create') ? 'secondary' :
-                                activity.action.includes('verify') ? 'outline' : 'secondary'
-                              }>
-                                {activity.action.replace(/_/g, ' ')}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-2 text-sm font-mono text-xs">
-                              {activity.resourceType}
-                              {activity.resourceId && (
-                                <span className="text-muted-foreground ml-1">
-                                  ({activity.resourceId.substring(0, 8)}...)
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-muted-foreground">
-                              {activity.details || '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              {/* Unified Timeline */}
+              {(() => {
+                // Combine all events into a unified timeline
+                const timelineEvents: Array<{
+                  id: string;
+                  type: 'alert' | 'trust_change' | 'verification' | 'action';
+                  timestamp: Date;
+                  title: string;
+                  description: string;
+                  severity?: string;
+                  icon: 'alert' | 'trust_up' | 'trust_down' | 'verification' | 'action';
+                  badge?: { text: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' };
+                  metadata?: Record<string, any>;
+                }> = [];
 
-              {/* Verification Events Section */}
-              <div>
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  Verification Events
-                </h4>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                          When
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                          Type
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                      {events.slice(0, 10).map((ev) => (
-                        <tr key={ev.id}>
-                          <td className="px-4 py-2 text-sm">
-                            {new Date(ev.startedAt).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-2 text-sm">
-                            {ev.verificationType}
-                          </td>
-                          <td className="px-4 py-2 text-sm">{ev.status}</td>
-                        </tr>
-                      ))}
-                      {events.length === 0 && agentActivity.length === 0 && (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="px-4 py-6 text-center text-sm text-muted-foreground"
-                          >
-                            No recent activity
-                          </td>
-                        </tr>
-                      )}
-                      {events.length === 0 && agentActivity.length > 0 && (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="px-4 py-6 text-center text-sm text-muted-foreground"
-                          >
-                            No recent verification events
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                // Add alerts
+                agentAlerts.forEach((alert: any) => {
+                  timelineEvents.push({
+                    id: `alert-${alert.id}`,
+                    type: 'alert',
+                    timestamp: new Date(alert.createdAt),
+                    title: alert.title,
+                    description: alert.description,
+                    severity: alert.severity,
+                    icon: 'alert',
+                    badge: {
+                      text: alert.severity?.toUpperCase() || 'ALERT',
+                      variant: alert.severity === 'critical' || alert.severity === 'high' ? 'destructive' :
+                               alert.severity === 'warning' ? 'secondary' : 'outline'
+                    },
+                    metadata: alert.metadata
+                  });
+                });
+
+                // Add trust score changes
+                trustScoreHistory.forEach((change: any, idx: number) => {
+                  const prevScore = idx < trustScoreHistory.length - 1
+                    ? trustScoreHistory[idx + 1]?.trustScore
+                    : null;
+                  const currentScore = change.trustScore;
+                  const isIncrease = prevScore !== null && currentScore > prevScore;
+                  const isDecrease = prevScore !== null && currentScore < prevScore;
+                  const scoreDiff = prevScore !== null ? ((currentScore - prevScore) * 100).toFixed(1) : null;
+
+                  timelineEvents.push({
+                    id: `trust-${change.timestamp}-${idx}`,
+                    type: 'trust_change',
+                    timestamp: new Date(change.timestamp),
+                    title: `Trust Score ${isIncrease ? 'Increased' : isDecrease ? 'Decreased' : 'Updated'}`,
+                    description: scoreDiff
+                      ? `${isDecrease ? '' : '+'}${scoreDiff}% → Now at ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`
+                      : `Trust score is ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`,
+                    icon: isDecrease ? 'trust_down' : isIncrease ? 'trust_up' : 'trust_up',
+                    badge: {
+                      text: `${(currentScore * 100).toFixed(0)}%`,
+                      variant: currentScore >= 0.7 ? 'default' : currentScore >= 0.4 ? 'secondary' : 'destructive'
+                    }
+                  });
+                });
+
+                // Add verification events
+                events.forEach((ev: any) => {
+                  timelineEvents.push({
+                    id: `verification-${ev.id}`,
+                    type: 'verification',
+                    timestamp: new Date(ev.startedAt),
+                    title: `Verification: ${ev.verificationType?.replace(/_/g, ' ') || 'Check'}`,
+                    description: `Status: ${ev.status}`,
+                    icon: 'verification',
+                    badge: {
+                      text: ev.status,
+                      variant: ev.status === 'passed' || ev.status === 'success' ? 'default' :
+                               ev.status === 'failed' ? 'destructive' : 'secondary'
+                    }
+                  });
+                });
+
+                // Add agent actions
+                agentActivity.forEach((activity: any) => {
+                  timelineEvents.push({
+                    id: `action-${activity.id}`,
+                    type: 'action',
+                    timestamp: new Date(activity.timestamp),
+                    title: activity.action?.replace(/_/g, ' ') || 'Action',
+                    description: activity.details || `${activity.resourceType}${activity.resourceId ? ` (${activity.resourceId.substring(0, 8)}...)` : ''}`,
+                    icon: 'action',
+                    badge: {
+                      text: activity.resourceType || 'agent',
+                      variant: 'outline'
+                    }
+                  });
+                });
+
+                // Sort by timestamp (newest first)
+                timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+                const hasEvents = timelineEvents.length > 0;
+
+                if (!hasEvents) {
+                  return (
+                    <div className="text-center py-12">
+                      <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No activity recorded for this agent yet.</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Activities will appear here when the agent performs actions or security events occur.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                          <Bell className="h-3 w-3" />
+                          Alerts
+                        </div>
+                        <div className="text-2xl font-bold">{agentAlerts.length}</div>
+                      </div>
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                          <TrendingDown className="h-3 w-3" />
+                          Trust Changes
+                        </div>
+                        <div className="text-2xl font-bold">{trustScoreHistory.length}</div>
+                      </div>
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                          <Shield className="h-3 w-3" />
+                          Verifications
+                        </div>
+                        <div className="text-2xl font-bold">{events.length}</div>
+                      </div>
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                          <Bot className="h-3 w-3" />
+                          Actions
+                        </div>
+                        <div className="text-2xl font-bold">{agentActivity.length}</div>
+                      </div>
+                    </div>
+
+                    {/* Timeline */}
+                    <div className="relative">
+                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                      <div className="space-y-4">
+                        {timelineEvents.slice(0, 20).map((event) => (
+                          <div key={event.id} className="relative pl-10">
+                            {/* Timeline dot */}
+                            <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
+                              event.type === 'alert' ? 'border-red-500' :
+                              event.icon === 'trust_down' ? 'border-orange-500' :
+                              event.icon === 'trust_up' ? 'border-green-500' :
+                              event.type === 'verification' ? 'border-blue-500' :
+                              'border-gray-400'
+                            }`} />
+
+                            {/* Event card */}
+                            <div className={`p-3 rounded-lg border ${
+                              event.type === 'alert' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' :
+                              event.icon === 'trust_down' ? 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900' :
+                              event.icon === 'trust_up' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' :
+                              'bg-card'
+                            }`}>
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                  {/* Icon */}
+                                  <div className={`mt-0.5 ${
+                                    event.type === 'alert' ? 'text-red-500' :
+                                    event.icon === 'trust_down' ? 'text-orange-500' :
+                                    event.icon === 'trust_up' ? 'text-green-500' :
+                                    event.type === 'verification' ? 'text-blue-500' :
+                                    'text-gray-500'
+                                  }`}>
+                                    {event.type === 'alert' && <AlertTriangle className="h-4 w-4" />}
+                                    {event.icon === 'trust_down' && <TrendingDown className="h-4 w-4" />}
+                                    {event.icon === 'trust_up' && event.type === 'trust_change' && <TrendingUp className="h-4 w-4" />}
+                                    {event.type === 'verification' && <Shield className="h-4 w-4" />}
+                                    {event.type === 'action' && <Bot className="h-4 w-4" />}
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-sm">{event.title}</div>
+                                    <div className="text-sm text-muted-foreground">{event.description}</div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {event.timestamp.toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                                {event.badge && (
+                                  <Badge variant={event.badge.variant} className="text-xs whitespace-nowrap">
+                                    {event.badge.text}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {timelineEvents.length > 20 && (
+                      <div className="text-center text-sm text-muted-foreground pt-4">
+                        Showing 20 of {timelineEvents.length} events
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

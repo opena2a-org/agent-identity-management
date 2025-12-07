@@ -133,7 +133,8 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
-		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, '')
+		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, ''),
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE id = $1
 	`
@@ -192,6 +193,8 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&updatedBy,
 		&agent.UpdatedByName,
 		&agent.UpdatedByEmail,
+		&agent.CapabilityViolationCount,
+		&agent.IsCompromised,
 	)
 
 	if err == sql.ErrNoRows {
@@ -274,7 +277,8 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by
+		       talks_to, created_at, updated_at, created_by,
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -314,6 +318,8 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CapabilityViolationCount,
+			&agent.IsCompromised,
 		)
 		if err != nil {
 			return nil, err
@@ -415,7 +421,8 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by
+		       talks_to, created_at, updated_at, created_by,
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -455,6 +462,8 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CapabilityViolationCount,
+			&agent.IsCompromised,
 		)
 		if err != nil {
 			return nil, err
@@ -532,7 +541,8 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by
+		       talks_to, created_at, updated_at, created_by,
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
 		  AND (
@@ -581,6 +591,8 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CapabilityViolationCount,
+			&agent.IsCompromised,
 		)
 		if err != nil {
 			return nil, err
@@ -626,7 +638,8 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by
+		       talks_to, created_at, updated_at, created_by,
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
 		  AND (
@@ -675,6 +688,8 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CapabilityViolationCount,
+			&agent.IsCompromised,
 		)
 		if err != nil {
 			return nil, err
@@ -717,7 +732,8 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
-		       talks_to, capabilities
+		       talks_to, capabilities,
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1 AND name = $2
 		LIMIT 1
@@ -767,6 +783,8 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&rotationCount,
 		&talksToJSON,
 		&capabilitiesJSON,
+		&agent.CapabilityViolationCount,
+		&agent.IsCompromised,
 	)
 
 	if err == sql.ErrNoRows {

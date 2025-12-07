@@ -740,6 +740,29 @@ class APIClient {
     return this.request(`/api/v1/agents/${id}/trust-score/history`);
   }
 
+  async getAgentAlerts(id: string, limit = 50, offset = 0): Promise<{
+    agentId: string;
+    alerts: Array<{
+      id: string;
+      alertType: string;
+      severity: string;
+      title: string;
+      description: string;
+      resourceType: string;
+      resourceId: string;
+      agentName?: string;
+      isAcknowledged: boolean;
+      acknowledgedBy?: string;
+      acknowledgedAt?: string;
+      createdAt: string;
+      metadata?: Record<string, any>;
+    }>;
+    limit: number;
+    offset: number;
+  }> {
+    return this.request(`/api/v1/agents/${id}/alerts?limit=${limit}&offset=${offset}`);
+  }
+
   // API Keys
   async listAPIKeys(): Promise<{ apiKeys: APIKey[] }> {
     return this.request("/api/v1/api-keys");
