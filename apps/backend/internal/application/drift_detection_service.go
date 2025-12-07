@@ -143,6 +143,7 @@ func (s *DriftDetectionService) createDriftAlert(
 		Description:    message,
 		ResourceType:   "agent",
 		ResourceID:     agent.ID,
+		AgentName:      agent.Name, // Denormalized for display in alerts
 		IsAcknowledged: false,
 		CreatedAt:      time.Now(),
 	}

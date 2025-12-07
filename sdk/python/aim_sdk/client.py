@@ -883,9 +883,9 @@ class AIMClient:
         if not reason or len(reason) < 10:
             raise ConfigurationError("reason must be at least 10 characters")
 
-        # Prepare request payload
+        # Prepare request payload (using camelCase for API consistency)
         request_data = {
-            "capability_type": capability_type,
+            "capabilityType": capability_type,
             "reason": reason
         }
 
