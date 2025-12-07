@@ -746,7 +746,7 @@ export default function MCPServerDetailsPage({
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-foreground">SDK documentation</a> for more details.
+                      See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-foreground">SDK documentation</a> for more details.
                     </p>
                   </div>
                 ) : (
@@ -965,7 +965,7 @@ export default function MCPServerDetailsPage({
                     <p className="text-xs text-center text-muted-foreground mt-5">
                       Learn more in the{" "}
                       <a
-                        href="https://opena2a.org/docs/sdk"
+                        href="https://opena2a.org/docs/integration/python"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 dark:text-blue-400 hover:underline"

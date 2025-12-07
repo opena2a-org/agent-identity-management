@@ -661,7 +661,7 @@ export default function MCPServersPage() {
             </button>
 
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              See the <a href="https://opena2a.org/docs/sdk" className="underline hover:text-gray-700 dark:hover:text-gray-300">SDK documentation</a> for more details.
+              See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-gray-700 dark:hover:text-gray-300">SDK documentation</a> for more details.
             </p>
           </div>
         )}
