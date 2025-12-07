@@ -656,6 +656,36 @@ func (s *AgentService) VerifyCapability(
 
 	// ⚠️  CRITICAL: If agent has NO GRANTED capabilities, DENY ALL actions
 	if len(capabilityTypes) == 0 {
+		// 📝 Record violation and increment count for tracking
+		violation := &domain.CapabilityViolation{
+			AgentID:             agentID,
+			AttemptedCapability: capability,
+			RegisteredCapabilities: map[string]interface{}{
+				"allowedCapabilities": []string{}, // No capabilities granted
+				"attemptedCapability": capability,
+				"resource":            resource,
+			},
+			Severity:         "high", // No capabilities = serious issue
+			TrustScoreImpact: -10,    // Standard violation impact
+			IsBlocked:        true,
+			SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
+			RequestMetadata:  metadata,
+		}
+
+		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+		} else {
+			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s with no granted capabilities\n",
+				agent.Name, capability)
+		}
+
+		// Increment violation count
+		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
+			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
+		} else {
+			fmt.Printf("✅ Violation count incremented for agent %s\n", agent.Name)
+		}
+
 		return false, "Agent has no granted capabilities - action denied (admin must grant capabilities first)", auditID, nil
 	}
 
@@ -696,6 +726,7 @@ func (s *AgentService) VerifyCapability(
 				Description:    alertDescription,
 				ResourceType:   "agent",
 				ResourceID:     agentID,
+				AgentName:      agent.DisplayName, // Denormalized for display in alerts
 				SourceIP:       sourceIP,
 				IsAcknowledged: false,
 				CreatedAt:      time.Now(),
@@ -752,6 +783,11 @@ func (s *AgentService) VerifyCapability(
 		} else {
 			fmt.Printf("✅ Trust score updated after violation: %.2f%% → %.2f%% (impact: %d%%) for agent %s\n",
 				agent.TrustScore*100, newScore*100, violation.TrustScoreImpact, agent.Name)
+		}
+
+		// Increment violation count on agent record
+		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
+			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
 		}
 
 		// Return enforcement decision from policy

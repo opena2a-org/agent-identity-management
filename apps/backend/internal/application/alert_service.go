@@ -328,6 +328,7 @@ func (s *AlertService) checkHighVolumeAccess(ctx context.Context, orgID, agentID
 			Description:    fmt.Sprintf("Agent made %d verification requests in %d minutes (threshold: %d). This may indicate automated abuse or misconfiguration.", count, config.TimeWindowMinutes, config.HighVolumeThreshold),
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AgentName:      agentName,
 		}, nil
 	}
 
@@ -371,6 +372,7 @@ func (s *AlertService) checkOffHoursAccess(ctx context.Context, orgID, agentID u
 			Description:    fmt.Sprintf("Agent is active during off-hours (%02d:00-%02d:00). Verify this is expected behavior.", config.OffHoursStart, config.OffHoursEnd),
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AgentName:      agentName,
 		}, nil
 	}
 
@@ -423,6 +425,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 				Description:    fmt.Sprintf("Agent accessed resource type '%s' for the first time in 7 days. Review if this access is authorized.", resourceType.String),
 				ResourceType:   "agent",
 				ResourceID:     agentID,
+				AgentName:      agentName,
 			})
 		}
 	}
@@ -464,6 +467,7 @@ func (s *AlertService) checkFailedVerificationSpike(ctx context.Context, orgID, 
 			Description:    fmt.Sprintf("Agent has %d failed verifications out of %d attempts (%.0f%% failure rate) in the last 5 minutes. This may indicate credential compromise or misconfiguration.", recentFailed, totalRecent, float64(recentFailed)/float64(totalRecent)*100),
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AgentName:      agentName,
 		}, nil
 	}
 
@@ -517,6 +521,7 @@ func (s *AlertService) CheckTrustScoreDrop(ctx context.Context, orgID uuid.UUID,
 			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). This may indicate a security issue or policy violation.", previousScore*100, currentScore*100, drop*100),
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AgentName:      agentName,
 		}
 	} else if dropPercentage >= config.SignificantDropThreshold {
 		// Significant drop (>10% drop)
@@ -528,6 +533,7 @@ func (s *AlertService) CheckTrustScoreDrop(ctx context.Context, orgID uuid.UUID,
 			Description:    fmt.Sprintf("Agent trust score dropped from %.1f%% to %.1f%% (%.1f%% decrease). Monitor this agent's behavior.", previousScore*100, currentScore*100, drop*100),
 			ResourceType:   "agent",
 			ResourceID:     agentID,
+			AgentName:      agentName,
 		}
 	}
 
@@ -602,4 +608,9 @@ func (s *AlertService) ApproveDrift(ctx context.Context, req *ApproveDriftReques
 	}
 
 	return nil
+}
+
+// GetAlertsByAgent retrieves alerts for a specific agent (by resourceId)
+func (s *AlertService) GetAlertsByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	return s.alertRepo.GetByResourceID(agentID, limit, offset)
 }

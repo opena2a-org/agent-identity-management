@@ -190,7 +190,13 @@ class MCPDetector:
         """Get path to Claude Desktop config file."""
         home = pathlib.Path.home()
 
-        # macOS/Linux path
+        # macOS path (Application Support)
+        if sys.platform == 'darwin':
+            config_path = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+            if config_path.exists():
+                return config_path
+
+        # Linux path (older Claude CLI style)
         config_path = home / ".claude" / "claude_desktop_config.json"
         if config_path.exists():
             return config_path

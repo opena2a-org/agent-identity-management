@@ -1392,6 +1392,72 @@ func (h *AgentHandler) GetAgentTrustScoreHistory(c fiber.Ctx) error {
 	return h.trustScoreHandler.GetTrustScoreHistory(c)
 }
 
+// GetAgentAlerts returns alerts for a specific agent
+// @Summary Get agent alerts
+// @Description Get security and operational alerts for a specific agent
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param limit query int false "Number of alerts to return (default: 50)"
+// @Param offset query int false "Offset for pagination (default: 0)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/alerts [get]
+func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Parse pagination params
+	limit := 50
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
+			limit = parsedLimit
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil {
+			offset = parsedOffset
+		}
+	}
+
+	// Get alerts for this agent
+	alerts, err := h.alertService.GetAlertsByAgent(c.Context(), agentID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch alerts",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"alerts":  alerts,
+		"agentId": agentID,
+		"limit":   limit,
+		"offset":  offset,
+	})
+}
+
 // UpdateAgentTrustScore manually updates trust score (admin override)
 // @Summary Update agent trust score (admin only)
 // @Description Manually override the trust score for an agent
