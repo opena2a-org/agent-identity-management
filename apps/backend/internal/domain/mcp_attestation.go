@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,14 +61,117 @@ type AttestationChallenge struct {
 
 // ToCanonicalJSON converts attestation payload to canonical JSON for signature verification
 // CRITICAL: Must match SDK's canonical JSON format exactly:
-// - Sorted keys (Go's json.Marshal does this by default for structs)
+// - Sorted keys (alphabetically by JSON key name)
 // - No whitespace (compact JSON)
-// - Consistent field ordering
+// - Consistent float formatting (Python's json.dumps formats 35.0 as "35.0", not "35")
 func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
-	// Go's json.Marshal already produces canonical JSON with sorted keys for struct fields
-	// The struct field order in Go determines the JSON key order
-	// Since our struct fields match the SDK's alphabetically sorted keys, this works correctly
-	return json.Marshal(ap)
+	// Build ordered map to match Python's json.dumps(sort_keys=True) exactly
+	// We use a custom approach because:
+	// 1. Go's json.Marshal uses struct field order, not alphabetical JSON key order
+	// 2. Go's json.Marshal formats 35.0 as "35" but Python formats it as "35.0"
+
+	parts := []string{}
+
+	// Fields in alphabetical order by JSON key name
+	parts = append(parts, formatJSONField("agent_id", ap.AgentID))
+	parts = append(parts, formatJSONArray("capabilities_found", ap.CapabilitiesFound))
+
+	// Challenge is optional - only include if non-empty (matches Python's behavior)
+	if ap.Challenge != "" {
+		parts = append(parts, formatJSONField("challenge", ap.Challenge))
+	}
+
+	// Format float with decimal point to match Python's behavior
+	parts = append(parts, formatJSONFloat("connection_latency_ms", ap.ConnectionLatencyMs))
+	parts = append(parts, formatJSONBool("connection_successful", ap.ConnectionSuccessful))
+	parts = append(parts, formatJSONBool("health_check_passed", ap.HealthCheckPassed))
+	parts = append(parts, formatJSONField("mcp_name", ap.MCPName))
+	parts = append(parts, formatJSONField("mcp_url", ap.MCPURL))
+	parts = append(parts, formatJSONField("sdk_version", ap.SDKVersion))
+	parts = append(parts, formatJSONField("timestamp", ap.Timestamp))
+
+	// Build final JSON object
+	result := "{" + joinStrings(parts, ",") + "}"
+	return []byte(result), nil
+}
+
+// Helper functions for canonical JSON formatting
+
+func formatJSONField(key, value string) string {
+	// Escape special characters in JSON string
+	escaped := escapeJSONString(value)
+	return `"` + key + `":"` + escaped + `"`
+}
+
+func formatJSONFloat(key string, value float64) string {
+	// Format float to match Python's json.dumps behavior:
+	// - Integer values like 35.0 are serialized as "35.0" (with decimal point)
+	// - Non-integer values like 35.5 are serialized normally
+	var formatted string
+	if value == float64(int64(value)) {
+		// Integer value - add .0 to match Python
+		formatted = fmt.Sprintf("%.1f", value)
+	} else {
+		// Non-integer - use default formatting
+		formatted = fmt.Sprintf("%g", value)
+	}
+	return `"` + key + `":` + formatted
+}
+
+func formatJSONBool(key string, value bool) string {
+	if value {
+		return `"` + key + `":true`
+	}
+	return `"` + key + `":false`
+}
+
+func formatJSONArray(key string, values []string) string {
+	if len(values) == 0 {
+		return `"` + key + `":[]`
+	}
+
+	var parts []string
+	for _, v := range values {
+		parts = append(parts, `"`+escapeJSONString(v)+`"`)
+	}
+	return `"` + key + `":[` + joinStrings(parts, ",") + `]`
+}
+
+func escapeJSONString(s string) string {
+	// Basic JSON string escaping
+	var result []byte
+	for _, c := range s {
+		switch c {
+		case '"':
+			result = append(result, '\\', '"')
+		case '\\':
+			result = append(result, '\\', '\\')
+		case '\n':
+			result = append(result, '\\', 'n')
+		case '\r':
+			result = append(result, '\\', 'r')
+		case '\t':
+			result = append(result, '\\', 't')
+		default:
+			if c < 32 {
+				result = append(result, []byte(fmt.Sprintf("\\u%04x", c))...)
+			} else {
+				result = append(result, []byte(string(c))...)
+			}
+		}
+	}
+	return string(result)
+}
+
+func joinStrings(parts []string, sep string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	result := parts[0]
+	for i := 1; i < len(parts); i++ {
+		result += sep + parts[i]
+	}
+	return result
 }
 
 // MCPAttestation represents a cryptographically signed attestation from a verified agent

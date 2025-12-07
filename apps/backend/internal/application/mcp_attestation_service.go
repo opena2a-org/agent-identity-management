@@ -55,12 +55,13 @@ func getMinOwnersForConsensus() int {
 
 // MCPAttestationService handles Agent Attestation operations
 type MCPAttestationService struct {
-	attestationRepo *repository.MCPAttestationRepository
-	agentRepo       *repository.AgentRepository
-	mcpRepo         *repository.MCPServerRepository
-	userRepo        *repository.UserRepository
-	connectionRepo  *repository.AgentMCPConnectionRepository
-	cryptoService   *infracrypto.ED25519Service
+	attestationRepo  *repository.MCPAttestationRepository
+	agentRepo        *repository.AgentRepository
+	mcpRepo          *repository.MCPServerRepository
+	userRepo         *repository.UserRepository
+	connectionRepo   *repository.AgentMCPConnectionRepository
+	capabilityRepo   *repository.MCPServerCapabilityRepository
+	cryptoService    *infracrypto.ED25519Service
 }
 
 func NewMCPAttestationService(
@@ -69,14 +70,16 @@ func NewMCPAttestationService(
 	mcpRepo *repository.MCPServerRepository,
 	userRepo *repository.UserRepository,
 	connectionRepo *repository.AgentMCPConnectionRepository,
+	capabilityRepo *repository.MCPServerCapabilityRepository,
 ) *MCPAttestationService {
 	return &MCPAttestationService{
-		attestationRepo: attestationRepo,
-		agentRepo:       agentRepo,
-		mcpRepo:         mcpRepo,
-		userRepo:        userRepo,
-		connectionRepo:  connectionRepo,
-		cryptoService:   infracrypto.NewED25519Service(),
+		attestationRepo:  attestationRepo,
+		agentRepo:        agentRepo,
+		mcpRepo:          mcpRepo,
+		userRepo:         userRepo,
+		connectionRepo:   connectionRepo,
+		capabilityRepo:   capabilityRepo,
+		cryptoService:    infracrypto.NewED25519Service(),
 	}
 }
 
@@ -304,6 +307,17 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 
 	if err := s.attestationRepo.CreateAttestation(attestation); err != nil {
 		return nil, fmt.Errorf("failed to store attestation: %w", err)
+	}
+
+	// 6.5 Sync capabilities from attestation to mcp_server_capabilities table
+	// This updates the Capabilities tab with actual tool names discovered by agents
+	if s.capabilityRepo != nil && len(req.Attestation.CapabilitiesFound) > 0 {
+		if err := s.capabilityRepo.UpsertFromAttestation(mcpServerID, req.Attestation.CapabilitiesFound); err != nil {
+			// Log but don't fail the attestation if capability sync fails
+			fmt.Printf("⚠️  Failed to sync capabilities from attestation: %v\n", err)
+		} else {
+			fmt.Printf("✅ Synced %d capabilities from attestation to MCP server\n", len(req.Attestation.CapabilitiesFound))
+		}
 	}
 
 	// 7. Update MCP confidence score

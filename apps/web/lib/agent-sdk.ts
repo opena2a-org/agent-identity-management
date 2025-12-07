@@ -34,15 +34,8 @@ export async function downloadSDK(
     throw new Error(`Failed to download SDK: ${response.statusText}`);
   }
 
-  // Get filename from Content-Disposition header or use default
-  const contentDisposition = response.headers.get('Content-Disposition');
-  let filename = `aim-sdk-${agentName}-${language}.zip`;
-  if (contentDisposition) {
-    const matches = /filename=([^;]+)/.exec(contentDisposition);
-    if (matches && matches[1]) {
-      filename = matches[1].replace(/['"]/g, '');
-    }
-  }
+  // Use consistent filename matching /dashboard/sdk page
+  const filename = `aim-sdk-${language}.zip`;
 
   // Download the file
   const blob = await response.blob();

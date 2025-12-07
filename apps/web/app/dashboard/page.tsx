@@ -244,6 +244,7 @@ function DashboardContent() {
   // Calculate derived metrics
   const verifiedMcps = mcpServers.filter((m) => m.isVerified || m.status === "verified").length;
   const pendingMcps = mcpServers.filter((m) => m.status === "pending").length;
+  const totalAttestations = mcpServers.reduce((sum, m) => sum + (m.attestationCount || 0), 0);
 
   // Verification status data for pie charts
   const agentStatusData = [
@@ -594,7 +595,7 @@ function DashboardContent() {
       )}
 
       {/* Security Overview and Quick Links */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
         {/* Security Status */}
         {permissions.canViewSecurityMetrics && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -640,6 +641,58 @@ function DashboardContent() {
             </div>
           </div>
         )}
+
+        {/* MCP Attestations */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <FileCheck className="h-5 w-5 text-cyan-500" />
+              MCP Attestations
+            </h3>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Attestation Status</span>
+              {mcpServers.length > 0 ? (
+                mcpServers.filter(m => (m.attestationCount || 0) > 0).length === mcpServers.length ? (
+                  <span className="flex items-center gap-1 text-green-600 font-medium">
+                    <CheckCircle className="h-4 w-4" /> All Attested
+                  </span>
+                ) : mcpServers.filter(m => (m.attestationCount || 0) > 0).length > 0 ? (
+                  <span className="flex items-center gap-1 text-yellow-600 font-medium">
+                    <Clock className="h-4 w-4" /> Partial
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-gray-500 font-medium">
+                    <AlertCircle className="h-4 w-4" /> None
+                  </span>
+                )
+              ) : (
+                <span className="flex items-center gap-1 text-gray-500 font-medium">
+                  <AlertCircle className="h-4 w-4" /> No MCPs
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                <p className="text-2xl font-bold text-cyan-600">{totalAttestations}</p>
+                <p className="text-xs text-gray-500">Total Attestations</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {mcpServers.filter(m => (m.attestationCount || 0) > 0).length}/{mcpServers.length}
+                </p>
+                <p className="text-xs text-gray-500">MCPs Attested</p>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/mcp"
+              className="block w-full py-2 text-center text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
+            >
+              View MCP Servers
+            </Link>
+          </div>
+        </div>
 
         {/* Quick Actions */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">

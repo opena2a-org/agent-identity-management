@@ -165,6 +165,11 @@ func (m *MockAlertRepository) BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID)
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockAlertRepository) CountBySeverity(orgID uuid.UUID, status string) (critical, high, warning, info int, err error) {
+	args := m.Called(orgID, status)
+	return args.Int(0), args.Int(1), args.Int(2), args.Int(3), args.Error(4)
+}
+
 func TestDetectDrift_NoDrift(t *testing.T) {
 	// Setup
 	mockAgentRepo := new(MockAgentRepository)

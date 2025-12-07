@@ -107,6 +107,11 @@ func (m *MockVerificationEventRepository) SearchAdminVerifications(orgID uuid.UU
 	return args.Get(0).([]*domain.VerificationEvent), args.Int(1), counts, args.Error(3)
 }
 
+func (m *MockVerificationEventRepository) UpdateExecutionStatus(id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
+	args := m.Called(id, executed, strictMode, executedAt, executionError)
+	return args.Error(0)
+}
+
 // TestVerificationEventWithDriftDetection tests the complete flow of verification event creation with drift detection
 func TestVerificationEventWithDriftDetection(t *testing.T) {
 	// Setup

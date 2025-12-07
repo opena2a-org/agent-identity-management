@@ -40,9 +40,9 @@ func NewJWTService() *JWTService {
 	}
 
 	// Get expiry durations from env or use secure defaults
-	// SECURITY: 15 minute access token expiry minimizes exposure window
+	// Access tokens last 2 hours for better UX during active sessions
 	// Refresh tokens last 7 days and support rotation
-	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "15m"))
+	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "2h"))
 	refreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
 
 	return &JWTService{

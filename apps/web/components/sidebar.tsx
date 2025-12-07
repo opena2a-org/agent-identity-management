@@ -37,10 +37,10 @@ import {
 import { eventEmitter, Events } from "@/lib/events";
 
 // ✅ Navigation with role-based access control
-// Organized by natural user workflow: Core → Development → Monitoring → Administration → Settings
+// Organized by natural user workflow: Main → Development → Monitoring → Administration → Settings
 const navigationBase: NavSection[] = [
   {
-    title: "Core",
+    title: "",
     items: [
       // Everyone starts here
       {
@@ -180,6 +180,7 @@ export function Sidebar() {
     provider?: string;
   } | null>(null);
   const [alertCount, setAlertCount] = useState<number>(0);
+  const [securityAlertCount, setSecurityAlertCount] = useState<number>(0);
   const [capabilityRequestCount, setCapabilityRequestCount] =
     useState<number>(0);
   const [verificationCount, setVerificationCount] = useState<number>(0);
@@ -258,6 +259,15 @@ export function Sidebar() {
         if (user?.role && user.role !== "viewer") {
           const alertCountData = await api.getUnacknowledgedAlertCount();
           setAlertCount(alertCountData);
+
+          // Fetch security alert count (critical + high priority)
+          try {
+            const alertData = await api.getAlerts(1, 0);
+            const securityCount = (alertData.criticalCount || 0) + (alertData.highCount || 0);
+            setSecurityAlertCount(securityCount);
+          } catch {
+            // Silently fail if user doesn't have permission
+          }
         }
 
         // Fetch capability request count (admin only)
@@ -276,6 +286,10 @@ export function Sidebar() {
           prev.map((section) => ({
             ...section,
             items: section.items.map((item) => {
+              // Update Security badge (critical + high alerts)
+              if (item.name === "Security" && securityAlertCount > 0) {
+                return { ...item, badge: securityAlertCount };
+              }
               // Update Alerts badge
               if (item.name === "Alerts" && alertCount > 0) {
                 return { ...item, badge: alertCount };
@@ -296,6 +310,7 @@ export function Sidebar() {
               }
               // Remove badges when count is 0
               if (
+                (item.name === "Security" && securityAlertCount === 0) ||
                 (item.name === "Alerts" && alertCount === 0) ||
                 (item.name === "Capability Requests" &&
                   capabilityRequestCount === 0) ||
@@ -375,7 +390,7 @@ export function Sidebar() {
         unsubscribeVerificationDenied();
       };
     }
-  }, [user?.role, alertCount, capabilityRequestCount, verificationCount]);
+  }, [user?.role, alertCount, securityAlertCount, capabilityRequestCount, verificationCount]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -469,8 +484,12 @@ export function Sidebar() {
           {/* Logo */}
           <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
             <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                <Shield className="h-5 w-5 text-white" />
+              <div className="w-8 h-8 flex items-center justify-center">
+                <img
+                  src="/opena2a-logo.svg"
+                  alt="OpenA2A Logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
               {!collapsed && (
                 <div className="flex flex-col">

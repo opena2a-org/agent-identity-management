@@ -12,9 +12,10 @@ import (
 
 // SecurityPolicyService handles security policy evaluation and management
 type SecurityPolicyService struct {
-	policyRepo   domain.SecurityPolicyRepository
-	alertRepo    domain.AlertRepository
-	auditLogRepo domain.AuditLogRepository
+	policyRepo       domain.SecurityPolicyRepository
+	alertRepo        domain.AlertRepository
+	auditLogRepo     domain.AuditLogRepository
+	behaviorAnalysis *BehaviorAnalysisService // Intelligent behavioral anomaly detection
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -24,10 +25,17 @@ func NewSecurityPolicyService(
 	auditLogRepo domain.AuditLogRepository,
 ) *SecurityPolicyService {
 	return &SecurityPolicyService{
-		policyRepo:   policyRepo,
-		alertRepo:    alertRepo,
-		auditLogRepo: auditLogRepo,
+		policyRepo:       policyRepo,
+		alertRepo:        alertRepo,
+		auditLogRepo:     auditLogRepo,
+		behaviorAnalysis: nil, // Will be set via SetBehaviorAnalysis
 	}
+}
+
+// SetBehaviorAnalysis sets the behavior analysis service for intelligent anomaly detection
+// This uses setter injection to break circular dependency between services
+func (s *SecurityPolicyService) SetBehaviorAnalysis(behaviorService *BehaviorAnalysisService) {
+	s.behaviorAnalysis = behaviorService
 }
 
 // EvaluateCapabilityViolation evaluates security policies for capability violations
@@ -288,6 +296,7 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 }
 
 // EvaluateUnusualActivity evaluates security policies for unusual activity patterns
+// Uses baseline-based statistical detection for accurate anomaly identification
 // Returns enforcement decision and whether to create an alert
 func (s *SecurityPolicyService) EvaluateUnusualActivity(
 	ctx context.Context,
@@ -296,6 +305,68 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 	resource string,
 	auditID uuid.UUID,
 ) (shouldBlock bool, shouldAlert bool, policyName string, err error) {
+	// ============================================================================
+	// INTELLIGENT BEHAVIORAL ANALYSIS (Primary Detection Method)
+	// ============================================================================
+	// Uses per-agent learned baselines for statistical anomaly detection
+	if s.behaviorAnalysis != nil {
+		// First, record this activity to update the agent's baseline
+		if err := s.behaviorAnalysis.RecordActivity(ctx, agent.ID, agent.OrganizationID, actionType, resource, actionType); err != nil {
+			fmt.Printf("⚠️  Failed to record activity for agent %s: %v\n", agent.Name, err)
+			// Don't fail - continue with detection
+		}
+
+		// Run intelligent anomaly detection against learned baseline
+		result, err := s.behaviorAnalysis.DetectAnomalies(ctx, agent.ID, agent.OrganizationID, actionType, resource, actionType)
+		if err != nil {
+			fmt.Printf("⚠️  Behavioral analysis failed for agent %s: %v\n", agent.Name, err)
+			// Fall through to legacy detection
+		} else if result.IsAnomalous {
+			// Get the policy for enforcement action
+			policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeUnusualActivity)
+			if err == nil && len(policies) > 0 {
+				// Use first enabled policy for enforcement
+				for _, policy := range policies {
+					if policy.IsEnabled && s.policyAppliesToAgent(policy, agent) {
+						// Log the intelligent detection
+						fmt.Printf("🧠 INTELLIGENT DETECTION: Agent %s - %s\n", agent.Name, result.Reason)
+						for _, anomaly := range result.Anomalies {
+							fmt.Printf("   ↳ %s [%s]: %s\n", anomaly.AnomalyType, anomaly.Severity, anomaly.Description)
+						}
+
+						switch policy.EnforcementAction {
+						case domain.EnforcementBlockAndAlert:
+							return result.ShouldBlock || true, true, policy.Name + " (Intelligent Detection)", nil
+						case domain.EnforcementAlertOnly:
+							return false, true, policy.Name + " (Intelligent Detection)", nil
+						case domain.EnforcementAllow:
+							// Log but don't enforce
+							return false, false, policy.Name + " (Intelligent Detection - Logged)", nil
+						}
+					}
+				}
+			}
+
+			// No policy configured but anomaly detected - use defaults
+			if result.ShouldBlock {
+				return true, true, "intelligent_detection_block", nil
+			}
+			if result.ShouldAlert {
+				return false, true, "intelligent_detection_alert", nil
+			}
+		} else if result.Reason != "" {
+			// Baseline learning in progress - log and allow
+			fmt.Printf("📊 Baseline: Agent %s - %s\n", agent.Name, result.Reason)
+			return false, false, "", nil
+		}
+	}
+
+	// ============================================================================
+	// LEGACY DETECTION (Fallback when intelligent analysis not available)
+	// ============================================================================
+	// Note: This code is kept for backwards compatibility but is not recommended
+	// The intelligent baseline-based detection above should be preferred
+
 	// Get active unusual_activity policies for this organization
 	policies, err := s.policyRepo.GetByType(agent.OrganizationID, domain.PolicyTypeUnusualActivity)
 	if err != nil {
@@ -307,25 +378,41 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 		return false, false, "", nil
 	}
 
+	// BASELINE CHECK: Skip legacy detection for new agents
+	const minAgentAgeHours = 24
+	const minVerifications = 10
+
+	agentAge := time.Since(agent.CreatedAt)
+	if agentAge < time.Duration(minAgentAgeHours)*time.Hour {
+		fmt.Printf("ℹ️  Skipping legacy unusual activity check for new agent %s (age: %v < %dh)\n",
+			agent.Name, agentAge.Round(time.Minute), minAgentAgeHours)
+		return false, false, "", nil
+	}
+
+	recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, minVerifications+1)
+	if err == nil && len(recentActions) < minVerifications {
+		fmt.Printf("ℹ️  Skipping legacy unusual activity check for agent %s (only %d verifications, need %d)\n",
+			agent.Name, len(recentActions), minVerifications)
+		return false, false, "", nil
+	}
+
 	// Evaluate policies by priority (highest first)
 	for _, policy := range policies {
 		if !policy.IsEnabled {
 			continue
 		}
 
-		// Check if policy applies to this agent
 		if !s.policyAppliesToAgent(policy, agent) {
 			continue
 		}
 
-		// Check for API rate spikes
+		// Legacy: Check for API rate spikes (fixed threshold)
 		if apiRateThreshold, ok := policy.Rules["api_rate_threshold"].(float64); ok {
 			timeWindowMinutes, _ := policy.Rules["time_window_minutes"].(float64)
 			if timeWindowMinutes == 0 {
-				timeWindowMinutes = 60 // Default to 1 hour window
+				timeWindowMinutes = 60
 			}
 
-			// Count actions by this agent in the time window
 			actionCount, err := s.auditLogRepo.CountActionsByAgentInTimeWindow(
 				agent.ID,
 				domain.AuditAction(actionType),
@@ -337,81 +424,16 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 			}
 
 			if actionCount > int(apiRateThreshold) {
-				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: API rate spike detected (count: %d > threshold: %.0f)\n",
-					policy.Name, actionCount, apiRateThreshold)
+				fmt.Printf("⚠️  LEGACY Detection: API rate spike (count: %d > threshold: %.0f)\n",
+					actionCount, apiRateThreshold)
 
 				switch policy.EnforcementAction {
 				case domain.EnforcementBlockAndAlert:
-					return true, true, policy.Name, nil
+					return true, true, policy.Name + " (Legacy)", nil
 				case domain.EnforcementAlertOnly:
-					return false, true, policy.Name, nil
+					return false, true, policy.Name + " (Legacy)", nil
 				case domain.EnforcementAllow:
-					return false, false, policy.Name, nil
-				}
-			}
-		}
-
-		// Check for off-hours access
-		if checkOffHours, ok := policy.Rules["check_off_hours"].(bool); ok && checkOffHours {
-			businessHoursStart, _ := policy.Rules["business_hours_start"].(float64)
-			businessHoursEnd, _ := policy.Rules["business_hours_end"].(float64)
-
-			// Default business hours: 8 AM to 6 PM
-			if businessHoursStart == 0 {
-				businessHoursStart = 8
-			}
-			if businessHoursEnd == 0 {
-				businessHoursEnd = 18
-			}
-
-			currentHour := time.Now().Hour()
-			if currentHour < int(businessHoursStart) || currentHour >= int(businessHoursEnd) {
-				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: Off-hours access detected (hour: %d, business hours: %.0f-%.0f)\n",
-					policy.Name, currentHour, businessHoursStart, businessHoursEnd)
-
-				switch policy.EnforcementAction {
-				case domain.EnforcementBlockAndAlert:
-					return true, true, policy.Name, nil
-				case domain.EnforcementAlertOnly:
-					return false, true, policy.Name, nil
-				case domain.EnforcementAllow:
-					return false, false, policy.Name, nil
-				}
-			}
-		}
-
-		// Check for unusual resource access patterns
-		if checkUnusualPatterns, ok := policy.Rules["check_unusual_patterns"].(bool); ok && checkUnusualPatterns {
-			// Get recent actions by this agent
-			recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, 100)
-			if err != nil {
-				fmt.Printf("⚠️  Failed to get recent actions for agent %s: %v\n", agent.Name, err)
-				continue
-			}
-
-			// Count unique resource types accessed
-			resourceTypes := make(map[string]int)
-			for _, action := range recentActions {
-				resourceTypes[action.ResourceType]++
-			}
-
-			// If agent is accessing many different resource types in short time, flag as unusual
-			unusualPatternThreshold, _ := policy.Rules["unusual_pattern_threshold"].(float64)
-			if unusualPatternThreshold == 0 {
-				unusualPatternThreshold = 5 // Default: accessing 5+ different resource types is unusual
-			}
-
-			if len(resourceTypes) > int(unusualPatternThreshold) {
-				fmt.Printf("✅ Unusual Activity Policy '%s' triggered: Unusual access pattern detected (resource types: %d > threshold: %.0f)\n",
-					policy.Name, len(resourceTypes), unusualPatternThreshold)
-
-				switch policy.EnforcementAction {
-				case domain.EnforcementBlockAndAlert:
-					return true, true, policy.Name, nil
-				case domain.EnforcementAlertOnly:
-					return false, true, policy.Name, nil
-				case domain.EnforcementAllow:
-					return false, false, policy.Name, nil
+					return false, false, policy.Name + " (Legacy)", nil
 				}
 			}
 		}
