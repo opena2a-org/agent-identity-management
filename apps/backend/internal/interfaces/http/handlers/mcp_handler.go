@@ -2,9 +2,9 @@ package handlers
 
 import (
 	"fmt"
-	"strconv"
-
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -19,7 +19,8 @@ type MCPHandler struct {
 	auditService                 *application.AuditService
 	agentRepository              *repository.AgentRepository
 	verificationEventRepository  domain.VerificationEventRepository
-	tagService                   *application.TagService // ✅ For fetching MCP server tags in responses
+	tagService                   *application.TagService              // ✅ For fetching MCP server tags in responses
+	attestationService           *application.MCPAttestationService   // ✅ For rich audit trail with attestations
 }
 
 func NewMCPHandler(
@@ -29,6 +30,7 @@ func NewMCPHandler(
 	agentRepository *repository.AgentRepository,
 	verificationEventRepository domain.VerificationEventRepository,
 	tagService *application.TagService, // ✅ For fetching MCP server tags in responses
+	attestationService *application.MCPAttestationService, // ✅ For rich audit trail with attestations
 ) *MCPHandler {
 	return &MCPHandler{
 		mcpService:                  mcpService,
@@ -37,6 +39,7 @@ func NewMCPHandler(
 		agentRepository:             agentRepository,
 		verificationEventRepository: verificationEventRepository,
 		tagService:                  tagService,
+		attestationService:          attestationService,
 	}
 }
 
@@ -941,9 +944,9 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 	})
 }
 
-// GetMCPServerAuditLogs returns audit logs for a specific MCP server
+// GetMCPServerAuditLogs returns a unified audit timeline for a specific MCP server
 // @Summary Get MCP server audit logs
-// @Description Get audit logs for a specific MCP server with pagination support
+// @Description Get a unified audit timeline including audit logs, attestation events, and capability changes
 // @Tags mcp-servers
 // @Produce json
 // @Param id path string true "MCP Server ID"
@@ -1000,8 +1003,24 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		})
 	}
 
-	// Get audit logs filtered by MCP server ID (entity_id)
-	logs, total, err := h.auditService.GetAuditLogs(
+	// Build unified timeline from multiple sources
+	type TimelineEvent struct {
+		ID          string                 `json:"id"`
+		EventType   string                 `json:"eventType"`   // "audit", "attestation", "capability"
+		Action      string                 `json:"action"`      // create, update, verify, attest, revoke, etc.
+		Timestamp   interface{}            `json:"timestamp"`
+		ActorType   string                 `json:"actorType"`   // "user", "agent", "system"
+		ActorID     *string                `json:"actorId,omitempty"`
+		ActorName   string                 `json:"actorName,omitempty"`
+		Description string                 `json:"description"`
+		Metadata    map[string]interface{} `json:"metadata,omitempty"`
+		IPAddress   string                 `json:"ipAddress,omitempty"`
+	}
+
+	var timeline []TimelineEvent
+
+	// 1. Get audit logs
+	logs, _, err := h.auditService.GetAuditLogs(
 		c.Context(),
 		orgID,
 		"",           // action filter (empty = all)
@@ -1010,19 +1029,195 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		nil,          // user_id filter (nil = all users)
 		nil,          // start_date
 		nil,          // end_date
-		limit,
-		offset,
+		100,          // Get more, we'll combine and re-sort
+		0,
 	)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch audit logs",
-		})
+	if err == nil && logs != nil {
+		for _, log := range logs {
+			actorType := "system"
+			var actorID *string
+			actorName := "System"
+
+			if log.UserID != nil && *log.UserID != uuid.Nil {
+				actorType = "user"
+				idStr := log.UserID.String()
+				actorID = &idStr
+				if log.UserName != "" {
+					actorName = log.UserName
+				} else {
+					actorName = "User"
+				}
+			} else if log.AgentID != nil && *log.AgentID != uuid.Nil {
+				actorType = "agent"
+				idStr := log.AgentID.String()
+				actorID = &idStr
+				if log.AgentName != "" {
+					actorName = log.AgentName
+				} else {
+					actorName = "Agent"
+				}
+			}
+
+			// Build description based on action
+			description := h.buildAuditDescription(string(log.Action), mcpServer.Name, log.Metadata)
+
+			timeline = append(timeline, TimelineEvent{
+				ID:          log.ID.String(),
+				EventType:   "audit",
+				Action:      string(log.Action),
+				Timestamp:   log.Timestamp,
+				ActorType:   actorType,
+				ActorID:     actorID,
+				ActorName:   actorName,
+				Description: description,
+				Metadata:    log.Metadata,
+				IPAddress:   log.IPAddress,
+			})
+		}
+	}
+
+	// 2. Get attestation events (if attestation service is available)
+	if h.attestationService != nil {
+		attestations, _, _, err := h.attestationService.GetMCPAttestations(c.Context(), mcpServerID)
+		if err == nil && attestations != nil {
+			for _, att := range attestations {
+				actorType := "agent"
+				actorID := att.AgentID.String()
+				actorName := att.AgentName
+				if actorName == "" {
+					actorName = "Agent"
+				}
+
+				action := "attest"
+				if !att.IsValid {
+					action = "attestation_expired"
+				}
+
+				description := fmt.Sprintf("%s attested to %s", actorName, mcpServer.Name)
+				if !att.IsValid {
+					description = fmt.Sprintf("Attestation from %s expired", actorName)
+				}
+
+				metadata := map[string]interface{}{
+					"agentTrustScore":     att.AgentTrustScore,
+					"healthCheckPassed":   att.HealthCheckPassed,
+					"connectionLatencyMs": att.ConnectionLatencyMs,
+					"isValid":             att.IsValid,
+				}
+				if len(att.CapabilitiesConfirmed) > 0 {
+					metadata["capabilitiesConfirmed"] = att.CapabilitiesConfirmed
+				}
+
+				timeline = append(timeline, TimelineEvent{
+					ID:          att.ID.String(),
+					EventType:   "attestation",
+					Action:      action,
+					Timestamp:   att.VerifiedAt,
+					ActorType:   actorType,
+					ActorID:     &actorID,
+					ActorName:   actorName,
+					Description: description,
+					Metadata:    metadata,
+				})
+			}
+		}
+	}
+
+	// 3. Get capability detection events (from capability service)
+	if h.mcpCapabilityService != nil {
+		capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), mcpServerID)
+		if err == nil && capabilities != nil {
+			for _, cap := range capabilities {
+				description := fmt.Sprintf("Capability '%s' (%s) detected", cap.Name, cap.CapabilityType)
+
+				timeline = append(timeline, TimelineEvent{
+					ID:          cap.ID.String(),
+					EventType:   "capability",
+					Action:      "capability_detected",
+					Timestamp:   cap.DetectedAt,
+					ActorType:   "system",
+					ActorName:   "MCP Discovery",
+					Description: description,
+					Metadata: map[string]interface{}{
+						"capabilityName": cap.Name,
+						"capabilityType": cap.CapabilityType,
+						"description":    cap.Description,
+						"isActive":       cap.IsActive,
+					},
+				})
+			}
+		}
+	}
+
+	// Sort by timestamp (most recent first) - using a simple bubble sort for clarity
+	// In production, you might use sort.Slice with proper timestamp comparison
+	for i := 0; i < len(timeline)-1; i++ {
+		for j := 0; j < len(timeline)-i-1; j++ {
+			// Compare timestamps - handle different timestamp types
+			t1 := h.getTimestamp(timeline[j].Timestamp)
+			t2 := h.getTimestamp(timeline[j+1].Timestamp)
+			if t1.Before(t2) {
+				timeline[j], timeline[j+1] = timeline[j+1], timeline[j]
+			}
+		}
+	}
+
+	// Apply pagination
+	total := len(timeline)
+	if offset >= total {
+		timeline = []TimelineEvent{}
+	} else {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		timeline = timeline[offset:end]
 	}
 
 	return c.JSON(fiber.Map{
-		"logs":   logs,
+		"logs":   timeline,
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// buildAuditDescription creates a human-readable description for audit events
+func (h *MCPHandler) buildAuditDescription(action, serverName string, metadata map[string]interface{}) string {
+	switch action {
+	case "create":
+		return fmt.Sprintf("MCP server '%s' was registered", serverName)
+	case "update":
+		return fmt.Sprintf("MCP server '%s' was updated", serverName)
+	case "delete":
+		return fmt.Sprintf("MCP server '%s' was deleted", serverName)
+	case "verify":
+		return fmt.Sprintf("MCP server '%s' verification requested", serverName)
+	case "attest":
+		return fmt.Sprintf("Attestation submitted for '%s'", serverName)
+	case "revoke":
+		if reason, ok := metadata["reason"].(string); ok {
+			return fmt.Sprintf("Attestation revoked: %s", reason)
+		}
+		return "Attestation revoked"
+	default:
+		return fmt.Sprintf("Action '%s' performed on '%s'", action, serverName)
+	}
+}
+
+// getTimestamp extracts time.Time from various timestamp types
+func (h *MCPHandler) getTimestamp(ts interface{}) time.Time {
+	switch v := ts.(type) {
+	case time.Time:
+		return v
+	case *time.Time:
+		if v != nil {
+			return *v
+		}
+	case string:
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }

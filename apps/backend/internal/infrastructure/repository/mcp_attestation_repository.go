@@ -272,6 +272,56 @@ func (r *MCPAttestationRepository) GetAttestationsByAgent(agentID uuid.UUID) ([]
 	return attestations, nil
 }
 
+func (r *MCPAttestationRepository) GetAllAttestationsByOrganization(orgID uuid.UUID, limit int) ([]*domain.MCPAttestation, error) {
+	query := `
+		SELECT
+			a.id, a.mcp_server_id, a.agent_id, a.attestation_data, a.signature,
+			a.signature_verified, a.verified_at, a.expires_at, a.is_valid, a.created_at
+		FROM mcp_attestations a
+		JOIN mcp_servers m ON a.mcp_server_id = m.id
+		WHERE m.organization_id = $1
+		ORDER BY a.verified_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.Query(query, orgID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestations: %w", err)
+	}
+	defer rows.Close()
+
+	var attestations []*domain.MCPAttestation
+	for rows.Next() {
+		attestation := &domain.MCPAttestation{}
+		var attestationJSON []byte
+
+		err := rows.Scan(
+			&attestation.ID,
+			&attestation.MCPServerID,
+			&attestation.AgentID,
+			&attestationJSON,
+			&attestation.Signature,
+			&attestation.SignatureVerified,
+			&attestation.VerifiedAt,
+			&attestation.ExpiresAt,
+			&attestation.IsValid,
+			&attestation.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan attestation: %w", err)
+		}
+
+		// Unmarshal attestation data
+		if err := json.Unmarshal(attestationJSON, &attestation.AttestationData); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal attestation data: %w", err)
+		}
+
+		attestations = append(attestations, attestation)
+	}
+
+	return attestations, nil
+}
+
 func (r *MCPAttestationRepository) InvalidateAttestation(id uuid.UUID) error {
 	query := `
 		UPDATE mcp_attestations

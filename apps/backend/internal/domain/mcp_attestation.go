@@ -233,6 +233,7 @@ type MCPAttestationRepository interface {
 	GetAttestationsByMCP(mcpServerID uuid.UUID) ([]*MCPAttestation, error)
 	GetValidAttestationsByMCP(mcpServerID uuid.UUID) ([]*MCPAttestation, error)
 	GetAttestationsByAgent(agentID uuid.UUID) ([]*MCPAttestation, error)
+	GetAllAttestationsByOrganization(orgID uuid.UUID, limit int) ([]*MCPAttestation, error)
 	InvalidateAttestation(id uuid.UUID) error
 	InvalidateExpiredAttestations() error // Background job
 

@@ -20,6 +20,9 @@ import {
   XCircle,
   Ban,
   Code2,
+  Zap,
+  FileText,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -1083,98 +1086,188 @@ export default function MCPServerDetailsPage({
           <TabsContent value="audit" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Audit Trail</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Activity Timeline
+                </CardTitle>
                 <CardDescription>
-                  History of all operations performed on this MCP server
+                  Unified view of attestations, capability changes, and administrative actions
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {auditLogs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Activity className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      No audit logs recorded yet
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Operations on this MCP server will appear here
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {auditLogs.map((log, index) => {
-                      const action = log.action || 'unknown';
-                      const actionLabel = action.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-                      const metadata = log.metadata || {};
+                {(() => {
+                  // Count events by type
+                  const attestationCount = auditLogs.filter(l => l.eventType === 'attestation').length;
+                  const capabilityCount = auditLogs.filter(l => l.eventType === 'capability').length;
+                  const auditCount = auditLogs.filter(l => l.eventType === 'audit' || !l.eventType).length;
 
-                      return (
-                        <div
-                          key={log.id || index}
-                          className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                        >
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                            <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  if (auditLogs.length === 0) {
+                    return (
+                      <div className="text-center py-12">
+                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No activity recorded yet</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Events will appear here when agents interact with this MCP server
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                            Attestations
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                {actionLabel}
-                              </p>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown'}
-                              </span>
-                            </div>
-
-                            {/* Show agent/user who performed the action */}
-                            <div className="mt-1 text-sm">
-                              {log.agentId ? (
-                                <span className="font-medium text-purple-600 dark:text-purple-400">
-                                  Agent: {log.agentName || (log.metadata as Record<string, unknown>)?.agentName as string || log.agentId.slice(0, 8)}
-                                </span>
-                              ) : log.userId ? (
-                                <span className="font-medium text-blue-600 dark:text-blue-400">
-                                  User: {log.userName || (log.metadata as Record<string, unknown>)?.userName as string || log.userId.slice(0, 8)}
-                                </span>
-                              ) : (
-                                <span className="text-gray-500 dark:text-gray-400">System</span>
-                              )}
-                            </div>
-
-                            {/* Show relevant metadata */}
-                            {metadata.serverName && (
-                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                {metadata.serverName}
-                              </p>
-                            )}
-
-                            {metadata.confidence_score && (
-                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                Confidence: {metadata.confidence_score.toFixed(1)}%
-                              </p>
-                            )}
-
-                            {metadata.trustScore && (
-                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                Trust score: {metadata.trustScore.toFixed(1)}%
-                              </p>
-                            )}
-
-                            {metadata.reason && (
-                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                Reason: {metadata.reason}
-                              </p>
-                            )}
-
-                            {log.ipAddress && (
-                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                IP: {log.ipAddress}
-                              </p>
-                            )}
-                          </div>
+                          <div className="text-2xl font-bold">{attestationCount}</div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <Code2 className="h-3 w-3 text-purple-500" />
+                            Capabilities
+                          </div>
+                          <div className="text-2xl font-bold">{capabilityCount}</div>
+                        </div>
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <FileText className="h-3 w-3 text-blue-500" />
+                            Admin Actions
+                          </div>
+                          <div className="text-2xl font-bold">{auditCount}</div>
+                        </div>
+                      </div>
+
+                      {/* Timeline */}
+                      <div className="relative">
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                        <div className="space-y-4">
+                          {auditLogs.map((log, index) => {
+                            const eventType = log.eventType || 'audit';
+                            const metadata = log.metadata || {};
+
+                            // Build rich title and description based on event type
+                            const getEventDetails = () => {
+                              switch (eventType) {
+                                case 'attestation':
+                                  const agentName = log.actorName || 'Unknown agent';
+                                  const trustScore = metadata.agentTrustScore !== undefined
+                                    ? `(${(metadata.agentTrustScore * 100).toFixed(0)}% trust)`
+                                    : '';
+                                  const latency = metadata.connectionLatencyMs
+                                    ? `${metadata.connectionLatencyMs}ms latency`
+                                    : '';
+                                  const healthStatus = metadata.healthCheckPassed
+                                    ? 'Health check passed'
+                                    : metadata.healthCheckPassed === false
+                                      ? 'Health check failed'
+                                      : '';
+                                  const capsCount = metadata.capabilitiesConfirmed?.length || 0;
+                                  const capsText = capsCount > 0 ? `${capsCount} capabilities confirmed` : '';
+
+                                  return {
+                                    title: `${agentName} attested to this server`,
+                                    description: [trustScore, healthStatus, capsText, latency].filter(Boolean).join(' • '),
+                                    icon: 'attestation' as const,
+                                    badge: metadata.isValid ? { text: 'Valid', variant: 'default' as const }
+                                           : metadata.isValid === false ? { text: 'Invalid', variant: 'destructive' as const }
+                                           : null
+                                  };
+                                case 'capability':
+                                  const capType = metadata.capabilityType || 'Unknown';
+                                  const capName = metadata.capabilityName || log.action?.replace('detect_', '') || '';
+                                  return {
+                                    title: `Capability detected: ${capType}`,
+                                    description: capName ? `${capName}${metadata.description ? ' - ' + metadata.description : ''}` : (metadata.description || 'New capability discovered'),
+                                    icon: 'capability' as const,
+                                    badge: { text: capType, variant: 'secondary' as const }
+                                  };
+                                default:
+                                  const action = log.action?.replace(/_/g, ' ') || 'Unknown action';
+                                  const actor = log.actorType === 'user' ? `by ${log.actorName || 'user'}` : '';
+                                  return {
+                                    title: action.charAt(0).toUpperCase() + action.slice(1),
+                                    description: log.description || (actor ? `Action performed ${actor}` : 'Administrative action'),
+                                    icon: 'audit' as const,
+                                    badge: null
+                                  };
+                              }
+                            };
+
+                            const details = getEventDetails();
+
+                            return (
+                              <div key={log.id || index} className="relative pl-10">
+                                {/* Timeline dot */}
+                                <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
+                                  eventType === 'attestation' ? 'border-green-500' :
+                                  eventType === 'capability' ? 'border-purple-500' :
+                                  'border-blue-500'
+                                }`} />
+
+                                {/* Event card */}
+                                <div className={`p-3 rounded-lg border ${
+                                  eventType === 'attestation' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' :
+                                  eventType === 'capability' ? 'bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900' :
+                                  'bg-card'
+                                }`}>
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3">
+                                      {/* Icon */}
+                                      <div className={`mt-0.5 ${
+                                        eventType === 'attestation' ? 'text-green-500' :
+                                        eventType === 'capability' ? 'text-purple-500' :
+                                        'text-blue-500'
+                                      }`}>
+                                        {eventType === 'attestation' && <CheckCircle className="h-4 w-4" />}
+                                        {eventType === 'capability' && <Code2 className="h-4 w-4" />}
+                                        {eventType === 'audit' && <FileText className="h-4 w-4" />}
+                                      </div>
+                                      <div>
+                                        <div className="font-medium text-sm">{details.title}</div>
+                                        <div className="text-sm text-muted-foreground">{details.description}</div>
+
+                                        {/* Show capabilities confirmed for attestations */}
+                                        {eventType === 'attestation' && metadata.capabilitiesConfirmed && metadata.capabilitiesConfirmed.length > 0 && (
+                                          <div className="mt-2 flex flex-wrap gap-1">
+                                            {metadata.capabilitiesConfirmed.slice(0, 5).map((cap: string, i: number) => (
+                                              <Badge key={i} variant="outline" className="text-xs">
+                                                {cap}
+                                              </Badge>
+                                            ))}
+                                            {metadata.capabilitiesConfirmed.length > 5 && (
+                                              <Badge variant="outline" className="text-xs">
+                                                +{metadata.capabilitiesConfirmed.length - 5} more
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                          <Clock className="h-3 w-3" />
+                                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown time'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {details.badge && (
+                                      <Badge variant={details.badge.variant} className="text-xs whitespace-nowrap">
+                                        {details.badge.text}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+{/* All events shown */}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
