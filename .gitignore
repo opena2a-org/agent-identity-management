@@ -74,6 +74,11 @@ sdk-page
 *.jpeg
 *.gif
 *.svg
+
+# Allow documentation images
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.gif
 *-page
 *-tab
 *-state
