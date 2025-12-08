@@ -22,6 +22,21 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Clock,
+  Filter,
+  Search,
+  Server,
+  Bot,
+  Key,
+  Eye,
+  Trash2,
+  Edit3,
+  UserPlus,
+  LogIn,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
 } from "lucide-react";
 import {
   XAxis,
@@ -122,13 +137,15 @@ interface AlertEntry {
   resourceId?: string;
 }
 
-// Agent entry for risk distribution
+// Agent entry for risk distribution and timeline
 interface AgentEntry {
   id: string;
   displayName: string;
   name: string;
   trustScore: number;
   status: string;
+  agentType?: string;
+  createdAt: string;
 }
 
 // MCP server entry for risk distribution
@@ -198,6 +215,7 @@ function ComplianceSummaryCard({
   icon: Icon,
   color,
   checks,
+  onNavigate,
 }: {
   title: string;
   description: string;
@@ -206,6 +224,7 @@ function ComplianceSummaryCard({
   icon: any;
   color: "blue" | "green" | "purple" | "orange";
   checks: CheckResult[];
+  onNavigate?: (url: string) => void;
 }) {
   const progress = total > 0 ? Math.round((passed / total) * 100) : 0;
 
@@ -241,25 +260,98 @@ function ComplianceSummaryCard({
   };
   const colors = colorMap[color];
 
-  // Format check name for display with better descriptions
-  const formatCheckName = (name: string) => {
-    const checkLabels: Record<string, string> = {
-      "apiKeyRotationNeeded": "API Key Rotation",
-      "trustScoreDegradation": "Low Trust Scores",
-      "capabilityViolations": "Capability Violations",
-      "adminAccessReview": "Admin Access Review",
-      "auditLogGaps": "Audit Log Coverage",
-      "inactiveAgents": "Inactive Agents",
-      "unverifiedAgentBacklog": "Pending Agent Verifications",
-      "orphanedResources": "Orphaned Resources",
-      "inactiveMCPServers": "Inactive MCP Servers",
-      "unverifiedMCPBacklog": "Pending MCP Verifications",
+  // Comprehensive check metadata with labels, descriptions, and action URLs
+  const checkMetadata: Record<string, { label: string; description: string; passedText: string; failedText: (count: number) => string; actionUrl: string }> = {
+    // Security Compliance Checks
+    "apiKeyRotationNeeded": {
+      label: "Credential Rotation",
+      description: "Agent credentials should be rotated every 90 days",
+      passedText: "All credentials are current",
+      failedText: (n) => `${n} agent${n > 1 ? "s" : ""} need${n === 1 ? "s" : ""} rotation`,
+      actionUrl: "/dashboard/agents",
+    },
+    "trustScoreDegradation": {
+      label: "Trust Score Health",
+      description: "Agents should maintain trust scores above 60%",
+      passedText: "All agents above threshold",
+      failedText: (n) => `${n} agent${n > 1 ? "s" : ""} below 60%`,
+      actionUrl: "/dashboard/agents",
+    },
+    "capabilityViolations": {
+      label: "Capability Compliance",
+      description: "Agents should not have capability violations",
+      passedText: "No violations detected",
+      failedText: (n) => `${n} violation${n > 1 ? "s" : ""} need review`,
+      actionUrl: "/dashboard/admin/alerts",
+    },
+    "adminAccessReview": {
+      label: "Admin Activity",
+      description: "Admin users should log in at least every 30 days",
+      passedText: "All admins recently active",
+      failedText: (n) => `${n} admin${n > 1 ? "s" : ""} inactive 30+ days`,
+      actionUrl: "/dashboard/admin/users",
+    },
+    "auditLogGaps": {
+      label: "Audit Coverage",
+      description: "Audit logs should be recorded daily",
+      passedText: "Continuous logging confirmed",
+      failedText: (n) => `${n} day${n > 1 ? "s" : ""} without logs`,
+      actionUrl: "/dashboard/admin/compliance",
+    },
+    // Operations Compliance Checks
+    "inactiveAgents": {
+      label: "Agent Activity",
+      description: "Agents should be active within 30 days",
+      passedText: "Activity within threshold",
+      failedText: (n) => `${n} agent${n > 1 ? "s" : ""} inactive 30+ days`,
+      actionUrl: "/dashboard/agents",
+    },
+    "unverifiedAgentBacklog": {
+      label: "Agent Verification Queue",
+      description: "Pending verifications should be processed promptly",
+      passedText: "Queue is manageable",
+      failedText: (n) => `${n} agent${n > 1 ? "s" : ""} awaiting verification`,
+      actionUrl: "/dashboard/admin/verifications",
+    },
+    "orphanedResources": {
+      label: "Resource Ownership",
+      description: "All agents should have active owners and good trust scores",
+      passedText: "All resources properly assigned",
+      failedText: (n) => `${n} orphaned resource${n > 1 ? "s" : ""}`,
+      actionUrl: "/dashboard/agents",
+    },
+    "inactiveMCPServers": {
+      label: "MCP Server Activity",
+      description: "MCP servers should be active within 30 days",
+      passedText: "All MCPs recently active",
+      failedText: (n) => `${n} MCP${n > 1 ? "s" : ""} inactive 30+ days`,
+      actionUrl: "/dashboard/mcp",
+    },
+    "unverifiedMCPBacklog": {
+      label: "MCP Verification Queue",
+      description: "MCP servers should be verified promptly",
+      passedText: "Queue is manageable",
+      failedText: (n) => `${n} MCP${n > 1 ? "s" : ""} awaiting verification`,
+      actionUrl: "/dashboard/mcp",
+    },
+  };
+
+  const getCheckInfo = (check: CheckResult) => {
+    const meta = checkMetadata[check.name];
+    if (!meta) {
+      return {
+        label: check.name.replace(/([A-Z])/g, " $1").replace(/^./, str => str.toUpperCase()).trim(),
+        description: check.details || "",
+        statusText: check.passed ? "Passed" : `${check.count || 0} issues`,
+        actionUrl: "/dashboard",
+      };
+    }
+    return {
+      label: meta.label,
+      description: meta.description,
+      statusText: check.passed ? meta.passedText : meta.failedText(check.count || 0),
+      actionUrl: meta.actionUrl,
     };
-    return checkLabels[name] || name
-      // Convert camelCase to Title Case
-      .replace(/([A-Z])/g, " $1")
-      .replace(/^./, str => str.toUpperCase())
-      .trim();
   };
 
   return (
@@ -277,88 +369,84 @@ function ComplianceSummaryCard({
             </div>
           </div>
           <div className="text-right">
-            <div className={`text-3xl font-bold ${colors.text}`}>{progress}%</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Compliance</div>
+            <div className={`text-3xl font-bold ${progress === 100 ? "text-green-600 dark:text-green-400" : progress >= 80 ? colors.text : "text-amber-600 dark:text-amber-400"}`}>
+              {progress}%
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {progress === 100 ? "All Passed" : `${passed}/${total} Passed`}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Controls implemented section */}
-      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Controls Implemented</span>
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">{passed} / {total}</span>
-        </div>
-        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2.5">
+      {/* Progress bar */}
+      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
           <div
-            className={`${colors.bg} h-2.5 rounded-full transition-all duration-500`}
+            className={`h-2 rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : progress >= 80 ? colors.bg : "bg-amber-500"}`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      {/* Individual checks */}
-      <div className="px-6 py-4 space-y-3">
+      {/* Individual checks with details */}
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {checks.map((check, idx) => {
-          // Format the badge text to always show counts (more meaningful than just Pass/Fail)
-          const getBadgeText = () => {
-            const count = check.count || 0;
-            // Use appropriate label based on check type
-            if (check.name === "trustScoreDegradation") {
-              return count === 1 ? "1 agent" : `${count} agents`;
-            }
-            if (check.name === "inactiveAgents") {
-              return count === 1 ? "1 inactive" : `${count} inactive`;
-            }
-            if (check.name === "capabilityViolations") {
-              return count === 1 ? "1 violation" : `${count} violations`;
-            }
-            if (check.name === "unverifiedAgentBacklog") {
-              return count === 1 ? "1 pending" : `${count} pending`;
-            }
-            if (check.name === "apiKeyRotationNeeded") {
-              return count === 1 ? "1 key" : `${count} keys`;
-            }
-            if (check.name === "orphanedResources") {
-              return count === 1 ? "1 resource" : `${count} resources`;
-            }
-            if (check.name === "inactiveMCPServers") {
-              return count === 1 ? "1 MCP" : `${count} MCPs`;
-            }
-            if (check.name === "unverifiedMCPBacklog") {
-              return count === 1 ? "1 pending" : `${count} pending`;
-            }
-            if (check.name === "adminAccessReview") {
-              return count === 1 ? "1 admin" : `${count} admins`;
-            }
-            if (check.name === "auditLogGaps") {
-              return count === 1 ? "1 gap" : `${count} gaps`;
-            }
-            return count === 1 ? "1 issue" : `${count} issues`;
-          };
+          const info = getCheckInfo(check);
+          const hasIssues = !check.passed && (check.count || 0) > 0;
 
           return (
-            <div key={idx} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {check.passed ? (
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                )}
-                <span className="text-sm text-gray-700 dark:text-gray-300">{formatCheckName(check.name)}</span>
+            <div
+              key={idx}
+              className={`px-6 py-3 ${hasIssues && onNavigate ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50" : ""} transition-colors`}
+              onClick={() => hasIssues && onNavigate && onNavigate(info.actionUrl)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="mt-0.5">
+                    {check.passed ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">{info.label}</span>
+                      {hasIssues && onNavigate && (
+                        <ArrowUpRight className="h-3 w-3 text-gray-400" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{info.description}</p>
+                  </div>
+                </div>
+                <div className="flex-shrink-0">
+                  <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full ${
+                    check.passed
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                      : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                  }`}>
+                    {info.statusText}
+                  </span>
+                </div>
               </div>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                check.passed
-                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                  : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-              }`}>
-                {getBadgeText()}
-              </span>
+              {/* Show affected items preview for failed checks */}
+              {hasIssues && check.affectedItems && check.affectedItems.length > 0 && (
+                <div className="mt-2 ml-8 flex flex-wrap gap-1">
+                  {check.affectedItems.slice(0, 3).map((item, i) => (
+                    <span key={i} className="inline-flex items-center text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                      {item.name}
+                    </span>
+                  ))}
+                  {check.affectedItems.length > 3 && (
+                    <span className="text-xs text-gray-400">+{check.affectedItems.length - 3} more</span>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-
     </div>
   );
 }
@@ -658,18 +746,33 @@ export default function CompliancePage() {
   // Framework for exports only (not for display)
   const exportFramework = "aim";
 
+  // Compliance Activity Timeline state
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [verificationEvents, setVerificationEvents] = useState<any[]>([]);
+  const [auditLogFilter, setAuditLogFilter] = useState<{
+    eventType: string;
+    search: string;
+  }>({
+    eventType: "all",
+    search: "",
+  });
+  const [auditTrailExpanded, setAuditTrailExpanded] = useState(true);
+  const [exportingAuditLogs, setExportingAuditLogs] = useState(false);
+
   const fetchComplianceData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [statusData, metricsData, accessData, agentsData, mcpData, alertsData, activityData] = await Promise.all([
+      const [statusData, metricsData, accessData, agentsData, mcpData, alertsData, activityData, auditData, verificationData] = await Promise.all([
         api.getComplianceStatus(),
         api.getComplianceMetrics(),
         api.getAccessReview(),
         api.listAgents(),
         api.listMCPServers(100, 0), // Get MCP servers for compliance tracking
-        api.getAlerts(10, 0), // Get 10 most recent alerts
+        api.getAlerts(50, 0), // Get 50 most recent alerts (violations)
         api.getActivitySummary(30), // Get last 30 days activity including attestations
+        api.getAuditLogs(200, 0), // Get 200 most recent audit logs
+        api.getRecentVerificationEvents(10080), // Get last 7 days of verification events (capability usage)
       ]);
       setStatus(statusData);
       setMetrics(metricsData);
@@ -678,6 +781,8 @@ export default function CompliancePage() {
       setMcpServers(mcpData.mcpServers || []);
       setAlerts(alertsData.alerts || []);
       setActivitySummary(activityData.summary || null);
+      setAuditLogs(auditData || []);
+      setVerificationEvents(verificationData?.events || []);
     } catch (err) {
       console.error("Failed to fetch compliance data:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -750,6 +855,188 @@ export default function CompliancePage() {
     }
   };
 
+  // Unified compliance event type
+  interface ComplianceEvent {
+    id: string;
+    type: "violation" | "capability" | "attestation" | "registration" | "verification";
+    severity: "info" | "low" | "medium" | "high" | "critical";
+    title: string;
+    description: string;
+    resourceType: string;
+    resourceName?: string;
+    agentName?: string;
+    timestamp: string;
+    metadata?: Record<string, any>;
+  }
+
+  // Build unified compliance timeline from multiple sources
+  const getUnifiedTimeline = (): ComplianceEvent[] => {
+    const events: ComplianceEvent[] = [];
+
+    // 1. Add violations from alerts
+    for (const alert of alerts) {
+      events.push({
+        id: `alert-${alert.id}`,
+        type: "violation",
+        severity: alert.severity,
+        title: alert.title,
+        description: alert.description,
+        resourceType: alert.resourceType || "security",
+        timestamp: alert.createdAt,
+        metadata: { alertType: alert.alertType, isAcknowledged: alert.isAcknowledged },
+      });
+    }
+
+    // 2. Add capability usage from verification events
+    for (const event of verificationEvents) {
+      const isSuccess = event.status === "success" || event.status === "allowed";
+      const isFailed = event.status === "failed" || event.status === "denied";
+      events.push({
+        id: `verification-${event.id}`,
+        type: "capability",
+        severity: isFailed ? "high" : isSuccess ? "low" : "medium",
+        title: `Capability ${isSuccess ? "Allowed" : isFailed ? "Denied" : "Checked"}: ${event.action || event.verificationType || "Unknown"}`,
+        description: event.resource ? `Resource: ${event.resource}` : `Agent verification ${event.status}`,
+        resourceType: "agent",
+        agentName: event.agentName,
+        timestamp: event.createdAt,
+        metadata: {
+          trustScore: event.trustScore,
+          durationMs: event.durationMs,
+          status: event.status,
+          reason: event.reason || event.errorReason,
+        },
+      });
+    }
+
+    // 3. Add agent registrations from agents list (created in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    for (const agent of agents) {
+      const createdAt = new Date(agent.createdAt);
+      if (createdAt >= thirtyDaysAgo) {
+        events.push({
+          id: `agent-reg-${agent.id}`,
+          type: "registration",
+          severity: "info",
+          title: `Agent Registered: ${agent.displayName || agent.name}`,
+          description: `New ${agent.agentType === "ai_agent" ? "AI Agent" : "Agent"} registered with status: ${agent.status}`,
+          resourceType: "agent",
+          resourceName: agent.displayName || agent.name,
+          timestamp: agent.createdAt,
+          metadata: { trustScore: agent.trustScore, status: agent.status },
+        });
+      }
+    }
+
+    // 4. Add MCP server registrations from mcpServers list (created in last 30 days)
+    for (const mcp of mcpServers) {
+      const createdAt = new Date(mcp.createdAt);
+      if (createdAt >= thirtyDaysAgo) {
+        events.push({
+          id: `mcp-reg-${mcp.id}`,
+          type: "registration",
+          severity: "info",
+          title: `MCP Server Registered: ${mcp.name}`,
+          description: `New MCP server registered: ${mcp.url}`,
+          resourceType: "mcp_server",
+          resourceName: mcp.name,
+          timestamp: mcp.createdAt,
+          metadata: { status: mcp.status, isVerified: mcp.isVerified },
+        });
+      }
+    }
+
+    // Sort by timestamp descending (newest first)
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Apply filters
+    return events.filter(event => {
+      if (auditLogFilter.eventType !== "all" && event.type !== auditLogFilter.eventType) {
+        return false;
+      }
+      if (auditLogFilter.search) {
+        const searchLower = auditLogFilter.search.toLowerCase();
+        const matchesTitle = event.title.toLowerCase().includes(searchLower);
+        const matchesDescription = event.description.toLowerCase().includes(searchLower);
+        const matchesAgent = event.agentName?.toLowerCase().includes(searchLower);
+        const matchesResource = event.resourceName?.toLowerCase().includes(searchLower);
+        if (!matchesTitle && !matchesDescription && !matchesAgent && !matchesResource) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
+
+  // Export compliance timeline
+  const handleExportAuditLogs = async (format: "csv" | "json") => {
+    try {
+      setExportingAuditLogs(true);
+      const timeline = getUnifiedTimeline();
+
+      if (format === "csv") {
+        const headers = ["ID", "Timestamp", "Type", "Severity", "Title", "Description", "Resource Type", "Agent/Resource Name"];
+        const rows = timeline.map(event => [
+          event.id,
+          event.timestamp,
+          event.type,
+          event.severity,
+          `"${event.title.replace(/"/g, '""')}"`,
+          `"${event.description.replace(/"/g, '""')}"`,
+          event.resourceType,
+          event.agentName || event.resourceName || "N/A",
+        ]);
+        const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `compliance-timeline-${new Date().toISOString().split("T")[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const blob = new Blob([JSON.stringify(timeline, null, 2)], { type: "application/json" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `compliance-timeline-${new Date().toISOString().split("T")[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      console.error("Failed to export timeline:", err);
+      alert("Failed to export: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setExportingAuditLogs(false);
+    }
+  };
+
+  // Get icon and color for compliance event
+  const getEventStyle = (event: ComplianceEvent) => {
+    // By type
+    if (event.type === "violation") {
+      if (event.severity === "critical") return { icon: XCircle, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" };
+      if (event.severity === "high") return { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" };
+      return { icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", badge: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" };
+    }
+    if (event.type === "capability") {
+      if (event.severity === "high") return { icon: Shield, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" };
+      return { icon: Shield, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20", badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" };
+    }
+    if (event.type === "attestation") {
+      return { icon: FileCheck, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", badge: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" };
+    }
+    if (event.type === "registration") {
+      if (event.resourceType === "agent") return { icon: Bot, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" };
+      return { icon: Server, color: "text-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-900/20", badge: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400" };
+    }
+    return { icon: Activity, color: "text-gray-600", bg: "bg-gray-50 dark:bg-gray-900/20", badge: "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400" };
+  };
 
   if (loading) return <CompliancePageSkeleton />;
   if (error && !status) return <ErrorDisplay message={error} onRetry={fetchComplianceData} />;
@@ -775,7 +1062,6 @@ export default function CompliancePage() {
     { name: "Verified Agents", value: `${status?.verifiedAgents || 0} / ${status?.totalAgents || 0}`, icon: CheckCircle, iconColor: "text-green-500" },
     { name: "Verified MCPs", value: `${verifiedMcps} / ${totalMcps}`, icon: ShieldCheck, iconColor: verifiedMcps === totalMcps && totalMcps > 0 ? "text-green-500" : verifiedMcps > 0 ? "text-yellow-500" : "text-gray-500" },
     { name: "MCP Attestations", value: `${attestationCount}`, icon: FileCheck, iconColor: attestationCount > 0 ? "text-blue-500" : "text-gray-500" },
-    { name: "Compliance Rate", value: `${complianceRate}%`, icon: FileText, iconColor: complianceRate >= 80 ? "text-green-500" : complianceRate >= 60 ? "text-yellow-500" : "text-red-500" },
   ];
 
   return (
@@ -830,7 +1116,7 @@ export default function CompliancePage() {
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((stat) => (
             <StatCard key={stat.name} stat={stat} />
           ))}
@@ -841,29 +1127,31 @@ export default function CompliancePage() {
           <div>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Compliance Status</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Real-time compliance checks for agent identity management</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Real-time security and operational health checks</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Security Checks */}
+              {/* Security Checks - focuses on security posture */}
               <ComplianceSummaryCard
                 title="Security Compliance"
-                description="API keys, access controls, and audit logging"
+                description="Credential hygiene, trust scores, violations, and audit coverage"
                 passed={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name) && c.passed).length}
                 total={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name)).length}
                 icon={Lock}
                 color="blue"
                 checks={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name))}
+                onNavigate={(url) => router.push(url)}
               />
 
-              {/* Operations Checks */}
+              {/* Operations Checks - focuses on operational health */}
               <ComplianceSummaryCard
                 title="Operations Compliance"
-                description="Agent and MCP activity and verification status"
+                description="Agent and MCP server activity, verification queues, and resource ownership"
                 passed={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name) && c.passed).length}
                 total={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name)).length}
                 icon={Activity}
                 color="green"
                 checks={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name))}
+                onNavigate={(url) => router.push(url)}
               />
             </div>
           </div>
@@ -1053,6 +1341,207 @@ export default function CompliancePage() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Comprehensive Audit Trail Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setAuditTrailExpanded(!auditTrailExpanded)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                >
+                  {auditTrailExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-gray-500" />
+                  )}
+                </button>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-blue-600" />
+                    Audit Trail
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Complete activity history for agents, MCP servers, and users
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Export Dropdown for Audit Logs */}
+                <div className="relative group">
+                  <button
+                    disabled={exportingAuditLogs}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                  >
+                    {exportingAuditLogs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Export Logs
+                  </button>
+                  <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                    <button
+                      onClick={() => handleExportAuditLogs("json")}
+                      className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-lg"
+                    >
+                      Export as JSON
+                    </button>
+                    <button
+                      onClick={() => handleExportAuditLogs("csv")}
+                      className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-lg"
+                    >
+                      Export as CSV
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {auditTrailExpanded && (
+            <>
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Search */}
+                  <div className="relative flex-1 min-w-[200px] max-w-xs">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search events, agents, resources..."
+                      value={auditLogFilter.search}
+                      onChange={(e) => setAuditLogFilter(prev => ({ ...prev, search: e.target.value }))}
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Event Type Filter */}
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-gray-400" />
+                    <select
+                      value={auditLogFilter.eventType}
+                      onChange={(e) => setAuditLogFilter(prev => ({ ...prev, eventType: e.target.value }))}
+                      className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Events</option>
+                      <option value="violation">Violations</option>
+                      <option value="capability">Capability Usage</option>
+                      <option value="attestation">Attestations</option>
+                      <option value="registration">Registrations</option>
+                    </select>
+                  </div>
+
+                  {/* Results count */}
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {getUnifiedTimeline().length} events
+                  </span>
+                </div>
+              </div>
+
+              {/* Compliance Timeline */}
+              <div className="p-6">
+                {getUnifiedTimeline().length > 0 ? (
+                  <div className="relative">
+                    {/* Vertical line */}
+                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+
+                    <div className="space-y-4">
+                      {getUnifiedTimeline().slice(0, 50).map((event) => {
+                        const { icon: Icon, color, bg, badge } = getEventStyle(event);
+                        return (
+                          <div key={event.id} className="relative flex items-start gap-4 pl-10">
+                            {/* Timeline dot */}
+                            <div className={`absolute left-2 w-5 h-5 rounded-full ${bg} flex items-center justify-center ring-4 ring-white dark:ring-gray-800`}>
+                              <Icon className={`h-3 w-3 ${color}`} />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {event.title}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                                    {event.description}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    {/* Event type badge */}
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${badge}`}>
+                                      {event.type}
+                                    </span>
+                                    {/* Severity badge for violations/high severity events */}
+                                    {(event.type === "violation" || event.severity === "high" || event.severity === "critical") && (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase ${
+                                        event.severity === "critical" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" :
+                                        event.severity === "high" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" :
+                                        event.severity === "medium" ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400" :
+                                        "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                                      }`}>
+                                        {event.severity}
+                                      </span>
+                                    )}
+                                    {/* Agent/Resource name */}
+                                    {(event.agentName || event.resourceName) && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        {event.agentName || event.resourceName}
+                                      </span>
+                                    )}
+                                    {/* Trust score for capability events */}
+                                    {event.metadata?.trustScore !== undefined && (
+                                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                                        Trust: {Math.round(event.metadata.trustScore * 100)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {formatRelativeTime(event.timestamp)}
+                                  </p>
+                                  {/* Status indicator */}
+                                  {event.metadata?.status && (
+                                    <p className={`text-xs mt-0.5 ${
+                                      event.metadata.status === "success" || event.metadata.status === "allowed" ? "text-green-500" :
+                                      event.metadata.status === "failed" || event.metadata.status === "denied" ? "text-red-500" :
+                                      "text-gray-400"
+                                    }`}>
+                                      {event.metadata.status}
+                                    </p>
+                                  )}
+                                  {/* Acknowledged indicator for violations */}
+                                  {event.metadata?.isAcknowledged && (
+                                    <p className="text-xs text-green-500 mt-0.5">acknowledged</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {getUnifiedTimeline().length > 50 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Showing 50 of {getUnifiedTimeline().length} events. Export to see all.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Clock className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                    <p className="text-gray-500 dark:text-gray-400">No compliance events found</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                      {auditLogFilter.search || auditLogFilter.eventType !== "all"
+                        ? "Try adjusting your filters"
+                        : "Violations, capability usage, and registrations will appear here"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </AuthGuard>

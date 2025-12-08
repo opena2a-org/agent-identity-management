@@ -346,128 +346,50 @@ func (s *ComplianceService) GetComplianceMetrics(
 		return nil, err
 	}
 
-	// Calculate real-time agent verification trend based on creation dates
+	// Calculate cumulative trust score trend
+	// For each day in the range, calculate the average trust score of ALL agents
+	// that existed on that day (created before or on that date)
 	agentVerificationTrend := []map[string]interface{}{}
 	trustScoreTrend := []map[string]interface{}{}
 
-	// Group agents by date based on interval
-	dateGroups := make(map[string]struct {
-		verified   int
-		totalScore float64
-		count      int
-	})
-
-	for _, agent := range agents {
-		// Only include agents created within the date range
-		if agent.CreatedAt.Before(startDate) || agent.CreatedAt.After(endDate) {
-			continue
-		}
-
-		// Format date based on interval
-		var dateKey string
-		switch interval {
-		case "week":
-			// Get start of week (Monday)
-			weekStart := agent.CreatedAt.AddDate(0, 0, -int(agent.CreatedAt.Weekday()-time.Monday))
-			dateKey = weekStart.Format("2006-01-02")
-		case "month":
-			dateKey = agent.CreatedAt.Format("2006-01")
-		default: // "day"
-			dateKey = agent.CreatedAt.Format("2006-01-02")
-		}
-
-		// Initialize if not exists
-		if _, exists := dateGroups[dateKey]; !exists {
-			dateGroups[dateKey] = struct {
-				verified   int
-				totalScore float64
-				count      int
-			}{}
-		}
-
-		// Update group data
-		group := dateGroups[dateKey]
-		if agent.Status == domain.AgentStatusVerified {
-			group.verified++
-		}
-		group.totalScore += agent.TrustScore
-		group.count++
-		dateGroups[dateKey] = group
-	}
-
-	// Convert map to sorted arrays
-	type dateMetric struct {
-		date       time.Time
-		verified   int
-		avgScore   float64
-		agentCount int
-	}
-	var sortedMetrics []dateMetric
-
-	for dateKey, group := range dateGroups {
-		var t time.Time
-		if interval == "month" {
-			t, _ = time.Parse("2006-01", dateKey)
-		} else {
-			t, _ = time.Parse("2006-01-02", dateKey)
-		}
-
-		avgScore := 0.0
-		if group.count > 0 {
-			avgScore = group.totalScore / float64(group.count)
-		}
-
-		sortedMetrics = append(sortedMetrics, dateMetric{
-			date:       t,
-			verified:   group.verified,
-			avgScore:   avgScore,
-			agentCount: group.count,
-		})
-	}
-
-	// Sort by date
-	for i := 0; i < len(sortedMetrics); i++ {
-		for j := i + 1; j < len(sortedMetrics); j++ {
-			if sortedMetrics[i].date.After(sortedMetrics[j].date) {
-				sortedMetrics[i], sortedMetrics[j] = sortedMetrics[j], sortedMetrics[i]
-			}
-		}
-	}
-
-	// Create a map of existing metrics by date
-	metricsMap := make(map[string]dateMetric)
-	for _, metric := range sortedMetrics {
-		metricsMap[metric.date.Format("2006-01-02")] = metric
-	}
-
-	// Fill in ALL dates in the range (even if no data, show 0)
+	// Iterate through each day in the range
 	currentDate := startDate
 	for currentDate.Before(endDate) || currentDate.Equal(endDate) {
 		dateKey := currentDate.Format("2006-01-02")
-		
-		// Check if we have data for this date
-		if metric, exists := metricsMap[dateKey]; exists {
-			// Use actual data
-			agentVerificationTrend = append(agentVerificationTrend, map[string]interface{}{
-				"date":     dateKey,
-				"verified": metric.verified,
-			})
-			trustScoreTrend = append(trustScoreTrend, map[string]interface{}{
-				"date":     dateKey,
-				"avgScore": metric.avgScore,
-			})
-		} else {
-			// No data for this date, use 0
-			agentVerificationTrend = append(agentVerificationTrend, map[string]interface{}{
-				"date":     dateKey,
-				"verified": 0,
-			})
-			trustScoreTrend = append(trustScoreTrend, map[string]interface{}{
-				"date":     dateKey,
-				"avgScore": 0.0,
-			})
+		endOfDay := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), 23, 59, 59, 0, currentDate.Location())
+
+		// Count agents that existed on this day (created before or on this date)
+		var totalScore float64
+		var agentCount int
+		var verifiedCount int
+
+		for _, agent := range agents {
+			// Only include agents that were created on or before this date
+			if agent.CreatedAt.Before(endOfDay) || agent.CreatedAt.Equal(endOfDay) {
+				totalScore += agent.TrustScore
+				agentCount++
+				if agent.Status == domain.AgentStatusVerified {
+					verifiedCount++
+				}
+			}
 		}
-		
+
+		// Calculate average trust score for this day
+		avgScore := 0.0
+		if agentCount > 0 {
+			avgScore = totalScore / float64(agentCount)
+		}
+
+		// Add to trends
+		agentVerificationTrend = append(agentVerificationTrend, map[string]interface{}{
+			"date":     dateKey,
+			"verified": verifiedCount,
+		})
+		trustScoreTrend = append(trustScoreTrend, map[string]interface{}{
+			"date":     dateKey,
+			"avgScore": avgScore,
+		})
+
 		// Move to next day
 		currentDate = currentDate.AddDate(0, 0, 1)
 	}

@@ -708,11 +708,12 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		MCP: handlers.NewMCPHandler(
 			services.MCP,
-			services.MCPCapability, // ✅ For capability endpoint
+			services.MCPCapability,  // ✅ For capability endpoint
 			services.Audit,
 			repos.Agent,             // ✅ For agent relationships ("Talks To")
 			repos.VerificationEvent, // ✅ For verification events endpoint
 			services.Tag,            // ✅ For fetching MCP server tags in responses
+			services.MCPAttestation, // ✅ For rich audit trail with attestations
 		),
 		MCPAttestation: handlers.NewMCPAttestationHandler(
 			services.MCPAttestation,

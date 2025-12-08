@@ -587,11 +587,16 @@ export default function AgentDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {connectedMCPServers.length}
+              {connectedMCPServers.length + detectedMCPs.length}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Connected MCP server
-              {connectedMCPServers.length !== 1 ? "s" : ""}
+              {connectedMCPServers.length > 0 && detectedMCPs.length > 0
+                ? `${connectedMCPServers.length} connected, ${detectedMCPs.length} detected`
+                : connectedMCPServers.length > 0
+                ? `Connected MCP server${connectedMCPServers.length !== 1 ? "s" : ""}`
+                : detectedMCPs.length > 0
+                ? `Auto-detected server${detectedMCPs.length !== 1 ? "s" : ""}`
+                : "No MCP servers"}
             </p>
           </CardContent>
         </Card>
