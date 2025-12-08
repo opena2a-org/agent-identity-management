@@ -120,6 +120,9 @@ Detection priority: **Specific mappings** → **Action patterns** → **Namespac
 - **✅ 10 Compliance Checks** — Automated security & operations checks
 - **📝 Complete Audit Trail** — Who did what, when, why
 - **🎯 Risk Level Auto-Detection** — Automatically determines risk from capability patterns
+- **📈 Unified Activity Timeline** — Comprehensive activity feed across agents, MCPs, and verifications
+- **🧠 Behavioral Analysis** — Intelligent pattern detection and anomaly tracking
+- **🔒 Global Enforcement Mode** — Organization-wide policy enforcement toggle
 
 ---
 

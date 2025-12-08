@@ -38,6 +38,20 @@ import { formatDateTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
 
+// Unified Security Activity for comprehensive activity feed
+interface SecurityActivity {
+  id: string;
+  type: 'agent_created' | 'agent_verified' | 'agent_suspended' | 'mcp_registered' | 'mcp_verified' | 'verification_success' | 'verification_failed' | 'capability_granted' | 'capability_revoked' | 'api_key_created' | 'api_key_revoked' | 'audit_action';
+  title: string;
+  description: string;
+  entityType: 'agent' | 'mcp' | 'verification' | 'capability' | 'api_key';
+  entityId?: string;
+  entityName: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
 interface SecurityThreat {
   id: string;
   targetId: string; // Agent or MCP server ID
@@ -296,6 +310,9 @@ export default function SecurityPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [alertCounts, setAlertCounts] = useState({ all: 0, acknowledged: 0, unacknowledged: 0 });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [verificationEvents, setVerificationEvents] = useState<any[]>([]);
 
   // Filter states
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -313,11 +330,14 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       setError(null);
-      const [threatsData, metricsData, alertsData, auditData] = await Promise.all([
+      const [threatsData, metricsData, alertsData, auditData, agentsData, mcpData, verificationData] = await Promise.all([
         api.getSecurityThreats(),
         api.getSecurityMetrics(),
         api.getAlerts(10, 0),
-        api.getAuditLogs(100, 0), // Fetch more to filter meaningful activities
+        api.getAuditLogs(100, 0),
+        api.listAgents().catch(() => ({ agents: [] })),
+        api.listMCPServers(50, 0).catch(() => ({ mcpServers: [] })),
+        api.getRecentVerificationEvents(60).catch(() => ({ events: [] })), // Last 60 minutes
       ]);
       setThreats(threatsData.threats || []);
       setMetrics(metricsData);
@@ -327,16 +347,10 @@ export default function SecurityPage() {
         acknowledged: alertsData.acknowledgedCount || 0,
         unacknowledged: alertsData.unacknowledgedCount || 0,
       });
-
-      // Filter for meaningful agent/MCP activities (exclude dashboard view events)
-      const meaningfulResourceTypes = ['agent', 'mcp_server', 'api_key', 'verification', 'agent_capability'];
-      const meaningfulActions = ['create', 'update', 'delete', 'verify', 'attest', 'register', 'revoke', 'approve', 'deny'];
-      const filteredLogs = (auditData || []).filter((log: any) =>
-        meaningfulResourceTypes.includes(log.resourceType) ||
-        meaningfulActions.includes(log.action) ||
-        log.agentId || log.agentName // Include any agent-initiated activity
-      );
-      setAuditLogs(filteredLogs);
+      setAuditLogs(auditData || []);
+      setAgents(agentsData.agents || []);
+      setMcpServers(mcpData.mcpServers || []);
+      setVerificationEvents(verificationData.events || []);
     } catch (err) {
       console.error("Failed to fetch security data:", err);
       const errorMessage = getErrorMessage(err, {
@@ -376,6 +390,189 @@ export default function SecurityPage() {
   useEffect(() => {
     fetchSecurityData();
   }, []);
+
+  // Create unified security activities from multiple data sources
+  const getUnifiedSecurityActivities = (): SecurityActivity[] => {
+    const activities: SecurityActivity[] = [];
+
+    // Add agent activities (recent creations/updates)
+    agents.forEach((agent: any) => {
+      // Agent creation
+      if (agent.createdAt) {
+        const isRecent = new Date(agent.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+        if (isRecent) {
+          activities.push({
+            id: `agent-created-${agent.id}`,
+            type: 'agent_created',
+            title: 'Agent Registered',
+            description: `Agent "${agent.displayName || agent.name}" was registered`,
+            entityType: 'agent',
+            entityId: agent.id,
+            entityName: agent.displayName || agent.name,
+            severity: 'success',
+            timestamp: agent.createdAt,
+            metadata: { status: agent.status, trustScore: agent.trustScore },
+          });
+        }
+      }
+      // Agent verification
+      if (agent.status === 'verified' && agent.updatedAt) {
+        const isRecent = new Date(agent.updatedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        if (isRecent && agent.createdAt !== agent.updatedAt) {
+          activities.push({
+            id: `agent-verified-${agent.id}`,
+            type: 'agent_verified',
+            title: 'Agent Verified',
+            description: `Agent "${agent.displayName || agent.name}" was verified`,
+            entityType: 'agent',
+            entityId: agent.id,
+            entityName: agent.displayName || agent.name,
+            severity: 'success',
+            timestamp: agent.updatedAt,
+            metadata: { trustScore: agent.trustScore },
+          });
+        }
+      }
+      // Agent suspended
+      if (agent.status === 'suspended' && agent.updatedAt) {
+        activities.push({
+          id: `agent-suspended-${agent.id}`,
+          type: 'agent_suspended',
+          title: 'Agent Suspended',
+          description: `Agent "${agent.displayName || agent.name}" was suspended`,
+          entityType: 'agent',
+          entityId: agent.id,
+          entityName: agent.displayName || agent.name,
+          severity: 'warning',
+          timestamp: agent.updatedAt,
+        });
+      }
+    });
+
+    // Add MCP server activities
+    mcpServers.forEach((mcp: any) => {
+      // MCP registration
+      if (mcp.createdAt) {
+        const isRecent = new Date(mcp.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        if (isRecent) {
+          activities.push({
+            id: `mcp-registered-${mcp.id}`,
+            type: 'mcp_registered',
+            title: 'MCP Server Registered',
+            description: `MCP server "${mcp.name}" was registered`,
+            entityType: 'mcp',
+            entityId: mcp.id,
+            entityName: mcp.name,
+            severity: 'success',
+            timestamp: mcp.createdAt,
+            metadata: { url: mcp.url, status: mcp.status },
+          });
+        }
+      }
+      // MCP verification
+      if (mcp.isVerified && mcp.lastVerifiedAt) {
+        const isRecent = new Date(mcp.lastVerifiedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        if (isRecent) {
+          activities.push({
+            id: `mcp-verified-${mcp.id}`,
+            type: 'mcp_verified',
+            title: 'MCP Server Verified',
+            description: `MCP server "${mcp.name}" verification completed`,
+            entityType: 'mcp',
+            entityId: mcp.id,
+            entityName: mcp.name,
+            severity: 'success',
+            timestamp: mcp.lastVerifiedAt,
+          });
+        }
+      }
+    });
+
+    // Add verification events
+    verificationEvents.forEach((event: any) => {
+      const isSuccess = event.status === 'success' || event.status === 'approved';
+      activities.push({
+        id: `verification-${event.id}`,
+        type: isSuccess ? 'verification_success' : 'verification_failed',
+        title: isSuccess ? 'Verification Passed' : 'Verification Failed',
+        description: `${event.verificationType || 'Verification'} for "${event.agentName || 'Agent'}"`,
+        entityType: 'verification',
+        entityId: event.agentId,
+        entityName: event.agentName || 'Unknown Agent',
+        severity: isSuccess ? 'success' : 'error',
+        timestamp: event.createdAt || event.completedAt || event.startedAt,
+        metadata: {
+          trustScore: event.trustScore,
+          durationMs: event.durationMs,
+          verificationType: event.verificationType,
+        },
+      });
+    });
+
+    // Add meaningful audit log activities
+    const meaningfulActions = ['create', 'verify', 'suspend', 'reactivate', 'revoke', 'grant', 'attest'];
+    const meaningfulResourceTypes = ['agent', 'mcp_server', 'api_key', 'agent_capability'];
+
+    auditLogs
+      .filter((log: any) =>
+        meaningfulActions.includes(log.action) ||
+        meaningfulResourceTypes.includes(log.resourceType)
+      )
+      .forEach((log: any) => {
+        const actionMap: Record<string, { title: string; severity: 'info' | 'success' | 'warning' | 'error' }> = {
+          'create': { title: 'Created', severity: 'success' },
+          'verify': { title: 'Verified', severity: 'success' },
+          'attest': { title: 'Attested', severity: 'success' },
+          'grant': { title: 'Capability Granted', severity: 'info' },
+          'revoke': { title: 'Revoked', severity: 'warning' },
+          'suspend': { title: 'Suspended', severity: 'warning' },
+          'reactivate': { title: 'Reactivated', severity: 'success' },
+          'delete': { title: 'Deleted', severity: 'error' },
+        };
+
+        const actionInfo = actionMap[log.action] || { title: log.action, severity: 'info' as const };
+        const resourceTypeName = log.resourceType?.replace(/_/g, ' ') || 'Resource';
+
+        activities.push({
+          id: `audit-${log.id}`,
+          type: 'audit_action',
+          title: `${actionInfo.title}`,
+          description: `${resourceTypeName} ${actionInfo.title.toLowerCase()}`,
+          entityType: log.resourceType === 'mcp_server' ? 'mcp' : log.resourceType === 'api_key' ? 'api_key' : log.resourceType === 'agent_capability' ? 'capability' : 'agent',
+          entityId: log.resourceId,
+          entityName: log.agentName || log.resourceId?.substring(0, 8) || 'Unknown',
+          severity: actionInfo.severity,
+          timestamp: log.createdAt || log.timestamp,
+          metadata: {
+            performedBy: log.userName || log.userId,
+            action: log.action,
+            resourceType: log.resourceType,
+          },
+        });
+      });
+
+    // Sort by timestamp (most recent first) and deduplicate by similar activities
+    const sortedActivities = activities.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Deduplicate: remove audit logs that duplicate agent/MCP/verification events
+    const seen = new Set<string>();
+    return sortedActivities.filter(activity => {
+      // For audit actions, check if we already have a specific event for this
+      if (activity.type === 'audit_action' && activity.entityId) {
+        const key = `${activity.entityType}-${activity.entityId}`;
+        if (seen.has(key)) return false;
+      }
+      // Mark entity as seen for non-audit activities
+      if (activity.type !== 'audit_action' && activity.entityId) {
+        seen.add(`${activity.entityType}-${activity.entityId}`);
+      }
+      return true;
+    });
+  };
+
+  const securityActivities = getUnifiedSecurityActivities();
 
   // Handler for viewing threat details
   const handleViewThreat = (threat: SecurityThreat) => {
@@ -833,57 +1030,80 @@ export default function SecurityPage() {
                   Agent & MCP Activities
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Recent agent and MCP server actions
+                  {securityActivities.length > 0
+                    ? `${securityActivities.length} recent activities`
+                    : 'Recent agent and MCP server actions'}
                 </p>
               </div>
               <Activity className="h-5 w-5 text-gray-400" />
             </div>
           </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {auditLogs.length === 0 ? (
+          <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
+            {securityActivities.length === 0 ? (
               <div className="p-8 text-center">
                 <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No agent activities recorded</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No recent activities</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Agent and MCP actions will appear here
+                  Agent registrations, verifications, and MCP server activities will appear here
                 </p>
               </div>
             ) : (
-              auditLogs.slice(0, 5).map((log) => {
-                const isPositiveAction = ['create', 'register', 'verify', 'approve', 'attest'].includes(log.action);
-                const isNegativeAction = ['delete', 'revoke', 'deny', 'suspend'].includes(log.action);
-                const isMcpRelated = log.resourceType === 'mcp_server' || log.resourceType?.includes('mcp');
-                const actorName = log.agentName || log.userName || (log.agentId ? `Agent ${log.agentId.substring(0, 8)}...` : 'System');
+              securityActivities.slice(0, 10).map((activity) => {
+                const severityStyles = {
+                  success: {
+                    bg: 'bg-green-100 dark:bg-green-900/30',
+                    icon: 'text-green-600 dark:text-green-400',
+                  },
+                  error: {
+                    bg: 'bg-red-100 dark:bg-red-900/30',
+                    icon: 'text-red-600 dark:text-red-400',
+                  },
+                  warning: {
+                    bg: 'bg-amber-100 dark:bg-amber-900/30',
+                    icon: 'text-amber-600 dark:text-amber-400',
+                  },
+                  info: {
+                    bg: 'bg-blue-100 dark:bg-blue-900/30',
+                    icon: 'text-blue-600 dark:text-blue-400',
+                  },
+                };
+
+                const style = severityStyles[activity.severity];
+                const isMcp = activity.entityType === 'mcp';
+                const isVerification = activity.entityType === 'verification';
 
                 return (
-                  <div key={log.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div key={activity.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 p-1.5 rounded-full ${
-                        isPositiveAction
-                          ? 'bg-green-100 dark:bg-green-900/30'
-                          : isNegativeAction
-                          ? 'bg-red-100 dark:bg-red-900/30'
-                          : 'bg-blue-100 dark:bg-blue-900/30'
-                      }`}>
-                        {isPositiveAction ? (
-                          <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        ) : isNegativeAction ? (
-                          <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                      <div className={`mt-0.5 p-1.5 rounded-full ${style.bg}`}>
+                        {activity.severity === 'success' ? (
+                          <CheckCircle className={`h-3.5 w-3.5 ${style.icon}`} />
+                        ) : activity.severity === 'error' ? (
+                          <XCircle className={`h-3.5 w-3.5 ${style.icon}`} />
+                        ) : activity.severity === 'warning' ? (
+                          <AlertCircle className={`h-3.5 w-3.5 ${style.icon}`} />
                         ) : (
-                          <Activity className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          <Activity className={`h-3.5 w-3.5 ${style.icon}`} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            isMcpRelated
+                            isMcp
                               ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                              : isVerification
+                              ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
                               : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                           }`}>
-                            {isMcpRelated ? (
+                            {isMcp ? (
                               <span className="flex items-center gap-1">
                                 <Server className="h-3 w-3" />
                                 MCP
+                              </span>
+                            ) : isVerification ? (
+                              <span className="flex items-center gap-1">
+                                <Shield className="h-3 w-3" />
+                                Verify
                               </span>
                             ) : (
                               <span className="flex items-center gap-1">
@@ -893,28 +1113,32 @@ export default function SecurityPage() {
                             )}
                           </span>
                           <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {actorName}
+                            {activity.title}
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          <span className="font-medium capitalize">{log.action}</span>
-                          <span className="text-gray-400"> on </span>
-                          <span>{log.resourceType?.replace(/_/g, ' ')}</span>
+                          {activity.entityName}
+                          {activity.metadata?.trustScore && (
+                            <span className="ml-2 text-gray-400">
+                              Trust: {Math.round(activity.metadata.trustScore)}%
+                            </span>
+                          )}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Clock className="h-3 w-3 text-gray-400" />
                           <span className="text-xs text-gray-400">
-                            {formatDateTime(log.createdAt || log.timestamp)}
+                            {formatDateTime(activity.timestamp)}
                           </span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${
-                            isPositiveAction
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                              : isNegativeAction
-                              ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                              : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                          }`}>
-                            {log.action}
-                          </span>
+                          {activity.metadata?.verificationType && (
+                            <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                              {activity.metadata.verificationType}
+                            </span>
+                          )}
+                          {activity.metadata?.durationMs && (
+                            <span className="text-xs text-gray-400">
+                              {activity.metadata.durationMs}ms
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
