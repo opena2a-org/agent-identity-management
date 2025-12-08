@@ -288,6 +288,11 @@ func main() {
 		log.Printf("💾 Redis: disabled (running without caching)")
 	}
 
+	// ✅ Start background job for automatic JIT access expiration
+	// This ensures expired verifications are marked as such even if not queried
+	stopExpirationJob := startExpirationCleanupJob(db)
+	defer close(stopExpirationJob)
+
 	// Graceful shutdown
 	go func() {
 		if err := app.Listen(":" + port); err != nil {
@@ -1338,4 +1343,94 @@ func getAppliedMigrations(db *sql.DB) (map[string]bool, error) {
 func getMigrationVersion(filename string) string {
 	// Use full filename as version for unique tracking
 	return filename
+}
+
+// startExpirationCleanupJob starts a background goroutine that periodically
+// marks expired verification events as expired. This implements the
+// "Time-Limited" JIT access feature documented in README.md.
+//
+// Expiration rules:
+// - Pending verifications: expire after 1 hour (if not approved/denied)
+// - Approved verifications: expire after 24 hours (access window closes)
+//
+// Returns a channel that should be closed to stop the cleanup job.
+func startExpirationCleanupJob(db *sql.DB) chan struct{} {
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(5 * time.Minute) // Run every 5 minutes
+
+	go func() {
+		log.Println("🕐 Starting JIT access expiration cleanup job (runs every 5 minutes)")
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := expireOldVerifications(db); err != nil {
+					log.Printf("⚠️  Expiration cleanup error: %v", err)
+				}
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("🛑 Stopping JIT access expiration cleanup job")
+				return
+			}
+		}
+	}()
+
+	return stopChan
+}
+
+// expireOldVerifications marks old pending and approved verifications as expired
+func expireOldVerifications(db *sql.DB) error {
+	now := time.Now()
+
+	// SQL query to update expired verifications
+	// - Pending verifications older than 1 hour
+	// - Approved verifications older than 24 hours
+	query := `
+		UPDATE verification_events
+		SET
+			result = 'expired',
+			reason = CASE
+				WHEN result = 'pending' THEN 'Pending verification expired after 1 hour (automatic)'
+				WHEN result = 'verified' THEN 'Approved access expired after 24 hours (automatic)'
+				ELSE 'Access expired automatically'
+			END,
+			metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+				'expiredAt', $1::text,
+				'originalResult', result,
+				'expirationReason', 'automatic_background_cleanup'
+			),
+			updated_at = NOW()
+		WHERE
+			result NOT IN ('expired', 'denied', 'failed')
+			AND (
+				(result = 'pending' AND created_at < $2)
+				OR
+				(result = 'verified' AND created_at < $3)
+			)
+		RETURNING id
+	`
+
+	pendingExpiry := now.Add(-1 * time.Hour)   // Pending expires after 1 hour
+	approvedExpiry := now.Add(-24 * time.Hour) // Approved expires after 24 hours
+
+	rows, err := db.Query(query, now.Format(time.RFC3339), pendingExpiry, approvedExpiry)
+	if err != nil {
+		return fmt.Errorf("expiration query failed: %w", err)
+	}
+	defer rows.Close()
+
+	expiredCount := 0
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		expiredCount++
+	}
+
+	if expiredCount > 0 {
+		log.Printf("🕐 Expired %d verification(s) (pending >1h or approved >24h)", expiredCount)
+	}
+
+	return nil
 }

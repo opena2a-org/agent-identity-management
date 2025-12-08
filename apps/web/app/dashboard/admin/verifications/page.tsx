@@ -89,6 +89,7 @@ const statusStyles: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-900 border border-yellow-200",
   approved: "bg-emerald-100 text-emerald-800 border border-emerald-200",
   denied: "bg-red-100 text-red-900 border border-red-200",
+  expired: "bg-gray-100 text-gray-700 border border-gray-200",
 };
 
 const normalizeRisk = (risk?: string) =>
@@ -109,7 +110,7 @@ export default function PendingVerificationsPage() {
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "denied">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "denied" | "expired">("all");
   const [riskFilter, setRiskFilter] = useState<"all" | "low" | "medium" | "high" | "critical">("all");
   const [searchField, setSearchField] = useState<"all" | "agent" | "action" | "resource">("all");
   const [searchInput, setSearchInput] = useState("");
@@ -122,6 +123,7 @@ export default function PendingVerificationsPage() {
     pending: 0,
     approved: 0,
     denied: 0,
+    expired: 0,
   });
   const [expandedContextId, setExpandedContextId] = useState<string | null>(null);
 
@@ -193,6 +195,7 @@ export default function PendingVerificationsPage() {
           pending: payload?.statusCounts?.pending ?? 0,
           approved: payload?.statusCounts?.approved ?? 0,
           denied: payload?.statusCounts?.denied ?? 0,
+          expired: payload?.statusCounts?.expired ?? 0,
         });
         const responseTotal = payload?.pagination?.total ?? 0;
         const responseTotalPages =
@@ -372,7 +375,7 @@ export default function PendingVerificationsPage() {
           </Button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
@@ -381,7 +384,7 @@ export default function PendingVerificationsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statusCounts.pending + statusCounts.approved + statusCounts.denied}
+                {statusCounts.pending + statusCounts.approved + statusCounts.denied + statusCounts.expired}
               </div>
             </CardContent>
           </Card>
@@ -418,6 +421,18 @@ export default function PendingVerificationsPage() {
             <CardContent>
               <div className="text-2xl font-bold text-red-600">
                 {statusCounts.denied}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Expired
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-500">
+                {statusCounts.expired}
               </div>
             </CardContent>
           </Card>
@@ -466,7 +481,7 @@ export default function PendingVerificationsPage() {
                 value={statusFilter}
                 onValueChange={(value) =>
                   setStatusFilter(
-                    value as "all" | "pending" | "approved" | "denied"
+                    value as "all" | "pending" | "approved" | "denied" | "expired"
                   )
                 }
               >
@@ -478,6 +493,7 @@ export default function PendingVerificationsPage() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="denied">Denied</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
             </div>
