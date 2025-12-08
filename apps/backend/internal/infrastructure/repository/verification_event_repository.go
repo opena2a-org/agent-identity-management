@@ -1017,6 +1017,8 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 		filters = append(filters, "status = 'success'")
 	case "denied":
 		filters = append(filters, "status = 'failed'")
+	case "expired":
+		filters = append(filters, "result = 'expired'")
 	}
 
 	if params.RiskLevel != "" && strings.ToLower(params.RiskLevel) != "all" {
@@ -1064,9 +1066,10 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 	statusCounts := &domain.VerificationStatusCounts{}
 	statusCountQuery := `
 		SELECT
-			COUNT(*) FILTER (WHERE status = 'pending') AS pending,
-			COUNT(*) FILTER (WHERE status = 'success') AS approved,
-			COUNT(*) FILTER (WHERE status = 'failed') AS denied
+			COUNT(*) FILTER (WHERE status = 'pending' AND (result IS NULL OR result != 'expired')) AS pending,
+			COUNT(*) FILTER (WHERE status = 'success' AND (result IS NULL OR result != 'expired')) AS approved,
+			COUNT(*) FILTER (WHERE status = 'failed' AND (result IS NULL OR result != 'expired')) AS denied,
+			COUNT(*) FILTER (WHERE result = 'expired') AS expired
 		FROM verification_events
 		WHERE organization_id = $1
 	`
@@ -1074,6 +1077,7 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 		&statusCounts.Pending,
 		&statusCounts.Approved,
 		&statusCounts.Denied,
+		&statusCounts.Expired,
 	); err != nil {
 		return nil, 0, nil, err
 	}

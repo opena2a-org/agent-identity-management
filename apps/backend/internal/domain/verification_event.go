@@ -139,6 +139,7 @@ type VerificationStatusCounts struct {
 	Pending  int `json:"pending"`
 	Approved int `json:"approved"`
 	Denied   int `json:"denied"`
+	Expired  int `json:"expired"`
 }
 
 // VerificationEventRepository defines the interface for verification event storage

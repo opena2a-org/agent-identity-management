@@ -811,13 +811,48 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 		EnforcementMode: enforcementMode,
 	}
 
+	// Calculate expiration time based on result type
+	var expiresAt time.Time
+	if event.Result != nil && *event.Result == domain.VerificationResultVerified {
+		// Approved verifications expire in 24 hours
+		expiresAt = event.CreatedAt.Add(24 * time.Hour)
+	} else {
+		// Pending verifications expire in 1 hour
+		expiresAt = event.CreatedAt.Add(1 * time.Hour)
+	}
+
+	// ✅ AUTOMATIC EXPIRATION CHECK: If current time is past expiration, mark as expired
+	isExpired := time.Now().After(expiresAt)
+	if isExpired && event.Result != nil && *event.Result != domain.VerificationResultExpired && *event.Result != domain.VerificationResultDenied {
+		// Update database to mark as expired (fire and forget - don't block response)
+		go func() {
+			expiredResult := domain.VerificationResultExpired
+			reason := "Access expired automatically after time limit"
+			_ = h.verificationEventService.UpdateVerificationResult(
+				context.Background(),
+				event.ID,
+				expiredResult,
+				&reason,
+				map[string]interface{}{
+					"expiredAt":        time.Now().Format(time.RFC3339),
+					"originalResult":   string(*event.Result),
+					"expirationReason": "automatic_time_limit",
+				},
+			)
+		}()
+	}
+
 	// Map event status and result to verification status
-	if event.Result != nil {
+	if isExpired {
+		// If expired, always return expired status regardless of DB state
+		response.Status = "expired"
+		response.ExpiresAt = expiresAt
+	} else if event.Result != nil {
 		switch *event.Result {
 		case domain.VerificationResultVerified:
 			response.Status = "approved"
 			response.ApprovedBy = "system"
-			response.ExpiresAt = event.CreatedAt.Add(24 * time.Hour)
+			response.ExpiresAt = expiresAt
 		case domain.VerificationResultDenied:
 			response.Status = "denied"
 			if event.ErrorReason != nil {
@@ -825,11 +860,14 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 			}
 		case domain.VerificationResultExpired:
 			response.Status = "expired"
+			response.ExpiresAt = expiresAt
 		default:
 			response.Status = "pending"
+			response.ExpiresAt = expiresAt
 		}
 	} else {
 		response.Status = "pending"
+		response.ExpiresAt = expiresAt
 	}
 
 	return c.Status(fiber.StatusOK).JSON(response)

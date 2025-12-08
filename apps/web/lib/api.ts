@@ -1401,6 +1401,7 @@ class APIClient {
       pending: number;
       approved: number;
       denied: number;
+      expired: number;
     };
   }> {
     const query = new URLSearchParams();
