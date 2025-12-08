@@ -306,6 +306,41 @@ export default function MCPServersPage() {
     fetchMCPServers();
   }, []);
 
+  // Get most recent activity timestamp for an MCP server
+  // Considers: registrations (createdAt), verifications (lastVerifiedAt), capability updates
+  function getMostRecentActivity(server: MCPServer): Date | null {
+    const timestamps: Date[] = [];
+
+    // Registration time
+    if (server.createdAt) {
+      timestamps.push(new Date(server.createdAt));
+    }
+
+    // Last verification time
+    if (server.lastVerifiedAt) {
+      timestamps.push(new Date(server.lastVerifiedAt));
+    }
+
+    // Capability updates (if any capabilities have been detected/verified)
+    if (server.capabilities && server.capabilities.length > 0) {
+      server.capabilities.forEach(cap => {
+        if (cap.detectedAt) {
+          timestamps.push(new Date(cap.detectedAt));
+        }
+        if (cap.lastVerifiedAt) {
+          timestamps.push(new Date(cap.lastVerifiedAt));
+        }
+      });
+    }
+
+    if (timestamps.length === 0) return null;
+
+    // Return the most recent timestamp
+    return timestamps.reduce((latest, current) =>
+      current > latest ? current : latest
+    );
+  }
+
   // Calculate stats
   // Note: Backend counts "verified" status as "active" for dashboard metrics
   // We should also count both "active" and "verified" to be consistent
@@ -315,13 +350,20 @@ export default function MCPServersPage() {
     avgTrustScore:
       mcpServers.reduce((sum, s) => sum + (s.trustScore || 0), 0) /
       mcpServers.length,
-    lastActivity: mcpServers
-      .filter((s) => s.lastVerifiedAt)
-      .sort(
-        (a, b) =>
-          new Date(b.lastVerifiedAt!).getTime() -
-          new Date(a.lastVerifiedAt!).getTime()
-      )[0]?.lastVerifiedAt,
+    // Last Activity now considers: registrations, verifications, and capability updates
+    lastActivity: (() => {
+      const activities = mcpServers
+        .map(s => getMostRecentActivity(s))
+        .filter((d): d is Date => d !== null);
+
+      if (activities.length === 0) return null;
+
+      const mostRecent = activities.reduce((latest, current) =>
+        current > latest ? current : latest
+      );
+
+      return mostRecent.toISOString();
+    })(),
   };
 
   const statCards = [
