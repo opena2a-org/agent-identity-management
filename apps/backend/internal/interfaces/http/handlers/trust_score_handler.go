@@ -171,18 +171,12 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 				"error": "Failed to calculate trust score",
 			})
 		}
-	} else {
-		// We have a stored score - sync it with agent.TrustScore if they differ
-		// This ensures consistency between trust_scores table and agents.trust_score column
-		if agent.TrustScore != score.Score {
-			// Use RecalculateTrustScore to properly update both tables
-			score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
-			if err != nil {
-				// Non-fatal: use the stored score but log the error
-				score, _ = h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
-			}
-		}
 	}
+	// NOTE: We intentionally do NOT auto-sync/recalculate trust scores here.
+	// The agent.TrustScore may differ from stored score.Score due to direct penalties
+	// from violations. Recalculating would cause double-counting because the 8-factor
+	// algorithm also considers security alerts created by violations.
+	// Trust score recalculation should only happen on explicit user request or scheduled intervals.
 
 	// Verify score is not nil (defensive check)
 	if score == nil {

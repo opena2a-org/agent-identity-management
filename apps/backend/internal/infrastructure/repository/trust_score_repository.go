@@ -145,6 +145,23 @@ func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*doma
 	return scores, nil
 }
 
+// UpdateScore updates just the score field in the latest trust_scores record for an agent
+// This is used when applying direct penalties without recalculating all factors
+func (r *TrustScoreRepository) UpdateScore(agentID uuid.UUID, newScore float64) error {
+	query := `
+		UPDATE trust_scores
+		SET score = $1, last_calculated = $2
+		WHERE agent_id = $3
+		AND created_at = (
+			SELECT MAX(created_at)
+			FROM trust_scores
+			WHERE agent_id = $3
+		)
+	`
+	_, err := r.db.Exec(query, newScore, time.Now(), agentID)
+	return err
+}
+
 // GetHistoryAuditTrail returns trust score audit trail from trust_score_history table
 // This provides the full audit trail with who changed it and why (for frontend UI)
 func (r *TrustScoreRepository) GetHistoryAuditTrail(agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {

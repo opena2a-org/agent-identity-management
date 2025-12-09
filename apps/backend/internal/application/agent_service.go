@@ -818,6 +818,12 @@ func (s *AgentService) VerifyCapability(
 				agent.TrustScore*100, newScore*100, violation.TrustScoreImpact, agent.Name)
 		}
 
+		// Also update trust_scores table to keep it in sync with agents.trust_score
+		// This ensures the Trust Score tab shows the correct value
+		if err := s.trustScoreRepo.UpdateScore(agentID, newScore); err != nil {
+			fmt.Printf("⚠️  Warning: failed to update trust_scores table: %v\n", err)
+		}
+
 		// Increment violation count on agent record
 		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
 			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
@@ -1652,8 +1658,8 @@ func (s *AgentService) CreateCapabilityViolation(
 	severity string,
 	metadata map[string]interface{},
 ) error {
-	// Get agent to determine trust score impact
-	agent, err := s.agentRepo.GetByID(agentID)
+	// Verify agent exists
+	_, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %w", err)
 	}
@@ -1712,23 +1718,11 @@ func (s *AgentService) CreateCapabilityViolation(
 		return fmt.Errorf("failed to create violation: %w", err)
 	}
 
-	// Recalculate trust score breakdown after violation
-	// This ensures the trust_scores table stays in sync with agents.trust_score
-	updatedScore, err := s.trustCalc.Calculate(agent)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: failed to recalculate trust score: %v\n", err)
-	} else {
-		// Store the new score breakdown
-		if err := s.trustScoreRepo.Create(updatedScore); err != nil {
-			fmt.Printf("⚠️  Warning: failed to store trust score breakdown: %v\n", err)
-		}
-		// Update agent's trust_score field to keep it in sync
-		if err := s.agentRepo.UpdateTrustScore(agentID, updatedScore.Score); err != nil {
-			fmt.Printf("⚠️  Warning: failed to update agent trust score: %v\n", err)
-		} else {
-			fmt.Printf("✅ Trust score recalculated after violation: %.2f%% for agent %s\n", updatedScore.Score*100, agent.Name)
-		}
-	}
+	// NOTE: We intentionally do NOT recalculate trust score here.
+	// The violation already has a trust_score_impact that is applied directly.
+	// Recalculating would cause double-counting since the 8-factor algorithm
+	// also considers security alerts (which includes this violation).
+	// Trust score recalculation should only happen on positive events or scheduled intervals.
 
 	return nil
 }

@@ -52,6 +52,7 @@ type TrustScoreRepository interface {
 	GetLatest(agentID uuid.UUID) (*TrustScore, error)
 	GetHistory(agentID uuid.UUID, limit int) ([]*TrustScore, error)
 	GetHistoryAuditTrail(agentID uuid.UUID, limit int) ([]*TrustScoreHistoryEntry, error)
+	UpdateScore(agentID uuid.UUID, newScore float64) error // Update just the score without recalculating factors
 }
 
 // TrustScoreHistoryEntry represents an audit trail entry for trust score changes
