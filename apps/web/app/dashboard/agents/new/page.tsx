@@ -4,18 +4,49 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, AgentType } from '@/lib/api';
 import { AuthGuard } from '@/components/auth-guard';
 
 interface AgentFormData {
   name: string;
   displayName: string;
   description: string;
-  agentType: 'ai_agent' | 'mcp_server';
+  agentType: AgentType;
   version: string;
   repositoryUrl: string;
   documentationUrl: string;
 }
+
+// Agent type options organized by category
+const AGENT_TYPE_OPTIONS: { value: AgentType; label: string; description: string; category: string }[] = [
+  // LLM Providers
+  { value: "claude", label: "Claude", description: "Anthropic Claude models", category: "LLM Providers" },
+  { value: "gpt", label: "GPT", description: "OpenAI GPT models", category: "LLM Providers" },
+  { value: "gemini", label: "Gemini", description: "Google Gemini models", category: "LLM Providers" },
+  { value: "llama", label: "Llama", description: "Meta Llama models", category: "LLM Providers" },
+  { value: "mistral", label: "Mistral", description: "Mistral AI models", category: "LLM Providers" },
+  { value: "cohere", label: "Cohere", description: "Cohere models", category: "LLM Providers" },
+  // Frameworks
+  { value: "langchain", label: "LangChain", description: "LangChain framework agents", category: "Frameworks" },
+  { value: "llamaindex", label: "LlamaIndex", description: "LlamaIndex agents", category: "Frameworks" },
+  { value: "langgraph", label: "LangGraph", description: "LangGraph workflow agents", category: "Frameworks" },
+  { value: "crewai", label: "CrewAI", description: "CrewAI multi-agent systems", category: "Frameworks" },
+  { value: "autogen", label: "AutoGen", description: "Microsoft AutoGen agents", category: "Frameworks" },
+  { value: "semantic_kernel", label: "Semantic Kernel", description: "Microsoft Semantic Kernel", category: "Frameworks" },
+  { value: "haystack", label: "Haystack", description: "Haystack pipeline agents", category: "Frameworks" },
+  // Copilots & Assistants
+  { value: "copilot", label: "Copilot", description: "GitHub Copilot, Microsoft Copilot, etc.", category: "Copilots & Assistants" },
+  { value: "assistant", label: "Assistant", description: "OpenAI Assistants API, custom assistants", category: "Copilots & Assistants" },
+  { value: "chatbot", label: "Chatbot", description: "Conversational chatbots", category: "Copilots & Assistants" },
+  // Autonomous Agents
+  { value: "autogpt", label: "AutoGPT", description: "AutoGPT autonomous agent", category: "Autonomous Agents" },
+  { value: "babyagi", label: "BabyAGI", description: "BabyAGI task-driven agent", category: "Autonomous Agents" },
+  // Other
+  { value: "custom", label: "Custom", description: "Custom or other agent type", category: "Other" },
+];
+
+// Get unique categories in order
+const AGENT_TYPE_CATEGORIES = [...new Set(AGENT_TYPE_OPTIONS.map(o => o.category))];
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -23,11 +54,10 @@ export default function NewAgentPage() {
     name: '',
     displayName: '',
     description: '',
-    agentType: 'ai_agent',
+    agentType: 'claude',
     version: '',
     repositoryUrl: '',
     documentationUrl: '',
-    // ✅ REMOVED: public_key - AIM generates this automatically
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +87,7 @@ export default function NewAgentPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Register New Agent</h1>
         <p className="mt-2 text-gray-600">
-          Register an AI agent or MCP server for identity verification
+          Register an AI agent for identity verification and capability management
         </p>
       </div>
 
@@ -66,7 +96,7 @@ export default function NewAgentPage() {
           <CardHeader>
             <CardTitle>Agent Information</CardTitle>
             <CardDescription>
-              Provide details about your agent or MCP server
+              Provide details about your AI agent
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -75,38 +105,25 @@ export default function NewAgentPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Agent Type *
               </label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, agentType: 'ai_agent' })}
-                  className={`p-4 border-2 rounded-lg transition-colors ${
-                    formData.agentType === 'ai_agent'
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-2">🤖</div>
-                  <div className="font-semibold">AI Agent</div>
-                  <div className="text-sm text-gray-500">
-                    Autonomous AI assistant or chatbot
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, agentType: 'mcp_server' })}
-                  className={`p-4 border-2 rounded-lg transition-colors ${
-                    formData.agentType === 'mcp_server'
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-2">🔧</div>
-                  <div className="font-semibold">MCP Server</div>
-                  <div className="text-sm text-gray-500">
-                    Model Context Protocol server
-                  </div>
-                </button>
-              </div>
+              <select
+                required
+                value={formData.agentType}
+                onChange={(e) => setFormData({ ...formData, agentType: e.target.value as AgentType })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white"
+              >
+                {AGENT_TYPE_CATEGORIES.map((category) => (
+                  <optgroup key={category} label={category}>
+                    {AGENT_TYPE_OPTIONS.filter(opt => opt.category === category).map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} - {option.description}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                Select the type of AI agent or framework you are registering
+              </p>
             </div>
 
             {/* Name */}

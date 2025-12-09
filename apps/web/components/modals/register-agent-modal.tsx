@@ -20,7 +20,7 @@ import {
   Key,
   ChevronDown,
 } from "lucide-react";
-import { api, Agent, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
+import { api, Agent, AgentType, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
@@ -38,13 +38,44 @@ interface FormData {
   name: string;
   displayName: string;
   description: string;
-  agentType: "ai_agent" | "mcp_server";
+  agentType: AgentType;
   version: string;
   repositoryUrl: string;
   documentationUrl: string;
   talksTo: string[]; // MCP server IDs/names
   capabilities: string[]; // Capability strings
 }
+
+// Agent type options organized by category
+const AGENT_TYPE_OPTIONS: { value: AgentType; label: string; description: string; category: string }[] = [
+  // LLM Providers
+  { value: "claude", label: "Claude", description: "Anthropic Claude models", category: "LLM Providers" },
+  { value: "gpt", label: "GPT", description: "OpenAI GPT models", category: "LLM Providers" },
+  { value: "gemini", label: "Gemini", description: "Google Gemini models", category: "LLM Providers" },
+  { value: "llama", label: "Llama", description: "Meta Llama models", category: "LLM Providers" },
+  { value: "mistral", label: "Mistral", description: "Mistral AI models", category: "LLM Providers" },
+  { value: "cohere", label: "Cohere", description: "Cohere models", category: "LLM Providers" },
+  // Frameworks
+  { value: "langchain", label: "LangChain", description: "LangChain framework agents", category: "Frameworks" },
+  { value: "llamaindex", label: "LlamaIndex", description: "LlamaIndex agents", category: "Frameworks" },
+  { value: "langgraph", label: "LangGraph", description: "LangGraph workflow agents", category: "Frameworks" },
+  { value: "crewai", label: "CrewAI", description: "CrewAI multi-agent systems", category: "Frameworks" },
+  { value: "autogen", label: "AutoGen", description: "Microsoft AutoGen agents", category: "Frameworks" },
+  { value: "semantic_kernel", label: "Semantic Kernel", description: "Microsoft Semantic Kernel", category: "Frameworks" },
+  { value: "haystack", label: "Haystack", description: "Haystack pipeline agents", category: "Frameworks" },
+  // Copilots & Assistants
+  { value: "copilot", label: "Copilot", description: "GitHub Copilot, Microsoft Copilot, etc.", category: "Copilots & Assistants" },
+  { value: "assistant", label: "Assistant", description: "OpenAI Assistants API, custom assistants", category: "Copilots & Assistants" },
+  { value: "chatbot", label: "Chatbot", description: "Conversational chatbots", category: "Copilots & Assistants" },
+  // Autonomous Agents
+  { value: "autogpt", label: "AutoGPT", description: "AutoGPT autonomous agent", category: "Autonomous Agents" },
+  { value: "babyagi", label: "BabyAGI", description: "BabyAGI task-driven agent", category: "Autonomous Agents" },
+  // Other
+  { value: "custom", label: "Custom", description: "Custom or other agent type", category: "Other" },
+];
+
+// Get unique categories in order
+const AGENT_TYPE_CATEGORIES = [...new Set(AGENT_TYPE_OPTIONS.map(o => o.category))];
 
 // Capability validation pattern (namespace:action format)
 const CAPABILITY_PATTERN = /^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$/;
@@ -99,7 +130,7 @@ export function RegisterAgentModal({
     name: "",
     displayName: "",
     description: "",
-    agentType: "ai_agent",
+    agentType: "claude",
     version: "1.0.0",
     repositoryUrl: "",
     documentationUrl: "",
@@ -1137,17 +1168,25 @@ print(f"Result: {result}")`;
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          agentType: e.target.value as
-                            | "ai_agent"
-                            | "mcp_server",
+                          agentType: e.target.value as AgentType,
                         })
                       }
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                       disabled={loading || success}
                     >
-                      <option value="ai_agent">AI Agent</option>
-                      <option value="mcp_server">MCP Server</option>
+                      {AGENT_TYPE_CATEGORIES.map((category) => (
+                        <optgroup key={category} label={category}>
+                          {AGENT_TYPE_OPTIONS.filter(o => o.category === category).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {AGENT_TYPE_OPTIONS.find(o => o.value === formData.agentType)?.description}
+                    </p>
                   </div>
 
                   <div>

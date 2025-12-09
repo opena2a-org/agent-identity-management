@@ -50,13 +50,41 @@ const getApiUrl = (): string => {
   return "http://localhost:8080";
 };
 
+// Agent types representing different AI models, frameworks, and architectures
+export type AgentType =
+  // LLM Provider-based agents
+  | "claude"          // Anthropic Claude models
+  | "gpt"             // OpenAI GPT models
+  | "gemini"          // Google Gemini models
+  | "llama"           // Meta Llama models
+  | "mistral"         // Mistral AI models
+  | "cohere"          // Cohere models
+  // Framework-based agents
+  | "langchain"       // LangChain agents
+  | "llamaindex"      // LlamaIndex agents
+  | "autogen"         // Microsoft AutoGen
+  | "crewai"          // CrewAI multi-agent
+  | "langgraph"       // LangGraph workflows
+  | "haystack"        // Haystack pipelines
+  | "semantic_kernel" // Microsoft Semantic Kernel
+  // Copilot/Assistant types
+  | "copilot"         // GitHub Copilot, Microsoft Copilot, etc.
+  | "assistant"       // OpenAI Assistants, custom assistants
+  | "chatbot"         // Conversational chatbots
+  // Autonomous agents
+  | "autogpt"         // AutoGPT
+  | "babyagi"         // BabyAGI
+  // Generic types
+  | "custom"          // Custom/other agent types
+  | "ai_agent";       // Legacy type (for backwards compatibility)
+
 export interface Agent {
   id: string;
   organizationId: string;
   name: string;
   displayName: string;
   description: string;
-  agentType: "ai_agent" | "mcp_server";
+  agentType: AgentType;
   status: "pending" | "verified" | "suspended" | "revoked";
   version: string;
   trustScore: number;
