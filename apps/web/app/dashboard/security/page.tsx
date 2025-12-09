@@ -1118,9 +1118,9 @@ export default function SecurityPage() {
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                           {activity.entityName}
-                          {activity.metadata?.trustScore && (
+                          {activity.metadata?.trustScore != null && (
                             <span className="ml-2 text-gray-400">
-                              Trust: {Math.round(activity.metadata.trustScore)}%
+                              Trust: {Math.round(activity.metadata.trustScore <= 1 ? activity.metadata.trustScore * 100 : activity.metadata.trustScore)}%
                             </span>
                           )}
                         </p>
@@ -1134,7 +1134,7 @@ export default function SecurityPage() {
                               {activity.metadata.verificationType}
                             </span>
                           )}
-                          {activity.metadata?.durationMs && (
+                          {activity.metadata?.durationMs && activity.metadata.durationMs > 0 && (
                             <span className="text-xs text-gray-400">
                               {activity.metadata.durationMs}ms
                             </span>

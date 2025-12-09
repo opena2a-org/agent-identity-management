@@ -903,9 +903,9 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	})
 }
 
-// GetAgentActivity retrieves agent activity metrics
-// @Summary Get agent activity metrics
-// @Description Get activity metrics for all agents
+// GetAgentActivity retrieves real agent activity events (verifications, violations, etc.)
+// @Summary Get agent activity events
+// @Description Get real activity events for all agents including verifications, violations, and status changes
 // @Tags analytics
 // @Produce json
 // @Param limit query int false "Limit" default(50)
@@ -922,123 +922,174 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	// Get REAL agent activity from agent_activity_metrics table
-	// Use agents.last_active column which is updated on every verify-action call
+	// Query real activity events from multiple sources using UNION ALL
+	// This combines verification events (for agents and MCP servers), capability violations, and agent status changes
 	query := `
-		SELECT
-			a.id,
-			a.name,
-			a.status,
-			a.trust_score,
-			COALESCE(a.last_active, a.created_at) as last_active,
-			COALESCE(SUM(aam.api_calls_count), 0) as api_calls,
-			COALESCE(SUM(aam.data_processed_bytes) / 1024.0 / 1024.0, 0) as data_processed_mb
-		FROM agents a
-		LEFT JOIN agent_activity_metrics aam ON a.id = aam.agent_id
-		WHERE a.organization_id = $1
-		GROUP BY a.id, a.name, a.status, a.trust_score, a.created_at, a.last_active
-		ORDER BY last_active DESC
+		WITH unified_activities AS (
+			-- Agent verification events (success/failure)
+			SELECT
+				ve.id::text as id,
+				ve.agent_id,
+				COALESCE(ve.agent_name, a.name, 'Unknown Agent') as agent_name,
+				CASE
+					WHEN ve.status = 'success' OR ve.status = 'approved' THEN 'Verification passed'
+					WHEN ve.status = 'failed' OR ve.status = 'denied' THEN 'Verification failed'
+					ELSE 'Verification ' || ve.status
+				END as action,
+				CASE
+					WHEN ve.status = 'success' OR ve.status = 'approved' THEN 'success'
+					WHEN ve.status = 'failed' OR ve.status = 'denied' THEN 'failure'
+					ELSE 'pending'
+				END as status,
+				ve.created_at as timestamp,
+				COALESCE(ve.verification_type || ' verification', 'Verification') ||
+					CASE WHEN ve.status = 'failed' OR ve.status = 'denied' THEN ': ' || COALESCE(ve.error_reason, 'Access denied') ELSE '' END as details,
+				COALESCE(ve.trust_score, 0) as trust_score
+			FROM verification_events ve
+			LEFT JOIN agents a ON ve.agent_id = a.id
+			WHERE ve.organization_id = $1 AND ve.agent_id IS NOT NULL
+
+			UNION ALL
+
+			-- MCP server verification events
+			SELECT
+				ve.id::text as id,
+				ve.mcp_server_id as agent_id,
+				COALESCE(ve.mcp_server_name, m.name, 'Unknown MCP Server') as agent_name,
+				CASE
+					WHEN ve.status = 'success' OR ve.status = 'approved' THEN 'MCP Verification passed'
+					WHEN ve.status = 'failed' OR ve.status = 'denied' THEN 'MCP Verification failed'
+					ELSE 'MCP Verification ' || ve.status
+				END as action,
+				CASE
+					WHEN ve.status = 'success' OR ve.status = 'approved' THEN 'success'
+					WHEN ve.status = 'failed' OR ve.status = 'denied' THEN 'failure'
+					ELSE 'pending'
+				END as status,
+				ve.created_at as timestamp,
+				COALESCE(ve.verification_type || ' verification', 'Verification') ||
+					CASE WHEN ve.status = 'failed' OR ve.status = 'denied' THEN ': ' || COALESCE(ve.error_reason, 'Access denied') ELSE '' END as details,
+				COALESCE(ve.trust_score, 0) as trust_score
+			FROM verification_events ve
+			LEFT JOIN mcp_servers m ON ve.mcp_server_id = m.id
+			WHERE ve.organization_id = $1 AND ve.mcp_server_id IS NOT NULL
+
+			UNION ALL
+
+			-- Capability violations
+			SELECT
+				cv.id::text as id,
+				cv.agent_id,
+				a.name as agent_name,
+				'Capability violation detected' as action,
+				'failure' as status,
+				cv.created_at as timestamp,
+				'Attempted: ' || cv.attempted_capability || ' (severity: ' || cv.severity || ')' as details,
+				COALESCE(a.trust_score, 0) as trust_score
+			FROM capability_violations cv
+			JOIN agents a ON cv.agent_id = a.id
+			WHERE a.organization_id = $1
+
+			UNION ALL
+
+			-- Agent registrations (from agents table)
+			SELECT
+				a.id::text || '-created' as id,
+				a.id as agent_id,
+				a.name as agent_name,
+				'Agent registered' as action,
+				'success' as status,
+				a.created_at as timestamp,
+				'New agent registered with status: ' || a.status as details,
+				COALESCE(a.trust_score, 0) as trust_score
+			FROM agents a
+			WHERE a.organization_id = $1
+			AND a.created_at > NOW() - INTERVAL '7 days'
+
+			UNION ALL
+
+			-- Agent verifications (when verified_at is set)
+			SELECT
+				a.id::text || '-verified' as id,
+				a.id as agent_id,
+				a.name as agent_name,
+				'Agent verified' as action,
+				'success' as status,
+				a.verified_at as timestamp,
+				'Agent status changed to verified' as details,
+				COALESCE(a.trust_score, 0) as trust_score
+			FROM agents a
+			WHERE a.organization_id = $1
+			AND a.verified_at IS NOT NULL
+			AND a.verified_at > NOW() - INTERVAL '7 days'
+		)
+		SELECT id, agent_id, agent_name, action, status, timestamp, details, trust_score
+		FROM unified_activities
+		ORDER BY timestamp DESC
 		LIMIT $2 OFFSET $3
 	`
 
 	rows, err := h.db.Query(query, orgID, limit, offset)
 	if err != nil {
-		// Fallback: if agent_activity_metrics table doesn't exist, use basic agent data
-		agents, err := h.agentService.ListAgents(c.Context(), orgID)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to fetch agent activity",
-			})
-		}
-
-		activities := []map[string]interface{}{}
-		for i, agent := range agents {
-			if i < offset {
-				continue
-			}
-			if len(activities) >= limit {
-				break
-			}
-
-			activities = append(activities, map[string]interface{}{
-				"agentId":       agent.ID.String(),
-				"agentName":     agent.Name,
-				"status":         agent.Status,
-				"trustScore":    agent.TrustScore,
-				"lastActive":    agent.CreatedAt,
-				"timestamp":      agent.CreatedAt, // Frontend expects 'timestamp' field
-				"apiCalls":      0,
-				"dataProcessed": 0.0,
-			})
-		}
-
-		// Calculate summary statistics for fallback case
-		totalActivities := len(activities)
-		successCount := 0
-		failureCount := 0
-
-		for _, activity := range activities {
-			status, ok := activity["status"].(string)
-			if !ok {
-				continue
-			}
-			if status == "verified" || status == "success" {
-				successCount++
-			} else if status == "pending" || status == "failed" {
-				failureCount++
-			}
-		}
-
-		successRate := 0.0
-		if totalActivities > 0 {
-			successRate = (float64(successCount) / float64(totalActivities)) * 100
-		}
-
+		// Fallback: return empty activities if tables don't exist
 		return c.JSON(fiber.Map{
-			"activities": activities,
+			"activities": []map[string]interface{}{},
 			"summary": fiber.Map{
-				"totalActivities": totalActivities,
-				"successCount":    successCount,
-				"failureCount":    failureCount,
-				"successRate":     successRate,
+				"totalActivities": 0,
+				"successCount":    0,
+				"failureCount":    0,
+				"successRate":     0.0,
 			},
-			"total":  len(agents),
+			"total":  0,
 			"limit":  limit,
 			"offset": offset,
-			"note":   "Activity metrics not yet available. Install migration 010 to enable tracking.",
+			"note":   "Activity data unavailable: " + err.Error(),
 		})
 	}
 	defer rows.Close()
 
-	// Build activity data from REAL database records
+	// Build activity data from REAL activity events
 	activities := []map[string]interface{}{}
 	for rows.Next() {
+		var id string
 		var agentID uuid.UUID
-		var name, status string
+		var agentName, action, status string
+		var timestamp time.Time
+		var details string
 		var trustScore float64
-		var lastActive time.Time
-		var apiCalls int64
-		var dataProcessedMB float64
 
-		if err := rows.Scan(&agentID, &name, &status, &trustScore, &lastActive, &apiCalls, &dataProcessedMB); err != nil {
+		if err := rows.Scan(&id, &agentID, &agentName, &action, &status, &timestamp, &details, &trustScore); err != nil {
 			continue
 		}
 
 		activities = append(activities, map[string]interface{}{
-			"agentId":       agentID.String(),
-			"agentName":     name,
-			"status":         status,
-			"trustScore":    trustScore,
-			"lastActive":    lastActive,
-			"timestamp":      lastActive, // Frontend expects 'timestamp' field
-			"apiCalls":      apiCalls,
-			"dataProcessed": dataProcessedMB, // in MB
+			"id":         id,
+			"agentId":    agentID.String(),
+			"agentName":  agentName,
+			"action":     action,
+			"status":     status,
+			"timestamp":  timestamp,
+			"details":    details,
+			"trustScore": trustScore,
 		})
 	}
 
 	// Get total count for pagination
 	var total int
-	countQuery := `SELECT COUNT(*) FROM agents WHERE organization_id = $1`
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT ve.id FROM verification_events ve WHERE ve.organization_id = $1 AND ve.agent_id IS NOT NULL
+			UNION ALL
+			SELECT ve.id FROM verification_events ve WHERE ve.organization_id = $1 AND ve.mcp_server_id IS NOT NULL
+			UNION ALL
+			SELECT cv.id FROM capability_violations cv
+			JOIN agents a ON cv.agent_id = a.id WHERE a.organization_id = $1
+			UNION ALL
+			SELECT a.id FROM agents a WHERE a.organization_id = $1 AND a.created_at > NOW() - INTERVAL '7 days'
+			UNION ALL
+			SELECT a.id FROM agents a WHERE a.organization_id = $1 AND a.verified_at IS NOT NULL AND a.verified_at > NOW() - INTERVAL '7 days'
+		) combined
+	`
 	h.db.QueryRow(countQuery, orgID).Scan(&total)
 
 	// Calculate summary statistics for the activity timeline
@@ -1051,9 +1102,9 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		if !ok {
 			continue
 		}
-		if status == "verified" || status == "success" {
+		if status == "success" {
 			successCount++
-		} else if status == "pending" || status == "failed" {
+		} else if status == "failure" || status == "failed" || status == "pending" {
 			failureCount++
 		}
 	}
