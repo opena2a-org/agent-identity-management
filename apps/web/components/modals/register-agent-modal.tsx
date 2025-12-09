@@ -19,6 +19,8 @@ import {
   Terminal,
   Key,
   ChevronDown,
+  Server,
+  Search,
 } from "lucide-react";
 import { api, Agent, AgentType, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
 import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
@@ -152,6 +154,20 @@ export function RegisterAgentModal({
   const [newMcpServer, setNewMcpServer] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // MCP server autocomplete state
+  const [mcpSuggestions, setMcpSuggestions] = useState<Array<{
+    id: string;
+    name: string;
+    url?: string;
+    status?: string;
+    isDiscovered?: boolean;
+    isRegistered?: boolean;
+  }>>([]);
+  const [loadingMcpSuggestions, setLoadingMcpSuggestions] = useState(false);
+  const [showMcpDropdown, setShowMcpDropdown] = useState(false);
+  const mcpInputRef = useRef<HTMLInputElement | null>(null);
+  const mcpDropdownRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (error && errorBannerRef.current) {
       requestAnimationFrame(() => {
@@ -181,6 +197,85 @@ export function RegisterAgentModal({
         });
     }
   }, [isOpen, capabilityDefinitions.length]);
+
+  // Fetch MCP server suggestions when modal opens
+  useEffect(() => {
+    if (isOpen && mcpSuggestions.length === 0) {
+      setLoadingMcpSuggestions(true);
+
+      // Fetch both registered MCP servers and discovered MCPs
+      Promise.all([
+        api.listMCPServers(100, 0).catch(() => ({ mcpServers: [], total: 0 })),
+        api.getDiscoveredMCPs().catch(() => ({ discovered: [], totalUnmapped: 0, totalAgents: 0, registeredServers: 0 })),
+      ])
+        .then(([registeredResponse, discoveredResponse]) => {
+          const suggestions: Array<{
+            id: string;
+            name: string;
+            url?: string;
+            status?: string;
+            isDiscovered?: boolean;
+            isRegistered?: boolean;
+          }> = [];
+
+          // Add registered MCP servers
+          registeredResponse.mcpServers.forEach((server) => {
+            suggestions.push({
+              id: server.id,
+              name: server.name,
+              url: server.url,
+              status: server.status,
+              isRegistered: true,
+              isDiscovered: false,
+            });
+          });
+
+          // Add discovered MCPs that aren't already registered
+          discoveredResponse.discovered.forEach((discovered) => {
+            // Check if this discovered MCP is already in the registered list
+            const alreadyRegistered = registeredResponse.mcpServers.some(
+              (server) => server.name.toLowerCase() === discovered.name.toLowerCase() ||
+                         server.url === discovered.url
+            );
+
+            if (!alreadyRegistered) {
+              suggestions.push({
+                id: `discovered-${discovered.name}`,
+                name: discovered.name,
+                url: discovered.url,
+                isRegistered: false,
+                isDiscovered: true,
+              });
+            }
+          });
+
+          setMcpSuggestions(suggestions);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch MCP server suggestions:", err);
+        })
+        .finally(() => {
+          setLoadingMcpSuggestions(false);
+        });
+    }
+  }, [isOpen, mcpSuggestions.length]);
+
+  // Close MCP dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        mcpDropdownRef.current &&
+        !mcpDropdownRef.current.contains(event.target as Node) &&
+        mcpInputRef.current &&
+        !mcpInputRef.current.contains(event.target as Node)
+      ) {
+        setShowMcpDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Update form data when initialData or editMode changes
   useEffect(() => {
@@ -538,14 +633,15 @@ export function RegisterAgentModal({
     setCustomCapabilityError(null);
   };
 
-  const addMcpServer = () => {
-    const trimmed = newMcpServer.trim();
+  const addMcpServer = (serverName?: string) => {
+    const trimmed = (serverName || newMcpServer).trim();
     if (trimmed && !formData.talksTo.includes(trimmed)) {
       setFormData((prev) => ({
         ...prev,
         talksTo: [...prev.talksTo, trimmed],
       }));
       setNewMcpServer("");
+      setShowMcpDropdown(false);
     }
   };
 
@@ -555,6 +651,25 @@ export function RegisterAgentModal({
       talksTo: prev.talksTo.filter((s) => s !== server),
     }));
   };
+
+  // Filter MCP suggestions based on search input
+  const filteredMcpSuggestions = useMemo(() => {
+    const searchTerm = newMcpServer.toLowerCase().trim();
+    return mcpSuggestions.filter((suggestion) => {
+      // Don't show already selected servers
+      if (formData.talksTo.includes(suggestion.name)) {
+        return false;
+      }
+      // Filter by search term
+      if (searchTerm) {
+        return (
+          suggestion.name.toLowerCase().includes(searchTerm) ||
+          (suggestion.url && suggestion.url.toLowerCase().includes(searchTerm))
+        );
+      }
+      return true;
+    });
+  }, [mcpSuggestions, newMcpServer, formData.talksTo]);
 
   if (!isOpen) return null;
 
@@ -1386,55 +1501,194 @@ print(f"Result: {result}")`;
                   MCP Servers (Talks To)
                 </label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  List the MCP servers this agent communicates with. This helps
-                  track dependencies and enforce security policies.
+                  Select MCP servers this agent communicates with. Choose from registered servers or discovered MCPs.
                 </p>
 
-                {/* Add MCP Server Input */}
-                <div className="flex gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={newMcpServer}
-                    onChange={(e) => setNewMcpServer(e.target.value)}
-                    onKeyPress={(e) =>
-                      e.key === "Enter" && (e.preventDefault(), addMcpServer())
-                    }
-                    placeholder="e.g., filesystem-mcp or github-mcp"
-                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
-                    disabled={loading || success}
-                  />
-                  <button
-                    type="button"
-                    onClick={addMcpServer}
-                    disabled={!newMcpServer.trim() || loading || success}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add
-                  </button>
+                {/* Add MCP Server Input with Autocomplete */}
+                <div className="relative">
+                  <div className="flex gap-2 mb-3">
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input
+                        ref={mcpInputRef}
+                        type="text"
+                        value={newMcpServer}
+                        onChange={(e) => {
+                          setNewMcpServer(e.target.value);
+                          setShowMcpDropdown(true);
+                        }}
+                        onFocus={() => setShowMcpDropdown(true)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addMcpServer();
+                          }
+                        }}
+                        placeholder="Search or type MCP server name..."
+                        className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                        disabled={loading || success}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addMcpServer()}
+                      disabled={!newMcpServer.trim() || loading || success}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Autocomplete Dropdown */}
+                  {showMcpDropdown && !loading && !success && (
+                    <div
+                      ref={mcpDropdownRef}
+                      className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                      style={{ top: "calc(100% - 12px)" }}
+                    >
+                      {loadingMcpSuggestions ? (
+                        <div className="p-3 text-center text-gray-500 dark:text-gray-400">
+                          <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1" />
+                          <span className="text-sm">Loading MCP servers...</span>
+                        </div>
+                      ) : filteredMcpSuggestions.length > 0 ? (
+                        <>
+                          {/* Registered MCPs Section */}
+                          {filteredMcpSuggestions.filter(s => s.isRegistered).length > 0 && (
+                            <>
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                                Registered MCP Servers
+                              </div>
+                              {filteredMcpSuggestions.filter(s => s.isRegistered).map((suggestion) => (
+                                <button
+                                  key={suggestion.id}
+                                  type="button"
+                                  onClick={() => addMcpServer(suggestion.name)}
+                                  className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                >
+                                  <Server className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {suggestion.name}
+                                      </span>
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                        suggestion.status === "verified"
+                                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                          : suggestion.status === "active"
+                                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                          : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                                      }`}>
+                                        {suggestion.status}
+                                      </span>
+                                    </div>
+                                    {suggestion.url && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">
+                                        {suggestion.url}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </>
+                          )}
+
+                          {/* Discovered MCPs Section */}
+                          {filteredMcpSuggestions.filter(s => s.isDiscovered).length > 0 && (
+                            <>
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                                Discovered (Not Registered)
+                              </div>
+                              {filteredMcpSuggestions.filter(s => s.isDiscovered).map((suggestion) => (
+                                <button
+                                  key={suggestion.id}
+                                  type="button"
+                                  onClick={() => addMcpServer(suggestion.name)}
+                                  className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                >
+                                  <Server className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {suggestion.name}
+                                      </span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                        discovered
+                                      </span>
+                                    </div>
+                                    {suggestion.url && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">
+                                        {suggestion.url}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <div className="p-3 text-center text-gray-500 dark:text-gray-400">
+                          <span className="text-sm">
+                            {mcpSuggestions.length === 0
+                              ? "No MCP servers found. Type a name to add manually."
+                              : "No matching MCP servers. Press Enter to add as custom."}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* MCP Servers List */}
+                {/* Selected MCP Servers List */}
                 {formData.talksTo.length > 0 && (
-                  <div className="space-y-2">
-                    {formData.talksTo.map((server) => (
-                      <div
-                        key={server}
-                        className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"
-                      >
-                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                          {server}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeMcpServer(server)}
-                          disabled={loading || success}
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                  <div className="space-y-2 mt-3">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Selected MCP Servers ({formData.talksTo.length})
+                    </div>
+                    {formData.talksTo.map((server) => {
+                      const suggestion = mcpSuggestions.find(s => s.name === server);
+                      return (
+                        <div
+                          key={server}
+                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2">
+                            <Server className={`h-4 w-4 ${
+                              suggestion?.isRegistered
+                                ? "text-green-600 dark:text-green-400"
+                                : suggestion?.isDiscovered
+                                ? "text-yellow-600 dark:text-yellow-400"
+                                : "text-gray-400"
+                            }`} />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                              {server}
+                            </span>
+                            {suggestion?.isRegistered && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                registered
+                              </span>
+                            )}
+                            {suggestion?.isDiscovered && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                discovered
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeMcpServer(server)}
+                            disabled={loading || success}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
