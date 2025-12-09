@@ -53,6 +53,39 @@ func NewAgentService(
 	}
 }
 
+// isValidAgentType checks if the given agent type is valid
+func isValidAgentType(agentType domain.AgentType) bool {
+	validTypes := map[domain.AgentType]bool{
+		// LLM Providers
+		domain.AgentTypeClaude:  true,
+		domain.AgentTypeGPT:     true,
+		domain.AgentTypeGemini:  true,
+		domain.AgentTypeLlama:   true,
+		domain.AgentTypeMistral: true,
+		domain.AgentTypeCohere:  true,
+		// Frameworks
+		domain.AgentTypeLangChain:      true,
+		domain.AgentTypeLlamaIndex:     true,
+		domain.AgentTypeAutoGen:        true,
+		domain.AgentTypeCrewAI:         true,
+		domain.AgentTypeLangGraph:      true,
+		domain.AgentTypeHaystack:       true,
+		domain.AgentTypeSemanticKernel: true,
+		// Copilots & Assistants
+		domain.AgentTypeCopilot:   true,
+		domain.AgentTypeAssistant: true,
+		domain.AgentTypeChatbot:   true,
+		// Autonomous
+		domain.AgentTypeAutoGPT: true,
+		domain.AgentTypeBabyAGI: true,
+		// Generic
+		domain.AgentTypeCustom: true,
+		// Legacy support
+		domain.AgentTypeAI: true,
+	}
+	return validTypes[agentType]
+}
+
 // CreateAgentRequest represents agent creation request
 type CreateAgentRequest struct {
 	Name             string           `json:"name"`
@@ -79,8 +112,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		return nil, fmt.Errorf("name and display_name are required")
 	}
 
-	if req.AgentType != domain.AgentTypeAI && req.AgentType != domain.AgentTypeMCP {
-		return nil, fmt.Errorf("invalid agent_type")
+	if !isValidAgentType(req.AgentType) {
+		return nil, fmt.Errorf("invalid agent_type: %s", req.AgentType)
 	}
 
 	// ✅ KEY MANAGEMENT - Support both SDK-provided and auto-generated keys
