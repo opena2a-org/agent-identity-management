@@ -77,16 +77,17 @@ agent = secure(
 
 ### `secure()` - The Magic Function
 
-Register and secure an agent with one line.
+Register and secure an agent with one line. The SDK auto-detects your agent type from imports.
 
 ```python
 from aim_sdk import secure
+import langchain  # SDK detects this!
 
 agent = secure(
     name: str,                    # Agent name (required)
     aim_url: str = None,          # AIM backend URL (default: http://localhost:8080)
     private_key: str = None,      # Ed25519 private key (default: auto-generate)
-    agent_type: str = "ai_agent", # Agent type (default: ai_agent)
+    agent_type: str = None,       # Agent type (default: auto-detected from imports)
     description: str = None,      # Agent description (optional)
     auto_verify: bool = True      # Auto-verify actions (default: True)
 ) -> AIMAgent
@@ -96,7 +97,7 @@ agent = secure(
 - **name** (required): Unique identifier for your agent
 - **aim_url**: AIM backend URL (defaults to `http://localhost:8080`)
 - **private_key**: Ed25519 private key (auto-generates if not provided)
-- **agent_type**: Type of agent (`ai_agent`, `mcp_server`, `multi_agent_team`)
+- **agent_type**: Type of agent (auto-detected if not specified). See [Supported Agent Types](#supported-agent-types)
 - **description**: Human-readable description
 - **auto_verify**: Automatically verify all actions (recommended)
 
@@ -104,17 +105,71 @@ agent = secure(
 
 **Example**:
 ```python
-# Minimal (auto-generates keypair)
-agent = secure("my-agent")
+# Minimal - agent type auto-detected from imports
+from aim_sdk import secure
+import langchain  # SDK detects LangChain!
+
+agent = secure("my-agent")  # Auto-detected as "langchain"
+
+# Explicit agent type
+from aim_sdk import secure, AgentType
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
 
 # Production (with existing key)
 agent = secure(
     name="production-agent",
     aim_url="https://aim.yourcompany.com",
     private_key=os.getenv("AIM_PRIVATE_KEY"),
-    agent_type="ai_agent",
+    agent_type=AgentType.CLAUDE,
     description="Production customer service agent"
 )
+```
+
+---
+
+## Supported Agent Types
+
+The SDK automatically detects your agent type based on imported packages:
+
+| Category | Types | Auto-Detected From |
+|----------|-------|-------------------|
+| **Frameworks** | LangChain, LlamaIndex, CrewAI, AutoGen, LangGraph, Haystack, Semantic Kernel | `langchain`, `llama_index`, `crewai`, `autogen`, etc. |
+| **LLM Providers** | Claude, GPT, Gemini, Llama, Mistral, Cohere | `anthropic`, `openai`, `google.generativeai`, etc. |
+| **Copilots** | Copilot, Assistant, Chatbot | For interactive assistants |
+| **Autonomous** | AutoGPT, BabyAGI | Self-directed agents |
+
+**Detection Priority**: Frameworks > Autonomous > LLM Providers
+
+If you import both `langchain` and `anthropic`, the agent type will be `langchain` (frameworks take precedence).
+
+### Using AgentType Constants
+
+```python
+from aim_sdk import secure, AgentType
+
+# Available constants
+AgentType.CLAUDE      # "claude"
+AgentType.GPT         # "gpt"
+AgentType.GEMINI      # "gemini"
+AgentType.LLAMA       # "llama"
+AgentType.MISTRAL     # "mistral"
+AgentType.COHERE      # "cohere"
+AgentType.LANGCHAIN   # "langchain"
+AgentType.LLAMAINDEX  # "llamaindex"
+AgentType.CREWAI      # "crewai"
+AgentType.AUTOGEN     # "autogen"
+AgentType.LANGGRAPH   # "langgraph"
+AgentType.HAYSTACK    # "haystack"
+AgentType.SEMANTIC_KERNEL  # "semantic_kernel"
+AgentType.COPILOT     # "copilot"
+AgentType.ASSISTANT   # "assistant"
+AgentType.CHATBOT     # "chatbot"
+AgentType.AUTOGPT     # "autogpt"
+AgentType.BABYAGI     # "babyagi"
+AgentType.CUSTOM      # "custom"
+
+# Use in registration
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
 ```
 
 ---

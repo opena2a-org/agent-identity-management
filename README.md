@@ -157,42 +157,53 @@ Navigate to **Settings → SDK Download** in the dashboard.
 
 ```python
 from aim_sdk import secure, perform_action
+import langchain  # SDK auto-detects your framework!
 
-# Register and verify the agent
+# ONE LINE - agent type auto-detected as "langchain"
 agent = secure("my-agent")
 
 # All actions are now verified, logged, and monitored
-@perform_action(capability="api:call")
-def fetch_data(url):
-    return requests.get(url)
+@perform_action(capability="db:read")
+def query_database(query):
+    return db.execute(query)  # Verified, logged, capability-enforced
 ```
 
 Watch the dashboard update in real-time as your agent registers and performs actions.
 
 ---
 
-## SDK: Secure Any Agent in 3 Lines
-
-```python
-from aim_sdk import secure, perform_action
-
-agent = secure("my-agent")
-
-@perform_action(capability="db:read")
-def query_database(query):
-    return db.execute(query)  # Verified, logged, capability-enforced
-```
+## SDK Features
 
 ### What the SDK Does Automatically
 
 | Feature | Description |
 |---------|-------------|
+| Agent Type Detection | Auto-detects framework (LangChain, CrewAI, etc.) or LLM provider (Claude, GPT, etc.) |
 | Key Generation | Creates Ed25519 keypair for cryptographic identity |
 | Registration | Registers agent with AIM backend |
 | Verification | Completes challenge-response authentication |
 | Action Logging | Logs every decorated action with metadata |
 | Capability Check | Blocks unauthorized actions before execution |
 | Risk Assessment | Auto-detects risk level from capability patterns |
+
+### Supported Agent Types
+
+The SDK automatically detects your agent type from imported packages:
+
+| Category | Types | Auto-Detection |
+|----------|-------|----------------|
+| **LLM Providers** | Claude, GPT, Gemini, Llama, Mistral, Cohere | Detects `anthropic`, `openai`, etc. |
+| **Frameworks** | LangChain, LlamaIndex, CrewAI, AutoGen, LangGraph, Haystack, Semantic Kernel | Detects framework imports |
+| **Copilots** | Copilot, Assistant, Chatbot | For interactive assistants |
+| **Autonomous** | AutoGPT, BabyAGI | Self-directed agents |
+
+Or specify explicitly:
+
+```python
+from aim_sdk import secure, AgentType
+
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
+```
 
 ### Risk Level Auto-Detection
 

@@ -27,11 +27,13 @@ Open your AIM dashboard side-by-side and watch it update in real-time as you tri
 
 ```python
 from aim_sdk import secure
+import langchain  # SDK auto-detects your framework!
 
 # ONE LINE - Complete security
-agent = secure("my-agent")
+agent = secure("my-agent")  # Auto-detected as "langchain" agent
 
 # That's it. Your agent now has:
+# ✅ Agent type auto-detected from imports
 # ✅ Ed25519 cryptographic signatures
 # ✅ Real-time trust scoring
 # ✅ Complete audit trail
@@ -81,12 +83,33 @@ The demo agent is an interactive menu that lets you trigger different actions (w
 
 | Feature | Description | Zero Config? |
 |---------|-------------|--------------|
+| **Agent Type Detection** | Auto-detects LangChain, CrewAI, Claude, GPT, etc. from imports | ✅ Automatic |
 | **Cryptographic Identity** | Ed25519 signatures on every action | ✅ Automatic |
 | **Trust Scoring** | Real-time ML risk assessment | ✅ Automatic |
 | **Capability Detection** | Scans your code, finds what your agent does | ✅ Automatic |
 | **MCP Server Detection** | Finds Claude Desktop configs automatically | ✅ Automatic |
 | **Audit Trail** | SOC 2 compliant logging | ✅ Automatic |
 | **Action Verification** | Every API call cryptographically signed | ✅ Automatic |
+
+### Supported Agent Types
+
+The SDK automatically detects your agent type from imported packages:
+
+| Category | Types | Auto-Detected From |
+|----------|-------|-------------------|
+| **Frameworks** | LangChain, LlamaIndex, CrewAI, AutoGen, LangGraph, Haystack, Semantic Kernel | `langchain`, `crewai`, `autogen`, etc. |
+| **LLM Providers** | Claude, GPT, Gemini, Llama, Mistral, Cohere | `anthropic`, `openai`, `google.generativeai`, etc. |
+| **Copilots** | Copilot, Assistant, Chatbot | For interactive assistants |
+| **Autonomous** | AutoGPT, BabyAGI | Self-directed agents |
+
+**Priority**: Frameworks are detected before LLM providers. If you import both `langchain` and `anthropic`, the agent type will be `langchain`.
+
+**Explicit Override**:
+```python
+from aim_sdk import secure, AgentType
+
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
+```
 
 ## Usage Examples
 

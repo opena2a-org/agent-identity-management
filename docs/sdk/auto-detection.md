@@ -1,12 +1,13 @@
-# 🔮 Auto-Detection Guide - Automatic MCP Discovery
+# 🔮 Auto-Detection Guide
 
-Let AIM automatically discover and secure your MCP servers with **zero configuration**.
+Let AIM automatically discover your agent type and MCP servers with **zero configuration**.
 
 ## What is Auto-Detection?
 
-**Auto-Detection** scans your system to find installed MCP servers and automatically registers them with AIM.
+**Auto-Detection** scans your Python environment and system to automatically configure your agent:
 
 **What it detects**:
+- ✅ **Agent Type** - LangChain, CrewAI, Claude, GPT, and 15+ more from imports
 - ✅ Claude Desktop MCP servers (`claude_desktop_config.json`)
 - ✅ Custom MCP server configurations
 - ✅ NPM-based MCP servers
@@ -15,6 +16,125 @@ Let AIM automatically discover and secure your MCP servers with **zero configura
 
 **Time to detect**: < 1 second
 **Code required**: 1 line
+
+---
+
+## Agent Type Auto-Detection
+
+The SDK automatically detects your agent type based on imported Python packages.
+
+### How It Works
+
+```python
+from aim_sdk import secure
+import langchain  # SDK detects this!
+
+agent = secure("my-agent")  # Auto-detected as "langchain"
+```
+
+Output:
+```
+✅ Auto-detected agent type: langchain (detected 'langchain' framework import)
+```
+
+### Supported Agent Types
+
+| Category | Types | Auto-Detected From |
+|----------|-------|-------------------|
+| **Frameworks** (highest priority) | LangChain, LlamaIndex, CrewAI, AutoGen, LangGraph, Haystack, Semantic Kernel | `langchain`, `llama_index`, `crewai`, `autogen`, `langgraph`, `haystack`, `semantic_kernel` |
+| **Autonomous Agents** | AutoGPT, BabyAGI | `autogpt`, `babyagi` |
+| **LLM Providers** (fallback) | Claude, GPT, Gemini, Llama, Mistral, Cohere | `anthropic`, `openai`, `google.generativeai`, `llama`, `mistralai`, `cohere` |
+| **Copilots & Assistants** | Copilot, Assistant, Chatbot | For interactive assistants |
+| **Generic** | Custom | When nothing specific detected |
+
+### Detection Priority
+
+Frameworks are detected **before** LLM providers. This makes sense because:
+
+- If you import `langchain` + `anthropic`, you're building a **LangChain agent** that uses Claude
+- The framework defines the agent's architecture and behavior
+- The LLM is just the underlying model
+
+```python
+import langchain       # Framework
+import anthropic       # LLM Provider
+
+agent = secure("my-agent")
+# Result: "langchain" (framework takes priority)
+```
+
+### Explicit Override
+
+You can always specify the agent type manually:
+
+```python
+from aim_sdk import secure, AgentType
+
+# Use AgentType constants for type safety
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
+
+# Or use string directly
+agent = secure("my-agent", agent_type="crewai")
+```
+
+### Available AgentType Constants
+
+```python
+from aim_sdk import AgentType
+
+# LLM Providers
+AgentType.CLAUDE        # "claude"
+AgentType.GPT           # "gpt"
+AgentType.GEMINI        # "gemini"
+AgentType.LLAMA         # "llama"
+AgentType.MISTRAL       # "mistral"
+AgentType.COHERE        # "cohere"
+
+# Frameworks
+AgentType.LANGCHAIN     # "langchain"
+AgentType.LLAMAINDEX    # "llamaindex"
+AgentType.CREWAI        # "crewai"
+AgentType.AUTOGEN       # "autogen"
+AgentType.LANGGRAPH     # "langgraph"
+AgentType.HAYSTACK      # "haystack"
+AgentType.SEMANTIC_KERNEL  # "semantic_kernel"
+
+# Copilots & Assistants
+AgentType.COPILOT       # "copilot"
+AgentType.ASSISTANT     # "assistant"
+AgentType.CHATBOT       # "chatbot"
+
+# Autonomous Agents
+AgentType.AUTOGPT       # "autogpt"
+AgentType.BABYAGI       # "babyagi"
+
+# Generic
+AgentType.CUSTOM        # "custom"
+AgentType.AI_AGENT      # "ai_agent" (legacy)
+
+# Helper methods
+AgentType.all_types()              # List all types
+AgentType.frameworks()             # List framework types
+AgentType.llm_providers()          # List LLM provider types
+```
+
+### Programmatic Detection
+
+You can also detect the agent type without registering:
+
+```python
+from aim_sdk import auto_detect_agent_type
+
+# Detect agent type from current imports
+agent_type, reason = auto_detect_agent_type()
+
+print(f"Detected: {agent_type}")
+print(f"Reason: {reason}")
+```
+
+---
+
+## MCP Server Auto-Detection
 
 ---
 

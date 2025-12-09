@@ -34,6 +34,122 @@ CAPABILITY_PATTERN = re.compile(r'^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$')
 RESERVED_NAMESPACES = ['file', 'db', 'api', 'network', 'system', 'user', 'mcp', 'data']
 
 
+# =============================================================================
+# Agent Type Constants
+# =============================================================================
+# These constants define the valid agent types for registration and filtering.
+# Use these constants instead of raw strings to prevent typos and enable IDE
+# autocomplete.
+
+class AgentType:
+    """
+    Constants for agent types used during registration and filtering.
+
+    Agent types are organized into categories:
+
+    **LLM Providers** - Agents built directly on LLM provider APIs:
+        - CLAUDE: Anthropic Claude models
+        - GPT: OpenAI GPT models
+        - GEMINI: Google Gemini models
+        - LLAMA: Meta Llama models
+        - MISTRAL: Mistral AI models
+        - COHERE: Cohere models
+
+    **Frameworks** - Agents built using AI/LLM frameworks:
+        - LANGCHAIN: LangChain framework agents
+        - LLAMAINDEX: LlamaIndex framework agents
+        - AUTOGEN: Microsoft AutoGen agents
+        - CREWAI: CrewAI multi-agent systems
+        - LANGGRAPH: LangGraph workflow agents
+        - HAYSTACK: Haystack pipeline agents
+        - SEMANTIC_KERNEL: Microsoft Semantic Kernel agents
+
+    **Copilots & Assistants** - Interactive assistant agents:
+        - COPILOT: GitHub Copilot and similar code assistants
+        - ASSISTANT: General-purpose assistants
+        - CHATBOT: Conversational chatbots
+
+    **Autonomous Agents** - Self-directed agent systems:
+        - AUTOGPT: AutoGPT autonomous agents
+        - BABYAGI: BabyAGI task-driven agents
+
+    **Generic Types**:
+        - CUSTOM: Custom/other agent types
+        - AI_AGENT: Legacy type for backward compatibility
+
+    Example:
+        >>> from aim_sdk import register_agent, AgentType
+        >>> agent = register_agent("my-agent", agent_type=AgentType.LANGCHAIN)
+    """
+
+    # LLM Provider-based agents
+    CLAUDE = "claude"
+    GPT = "gpt"
+    GEMINI = "gemini"
+    LLAMA = "llama"
+    MISTRAL = "mistral"
+    COHERE = "cohere"
+
+    # Framework-based agents
+    LANGCHAIN = "langchain"
+    LLAMAINDEX = "llamaindex"
+    AUTOGEN = "autogen"
+    CREWAI = "crewai"
+    LANGGRAPH = "langgraph"
+    HAYSTACK = "haystack"
+    SEMANTIC_KERNEL = "semantic_kernel"
+
+    # Copilot/Assistant types
+    COPILOT = "copilot"
+    ASSISTANT = "assistant"
+    CHATBOT = "chatbot"
+
+    # Autonomous agents
+    AUTOGPT = "autogpt"
+    BABYAGI = "babyagi"
+
+    # Generic types
+    CUSTOM = "custom"
+
+    # Legacy support (deprecated, use specific types instead)
+    AI_AGENT = "ai_agent"
+
+    @classmethod
+    def all_types(cls) -> list:
+        """Return all valid agent types."""
+        return [
+            cls.CLAUDE, cls.GPT, cls.GEMINI, cls.LLAMA, cls.MISTRAL, cls.COHERE,
+            cls.LANGCHAIN, cls.LLAMAINDEX, cls.AUTOGEN, cls.CREWAI, cls.LANGGRAPH,
+            cls.HAYSTACK, cls.SEMANTIC_KERNEL,
+            cls.COPILOT, cls.ASSISTANT, cls.CHATBOT,
+            cls.AUTOGPT, cls.BABYAGI,
+            cls.CUSTOM, cls.AI_AGENT
+        ]
+
+    @classmethod
+    def llm_providers(cls) -> list:
+        """Return LLM provider agent types."""
+        return [cls.CLAUDE, cls.GPT, cls.GEMINI, cls.LLAMA, cls.MISTRAL, cls.COHERE]
+
+    @classmethod
+    def frameworks(cls) -> list:
+        """Return framework-based agent types."""
+        return [
+            cls.LANGCHAIN, cls.LLAMAINDEX, cls.AUTOGEN, cls.CREWAI,
+            cls.LANGGRAPH, cls.HAYSTACK, cls.SEMANTIC_KERNEL
+        ]
+
+    @classmethod
+    def copilots_and_assistants(cls) -> list:
+        """Return copilot and assistant agent types."""
+        return [cls.COPILOT, cls.ASSISTANT, cls.CHATBOT]
+
+    @classmethod
+    def autonomous_agents(cls) -> list:
+        """Return autonomous agent types."""
+        return [cls.AUTOGPT, cls.BABYAGI]
+
+
 def validate_capability_format(capability: str) -> tuple[bool, str]:
     """
     Validate that a capability string matches the namespace:action format.
@@ -1233,7 +1349,15 @@ class AIMClient:
             name: Unique name/identifier for the agent (required)
             display_name: Human-readable display name (defaults to name)
             description: Agent description (defaults to auto-generated)
-            agent_type: Type of agent - "ai_agent" or "mcp_server" (default: "ai_agent")
+            agent_type: Type of agent. Use AgentType constants for type safety.
+                Valid types include:
+                - LLM Providers: "claude", "gpt", "gemini", "llama", "mistral", "cohere"
+                - Frameworks: "langchain", "llamaindex", "autogen", "crewai",
+                  "langgraph", "haystack", "semantic_kernel"
+                - Copilots: "copilot", "assistant", "chatbot"
+                - Autonomous: "autogpt", "babyagi"
+                - Generic: "custom", "ai_agent" (legacy)
+                Default: "ai_agent"
             version: Agent version (e.g., "1.0.0")
             repository_url: GitHub/GitLab repository URL
             documentation_url: Documentation URL
@@ -1256,14 +1380,16 @@ class AIMClient:
 
         Example:
             # Using OAuth credentials (SDK download mode)
+            from aim_sdk import AgentType
             client = AIMClient(agent_id="admin-agent", aim_url="https://aim.example.com", ...)
 
-            # Create a new agent
+            # Create a LangChain agent
             new_agent = client.create_new_agent(
-                name="my-new-agent",
-                display_name="My New Agent",
+                name="my-langchain-agent",
+                display_name="My LangChain Agent",
                 description="An agent for processing data",
-                capabilities=["read_database", "write_files"]
+                agent_type=AgentType.LANGCHAIN,
+                capabilities=["db:read", "file:write"]
             )
 
             print(f"Created agent: {new_agent['id']}")
@@ -2114,13 +2240,17 @@ def register_agent(
     This is the magic function that makes AIM effortless to use while maintaining production-ready protection.
     Call this once and your agent is registered, verified, and ready to use.
 
+    Agent type is automatically detected from your imports (LangChain, CrewAI, Anthropic, OpenAI, etc.)
+
     **ZERO CONFIG MODE** (SDK Download):
-        agent = register_agent("my-agent")
-        # That's it! Everything auto-detected.
+        from aim_sdk import secure
+        agent = secure("my-agent")
+        # That's it! Agent type + capabilities auto-detected from imports.
 
     **MANUAL MODE** (pip install):
-        agent = register_agent("my-agent", api_key="aim_abc123")
-        # Still auto-detects capabilities + MCPs
+        from aim_sdk import secure
+        agent = secure("my-agent", api_key="aim_abc123")
+        # Still auto-detects agent type, capabilities + MCPs
 
     Args:
         name: Agent name (unique identifier)
@@ -2128,7 +2258,15 @@ def register_agent(
         api_key: AIM API key (only required if no SDK credentials found)
         display_name: Human-readable display name (defaults to name)
         description: Agent description (defaults to auto-generated)
-        agent_type: "ai_agent" or "mcp_server" (default: "ai_agent")
+        agent_type: Type of agent. Use AgentType constants for type safety.
+            Valid types include:
+            - LLM Providers: "claude", "gpt", "gemini", "llama", "mistral", "cohere"
+            - Frameworks: "langchain", "llamaindex", "autogen", "crewai",
+              "langgraph", "haystack", "semantic_kernel"
+            - Copilots: "copilot", "assistant", "chatbot"
+            - Autonomous: "autogpt", "babyagi"
+            - Generic: "custom", "ai_agent" (legacy)
+            Default: "ai_agent"
         version: Agent version (e.g., "1.0.0")
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
@@ -2144,18 +2282,26 @@ def register_agent(
         AIMClient instance ready to use
 
     Examples:
-        # SDK Download Mode (ZERO CONFIG):
-        >>> agent = register_agent("my-agent")
+        # SDK Download Mode (ZERO CONFIG) - agent type auto-detected from imports:
+        >>> from aim_sdk import secure
+        >>> agent = secure("my-agent")
+
+        # With explicit agent type:
+        >>> from aim_sdk import secure, AgentType
+        >>> agent = secure("my-agent", agent_type=AgentType.LANGCHAIN)
 
         # Manual Install Mode:
-        >>> agent = register_agent("my-agent", api_key="aim_abc123")
+        >>> from aim_sdk import secure
+        >>> agent = secure("my-agent", api_key="aim_abc123")
 
         # Power User Mode (disable auto-detection):
-        >>> agent = register_agent(
+        >>> from aim_sdk import secure, AgentType
+        >>> agent = secure(
         ...     "my-agent",
         ...     api_key="aim_abc123",
+        ...     agent_type=AgentType.CREWAI,
         ...     auto_detect=False,
-        ...     capabilities=["custom_capability"],
+        ...     capabilities=["db:read", "api:call"],
         ...     talks_to=["custom-mcp-server"]
         ... )
 
@@ -2231,9 +2377,20 @@ def register_agent(
             "Either download SDK from dashboard (OAuth mode) or provide api_key parameter (Manual mode)."
         )
 
-    # 3. Auto-detect capabilities and MCPs (unless manually specified)
+    # 3. Auto-detect capabilities, MCPs, and agent type (unless manually specified)
     if auto_detect:
-       
+        # Auto-detect agent type (unless manually provided)
+        # Only auto-detect if agent_type is at the default value "ai_agent"
+        if agent_type == "ai_agent":
+            from .capability_detection import auto_detect_agent_type
+
+            detected_type, detection_reason = auto_detect_agent_type()
+            if detected_type != "custom":
+                agent_type = detected_type
+                print(f"   ✅ Auto-detected agent type: {agent_type} ({detection_reason})")
+            else:
+                # Keep ai_agent as default when nothing specific is detected
+                print(f"   ℹ️  Using default agent type: ai_agent ({detection_reason})")
 
         # Auto-detect capabilities (unless manually provided)
         if not capabilities:

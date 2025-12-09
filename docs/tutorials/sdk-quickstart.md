@@ -58,13 +58,25 @@ Create a new Python file in the extracted SDK folder:
 
 ```python
 from aim_sdk import secure
+import langchain  # SDK auto-detects your framework!
 
 # This single line:
+# - Auto-detects agent type from imports (langchain, crewai, anthropic, openai, etc.)
 # - Registers your agent with AIM
 # - Generates Ed25519 cryptographic keys
 # - Stores credentials securely
 # - Detects capabilities automatically
-agent = secure("my-first-agent")
+agent = secure("my-first-agent")  # Auto-detected as "langchain" agent
+```
+
+The SDK automatically detects your agent type based on imported packages:
+- **Frameworks**: LangChain, CrewAI, AutoGen, LlamaIndex, etc.
+- **LLM Providers**: Claude, GPT, Gemini, Mistral, etc.
+
+Or specify explicitly:
+```python
+from aim_sdk import secure, AgentType
+agent = secure("my-agent", agent_type=AgentType.CREWAI)
 ```
 
 Run it:

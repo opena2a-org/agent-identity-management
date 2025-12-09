@@ -1,11 +1,12 @@
 """
-AIM SDK - Agent Capability Auto-Detection
+AIM SDK - Agent Capability and Type Auto-Detection
 
-This module automatically detects agent capabilities through various methods:
+This module automatically detects agent capabilities and type through various methods:
 
 1. Decorator Analysis - Scans @agent.perform_action() decorator calls
 2. Import Analysis - Infers capabilities from imported packages
 3. Config File - Reads explicit declarations from .aim/capabilities.json
+4. Agent Type Detection - Infers agent type from framework/LLM imports
 
 Detection results can be used during agent registration or reported separately.
 """
@@ -16,10 +17,133 @@ import sys
 import json
 import pathlib
 import inspect
-from typing import List, Set, Optional, Dict, Any
+from typing import List, Set, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
+
+# =============================================================================
+# Agent Type Auto-Detection
+# =============================================================================
+# Priority-based detection: Frameworks > Autonomous > LLM Providers > Custom
+# This ensures that if someone uses LangChain with Claude, we detect "langchain"
+# since the framework defines the agent's behavior more than the underlying LLM.
+
+# Framework imports (highest priority - these define agent architecture)
+FRAMEWORK_IMPORTS = {
+    "langchain": "langchain",
+    "langchain_core": "langchain",
+    "langchain_community": "langchain",
+    "langchain_openai": "langchain",
+    "langchain_anthropic": "langchain",
+    "llama_index": "llamaindex",
+    "llamaindex": "llamaindex",
+    "autogen": "autogen",
+    "pyautogen": "autogen",
+    "crewai": "crewai",
+    "langgraph": "langgraph",
+    "haystack": "haystack",
+    "semantic_kernel": "semantic_kernel",
+}
+
+# Autonomous agent imports (second priority)
+AUTONOMOUS_IMPORTS = {
+    "autogpt": "autogpt",
+    "auto_gpt": "autogpt",
+    "babyagi": "babyagi",
+    "baby_agi": "babyagi",
+}
+
+# Copilot/Assistant patterns (third priority)
+COPILOT_IMPORTS = {
+    "github_copilot": "copilot",
+    "copilot": "copilot",
+}
+
+# LLM Provider imports (lowest priority - fallback when no framework detected)
+LLM_PROVIDER_IMPORTS = {
+    "anthropic": "claude",
+    "openai": "gpt",
+    "google.generativeai": "gemini",
+    "google.ai.generativelanguage": "gemini",
+    "vertexai": "gemini",
+    "llama": "llama",
+    "llama_cpp": "llama",
+    "mistralai": "mistral",
+    "cohere": "cohere",
+}
+
+
+def auto_detect_agent_type() -> Tuple[str, str]:
+    """
+    Automatically detect the agent type based on imported packages.
+
+    Uses a priority-based approach:
+    1. Frameworks (langchain, crewai, etc.) - highest priority
+    2. Autonomous agents (autogpt, babyagi)
+    3. Copilot/Assistant patterns
+    4. LLM providers (anthropic, openai, etc.) - fallback
+    5. "custom" if nothing detected
+
+    Returns:
+        Tuple of (agent_type, detection_reason)
+        - agent_type: The detected type string (e.g., "langchain", "claude")
+        - detection_reason: Human-readable explanation of why this type was detected
+
+    Example:
+        >>> agent_type, reason = auto_detect_agent_type()
+        >>> print(f"Detected: {agent_type} ({reason})")
+        Detected: langchain (detected 'langchain' package import)
+    """
+    loaded_modules = set(sys.modules.keys())
+
+    # Check frameworks first (highest priority)
+    for import_name, agent_type in FRAMEWORK_IMPORTS.items():
+        if _is_module_loaded(import_name, loaded_modules):
+            return agent_type, f"detected '{import_name}' framework import"
+
+    # Check autonomous agents
+    for import_name, agent_type in AUTONOMOUS_IMPORTS.items():
+        if _is_module_loaded(import_name, loaded_modules):
+            return agent_type, f"detected '{import_name}' autonomous agent import"
+
+    # Check copilot patterns
+    for import_name, agent_type in COPILOT_IMPORTS.items():
+        if _is_module_loaded(import_name, loaded_modules):
+            return agent_type, f"detected '{import_name}' copilot import"
+
+    # Check LLM providers (fallback)
+    for import_name, agent_type in LLM_PROVIDER_IMPORTS.items():
+        if _is_module_loaded(import_name, loaded_modules):
+            return agent_type, f"detected '{import_name}' LLM provider import"
+
+    # Nothing detected - return custom
+    return "custom", "no recognized AI framework or LLM provider detected"
+
+
+def _is_module_loaded(module_name: str, loaded_modules: Set[str]) -> bool:
+    """
+    Check if a module or any of its submodules are loaded.
+
+    Args:
+        module_name: The module name to check (e.g., "langchain")
+        loaded_modules: Set of currently loaded module names
+
+    Returns:
+        True if the module or any submodule is loaded
+    """
+    # Direct match
+    if module_name in loaded_modules:
+        return True
+
+    # Check if any loaded module starts with this name (submodule)
+    prefix = module_name + "."
+    for loaded in loaded_modules:
+        if loaded.startswith(prefix):
+            return True
+
+    return False
 
 
 class CapabilityDetector:

@@ -7,12 +7,41 @@ import (
 	"github.com/google/uuid"
 )
 
-// AgentType represents the type of agent
+// AgentType represents the type of AI agent
 type AgentType string
 
 const (
-	AgentTypeAI  AgentType = "ai_agent"
-	AgentTypeMCP AgentType = "mcp_server"
+	// LLM Provider-based agents
+	AgentTypeClaude  AgentType = "claude"
+	AgentTypeGPT     AgentType = "gpt"
+	AgentTypeGemini  AgentType = "gemini"
+	AgentTypeLlama   AgentType = "llama"
+	AgentTypeMistral AgentType = "mistral"
+	AgentTypeCohere  AgentType = "cohere"
+
+	// Framework-based agents
+	AgentTypeLangChain   AgentType = "langchain"
+	AgentTypeLlamaIndex  AgentType = "llamaindex"
+	AgentTypeAutoGen     AgentType = "autogen"
+	AgentTypeCrewAI      AgentType = "crewai"
+	AgentTypeLangGraph   AgentType = "langgraph"
+	AgentTypeHaystack    AgentType = "haystack"
+	AgentTypeSemanticKernel AgentType = "semantic_kernel"
+
+	// Copilot/Assistant types
+	AgentTypeCopilot   AgentType = "copilot"
+	AgentTypeAssistant AgentType = "assistant"
+	AgentTypeChatbot   AgentType = "chatbot"
+
+	// Autonomous agents
+	AgentTypeAutoGPT AgentType = "autogpt"
+	AgentTypeBabyAGI AgentType = "babyagi"
+
+	// Generic types
+	AgentTypeCustom AgentType = "custom"
+
+	// Legacy support
+	AgentTypeAI AgentType = "ai_agent"
 )
 
 // AgentStatus represents the verification status
