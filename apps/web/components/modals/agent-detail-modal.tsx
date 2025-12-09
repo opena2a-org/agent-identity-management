@@ -22,6 +22,42 @@ import {
 import { Agent, Tag, AgentCapability, api } from "@/lib/api";
 import { TagSelector } from "../ui/tag-selector";
 
+// Agent type display configuration
+const AGENT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  // LLM Providers
+  claude: { label: "Claude", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300" },
+  gpt: { label: "GPT", color: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300" },
+  gemini: { label: "Gemini", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300" },
+  llama: { label: "Llama", color: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300" },
+  mistral: { label: "Mistral", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300" },
+  cohere: { label: "Cohere", color: "bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-300" },
+  // Frameworks
+  langchain: { label: "LangChain", color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300" },
+  llamaindex: { label: "LlamaIndex", color: "bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300" },
+  langgraph: { label: "LangGraph", color: "bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300" },
+  crewai: { label: "CrewAI", color: "bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300" },
+  autogen: { label: "AutoGen", color: "bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300" },
+  semantic_kernel: { label: "Semantic Kernel", color: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300" },
+  haystack: { label: "Haystack", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300" },
+  // Copilots & Assistants
+  copilot: { label: "Copilot", color: "bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300" },
+  assistant: { label: "Assistant", color: "bg-lime-100 dark:bg-lime-900/30 text-lime-800 dark:text-lime-300" },
+  chatbot: { label: "Chatbot", color: "bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-800 dark:text-fuchsia-300" },
+  // Autonomous Agents
+  autogpt: { label: "AutoGPT", color: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300" },
+  babyagi: { label: "BabyAGI", color: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300" },
+  // Other
+  custom: { label: "Custom", color: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300" },
+  // Legacy
+  ai_agent: { label: "AI Agent", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300" },
+};
+
+// Get display info for an agent type
+function getAgentTypeDisplay(agentType: string | undefined): { label: string; color: string } {
+  if (!agentType) return AGENT_TYPE_LABELS.custom;
+  return AGENT_TYPE_LABELS[agentType] || { label: agentType, color: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300" };
+}
+
 interface AgentDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -350,13 +386,9 @@ export function AgentDetailModal({
                 Type
               </span>
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  agent.agentType === "ai_agent"
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
-                    : "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
-                }`}
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getAgentTypeDisplay(agent.agentType).color}`}
               >
-                {agent.agentType === "ai_agent" ? "AI Agent" : "MCP Server"}
+                {getAgentTypeDisplay(agent.agentType).label}
               </span>
             </div>
           </div>

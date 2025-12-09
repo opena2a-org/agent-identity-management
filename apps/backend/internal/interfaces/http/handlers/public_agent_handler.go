@@ -56,6 +56,39 @@ type PublicRegisterResponse struct {
 	Message     string  `json:"message"`
 }
 
+// isValidAgentTypeForPublicAPI checks if the given agent type is valid for public registration
+func isValidAgentTypeForPublicAPI(agentType domain.AgentType) bool {
+	validTypes := map[domain.AgentType]bool{
+		// LLM Providers
+		domain.AgentTypeClaude:  true,
+		domain.AgentTypeGPT:     true,
+		domain.AgentTypeGemini:  true,
+		domain.AgentTypeLlama:   true,
+		domain.AgentTypeMistral: true,
+		domain.AgentTypeCohere:  true,
+		// Frameworks
+		domain.AgentTypeLangChain:      true,
+		domain.AgentTypeLlamaIndex:     true,
+		domain.AgentTypeAutoGen:        true,
+		domain.AgentTypeCrewAI:         true,
+		domain.AgentTypeLangGraph:      true,
+		domain.AgentTypeHaystack:       true,
+		domain.AgentTypeSemanticKernel: true,
+		// Copilots & Assistants
+		domain.AgentTypeCopilot:   true,
+		domain.AgentTypeAssistant: true,
+		domain.AgentTypeChatbot:   true,
+		// Autonomous
+		domain.AgentTypeAutoGPT: true,
+		domain.AgentTypeBabyAGI: true,
+		// Generic
+		domain.AgentTypeCustom: true,
+		// Legacy support
+		domain.AgentTypeAI: true,
+	}
+	return validTypes[agentType]
+}
+
 // Register handles public agent self-registration
 // @Summary Public agent self-registration
 // @Description Register an agent without authentication. Returns credentials including private key (ONLY ONCE).
@@ -82,9 +115,9 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	if req.AgentType != domain.AgentTypeAI && req.AgentType != domain.AgentTypeMCP {
+	if !isValidAgentTypeForPublicAPI(req.AgentType) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "agent_type must be 'ai_agent' or 'mcp_server'",
+			"error": fmt.Sprintf("invalid agent_type: %s", req.AgentType),
 		})
 	}
 

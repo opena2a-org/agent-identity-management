@@ -324,12 +324,32 @@ func (s *TagService) suggestTagsForAgentType(agentType domain.AgentType) []*doma
 	suggestions := make([]*domain.Tag, 0)
 
 	switch agentType {
-	case domain.AgentTypeAI:
-		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "ai-agent", Category: domain.TagCategoryAgentType})
+	// LLM Providers
+	case domain.AgentTypeClaude, domain.AgentTypeGPT, domain.AgentTypeGemini,
+		domain.AgentTypeLlama, domain.AgentTypeMistral, domain.AgentTypeCohere:
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "llm-provider", Category: domain.TagCategoryAgentType})
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: string(agentType), Category: domain.TagCategoryAgentType})
+
+	// Frameworks
+	case domain.AgentTypeLangChain, domain.AgentTypeLlamaIndex, domain.AgentTypeAutoGen,
+		domain.AgentTypeCrewAI, domain.AgentTypeLangGraph, domain.AgentTypeHaystack,
+		domain.AgentTypeSemanticKernel:
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "framework", Category: domain.TagCategoryAgentType})
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: string(agentType), Category: domain.TagCategoryAgentType})
+
+	// Copilots & Assistants
+	case domain.AgentTypeCopilot, domain.AgentTypeAssistant, domain.AgentTypeChatbot:
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "assistant", Category: domain.TagCategoryAgentType})
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: string(agentType), Category: domain.TagCategoryAgentType})
+
+	// Autonomous Agents
+	case domain.AgentTypeAutoGPT, domain.AgentTypeBabyAGI:
 		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "autonomous", Category: domain.TagCategoryAgentType})
-	case domain.AgentTypeMCP:
-		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "mcp-server", Category: domain.TagCategoryAgentType})
-		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "tool-provider", Category: domain.TagCategoryAgentType})
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: string(agentType), Category: domain.TagCategoryAgentType})
+
+	// Generic/Legacy
+	case domain.AgentTypeAI, domain.AgentTypeCustom:
+		suggestions = append(suggestions, &domain.Tag{Key: "type", Value: "ai-agent", Category: domain.TagCategoryAgentType})
 	}
 
 	return suggestions
