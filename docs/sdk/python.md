@@ -341,23 +341,28 @@ with open("soc2_report_sept.pdf", "wb") as f:
 
 ## Decorators
 
-### `@agent.track_action`
+### `@agent.perform_action`
 
-Automatically track and verify function calls.
+Automatically verify and track function calls. Capabilities are auto-registered on first use.
 
 ```python
 from aim_sdk import secure
 
 agent = secure("my-agent")
 
-@agent.track_action(
-    action_name: str = None,    # Custom action name (default: function name)
-    risk_level: str = "low"     # Risk level (low/medium/high/critical)
+@agent.perform_action(
+    capability: str = None,     # Capability name (default: function name)
+    risk_level: str = "medium", # Risk level (low/medium/high/critical)
+    resource: str = None,       # Resource being accessed (optional)
+    jit_access: bool = False,   # Require admin approval (for critical actions)
+    auto_register: bool = True  # Auto-register capability on first use (default: True)
 )
 def your_function(*args, **kwargs):
     # Function implementation
     pass
 ```
+
+> **Note**: The `auto_register` parameter (default: `True`) automatically registers capabilities with AIM on first use. This works seamlessly with MONITORING mode, where actions are logged but not blocked.
 
 **Example**:
 ```python
@@ -366,7 +371,7 @@ import requests
 
 agent = secure("weather-agent")
 
-@agent.track_action(action_name="get_weather", risk_level="low")
+@agent.perform_action(capability="get_weather", risk_level="low")
 def get_weather(city: str) -> dict:
     """Fetch weather data for a city"""
     response = requests.get(
@@ -423,6 +428,94 @@ def delete_all_users():
 # Only executes if approved by human
 result = delete_all_users()  # Waits for approval
 ```
+
+---
+
+## Capability Management
+
+### `agent.register_capability()`
+
+Explicitly register a capability with AIM. This is optional when using `@agent.perform_action` with `auto_register=True` (the default).
+
+```python
+agent.register_capability(
+    capability_type: str,       # Capability name (e.g., "api:weather", "db:read")
+    description: str = "",      # Description of what this capability does
+    risk_level: str = "medium", # Risk level (low/medium/high/critical)
+    auto_approve: bool = False  # Request auto-approval for low-risk capabilities
+) -> dict
+```
+
+**Example**:
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+# Explicitly register capabilities on startup
+agent.register_capability("api:weather", "Check weather data", risk_level="low")
+agent.register_capability("db:read", "Read from database", risk_level="medium")
+agent.register_capability("file:write", "Write files to disk", risk_level="high")
+
+# Now use the capabilities
+@agent.perform_action(capability="api:weather", risk_level="low")
+def get_weather(city: str):
+    return {"temp": 72, "city": city}
+```
+
+> **When to use**: Use `register_capability()` when you want to declare all your agent's capabilities upfront for visibility. The `@agent.perform_action` decorator will auto-register capabilities on first use if `auto_register=True` (default).
+
+### `agent.request_capability()`
+
+Request a new capability that requires admin approval.
+
+```python
+agent.request_capability(
+    capability_type: str,       # Capability being requested
+    reason: str                 # Business justification (min 10 characters)
+) -> dict
+```
+
+**Example**:
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+# Request elevated capability
+result = agent.request_capability(
+    capability_type="db:admin",
+    reason="Need database admin access to run migration scripts"
+)
+
+print(f"Request status: {result['status']}")  # "pending", "approved", or "rejected"
+```
+
+---
+
+## Enforcement Modes
+
+AIM supports two global enforcement modes that affect how capabilities are verified:
+
+### MONITORING Mode (Default)
+
+In MONITORING mode, all actions are **allowed** but logged for visibility:
+
+- Actions proceed even without pre-registered capabilities
+- Violations are logged and alerted but NOT blocked
+- Individual security policies generate alerts but don't block
+- Ideal for development, testing, and initial deployment
+
+### STRICT Mode
+
+In STRICT mode, capabilities must be granted before use:
+
+- Actions are **blocked** if the agent lacks the required capability
+- Individual security policies can block actions
+- Admin must grant capabilities before agents can use them
+- Ideal for production environments with strict security requirements
+
+> **Tip**: Start with MONITORING mode to see how your agents behave, then switch to STRICT mode once you've configured the appropriate capabilities and policies.
 
 ---
 
@@ -685,7 +778,7 @@ agent = secure(
 
 ```python
 # ✅ GOOD - Use decorators
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def get_weather(city: str):
     return requests.get(f"https://api.weather.com/{city}").json()
 
@@ -701,7 +794,7 @@ def get_weather(city: str):
 
 ```python
 # ✅ GOOD - Appropriate risk levels
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def read_data(id: int):
     pass
 
@@ -714,7 +807,7 @@ def delete_all_data():
     pass
 
 # ❌ BAD - Everything is low risk
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def delete_all_data():  # Should be critical!
     pass
 ```
@@ -776,7 +869,7 @@ class WeatherAgent:
         self.api_key = os.getenv("OPENWEATHER_API_KEY")
         self.base_url = "https://api.openweathermap.org/data/2.5/weather"
 
-    @agent.track_action(risk_level="low")
+    @agent.perform_action(risk_level="low")
     def get_weather(self, city: str, units: str = "imperial") -> dict:
         """Get current weather for a city"""
         response = requests.get(
@@ -786,7 +879,7 @@ class WeatherAgent:
         response.raise_for_status()
         return response.json()
 
-    @agent.track_action(risk_level="low")
+    @agent.perform_action(risk_level="low")
     def get_forecast(self, city: str) -> str:
         """Get human-readable weather forecast"""
         weather = self.get_weather(city)

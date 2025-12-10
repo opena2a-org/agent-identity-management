@@ -1,17 +1,82 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Code, Terminal, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, Code, Terminal, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { AuthGuard } from "@/components/auth-guard";
 
 type SDKLanguage = 'python' | 'go' | 'javascript'
+
+const sampleCode = `from aim_sdk import secure, AgentType
+
+# ══════════════════════════════════════════════════════════════════════════
+# AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+agent = secure(
+    "my-ai-assistant",
+    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    capabilities=["db:read", "api:call"],
+    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
+    description="Customer support AI agent",
+    tags=["production", "customer-facing", "gpt-4", "support-team"],
+    metadata={
+        "model": "gpt-4",
+        "department": "support"
+    },
+    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+)
+
+# ══════════════════════════════════════════════════════════════════════════
+# TRACK ACTIONS & RISKS - Log all agent activities in AIM
+# ------------------------------------------------------------------------------
+# AIM verifies agent has db:read and approve or reject action
+@agent.perform_action(capability="db:read")  # auto: low risk
+def get_customer(customer_id: str):
+    return {"id": customer_id, "name": "Jane Doe"}
+# ------------------------------------------------------------------------------
+# @agent.perform_action(capability="text:generate")  # auto: low risk
+# def generate_response(prompt: str):
+#     return llm.generate(prompt)
+
+# @agent.perform_action(capability="sentiment:analyze")  # auto: low risk
+# def analyze_sentiment(text: str):
+#     return {"sentiment": "positive", "score": 0.92}
+
+# Critical action - requires admin approval (JIT Access)
+# @agent.perform_action(capability="customer:delete", jit_access=True)
+# def delete_customer(customer_id: str):
+#     return {"deleted": customer_id}  # Waits for admin approval!
+
+# Run your functions - AIM verifies and tracks everything!
+# response = generate_response("Hello, how can I help?")
+# print(f"Response: {response}")
+
+# ══════════════════════════════════════════════════════════════════════════
+# CAPABILITY REQUEST - Request New Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+
+# Request capabilities that need admin approval
+# agent.request_capability(
+#     "db:admin",
+#     reason="Need admin access for migration",
+#     metadata={
+#         "use_case": "quarterly migration",
+#         "expires": "2025-01-01"
+#     }
+# )`
 
 export default function SDKDownloadPage() {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [selectedSDK, setSelectedSDK] = useState<SDKLanguage>('python')
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(sampleCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const handleDownload = async (sdk: SDKLanguage) => {
     try {
@@ -21,13 +86,13 @@ export default function SDKDownloadPage() {
       setSelectedSDK(sdk)
 
       // Use API client with automatic token refresh on 401
-      const blob = await api.downloadSDK(sdk)
+      const { blob, filename } = await api.downloadSDK(sdk)
 
-      // Create blob and trigger download
+      // Create blob and trigger download with versioned filename from backend
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `aim-sdk-${sdk}.zip`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -88,9 +153,14 @@ export default function SDKDownloadPage() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Python SDK</h2>
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 mt-1">
-                  ✅ Stable Release
-                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    ✅ Stable Release
+                  </span>
+                  <span className="inline-flex items-center px-2 py-1 rounded text-sm font-mono font-medium bg-gray-100 text-gray-700">
+                    v1.7.0
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -178,25 +248,21 @@ export default function SDKDownloadPage() {
 
             <div>
               <h4 className="font-medium text-gray-900 mb-2">3. Build Your Own Agent</h4>
-              <div className="bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
-                <code className="text-sm text-green-400 font-mono">
-                  from aim_sdk import secure<br />
-                  <br />
-                  # ONE LINE - Security enabled!<br />
-                  agent = secure(&quot;my-agent&quot;)<br />
-                  <br />
-                  # Add security to any function with a decorator<br />
-                  @agent.track_action(risk_level=&quot;low&quot;)<br />
-                  def my_function():<br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;return &quot;Hello from a secured agent!&quot;<br />
-                  <br />
-                  # Every call is now verified, logged, and monitored!<br />
-                  result = my_function()
-                </code>
+              <div className="relative bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
+                <button
+                  onClick={handleCopy}
+                  className="absolute top-3 right-3 p-2 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                  title="Copy to clipboard"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+                <pre className="text-sm text-green-400 font-mono whitespace-pre overflow-x-auto">
+                  {sampleCode}
+                </pre>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>Copy the demo_agent.py file and modify it for your use case!</span>
+                <span>Click the copy button above or use the demo_agent.py file as a starting point!</span>
               </p>
             </div>
 

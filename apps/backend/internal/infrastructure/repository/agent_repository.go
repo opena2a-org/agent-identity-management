@@ -58,10 +58,10 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	query := `
 		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		                    trust_score, talks_to, capabilities,
+		                    trust_score, talks_to, capabilities, metadata,
 		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
 	`
 
 	now := time.Now()
@@ -90,6 +90,15 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		return fmt.Errorf("failed to marshal capabilities: %w", err)
 	}
 
+	// Marshal metadata to JSONB
+	metadataJSON, err := json.Marshal(agent.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+	if agent.Metadata == nil {
+		metadataJSON = []byte("{}")
+	}
+
 	_, err = r.db.Exec(query,
 		agent.ID,
 		agent.OrganizationID,
@@ -108,6 +117,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.TrustScore,
 		talksToJSON,
 		capabilitiesJSON,
+		metadataJSON,
 		agent.KeyCreatedAt,
 		agent.KeyExpiresAt,
 		agent.KeyRotationGraceUntil,
@@ -130,7 +140,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, talks_to, capabilities, created_at, updated_at, created_by, last_active,
+		       trust_score, verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
 		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, ''),
@@ -149,6 +159,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var documentationURL sql.NullString
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
+	var metadataJSON []byte
 	var lastActive sql.NullTime
 	var keyCreatedAt sql.NullTime
 	var keyExpiresAt sql.NullTime
@@ -177,6 +188,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.VerifiedAt,
 		&talksToJSON,
 		&capabilitiesJSON,
+		&metadataJSON,
 		&agent.CreatedAt,
 		&agent.UpdatedAt,
 		&agent.CreatedBy,
@@ -269,6 +281,13 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		}
 	}
 
+	// Unmarshal metadata from JSONB
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
 	return agent, nil
 }
 
@@ -277,7 +296,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by,
+		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
@@ -299,6 +318,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
 		var talksToJSON []byte
+		var metadataJSON []byte
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -315,6 +335,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
+			&metadataJSON,
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
@@ -348,6 +369,13 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			return nil, err
 		}
 
+		// Unmarshal metadata from JSONB
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -361,10 +389,10 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		SET display_name = $1, description = $2, agent_type = $3, status = $4, version = $5,
 		    public_key = $6, encrypted_private_key = $7, key_algorithm = $8, certificate_url = $9, repository_url = $10,
 		    documentation_url = $11, trust_score = $12, verified_at = $13,
-		    talks_to = $14, capabilities = $15, updated_at = $16,
-		    key_created_at = $17, key_expires_at = $18, key_rotation_grace_until = $19,
-		    previous_public_key = $20, rotation_count = $21
-		WHERE id = $22
+		    talks_to = $14, capabilities = $15, metadata = $16, updated_at = $17,
+		    key_created_at = $18, key_expires_at = $19, key_rotation_grace_until = $20,
+		    previous_public_key = $21, rotation_count = $22
+		WHERE id = $23
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -379,6 +407,15 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 	capabilitiesJSON, err := json.Marshal(agent.Capabilities)
 	if err != nil {
 		return fmt.Errorf("failed to marshal capabilities: %w", err)
+	}
+
+	// Marshal metadata to JSONB
+	metadataJSON, err := json.Marshal(agent.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+	if agent.Metadata == nil {
+		metadataJSON = []byte("{}")
 	}
 
 	_, err = r.db.Exec(query,
@@ -397,6 +434,7 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.VerifiedAt,
 		talksToJSON,
 		capabilitiesJSON,
+		metadataJSON,
 		agent.UpdatedAt,
 		agent.KeyCreatedAt,
 		agent.KeyExpiresAt,
@@ -421,7 +459,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by,
+		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		ORDER BY created_at DESC
@@ -443,6 +481,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
 		var talksToJSON []byte
+		var metadataJSON []byte
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -459,6 +498,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
+			&metadataJSON,
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
@@ -490,6 +530,13 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
 		if err != nil {
 			return nil, err
+		}
+
+		// Unmarshal metadata from JSONB
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
 		}
 
 		agents = append(agents, agent)
@@ -541,7 +588,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by,
+		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
@@ -572,6 +619,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
 		var talksToJSON []byte
+		var metadataJSON []byte
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -588,6 +636,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
+			&metadataJSON,
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
@@ -621,6 +670,13 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			return nil, err
 		}
 
+		// Unmarshal metadata from JSONB
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -638,7 +694,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
-		       talks_to, created_at, updated_at, created_by,
+		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
@@ -669,6 +725,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
 		var talksToJSON []byte
+		var metadataJSON []byte
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -685,6 +742,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.TrustScore,
 			&agent.VerifiedAt,
 			&talksToJSON,
+			&metadataJSON,
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
@@ -718,6 +776,13 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			return nil, err
 		}
 
+		// Unmarshal metadata from JSONB
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -732,7 +797,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
-		       talks_to, capabilities,
+		       talks_to, capabilities, metadata,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1 AND name = $2
@@ -755,6 +820,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	var rotationCount sql.NullInt32
 	var talksToJSON []byte
 	var capabilitiesJSON []byte
+	var metadataJSON []byte
 
 	err := r.db.QueryRow(query, orgID, name).Scan(
 		&agent.ID,
@@ -783,6 +849,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&rotationCount,
 		&talksToJSON,
 		&capabilitiesJSON,
+		&metadataJSON,
 		&agent.CapabilityViolationCount,
 		&agent.IsCompromised,
 	)
@@ -845,6 +912,11 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	if len(capabilitiesJSON) > 0 {
 		if err := json.Unmarshal(capabilitiesJSON, &agent.Capabilities); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+		}
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 		}
 	}
 

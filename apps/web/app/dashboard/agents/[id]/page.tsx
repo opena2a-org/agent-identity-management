@@ -870,17 +870,37 @@ export default function AgentDetailsPage({
 
                 // Add agent actions
                 agentActivity.forEach((activity: any) => {
+                  const meta = activity.metadata || {};
+                  const riskLevel = meta.riskLevel || 'unknown';
+                  const resource = meta.resource || activity.resourceType || 'unknown';
+                  const wasApproved = meta.autoApproved;
+                  const trustScore = meta.trustScore ? `${(meta.trustScore * 100).toFixed(0)}%` : null;
+
+                  // Build a detailed description
+                  let description = `Resource: ${resource}`;
+                  if (riskLevel !== 'unknown') {
+                    description += ` • Risk: ${riskLevel}`;
+                  }
+                  if (trustScore) {
+                    description += ` • Trust: ${trustScore}`;
+                  }
+                  if (wasApproved !== undefined) {
+                    description += wasApproved ? ' • Auto-approved' : ' • Denied';
+                  }
+
                   timelineEvents.push({
                     id: `action-${activity.id}`,
                     type: 'action',
                     timestamp: new Date(activity.timestamp),
-                    title: activity.action?.replace(/_/g, ' ') || 'Action',
-                    description: activity.details || `${activity.resourceType}${activity.resourceId ? ` (${activity.resourceId.substring(0, 8)}...)` : ''}`,
+                    title: activity.action?.replace(/_/g, ' ').replace(/:/g, ':') || 'Action',
+                    description,
                     icon: 'action',
                     badge: {
-                      text: activity.resourceType || 'agent',
-                      variant: 'outline'
-                    }
+                      text: riskLevel,
+                      variant: riskLevel === 'high' || riskLevel === 'critical' ? 'destructive' :
+                               riskLevel === 'medium' ? 'secondary' : 'outline'
+                    },
+                    metadata: meta
                   });
                 });
 
@@ -929,7 +949,7 @@ export default function AgentDetailsPage({
                       <div className="p-3 rounded-lg border bg-card">
                         <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                           <Bot className="h-3 w-3" />
-                          Actions
+                          Performed Actions
                         </div>
                         <div className="text-2xl font-bold">{agentActivity.length}</div>
                       </div>
@@ -1198,6 +1218,26 @@ export default function AgentDetailsPage({
                     {agent.organizationId}
                   </span>
                 </div>
+                {agent.metadata && Object.keys(agent.metadata).length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-3 items-start gap-4">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Metadata:
+                      </span>
+                      <div className="col-span-2">
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(agent.metadata).map(([key, value]) => (
+                            <Badge key={key} variant="outline" className="text-xs">
+                              <span className="font-medium">{key}:</span>
+                              <span className="ml-1">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

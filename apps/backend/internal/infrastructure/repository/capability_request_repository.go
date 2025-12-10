@@ -22,10 +22,10 @@ func NewCapabilityRequestRepository(db *sqlx.DB) domain.CapabilityRequestReposit
 func (r *capabilityRequestRepository) Create(req *domain.CapabilityRequest) error {
 	query := `
 		INSERT INTO capability_requests (
-			id, agent_id, capability_type, reason, status,
+			id, agent_id, capability_type, reason, metadata, status,
 			requested_by, requested_at, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)
 	`
 
@@ -36,12 +36,14 @@ func (r *capabilityRequestRepository) Create(req *domain.CapabilityRequest) erro
 	req.RequestedAt = now
 	req.Status = domain.CapabilityRequestStatusPending
 
+	// Use JSONBMap's Value() method for metadata serialization
 	_, err := r.db.Exec(
 		query,
 		req.ID,
 		req.AgentID,
 		req.CapabilityType,
 		req.Reason,
+		req.Metadata, // JSONBMap implements driver.Valuer
 		req.Status,
 		req.RequestedBy,
 		req.RequestedAt,
@@ -59,6 +61,7 @@ func (r *capabilityRequestRepository) GetByID(id uuid.UUID) (*domain.CapabilityR
 			cr.agent_id,
 			cr.capability_type,
 			cr.reason,
+			cr.metadata,
 			cr.status,
 			cr.requested_by,
 			cr.reviewed_by,
@@ -96,6 +99,7 @@ func (r *capabilityRequestRepository) List(filter domain.CapabilityRequestFilter
 			cr.agent_id,
 			cr.capability_type,
 			cr.reason,
+			cr.metadata,
 			cr.status,
 			cr.requested_by,
 			cr.reviewed_by,

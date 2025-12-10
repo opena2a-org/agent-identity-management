@@ -60,6 +60,7 @@ func CORSMiddleware(allowedOrigins []string) fiber.Handler {
 		AllowOrigins:     strings.Join(safeOrigins, ","),
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Agent-ID,X-Signature,X-Timestamp,X-Public-Key,X-API-Key",
+		ExposeHeaders:    "Content-Disposition,Content-Length", // Allow frontend to read these headers
 		AllowCredentials: true,
 		MaxAge:           3600,
 	})

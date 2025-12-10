@@ -109,7 +109,7 @@ Document changes in `CHANGELOG.md`:
 
 ### Added
 - `@agent.require_approval()` decorator for critical actions
-- `@agent.track_action()` decorator for monitoring
+- `@agent.perform_action()` decorator for verification and tracking
 
 ### Fixed
 - Ed25519 signature verification JSON formatting issue
@@ -177,7 +177,7 @@ Before introducing breaking changes:
 1. **Version N**: Add deprecation warning
    ```python
    import warnings
-   warnings.warn("perform_action() is deprecated, use track_action() instead", DeprecationWarning)
+   warnings.warn("track_action() is deprecated, use perform_action() instead", DeprecationWarning)
    ```
 
 2. **Version N+1**: Continue supporting deprecated feature with warnings
@@ -185,10 +185,9 @@ Before introducing breaking changes:
 3. **Version N+2 (Major)**: Remove deprecated feature
 
 **Example**:
-- v1.0.0: `@agent.perform_action()` works
-- v1.1.0: Add `@agent.track_action()`, deprecate `perform_action()`
-- v1.2.0: Both work, deprecation warning shown
-- v2.0.0: Remove `@agent.perform_action()` entirely
+- v1.6.0: `@agent.track_action()` deprecated, `@agent.perform_action()` is standard
+- v1.7.0: Both work, deprecation warning shown
+- v2.0.0: Remove `@agent.track_action()` entirely
 
 ## Version Checking
 
@@ -215,25 +214,25 @@ python -c "import aim_sdk; print(aim_sdk.__version__)"
 
 ## Upgrade Guide
 
-### From 1.0.x to 1.1.x (Minor Upgrade)
+### From 1.5.x to 1.6.x (Minor Upgrade)
 
 **Changes**:
-- New decorators available: `@track_action()` and `@require_approval()`
-- `@perform_action()` still works but deprecated
+- `@agent.track_action()` is deprecated, use `@agent.perform_action()` instead
+- `@agent.perform_action()` now supports `jit_access=True` for admin approval flows
 
 **Action Required**:
 - ✅ No breaking changes
-- ⚠️ Update code to use new decorators (recommended but optional)
+- ⚠️ Migrate from `track_action()` to `perform_action()` (recommended)
 
 **Migration**:
 ```python
-# OLD (still works)
-@agent.perform_action("read_database", resource="users")
+# OLD (deprecated)
+@agent.track_action(risk_level="low")
 def query_users():
     return db.query("SELECT * FROM users")
 
 # NEW (recommended)
-@agent.track_action(risk_level="low", resource="database:users")
+@agent.perform_action(risk_level="low", resource="database:users")
 def query_users():
     return db.query("SELECT * FROM users")
 ```
@@ -292,7 +291,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `@agent.require_approval()` decorator for critical actions requiring admin approval
-- `@agent.track_action()` decorator for monitoring and audit logging
+- `@agent.perform_action()` decorator for verification and tracking
 
 ### Fixed
 - Ed25519 signature verification JSON formatting mismatch between Python and Go
@@ -352,7 +351,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Major Changes |
 |---------|-------------|---------------|
-| 1.1.0   | 2025-11-06  | Added `@track_action()` and `@require_approval()` decorators |
+| 1.6.0   | 2025-12-09  | Deprecated `@track_action()`, unified to `@perform_action()` |
+| 1.1.0   | 2025-11-06  | Added `@perform_action()` and `@require_approval()` decorators |
 | 1.0.0   | 2025-11-05  | Initial stable release |
 
 ---

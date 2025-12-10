@@ -1,0 +1,4 @@
+include VERSION
+include README.md
+include LICENSE
+recursive-include aim_sdk *.py

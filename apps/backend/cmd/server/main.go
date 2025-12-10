@@ -265,10 +265,11 @@ func main() {
 	sdkAPI.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Validates agent signatures, passes through JWT
 	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.RateLimitMiddleware())
-	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                             // Get agent by ID or name (SDK)
-	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                       // SDK capability reporting
-	sdkAPI.Get("/agents/:id/capability-requests", h.CapabilityRequest.ListAgentCapabilityRequests)  // SDK list agent's capability requests
-	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest) // SDK capability request creation
+	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
+	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                          // SDK capability reporting (legacy)
+	sdkAPI.Post("/agents/:id/capabilities/register", h.Capability.RegisterCapability)              // SDK capability registration (respects enforcement mode)
+	sdkAPI.Get("/agents/:id/capability-requests", h.CapabilityRequest.ListAgentCapabilityRequests) // SDK list agent's capability requests
+	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest)    // SDK capability request creation
 	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                               // SDK MCP registration (create new MCP server)
 	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                 // SDK list MCP servers for agent's org
 	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)            // SDK record agent-MCP connection (use_mcp_tool)
@@ -506,6 +507,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		verificationEventService, // ✅ NEW: Inject VerificationEventService for creating verification events
 		repos.Tag,                // ✅ NEW: Inject TagRepository for tagging agents during registration
 		repos.User,               // ✅ NEW: Inject UserRepository for audit trail (creator/updater info)
+		repos.Organization,       // ✅ NEW: Inject OrganizationRepository for checking enforcement mode
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -788,6 +790,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
+			services.CapabilityRequest,
+			repos.Agent,
+			repos.Organization,
 		),
 		Detection: handlers.NewDetectionHandler(
 			services.Detection,

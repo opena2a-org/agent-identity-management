@@ -125,90 +125,86 @@ from aim_sdk import secure
 agent = secure("my-agent", api_key="aim_abc123")
 ```
 
-### 3. Custom Configuration
+### 3. Full-Featured Registration
 ```python
-from aim_sdk import secure
+from aim_sdk import secure, AgentType
+
 agent = secure(
-    name="my-agent",
-    api_key="aim_abc123",
-    auto_detect=False,
-    capabilities=["db:read", "notification:send"],  # namespace:action format
-    version="1.0.0"
+    "my-ai-assistant",
+    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    capabilities=["db:read", "api:call"],
+    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
+    description="Customer support AI agent",
+    tags=["production", "customer-facing", "gpt-4", "support-team"],
+    metadata={
+        "model": "gpt-4",
+        "department": "support"
+    },
+    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
 )
 ```
 
 ### Performing Verified Actions
 
-AIM provides two decorators for action verification:
-
-#### 1. `@agent.track_action()` - Track and Log Actions
-Best for: Monitoring, logging, and audit trails (doesn't require approval)
+Use `@agent.perform_action()` for all action verification. Risk level is **auto-detected** from the capability name:
 
 ```python
-# Low-risk action - just track and log
-@agent.track_action(risk_level="low")
-def get_weather(city):
-    """Fetch weather data - safe operation"""
-    return weather_api.get(city)
+# Auto risk detection - db:read detected as "low" risk
+@agent.perform_action(capability="db:read")
+def get_customer(customer_id: str):
+    return {"id": customer_id, "name": "Jane Doe"}
 
-# Medium-risk action - track with context
-@agent.track_action(risk_level="medium", resource="database:users")
-def query_database(query):
-    """Query database - monitored for anomalies"""
-    return db.execute(query)
+# Auto risk detection - db:delete detected as "high" risk
+@agent.perform_action(capability="db:delete")
+def delete_customer(customer_id: str):
+    return db.execute("DELETE FROM customers WHERE id = ?", customer_id)
 
-# High-risk action - tracked and flagged
-@agent.track_action(risk_level="high", resource="payments:charge")
-def charge_credit_card(amount, card_token):
-    """Charge credit card - high-risk, closely monitored"""
-    return stripe.charge(amount, card_token)
+# Explicit risk level override when needed
+@agent.perform_action(capability="api:call", risk_level="medium", resource="external-api")
+def call_external_api(endpoint):
+    return requests.get(endpoint)
+
+# Critical action with JIT access - requires admin approval
+@agent.perform_action(capability="payment:refund", jit_access=True)
+def process_refund(order_id: str, amount: float):
+    """Waits for admin approval before executing"""
+    return stripe.refund(order_id, amount)
 ```
 
-#### 2. `@agent.require_approval()` - Require Admin Approval
-Best for: Dangerous actions that need human oversight
+#### Risk Levels
+
+| Risk Level | Approval Required? | When to Use |
+|------------|-------------------|-------------|
+| `low` | No - executes immediately | Read operations, safe actions |
+| `medium` | No - executes immediately | Write operations, data modification |
+| `high` | No (unless `jit_access=True`) | Sensitive operations, closely monitored |
+| `critical` | Recommended with `jit_access=True` | Destructive operations, requires approval |
+
+#### JIT (Just-In-Time) Access
+
+For critical operations that require human oversight, add `jit_access=True`:
 
 ```python
-# Delete user account - requires admin approval
-@agent.require_approval(risk_level="critical", resource="user:account")
-def delete_user_account(user_id):
-    """Delete user - REQUIRES admin approval before execution"""
-    return db.execute("DELETE FROM users WHERE id = ?", user_id)
-
-# Transfer money - requires approval
-@agent.require_approval(risk_level="critical", resource="financial:transfer")
+@agent.perform_action(risk_level="critical", jit_access=True, timeout_seconds=300)
 def transfer_money(from_account, to_account, amount):
     """Transfer funds - BLOCKED until admin approves"""
     return banking_api.transfer(from_account, to_account, amount)
-
-# Deploy to production - requires approval
-@agent.require_approval(risk_level="high", resource="infrastructure:deploy")
-def deploy_to_production(service_name, version):
-    """Deploy to prod - admin must approve first"""
-    return k8s.deploy(service_name, version)
 ```
 
-#### Key Differences
-
-| Decorator | Requires Approval? | When to Use |
-|-----------|-------------------|-------------|
-| `@track_action()` | ❌ No - executes immediately | Monitoring, logging, low-medium risk actions |
-| `@require_approval()` | ✅ Yes - blocks until admin approves | Critical actions, destructive operations, high-risk |
+With `jit_access=True`:
+- Pauses execution and creates approval request in AIM dashboard
+- Notifies admin with action details
+- Waits for admin decision (approve/reject)
+- Times out after `timeout_seconds` if no decision
 
 #### What Happens During Verification
 
-**Both decorators**:
-1. ✅ Verify agent identity with Ed25519 signature
-2. ✅ Check trust score (must be above threshold)
-3. ✅ Log action to immutable audit trail
-4. ✅ Monitor for behavioral anomalies
-5. ✅ Update trust score based on result
-
-**`@require_approval()` additionally**:
-- ⏸️ Pauses execution and creates approval request
-- 📧 Notifies admin with action details
-- ⏳ Waits for admin decision (approve/reject)
-- ✅ Executes only if approved
-- ❌ Raises `ActionDeniedError` if rejected
+Every `@agent.perform_action()` call:
+1. Verifies agent identity with Ed25519 signature
+2. Checks trust score (must be above threshold)
+3. Logs action to immutable audit trail
+4. Monitors for behavioral anomalies
+5. Updates trust score based on result
 
 ## Enforcement Mode: Strict vs Monitoring
 

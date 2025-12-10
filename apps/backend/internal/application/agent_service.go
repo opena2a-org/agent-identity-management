@@ -24,6 +24,7 @@ type AgentService struct {
 	verificationEventService *VerificationEventService   // ✅ For creating verification events
 	tagRepo                  domain.TagRepository        // ✅ For tagging agents during registration
 	userRepo                 domain.UserRepository       // ✅ For looking up user details (audit trail)
+	orgRepo                  domain.OrganizationRepository // ✅ For checking enforcement mode
 }
 
 // NewAgentService creates a new agent service
@@ -38,6 +39,7 @@ func NewAgentService(
 	verificationEventService *VerificationEventService, // ✅ NEW: For creating verification events
 	tagRepo domain.TagRepository, // ✅ NEW: For tagging agents during registration
 	userRepo domain.UserRepository, // ✅ NEW: For audit trail (creator/updater info)
+	orgRepo domain.OrganizationRepository, // ✅ NEW: For checking enforcement mode
 ) *AgentService {
 	return &AgentService{
 		agentRepo:                agentRepo,
@@ -50,6 +52,7 @@ func NewAgentService(
 		verificationEventService: verificationEventService,
 		tagRepo:                  tagRepo,
 		userRepo:                 userRepo,
+		orgRepo:                  orgRepo,
 	}
 }
 
@@ -88,18 +91,19 @@ func isValidAgentType(agentType domain.AgentType) bool {
 
 // CreateAgentRequest represents agent creation request
 type CreateAgentRequest struct {
-	Name             string           `json:"name"`
-	DisplayName      string           `json:"displayName"`
-	Description      string           `json:"description"`
-	AgentType        domain.AgentType `json:"agentType"`
-	Version          string           `json:"version"`
-	PublicKey        string           `json:"publicKey,omitempty"` // ✅ OPTIONAL: SDK can provide its own public key
-	CertificateURL   string           `json:"certificateUrl"`
-	RepositoryURL    string           `json:"repositoryUrl"`
-	DocumentationURL string           `json:"documentationUrl"`
-	TalksTo          []string         `json:"talksTo,omitempty"`      // MCP servers this agent communicates with
-	Capabilities     []string         `json:"capabilities,omitempty"` // Agent capabilities
-	TagIds           []string         `json:"tagIds,omitempty"`       // ✅ Tags to apply during registration
+	Name             string                 `json:"name"`
+	DisplayName      string                 `json:"displayName"`
+	Description      string                 `json:"description"`
+	AgentType        domain.AgentType       `json:"agentType"`
+	Version          string                 `json:"version"`
+	PublicKey        string                 `json:"publicKey,omitempty"` // ✅ OPTIONAL: SDK can provide its own public key
+	CertificateURL   string                 `json:"certificateUrl"`
+	RepositoryURL    string                 `json:"repositoryUrl"`
+	DocumentationURL string                 `json:"documentationUrl"`
+	TalksTo          []string               `json:"talksTo,omitempty"`      // MCP servers this agent communicates with
+	Capabilities     []string               `json:"capabilities,omitempty"` // Agent capabilities
+	TagIds           []string               `json:"tagIds,omitempty"`       // ✅ Tags to apply during registration
+	Metadata         map[string]interface{} `json:"metadata,omitempty"`     // Custom agent metadata (model, department, etc.)
 }
 
 // CreateAgent creates a new agent
@@ -182,6 +186,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		DocumentationURL:    req.DocumentationURL,
 		TalksTo:             req.TalksTo,      // MCP servers this agent communicates with
 		Capabilities:        req.Capabilities, // ✅ Store detected capabilities from SDK
+		Metadata:            req.Metadata,     // ✅ Custom metadata (model, department, owner, etc.)
 		Status:              domain.AgentStatusVerified, // ✅ Auto-verified for authenticated users
 		CreatedBy:           userID,
 		CreatedByName:       createdByName,   // ✅ Denormalized for audit trail
@@ -361,6 +366,9 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.Description != "" {
 		agent.Description = req.Description
 	}
+	if req.AgentType != "" {
+		agent.AgentType = req.AgentType
+	}
 	if req.Version != "" {
 		agent.Version = req.Version
 	}
@@ -378,6 +386,10 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.TalksTo != nil {
 		agent.TalksTo = req.TalksTo
 	}
+	// Update metadata
+	if req.Metadata != nil {
+		agent.Metadata = req.Metadata
+	}
 
 	if err := s.agentRepo.Update(agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
@@ -387,7 +399,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		// Get current capabilities
 		currentCaps, err := s.capabilityRepo.GetCapabilitiesByAgentID(id)
 		if err != nil {
-			fmt.Printf("⚠️  Warning: failed to get current capabilities: %v\n", err)
+			fmt.Printf("Warning: failed to get current capabilities: %v\n", err)
 		}
 
 		// Build map of current capability types
@@ -404,33 +416,64 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 			requestedCapTypes[capType] = true
 		}
 
-		// Add new capabilities that don't exist
-		for _, capType := range req.Capabilities {
-			if _, exists := currentCapTypes[capType]; !exists {
-				capabilityRecord := &domain.AgentCapability{
-					AgentID:        id,
-					CapabilityType: capType,
-					GrantedBy:      &agent.CreatedBy, // Use agent creator as granter
-					GrantedAt:      time.Now(),
-				}
-				if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
-					fmt.Printf("⚠️  Warning: failed to add capability '%s': %v\n", capType, err)
-				} else {
-					fmt.Printf("✅ Added capability '%s' to agent %s\n", capType, agent.Name)
-				}
+		// Check organization enforcement mode
+		var enforcementMode domain.EnforcementMode = domain.EnforcementModeStrict // Default to strict
+		if s.orgRepo != nil {
+			org, orgErr := s.orgRepo.GetByID(agent.OrganizationID)
+			if orgErr == nil && org != nil {
+				enforcementMode = org.EnforcementMode
 			}
 		}
 
-		// Revoke capabilities that are no longer in the request
+		// Identify new capabilities (potential escalations)
+		var newCaps []string
+		for _, capType := range req.Capabilities {
+			if _, exists := currentCapTypes[capType]; !exists {
+				newCaps = append(newCaps, capType)
+			}
+		}
+
+		// Handle new capabilities based on enforcement mode
+		if len(newCaps) > 0 {
+			if enforcementMode == domain.EnforcementModeMonitoring {
+				// MONITORING MODE: Auto-grant new capabilities (permissive)
+				for _, capType := range newCaps {
+					capabilityRecord := &domain.AgentCapability{
+						AgentID:        id,
+						CapabilityType: capType,
+						GrantedBy:      nil, // System auto-grant
+						GrantedAt:      time.Now(),
+					}
+					if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
+						fmt.Printf("Warning: failed to auto-grant capability '%s': %v\n", capType, err)
+					} else {
+						fmt.Printf("Agent %s: auto-granted capability '%s' (monitoring mode)\n", agent.Name, capType)
+					}
+				}
+			} else {
+				// STRICT MODE: Reject capability escalation attempts
+				// New capabilities MUST go through request_capability() approval workflow
+				fmt.Printf("SECURITY: Agent %s (%s) attempted capability escalation: %v - REJECTED (strict mode)\n",
+					agent.Name, id, newCaps)
+				fmt.Printf("  -> New capabilities must be requested via request_capability() and approved by an admin\n")
+			}
+		}
+
+		// Capability removal is always allowed (safe direction - reducing privileges)
+		var revokedCaps []string
 		for capType, cap := range currentCapTypes {
 			if !requestedCapTypes[capType] {
 				now := time.Now()
 				if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
-					fmt.Printf("⚠️  Warning: failed to revoke capability '%s': %v\n", capType, err)
+					fmt.Printf("Warning: failed to revoke capability '%s': %v\n", capType, err)
 				} else {
-					fmt.Printf("🗑️  Revoked capability '%s' from agent %s\n", capType, agent.Name)
+					revokedCaps = append(revokedCaps, capType)
 				}
 			}
+		}
+
+		if len(revokedCaps) > 0 {
+			fmt.Printf("Agent %s: revoked capabilities %v (self-requested reduction)\n", agent.Name, revokedCaps)
 		}
 	}
 	// Recalculate trust score
@@ -687,8 +730,95 @@ func (s *AgentService) VerifyCapability(
 		}
 	}
 
-	// ⚠️  CRITICAL: If agent has NO GRANTED capabilities, DENY ALL actions
+	// ⚠️  Check enforcement mode for agents with NO GRANTED capabilities
+	// In MONITORING mode: Allow actions but log violations
+	// In STRICT mode: Block actions (require capabilities to be granted first)
 	if len(capabilityTypes) == 0 {
+		// 🔍 Get organization enforcement mode
+		enforcementMode := domain.EnforcementModeMonitoring // Default to monitoring (lenient)
+		if s.orgRepo != nil {
+			org, err := s.orgRepo.GetByID(agent.OrganizationID)
+			if err == nil && org != nil {
+				enforcementMode = org.EnforcementMode
+			}
+		}
+
+		// 🛡️ Also check security policies for capability violations
+		// Note: In MONITORING mode, we ignore shouldBlock and always allow (alert only)
+		_, shouldAlert, policyName, policyErr := s.policyService.EvaluateCapabilityViolation(
+			ctx, agent, capability, resource, auditID,
+		)
+		if policyErr != nil {
+			fmt.Printf("⚠️  Policy evaluation failed for no-capabilities check: %v\n", policyErr)
+			// Policy failed - use enforcement mode as fallback
+			shouldAlert = true
+			policyName = "enforcement_mode_fallback"
+		}
+
+		// In MONITORING mode, ALWAYS allow the action (policies only affect alerting, not blocking)
+		// This is the key difference: MONITORING mode overrides individual policy blocking decisions
+		// If you want to block, switch to STRICT mode in Global Enforcement settings
+		if enforcementMode == domain.EnforcementModeMonitoring {
+			fmt.Printf("✅ MONITORING MODE: Allowing action '%s' for agent %s (no granted capabilities) - will be logged\n",
+				capability, agent.Name)
+			fmt.Printf("   Policy '%s' would block in STRICT mode, but MONITORING mode allows all actions\n", policyName)
+
+			// Still log the violation for visibility (non-blocking)
+			violation := &domain.CapabilityViolation{
+				AgentID:             agentID,
+				AttemptedCapability: capability,
+				RegisteredCapabilities: map[string]interface{}{
+					"allowedCapabilities": []string{}, // No capabilities granted
+					"attemptedCapability": capability,
+					"resource":            resource,
+					"enforcementMode":     "monitoring",
+				},
+				Severity:         "medium", // Lower severity in monitoring mode
+				TrustScoreImpact: -2,       // Minimal impact in monitoring mode
+				IsBlocked:        false,    // NOT blocked
+				SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
+				RequestMetadata:  metadata,
+			}
+
+			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
+			}
+
+			// Create alert if policy requires it
+			if shouldAlert {
+				alertTitle := fmt.Sprintf("Unregistered Capability Used (Monitoring Mode): %s", agent.DisplayName)
+				alertDescription := fmt.Sprintf(
+					"Agent '%s' used capability '%s' without pre-registration. "+
+						"No capabilities granted to this agent. Enforcement mode: MONITORING. "+
+						"Action was ALLOWED but logged. Policy: %s. Audit ID: %s",
+					agent.DisplayName, capability, policyName, auditID.String(),
+				)
+				alert := &domain.Alert{
+					ID:             uuid.New(),
+					OrganizationID: agent.OrganizationID,
+					AlertType:      domain.AlertSecurityBreach,
+					Severity:       domain.AlertSeverityWarning,
+					Title:          alertTitle,
+					Description:    alertDescription,
+					ResourceType:   "agent",
+					ResourceID:     agentID,
+					AgentName:      agent.DisplayName,
+					SourceIP:       sourceIP,
+					IsAcknowledged: false,
+					CreatedAt:      time.Now(),
+				}
+				if err := s.alertRepo.Create(alert); err != nil {
+					fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
+				}
+			}
+
+			return true, fmt.Sprintf(
+				"Action allowed by MONITORING mode (no capabilities registered yet) - logged for review. Policy: %s",
+				policyName,
+			), auditID, nil
+		}
+
+		// STRICT mode or policy says block - deny the action
 		// 📝 Record violation and increment count for tracking
 		violation := &domain.CapabilityViolation{
 			AgentID:             agentID,
@@ -697,6 +827,7 @@ func (s *AgentService) VerifyCapability(
 				"allowedCapabilities": []string{}, // No capabilities granted
 				"attemptedCapability": capability,
 				"resource":            resource,
+				"enforcementMode":     string(enforcementMode),
 			},
 			Severity:         "high", // No capabilities = serious issue
 			TrustScoreImpact: -10,    // Standard violation impact
@@ -708,8 +839,8 @@ func (s *AgentService) VerifyCapability(
 		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
 			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
 		} else {
-			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s with no granted capabilities\n",
-				agent.Name, capability)
+			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s with no granted capabilities (mode: %s)\n",
+				agent.Name, capability, enforcementMode)
 		}
 
 		// Increment violation count
@@ -719,12 +850,24 @@ func (s *AgentService) VerifyCapability(
 			fmt.Printf("✅ Violation count incremented for agent %s\n", agent.Name)
 		}
 
-		return false, "Agent has no granted capabilities - action denied (admin must grant capabilities first)", auditID, nil
+		return false, fmt.Sprintf(
+			"Agent has no granted capabilities - action denied by %s mode (admin must grant capabilities first)",
+			enforcementMode,
+		), auditID, nil
 	}
 
 	if !hasCapability {
 		// ✅ CAPABILITY VIOLATION DETECTED - Evaluate security policies
 		// This prevents scope violations like EchoLeak's bulk email access
+
+		// 🔍 Get organization enforcement mode (check if MONITORING overrides)
+		orgEnforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
+		if s.orgRepo != nil {
+			org, err := s.orgRepo.GetByID(agent.OrganizationID)
+			if err == nil && org != nil {
+				orgEnforcementMode = org.EnforcementMode
+			}
+		}
 
 		// 🛡️ Evaluate security policies to determine enforcement action
 		shouldBlock, shouldAlert, policyName, err := s.policyService.EvaluateCapabilityViolation(
@@ -736,6 +879,15 @@ func (s *AgentService) VerifyCapability(
 			shouldBlock = true
 			shouldAlert = true
 			policyName = "default_policy"
+		}
+
+		// 🔄 MONITORING MODE OVERRIDE: In monitoring mode, never block, only alert
+		// This allows all actions to proceed for observation purposes
+		if orgEnforcementMode == domain.EnforcementModeMonitoring && shouldBlock {
+			fmt.Printf("✅ MONITORING MODE OVERRIDE: Policy '%s' would block '%s' but MONITORING mode allows all actions\n",
+				policyName, capability)
+			shouldBlock = false // Override to allow
+			shouldAlert = true  // Still alert for visibility
 		}
 
 		// 🚨 CREATE SECURITY ALERT if policy requires it
@@ -849,6 +1001,15 @@ func (s *AgentService) VerifyCapability(
 	// 6. ✅ CAPABILITY CHECK PASSED - Now evaluate additional security policies
 	// Even if agent has the capability, we still need to check other policy types
 
+	// 🔍 Get organization enforcement mode for policy overrides
+	policyEnforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
+	if s.orgRepo != nil {
+		org, err := s.orgRepo.GetByID(agent.OrganizationID)
+		if err == nil && org != nil {
+			policyEnforcementMode = org.EnforcementMode
+		}
+	}
+
 	// 6.1 Trust Score Policy Evaluation
 	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := s.policyService.EvaluateTrustScoreLow(
 		ctx, agent, capability, resource, auditID,
@@ -859,6 +1020,12 @@ func (s *AgentService) VerifyCapability(
 	if trustScoreAlert {
 		s.createPolicyAlert(agent, "Trust Score Low", trustScorePolicyName, trustScoreBlocked,
 			fmt.Sprintf("Agent has low trust score (%.2f)", agent.TrustScore), domain.AlertSeverityWarning, auditID)
+	}
+	// Apply MONITORING mode override
+	if trustScoreBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
+		fmt.Printf("✅ MONITORING MODE: Trust score policy '%s' would block but allowing (mode: %s)\n",
+			trustScorePolicyName, policyEnforcementMode)
+		trustScoreBlocked = false
 	}
 	if trustScoreBlocked {
 		return false, fmt.Sprintf(
@@ -879,6 +1046,12 @@ func (s *AgentService) VerifyCapability(
 			fmt.Sprintf("Suspected data exfiltration pattern detected: %s on %s", capability, resource),
 			domain.AlertSeverityCritical, auditID)
 	}
+	// Apply MONITORING mode override
+	if exfilBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
+		fmt.Printf("✅ MONITORING MODE: Data exfiltration policy '%s' would block but allowing (mode: %s)\n",
+			exfilPolicyName, policyEnforcementMode)
+		exfilBlocked = false
+	}
 	if exfilBlocked {
 		return false, fmt.Sprintf(
 			"Action blocked by data exfiltration policy '%s': Suspicious pattern detected",
@@ -896,6 +1069,12 @@ func (s *AgentService) VerifyCapability(
 	if unusualAlert {
 		s.createPolicyAlert(agent, "Unusual Activity", unusualPolicyName, unusualBlocked,
 			"Anomalous behavior pattern detected", domain.AlertSeverityWarning, auditID)
+	}
+	// Apply MONITORING mode override
+	if unusualBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
+		fmt.Printf("✅ MONITORING MODE: Unusual activity policy '%s' would block but allowing (mode: %s)\n",
+			unusualPolicyName, policyEnforcementMode)
+		unusualBlocked = false
 	}
 	if unusualBlocked {
 		return false, fmt.Sprintf(
@@ -915,6 +1094,12 @@ func (s *AgentService) VerifyCapability(
 		s.createPolicyAlert(agent, "Configuration Drift", driftPolicyName, driftBlocked,
 			"Agent configuration has drifted from baseline", domain.AlertSeverityWarning, auditID)
 	}
+	// Apply MONITORING mode override
+	if driftBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
+		fmt.Printf("✅ MONITORING MODE: Config drift policy '%s' would block but allowing (mode: %s)\n",
+			driftPolicyName, policyEnforcementMode)
+		driftBlocked = false
+	}
 	if driftBlocked {
 		return false, fmt.Sprintf(
 			"Action blocked by config drift policy '%s'",
@@ -932,6 +1117,12 @@ func (s *AgentService) VerifyCapability(
 	if unauthAlert {
 		s.createPolicyAlert(agent, "Unauthorized Access Attempt", unauthPolicyName, unauthBlocked,
 			"Unauthorized access pattern detected", domain.AlertSeverityHigh, auditID)
+	}
+	// Apply MONITORING mode override
+	if unauthBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
+		fmt.Printf("✅ MONITORING MODE: Unauthorized access policy '%s' would block but allowing (mode: %s)\n",
+			unauthPolicyName, policyEnforcementMode)
+		unauthBlocked = false
 	}
 	if unauthBlocked {
 		return false, fmt.Sprintf(

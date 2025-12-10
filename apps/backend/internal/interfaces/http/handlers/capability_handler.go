@@ -13,13 +13,24 @@ import (
 
 // CapabilityHandler handles capability-related HTTP requests
 type CapabilityHandler struct {
-	capabilityService *application.CapabilityService
+	capabilityService        *application.CapabilityService
+	capabilityRequestService *application.CapabilityRequestService
+	agentRepo                domain.AgentRepository
+	orgRepo                  domain.OrganizationRepository
 }
 
 // NewCapabilityHandler creates a new capability handler
-func NewCapabilityHandler(capabilityService *application.CapabilityService) *CapabilityHandler {
+func NewCapabilityHandler(
+	capabilityService *application.CapabilityService,
+	capabilityRequestService *application.CapabilityRequestService,
+	agentRepo domain.AgentRepository,
+	orgRepo domain.OrganizationRepository,
+) *CapabilityHandler {
 	return &CapabilityHandler{
-		capabilityService: capabilityService,
+		capabilityService:        capabilityService,
+		capabilityRequestService: capabilityRequestService,
+		agentRepo:                agentRepo,
+		orgRepo:                  orgRepo,
 	}
 }
 
@@ -103,6 +114,161 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(capability)
+}
+
+// RegisterCapabilityRequest is the request body for registering a capability
+type RegisterCapabilityRequest struct {
+	CapabilityType string `json:"capabilityType" validate:"required"`
+	Description    string `json:"description,omitempty"`
+	RiskLevel      string `json:"riskLevel,omitempty"`
+}
+
+// RegisterCapabilityResponse is the response for capability registration
+type RegisterCapabilityResponse struct {
+	Success        bool   `json:"success"`
+	CapabilityType string `json:"capabilityType"`
+	Status         string `json:"status"` // "granted", "pending", "already_exists"
+	Message        string `json:"message"`
+	RequestID      string `json:"requestId,omitempty"` // Only set if status is "pending"
+}
+
+// RegisterCapability godoc
+// @Summary Register a capability for an agent (SDK endpoint)
+// @Description Register a capability that an agent intends to use. In MONITORING mode, capabilities are auto-granted. In STRICT mode, a pending request is created requiring admin approval.
+// @Tags sdk-api
+// @Accept json
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Param request body RegisterCapabilityRequest true "Capability registration request"
+// @Success 200 {object} RegisterCapabilityResponse
+// @Success 201 {object} RegisterCapabilityResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} RegisterCapabilityResponse "Capability already exists"
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/sdk-api/agents/{id}/capabilities/register [post]
+func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
+	// Parse agent ID from path
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid agent ID",
+		})
+	}
+
+	// Parse request body
+	var req RegisterCapabilityRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid request body",
+		})
+	}
+
+	if req.CapabilityType == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "capabilityType is required",
+		})
+	}
+
+	// Get the agent to verify it exists and get org ID
+	agent, err := h.agentRepo.GetByID(agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
+			Error: "Agent not found",
+		})
+	}
+
+	// Check if agent already has this capability
+	existingCaps, err := h.capabilityService.GetAgentCapabilities(context.Background(), agentID, true)
+	if err == nil {
+		for _, cap := range existingCaps {
+			if cap.CapabilityType == req.CapabilityType {
+				return c.Status(fiber.StatusConflict).JSON(RegisterCapabilityResponse{
+					Success:        true,
+					CapabilityType: req.CapabilityType,
+					Status:         "already_exists",
+					Message:        "Capability already granted to this agent",
+				})
+			}
+		}
+	}
+
+	// Get organization to check enforcement mode
+	org, err := h.orgRepo.GetByID(agent.OrganizationID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: "Failed to get organization settings",
+		})
+	}
+
+	// MONITORING mode: Auto-grant the capability
+	if org.EnforcementMode == domain.EnforcementModeMonitoring {
+		// Validate and auto-register the capability type if custom
+		if err := h.capabilityService.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, agent.OrganizationID); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+				Error: err.Error(),
+			})
+		}
+
+		// Auto-grant the capability
+		capability, err := h.capabilityService.GrantCapability(
+			context.Background(),
+			agentID,
+			req.CapabilityType,
+			nil, // No scope
+			nil, // System auto-grant
+		)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+				Error: err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusCreated).JSON(RegisterCapabilityResponse{
+			Success:        true,
+			CapabilityType: capability.CapabilityType,
+			Status:         "granted",
+			Message:        "Capability auto-granted (monitoring mode)",
+		})
+	}
+
+	// STRICT mode: Create a pending capability request
+	// Create the capability request for admin approval
+	input := &domain.CreateCapabilityRequestInput{
+		AgentID:        agentID,
+		CapabilityType: req.CapabilityType,
+		Reason:         req.Description,
+		RequestedBy:    agent.CreatedBy, // Use agent owner as requester
+	}
+
+	if input.Reason == "" {
+		input.Reason = "Capability registered via SDK"
+	}
+
+	request, err := h.capabilityRequestService.CreateRequest(c.Context(), input)
+	if err != nil {
+		errMsg := err.Error()
+		// Check if pending request already exists
+		if len(errMsg) > 7 && errMsg[:7] == "pending" {
+			return c.Status(fiber.StatusConflict).JSON(RegisterCapabilityResponse{
+				Success:        true,
+				CapabilityType: req.CapabilityType,
+				Status:         "pending",
+				Message:        "A pending request for this capability already exists",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusAccepted).JSON(RegisterCapabilityResponse{
+		Success:        true,
+		CapabilityType: req.CapabilityType,
+		Status:         "pending",
+		Message:        "Capability request created - awaiting admin approval (strict mode)",
+		RequestID:      request.ID.String(),
+	})
 }
 
 // GetAgentCapabilities godoc

@@ -78,10 +78,10 @@ except Exception as e:
 
 
 # Define demo actions with different risk levels
-# Note: action_name uses the standard namespace:action format (e.g., "api:call", "db:read")
+# Note: capability uses the standard namespace:action format (e.g., "api:call", "db:read")
 # See https://docs.aim.dev/capabilities for the full list of capabilities
 
-@agent.track_action(risk_level="low", action_name="api:call", resource="weather_api")
+@agent.perform_action(capability="api:call", risk_level="low", resource="weather_api")
 def check_weather(city: str) -> dict:
     """Simulate checking weather - LOW risk action"""
     conditions = ["Sunny", "Cloudy", "Rainy", "Windy", "Snowy"]
@@ -93,7 +93,7 @@ def check_weather(city: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="low", action_name="api:call", resource="product_search_api")
+@agent.perform_action(capability="api:call", risk_level="low", resource="product_search_api")
 def search_products(query: str) -> dict:
     """Simulate product search - LOW risk action"""
     return {
@@ -103,7 +103,7 @@ def search_products(query: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="medium", action_name="user:read", resource="users_table")
+@agent.perform_action(capability="user:read", risk_level="medium", resource="users_table")
 def get_user_profile(user_id: str) -> dict:
     """Simulate reading user data - MEDIUM risk action"""
     return {
@@ -114,7 +114,7 @@ def get_user_profile(user_id: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="medium", action_name="db:read", resource="orders_table")
+@agent.perform_action(capability="db:read", risk_level="medium", resource="orders_table")
 def query_orders(user_id: str) -> dict:
     """Simulate querying orders - MEDIUM risk action"""
     return {
@@ -124,7 +124,7 @@ def query_orders(user_id: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="high", action_name="notification:send", resource="push_notification")
+@agent.perform_action(capability="notification:send", risk_level="high", resource="push_notification")
 def send_notification(user_id: str, message: str) -> dict:
     """Simulate sending notification - HIGH risk action"""
     return {
@@ -135,7 +135,7 @@ def send_notification(user_id: str, message: str) -> dict:
     }
 
 
-@agent.track_action(risk_level="high", action_name="payment:process", resource="refund_service")
+@agent.perform_action(capability="payment:process", risk_level="high", resource="refund_service")
 def process_refund(order_id: str, amount: float) -> dict:
     """Simulate processing refund - HIGH risk action"""
     return {
@@ -146,12 +146,12 @@ def process_refund(order_id: str, amount: float) -> dict:
     }
 
 
-# JIT Access Actions - These may require admin approval before execution
-# The @perform_action decorator waits for AIM approval based on trust score
+# JIT Access Actions - These require admin approval before execution
+# Add jit_access=True for critical operations that need human oversight
 
-@agent.perform_action("database:delete", resource="users_table", timeout_seconds=30)
+@agent.perform_action(capability="database:delete", risk_level="critical", resource="users_table", jit_access=True, timeout_seconds=30)
 def delete_user_account(user_id: str) -> dict:
-    """Delete a user account - Requires JIT approval for low-trust agents"""
+    """Delete a user account - Requires JIT approval"""
     return {
         "user_id": user_id,
         "status": "deleted",
@@ -159,9 +159,9 @@ def delete_user_account(user_id: str) -> dict:
     }
 
 
-@agent.perform_action("payment:refund_bulk", resource="stripe", timeout_seconds=60)
+@agent.perform_action(capability="payment:refund_bulk", risk_level="critical", resource="stripe", jit_access=True, timeout_seconds=60)
 def bulk_refund(order_ids: list, reason: str) -> dict:
-    """Process bulk refunds - Always requires approval"""
+    """Process bulk refunds - Requires approval"""
     return {
         "orders_processed": len(order_ids),
         "reason": reason,

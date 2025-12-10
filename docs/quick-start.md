@@ -135,8 +135,8 @@ import os
 # LINE 1: Register your agent (zero config!)
 agent = secure("weather-agent")
 
-# LINE 2: Add @agent.track_action to verify every call
-@agent.track_action(risk_level="low")
+# LINE 2: Add @agent.perform_action to verify every call
+@agent.perform_action(risk_level="low")
 def get_weather(city: str):
     """Fetch weather data for a city"""
     # LINE 3: Your normal code - AIM verifies BEFORE this runs
@@ -248,7 +248,7 @@ You've just secured your first AI agent in **5 minutes**!
 Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 
 1. ✅ **Line 1** (`secure("weather-agent")`) - Cryptographic identity created
-2. ✅ **Line 2** (`@agent.track_action`) - **Verification BEFORE execution** (prevents malicious actions!)
+2. ✅ **Line 2** (`@agent.perform_action`) - **Verification BEFORE execution** (prevents malicious actions!)
 3. ✅ **Line 3** (your code) - Runs ONLY if verification passes
 
 **Every time `get_weather()` is called**, AIM automatically:
@@ -259,8 +259,8 @@ Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 - 🚨 **Monitors** for anomalies (unusual patterns trigger alerts)
 - 🔐 **Signs** with Ed25519 cryptography (tamper-proof verification)
 
-**Without `@agent.track_action`?** Your agent can do ANYTHING without oversight. ❌
-**With `@agent.track_action`?** Every action verified, logged, monitored. ✅
+**Without `@agent.perform_action`?** Your agent can do ANYTHING without oversight. ❌
+**With `@agent.perform_action`?** Every action verified, logged, monitored. ✅
 
 This is **the difference between a rogue agent and a trusted agent**.
 
@@ -299,11 +299,11 @@ This is **the difference between a rogue agent and a trusted agent**.
 
 ###  What's a Decorator?
 
-**Think of it like airport security**: Your function is a passenger, and `@agent.track_action` is the security checkpoint.
+**Think of it like airport security**: Your function is a passenger, and `@agent.perform_action` is the security checkpoint.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    WITHOUT @agent.track_action                      │
+│                   WITHOUT @agent.perform_action                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  User Request  →  Agent  →  External API  →  Done                  │
@@ -321,7 +321,7 @@ This is **the difference between a rogue agent and a trusted agent**.
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     WITH @agent.track_action                        │
+│                    WITH @agent.perform_action                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  User Request  →  Agent  →  🛡️  AIM VERIFICATION  →  External API  │
@@ -348,7 +348,7 @@ def get_weather(city):
     return call_api(city)  # ❌ Anyone can board the plane
 
 # WITH decorator = Security checkpoint BEFORE boarding
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def get_weather(city):
     return call_api(city)  # ✅ Verified passenger only
 ```
@@ -361,7 +361,7 @@ from aim_sdk import secure
 agent = secure("my-agent")
 
 # The @ symbol means "wrap this function with verification"
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def send_email(to, subject, body):
     # AIM does this AUTOMATICALLY:
     # 1. Verify: "Is this agent allowed to send email?"
@@ -382,7 +382,7 @@ def delete_database():
     db.drop_all_tables()  # ❌ No verification, no audit trail, no alerts
 
 # WITH decorator - Attacker is caught:
-@agent.track_action(risk_level="critical")
+@agent.perform_action(risk_level="critical")
 def delete_database():
     # AIM catches this:
     # 🚨 Alert: "Critical action attempted"
@@ -397,17 +397,17 @@ def delete_database():
 
 ```python
 # LOW RISK - Read operations, safe actions
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def get_weather(city):
     return weather_api.get(city)
 
 # MEDIUM RISK - Writes, data modification
-@agent.track_action(risk_level="medium")
+@agent.perform_action(risk_level="medium")
 def update_user_profile(user_id, data):
     return db.update(user_id, data)
 
 # HIGH RISK - Sensitive operations
-@agent.track_action(risk_level="high")
+@agent.perform_action(risk_level="high")
 def transfer_money(from_account, to_account, amount):
     return bank_api.transfer(from_account, to_account, amount)
 
@@ -427,11 +427,11 @@ def delete_all_users():
 
 ```python
 # ✅ GOOD - All actions verified
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def search_products(query):
     return api.search(query)
 
-@agent.track_action(risk_level="medium")
+@agent.perform_action(risk_level="medium")
 def add_to_cart(product_id):
     return cart.add(product_id)
 

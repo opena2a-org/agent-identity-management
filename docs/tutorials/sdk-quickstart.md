@@ -99,13 +99,13 @@ from aim_sdk import secure
 agent = secure("my-first-agent")
 
 # Low-risk action: Track and log
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def fetch_weather(city):
     """Every call is verified, logged, and monitored"""
     return f"Weather in {city}: Sunny, 72°F"
 
 # High-risk action: Requires higher trust score
-@agent.track_action(risk_level="high")
+@agent.perform_action(risk_level="high")
 def send_email(to, subject, body):
     """High-risk actions are flagged and closely monitored"""
     print(f"Sending email to {to}: {subject}")
@@ -156,7 +156,7 @@ from aim_sdk import secure
 agent = secure("weather-bot")
 
 # Define secured actions
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def get_weather(city: str) -> dict:
     """Fetch weather data - low risk, just tracking"""
     return {
@@ -165,7 +165,7 @@ def get_weather(city: str) -> dict:
         "condition": "Sunny"
     }
 
-@agent.track_action(risk_level="medium", resource="database:read")
+@agent.perform_action(risk_level="medium", resource="database:read")
 def get_user_preferences(user_id: str) -> dict:
     """Read user data - medium risk, monitored for anomalies"""
     return {
@@ -174,7 +174,7 @@ def get_user_preferences(user_id: str) -> dict:
         "notifications": True
     }
 
-@agent.track_action(risk_level="high", resource="notification:send")
+@agent.perform_action(risk_level="high", resource="notification:send")
 def send_weather_alert(user_id: str, message: str) -> bool:
     """Send notifications - high risk, requires good trust score"""
     print(f"Sending to {user_id}: {message}")

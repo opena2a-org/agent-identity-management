@@ -66,6 +66,7 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 		AgentID:        input.AgentID,
 		CapabilityType: input.CapabilityType,
 		Reason:         input.Reason,
+		Metadata:       input.Metadata,
 		RequestedBy:    input.RequestedBy,
 	}
 

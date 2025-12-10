@@ -1,10 +1,44 @@
 package domain
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// JSONBMap is a map type that implements sql.Scanner and driver.Valuer for JSONB columns
+type JSONBMap map[string]interface{}
+
+// Scan implements sql.Scanner for JSONBMap
+func (j *JSONBMap) Scan(value interface{}) error {
+	if value == nil {
+		*j = nil
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("failed to scan JSONBMap: expected []byte, got %T", value)
+	}
+
+	if len(bytes) == 0 {
+		*j = nil
+		return nil
+	}
+
+	return json.Unmarshal(bytes, j)
+}
+
+// Value implements driver.Valuer for JSONBMap
+func (j JSONBMap) Value() (driver.Value, error) {
+	if j == nil {
+		return nil, nil
+	}
+	return json.Marshal(j)
+}
 
 // CapabilityRequestStatus represents the approval status of a capability request
 type CapabilityRequestStatus string
@@ -21,6 +55,7 @@ type CapabilityRequest struct {
 	AgentID        uuid.UUID               `json:"agentId" db:"agent_id"`
 	CapabilityType string                  `json:"capabilityType" db:"capability_type"`
 	Reason         string                  `json:"reason" db:"reason"`
+	Metadata       JSONBMap                `json:"metadata,omitempty" db:"metadata"`
 	Status         CapabilityRequestStatus `json:"status" db:"status"`
 	RequestedBy    uuid.UUID               `json:"requestedBy" db:"requested_by"`
 	ReviewedBy     *uuid.UUID              `json:"reviewedBy,omitempty" db:"reviewed_by"`
@@ -44,6 +79,7 @@ type CreateCapabilityRequestInput struct {
 	AgentID        uuid.UUID `json:"agentId" validate:"required"`
 	CapabilityType string    `json:"capabilityType" validate:"required"`
 	Reason         string    `json:"reason" validate:"required,min=10"`
+	Metadata       JSONBMap  `json:"metadata,omitempty"`
 	RequestedBy    uuid.UUID `json:"-"` // Set from authenticated user context
 }
 

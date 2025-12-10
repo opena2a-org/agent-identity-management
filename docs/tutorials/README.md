@@ -38,7 +38,7 @@ from aim_sdk import secure
 agent = secure("my-agent")
 
 # 2. Secure your actions (1 decorator)
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def call_api(data):
     return requests.post("https://api.example.com", json=data)
 
