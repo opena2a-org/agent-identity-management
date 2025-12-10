@@ -79,7 +79,28 @@ from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 
-__version__ = "1.6.0"
+# Read version from VERSION file (single source of truth)
+# Supports both development (file in parent dir) and installed package scenarios
+import os as _os
+
+def _get_version():
+    """Get version from VERSION file or fallback to importlib.metadata."""
+    # Try VERSION file in parent directory (development mode)
+    version_file = _os.path.join(_os.path.dirname(__file__), "..", "VERSION")
+    if _os.path.exists(version_file):
+        with open(version_file, "r", encoding="utf-8") as vf:
+            return vf.read().strip()
+
+    # Try importlib.metadata (installed package)
+    try:
+        from importlib.metadata import version
+        return version("aim-sdk")
+    except Exception:
+        pass
+
+    return "0.0.0"  # Ultimate fallback
+
+__version__ = _get_version()
 __all__ = [
     "AIMClient",
     "register_agent",

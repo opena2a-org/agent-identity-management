@@ -123,12 +123,9 @@ class SecureCredentialStorage:
         # Set restrictive permissions (owner read/write only)
         os.chmod(self.encrypted_path, 0o600)
 
-        # Remove plaintext file if it exists
+        # Remove plaintext file if it exists (silent migration)
         if self.credentials_path.exists():
             self.credentials_path.unlink()
-            print("🗑️  Removed old plaintext credentials")
-
-        print(f"✅ Credentials saved securely (encrypted) at {self.encrypted_path}")
 
     def load_credentials(self) -> Optional[Dict[str, Any]]:
         """

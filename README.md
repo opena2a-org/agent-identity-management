@@ -108,10 +108,15 @@ Configure enforcement modes and detection rules for your entire organization.
 
 ![Security Policies](docs/images/security-policies.png)
 
-- **Global Enforcement Mode** — Toggle between monitoring and blocking modes
-- **Capability Violation Detection** — Block unauthorized actions in real-time
+- **Global Enforcement Mode** — Choose between MONITORING (observe) and STRICT (enforce) modes
+  - **MONITORING**: Actions are logged and alerted but never blocked — ideal for development
+  - **STRICT**: Policies are enforced and unauthorized actions are blocked — ideal for production
+- **Capability Violation Detection** — Detect when agents exceed their registered capabilities
 - **Data Exfiltration Detection** — Detect unusual data transfer patterns
+- **Trust Score Policies** — Block or alert on agents with low trust scores
 - **Failed Authentication Monitoring** — Alert on repeated auth failures
+
+> **Note**: In MONITORING mode, individual policy blocking decisions are overridden to allow all actions while still generating alerts. Switch to STRICT mode to enforce policies.
 
 ![Security Alerts](docs/images/alerts.png)
 
@@ -156,16 +161,30 @@ Navigate to **Settings → SDK Download** in the dashboard.
 ### 4. Secure Your First Agent
 
 ```python
-from aim_sdk import secure, perform_action
-import langchain  # SDK auto-detects your framework!
+from aim_sdk import secure, AgentType
 
-# ONE LINE - agent type auto-detected as "langchain"
-agent = secure("my-agent")
+# Full-featured agent registration
+agent = secure(
+    "my-ai-assistant",
+    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    capabilities=["db:read", "api:call"],
+    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
+    description="Customer support AI agent",
+    tags=["production", "customer-facing", "gpt-4", "support-team"],
+    metadata={
+        "model": "gpt-4",
+        "department": "support"
+    },
+    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+)
 
 # All actions are now verified, logged, and monitored
-@perform_action(capability="db:read")
-def query_database(query):
-    return db.execute(query)  # Verified, logged, capability-enforced
+# Risk level auto-detected from capability name (db:read → low)
+@agent.perform_action(capability="db:read")
+def get_customer(customer_id: str):
+    return {"id": customer_id, "name": "Jane Doe"}
+
+result = get_customer("cust-123")
 ```
 
 Watch the dashboard update in real-time as your agent registers and performs actions.
@@ -210,13 +229,13 @@ agent = secure("my-agent", agent_type=AgentType.CREWAI)
 The SDK automatically determines risk levels based on capability patterns:
 
 ```python
-@perform_action(capability="weather:fetch")      # → low (read-only, public data)
-@perform_action(capability="db:write")           # → medium (data modification)
-@perform_action(capability="file:delete")        # → high (destructive action)
-@perform_action(capability="payment:process")    # → critical (financial operation)
+@agent.perform_action(capability="weather:fetch")      # → low (read-only, public data)
+@agent.perform_action(capability="db:write")           # → medium (data modification)
+@agent.perform_action(capability="file:delete")        # → high (destructive action)
+@agent.perform_action(capability="payment:process")    # → critical (financial operation)
 
 # Override when needed
-@perform_action(capability="internal:api", risk_level="critical")
+@agent.perform_action(capability="internal:api", risk_level="critical")
 ```
 
 ---
@@ -259,12 +278,12 @@ Manage hundreds of AI agents across your organization with centralized identity,
 Add security controls to your existing AI agent frameworks without rewriting your code.
 
 ```python
-from aim_sdk import secure, perform_action
+from aim_sdk import secure
 from langchain.agents import Tool
 
 agent = secure("langchain-agent")
 
-@perform_action(capability="search:web")
+@agent.perform_action(capability="search:web")
 def search_tool(query):
     # Your existing LangChain tool logic
     pass

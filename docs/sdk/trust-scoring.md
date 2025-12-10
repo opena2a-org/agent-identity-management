@@ -51,18 +51,18 @@ verification_status = verified_actions / total_actions
 - **Score**: 1.0 (100%)
 
 **How to improve**:
-- ✅ Always use `agent.verify_capability()` or `@perform_action` decorator
+- ✅ Always use `agent.verify_capability()` or `@agent.perform_action` decorator
 - ✅ Ensure Ed25519 private key is valid
 - ✅ Fix authentication errors immediately
 
 **Code Example**:
 ```python
-from aim_sdk import secure, perform_action
+from aim_sdk import secure
 
 agent = secure("my-agent")
 
 # ✅ GOOD - Capability is automatically verified
-@perform_action(capability="data:read", risk_level="low")
+@agent.perform_action(capability="data:read", risk_level="low")
 def get_data(id: int):
     return {"data": f"Data for {id}"}
 
@@ -140,12 +140,12 @@ success_rate = successful_actions / total_actions
 
 **Code Example**:
 ```python
-from aim_sdk import secure, perform_action
+from aim_sdk import secure
 import requests
 
 agent = secure("weather-agent")
 
-@perform_action(capability="weather:fetch", risk_level="low")
+@agent.perform_action(capability="weather:fetch", risk_level="low")
 def get_weather(city: str) -> dict:
     """
     Get weather with error handling
@@ -532,7 +532,7 @@ def improve_trust_score():
     # Factor 1: Verification Status
     if breakdown['factors']['verification_status'] < 0.95:
         print("❌ Low verification status")
-        print("   → Add @agent.track_action decorators to all functions")
+        print("   → Add @agent.perform_action decorators to all functions")
 
     # Factor 2: Uptime
     if breakdown['factors']['uptime'] < 0.95:
@@ -620,11 +620,11 @@ else:
 ### Automated Actions by Trust Score
 
 ```python
-from aim_sdk import secure, perform_action
+from aim_sdk import secure
 
 agent = secure("my-agent")
 
-@perform_action(capability="sensitive:execute", risk_level="high")
+@agent.perform_action(capability="sensitive:execute", risk_level="high")
 def sensitive_action(data):
     """Sensitive capability with trust score check"""
     score = agent.get_trust_score()

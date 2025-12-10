@@ -4,6 +4,115 @@
 
 AIM implements **complete security** for AI agent identity management with multiple layers of protection against credential theft, unauthorized access, and token compromise.
 
+## Enforcement Modes
+
+AIM supports two enforcement modes that control how security policies are applied across your organization.
+
+### Global Enforcement Mode
+
+Configure at **Settings → Security Policies → Global Enforcement Mode**:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **MONITORING** | Log & alert only, never block | Development, testing, gradual rollout |
+| **STRICT** | Enforce policies, block violations | Production environments |
+
+### How Enforcement Mode Affects Policies
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Action Requested                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Evaluate Security Policies                      │
+│  (Capability Violation, Trust Score, Data Exfiltration...)  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                  ┌───────────────────┐
+                  │ Policy says BLOCK │
+                  └───────────────────┘
+                              │
+          ┌───────────────────┴───────────────────┐
+          │                                       │
+          ▼                                       ▼
+┌─────────────────────┐              ┌─────────────────────┐
+│  MONITORING Mode    │              │    STRICT Mode      │
+│  ─────────────────  │              │  ─────────────────  │
+│  ✅ Allow action    │              │  ❌ Block action    │
+│  ✅ Create alert    │              │  ✅ Create alert    │
+│  ✅ Log violation   │              │  ✅ Log violation   │
+└─────────────────────┘              └─────────────────────┘
+```
+
+**Key Principle**: In MONITORING mode, individual policy blocking decisions are **overridden** to allow all actions while still generating alerts for visibility.
+
+### Policy Hierarchy
+
+1. **Agent Verification** — Always enforced (cryptographic identity required)
+2. **Global Enforcement Mode** — Determines if policies can block actions
+3. **Individual Security Policies** — Evaluated and logged, blocking based on mode
+
+### Example: Capability Violation Detection
+
+```python
+# Agent has capability: "db:read"
+# Agent attempts: "db:write" (not registered)
+
+# With STRICT mode:
+# → Policy evaluates: "Capability violation detected"
+# → Action: BLOCKED
+# → Alert: Created with severity "high"
+
+# With MONITORING mode:
+# → Policy evaluates: "Capability violation detected"
+# → Action: ALLOWED (override)
+# → Alert: Created with severity "high"
+# → Log: "Action allowed by MONITORING mode - logged for review"
+```
+
+### Auto-Registration of Capabilities
+
+When using the Python SDK with `@agent.perform_action()`, capabilities are **auto-registered** on first use:
+
+```python
+@agent.perform_action(capability="db:write", auto_register=True)  # Default
+def write_data():
+    pass
+```
+
+This means:
+- **First call**: Capability auto-registered, action proceeds
+- **Subsequent calls**: Capability already exists, normal verification
+
+To disable auto-registration:
+```python
+@agent.perform_action(capability="db:write", auto_register=False)
+def write_data():
+    pass
+```
+
+### Recommended Workflow
+
+1. **Development**: Use MONITORING mode
+   - All actions allowed
+   - Collect baseline data on agent behavior
+   - Identify capability patterns
+
+2. **Pre-Production**: Review alerts
+   - Analyze violation patterns
+   - Register missing capabilities
+   - Tune policy thresholds
+
+3. **Production**: Switch to STRICT mode
+   - Policies enforced
+   - Unauthorized actions blocked
+   - Alerts for investigation
+
+---
+
 ## Priority 1 Security Features (Implemented)
 
 ### 1. **Encrypted Credential Storage**

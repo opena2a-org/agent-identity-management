@@ -754,6 +754,9 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	var sdkBytes []byte
 	var filename string
 
+	// SDK version - keep in sync with sdk/python/VERSION and sdk/python/aim_sdk/__init__.py
+	const sdkVersion = "1.6.0"
+
 	switch language {
 	case "python":
 		sdkBytes, err = sdkgen.GeneratePythonSDK(sdkgen.PythonSDKConfig{
@@ -762,9 +765,9 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 			PrivateKey: privateKey,
 			AIMURL:     getAIMBaseURL(c),
 			AgentName:  agent.Name,
-			Version:    "1.0.0",
+			Version:    sdkVersion,
 		})
-		filename = fmt.Sprintf("aim-sdk-%s-python.zip", agent.Name)
+		filename = fmt.Sprintf("aim-sdk-python-v%s.zip", sdkVersion)
 
 	case "nodejs":
 		// TODO: Implement Node.js SDK generator

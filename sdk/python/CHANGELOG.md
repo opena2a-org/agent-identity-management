@@ -79,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **New Decorators**:
-  - `@agent.track_action()` - Track and log actions without requiring approval (for monitoring and audit)
+  - `@agent.perform_action()` - Verify and track actions with optional JIT access for admin approval
   - `@agent.require_approval()` - Require admin approval before executing critical actions
 - **Versioning**: SDK download filename now includes version (e.g., `aim-sdk-python-v1.0.0.zip`)
 - **VERSION File**: Single source of truth for SDK version at `/sdk/python/VERSION`
@@ -115,9 +115,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Verification Flow**: Improved decorator implementation with proper error handling
 
 ### Deprecated
-- `@agent.perform_action()` - Use `@agent.track_action()` or `@agent.require_approval()` instead
+- `@agent.track_action()` - Use `@agent.perform_action()` instead
   - Will be removed in v2.0.0
-  - Deprecation warnings will be added in v1.1.0
+  - Deprecation warnings added in v1.6.0
 
 ## [0.9.0] - 2025-11-05 (Pre-release)
 
@@ -152,25 +152,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Breaking Changes**: None
 
 **New Features**:
-- Two new decorators available: `@track_action()` and `@require_approval()`
+- `@agent.perform_action()` decorator for verification and tracking
+- `@agent.require_approval()` decorator for critical actions
 
-**Recommended Migration**:
+**Recommended Usage**:
 
 ```python
-# OLD (0.9.x) - Still works but deprecated
-@agent.perform_action("read_database", resource="users")
+# Standard usage - all actions verified and tracked
+@agent.perform_action(risk_level="low", resource="database:users")
 def query_users():
     return db.query("SELECT * FROM users")
 
-# NEW (1.0.0) - Recommended for monitoring
-@agent.track_action(risk_level="low", resource="database:users")
-def query_users():
-    return db.query("SELECT * FROM users")
-
-# NEW (1.0.0) - For critical actions requiring approval
-@agent.require_approval(risk_level="critical", resource="database:users")
+# Critical actions with JIT access - requires admin approval
+@agent.perform_action(risk_level="critical", jit_access=True, resource="database:users")
 def delete_all_users():
     return db.execute("DELETE FROM users")  # ⏸️ Pauses until admin approves
+
+# Alternative: use @require_approval for critical actions
+@agent.require_approval(risk_level="critical", resource="database:users")
+def purge_data():
+    return db.execute("TRUNCATE TABLE users")
 ```
 
 **Action Required**:

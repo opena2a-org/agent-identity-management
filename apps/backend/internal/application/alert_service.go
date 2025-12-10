@@ -208,8 +208,8 @@ func DefaultUnusualAccessConfig() UnusualAccessPatternConfig {
 	return UnusualAccessPatternConfig{
 		HighVolumeThreshold:    100,             // 100+ requests in window
 		TimeWindowMinutes:      5,               // 5-minute window
-		OffHoursStart:          22,              // 10 PM
-		OffHoursEnd:            6,               // 6 AM
+		OffHoursStart:          0,               // Midnight UTC (disabled - 0 to 0 means never off-hours)
+		OffHoursEnd:            0,               // Midnight UTC (disabled - use org timezone settings when available)
 		NewResourceAlertDelay:  24 * time.Hour,  // Don't alert for 24h on new resources
 	}
 }
@@ -337,6 +337,11 @@ func (s *AlertService) checkHighVolumeAccess(ctx context.Context, orgID, agentID
 
 // checkOffHoursAccess detects access during unusual hours
 func (s *AlertService) checkOffHoursAccess(ctx context.Context, orgID, agentID uuid.UUID, config UnusualAccessPatternConfig) (*domain.Alert, error) {
+	// Skip if off-hours detection is disabled (start == end means disabled)
+	if config.OffHoursStart == config.OffHoursEnd {
+		return nil, nil
+	}
+
 	currentHour := time.Now().Hour()
 	isOffHours := currentHour >= config.OffHoursStart || currentHour < config.OffHoursEnd
 

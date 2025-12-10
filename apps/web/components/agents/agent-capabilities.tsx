@@ -255,7 +255,7 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
                     variant="secondary"
                     className="px-3 py-1 text-sm font-medium"
                   >
-                    {capability.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                    {capability.toLowerCase()}
                   </Badge>
                 ))}
               </div>

@@ -214,6 +214,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		ID:             auditIDFromVerify, // Use same ID so alerts link correctly
 		OrganizationID: agent.OrganizationID,
 		UserID:         &agent.CreatedBy, // Creator of the agent (now a pointer)
+		AgentID:        &agentID,         // Set AgentID so GetByAgent queries work
 		Action:         domain.AuditAction(req.Capability),
 		ResourceType:   "agent_action",
 		ResourceID:     agentID,
@@ -263,11 +264,21 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			alertType = domain.AlertSecurityBreach
 			severity = h.determineAlertSeverity(req.Capability, req.Context, detectedRiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
-			alertDescription = fmt.Sprintf(
-				"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
-					"This action was DENIED. Grant the required capability to allow this action.",
-				agent.Name, req.Capability, req.Resource,
-			)
+
+			// Use correct message based on whether action was denied or allowed
+			if status == "denied" {
+				alertDescription = fmt.Sprintf(
+					"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
+						"This action was DENIED. Grant the required capability to allow this action.",
+					agent.Name, req.Capability, req.Resource,
+				)
+			} else {
+				alertDescription = fmt.Sprintf(
+					"Agent '%s' performed action '%s' on resource '%s' without explicit capability grant. "+
+						"This action was ALLOWED (monitoring mode) but logged for review. Consider granting the capability explicitly.",
+					agent.Name, req.Capability, req.Resource,
+				)
+			}
 		}
 
 		alert := &domain.Alert{

@@ -633,7 +633,7 @@ print(f"Public Key: {agent.public_key}")
 print(f"Trust Score: {agent.get_trust_score()}")
 
 # 4. All actions are now authenticated
-@agent.track_action(risk_level="low")
+@agent.perform_action(risk_level="low")
 def get_data(id: int):
     # This action is automatically:
     # 1. Verified with challenge-response

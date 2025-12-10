@@ -8,8 +8,6 @@ import {
   AlertCircle,
   Plus,
   Trash2,
-  Download,
-  ShieldAlert,
   Code,
   Package,
   Copy,
@@ -23,7 +21,6 @@ import {
   Search,
 } from "lucide-react";
 import { api, Agent, AgentType, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
-import { downloadSDK as downloadAgentSDK } from "@/lib/agent-sdk";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { useMemo, useCallback } from "react";
@@ -101,7 +98,6 @@ export function RegisterAgentModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
-  const [downloadingSDK, setDownloadingSDK] = useState(false);
   const [integrationMethod, setIntegrationMethod] = useState<
     "sdk" | "manual" | null
   >(null);
@@ -432,29 +428,6 @@ export function RegisterAgentModal({
     }
   };
 
-  const downloadSDK = async () => {
-    if (!createdAgent) return;
-
-    setDownloadingSDK(true);
-    try {
-      await downloadAgentSDK(createdAgent.id, createdAgent.name, 'python');
-
-      // After successful download, close modal
-      setTimeout(() => {
-        onSuccess?.(createdAgent);
-        onClose();
-        resetForm();
-      }, 1000);
-    } catch (err) {
-      console.error("Failed to download SDK:", err);
-      alert(
-        "Failed to download SDK. Please try again from the agent details page."
-      );
-    } finally {
-      setDownloadingSDK(false);
-    }
-  };
-
   const handleSkipSDK = () => {
     if (createdAgent) {
       onSuccess?.(createdAgent);
@@ -528,7 +501,6 @@ export function RegisterAgentModal({
     setSuccess(false);
     setCreatedAgent(null);
     setCreatedApiKey(null);
-    setDownloadingSDK(false);
     setIntegrationMethod(null);
     setShowPrivateKey(false);
     setCopiedField(null);
@@ -784,41 +756,39 @@ export function RegisterAgentModal({
                     🎯 Choose Your Integration Method
                   </h4>
 
-                  {/* SDK Integration Option */}
+                  {/* Manual Integration Option - Primary */}
                   <button
-                    onClick={() => setIntegrationMethod("sdk")}
+                    onClick={handleManualIntegration}
                     className="w-full p-4 border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
                   >
                     <div className="flex items-start gap-3">
-                      <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                      <Code className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                          📦 SDK Integration (Recommended)
+                          🔧 Manual Integration (Recommended for Dashboard Agents)
                         </h5>
                         <p className="text-xs text-blue-800 dark:text-blue-200">
-                          Download ready-to-use SDK for <strong>Python</strong>.
-                          Includes cryptographic keys and automatic
-                          verification.
+                          Use <strong>any programming language</strong> (Python, Rust,
+                          Ruby, PHP, Java, etc.). Get your API key and credentials.
                         </p>
                       </div>
                     </div>
                   </button>
 
-                  {/* Manual Integration Option */}
+                  {/* SDK Integration Option - Secondary */}
                   <button
-                    onClick={handleManualIntegration}
+                    onClick={() => setIntegrationMethod("sdk")}
                     className="w-full p-4 border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors text-left"
                   >
                     <div className="flex items-start gap-3">
-                      <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                      <Package className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                          🔧 Manual Integration
+                          📦 Using Python SDK?
                         </h5>
                         <p className="text-xs text-gray-700 dark:text-gray-300">
-                          Use <strong>any programming language</strong> (Rust,
-                          Ruby, PHP, Java, etc.). Get your credentials and API
-                          documentation.
+                          The SDK auto-registers agents with local credentials.
+                          See how to create agents directly via SDK code.
                         </p>
                       </div>
                     </div>
@@ -826,118 +796,191 @@ export function RegisterAgentModal({
                 </div>
               )}
 
-              {/* SDK Download Section - Show if SDK method chosen */}
+              {/* SDK Integration Section - Show if SDK method chosen */}
               {integrationMethod === "sdk" && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-4">
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-4">
                   <div className="flex items-start gap-3">
-                    <Download className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                        Download Python SDK
+                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                        SDK Creates Agents Automatically
                       </h4>
-                      <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
-                        Get started immediately with automatic identity
-                        verification. The SDK includes your agent's
-                        cryptographic keys for seamless authentication.
+                      <p className="text-xs text-amber-800 dark:text-amber-200 mb-3">
+                        The Python SDK generates local cryptographic keys and auto-registers agents.
+                        Dashboard-created agents use server-side keys which won't work with the SDK.
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Python Code Example */}
+                  <div>
+                    <p className="text-xs font-medium text-amber-900 dark:text-amber-100 mb-2">
+                      Create your agent directly in Python code:
+                    </p>
+                    <div className="relative">
+                      <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap">
+{`from aim_sdk import secure, AgentType
+
+# ══════════════════════════════════════════════════════════════════════════
+# AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+agent = secure(
+    "my-ai-assistant",
+    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    capabilities=["db:read", "api:call"],
+    version="1.0.0", # Note: version defaults to "1.0.0" if undeclared
+    description="Customer support AI agent",
+    tags=["production", "customer-facing", "gpt-4", "support-team"],
+    metadata={
+        "model": "gpt-4",
+        "department": "support"
+    },
+    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+)
+
+# ══════════════════════════════════════════════════════════════════════════
+# TRACK ACTIONS & RISKS - Log all agent activities in AIM
+# -----------------------------------------------------------
+# AIM verifies agent has db:read and approve or reject action
+@agent.perform_action(capability="db:read")  # auto: low risk
+def get_customer(customer_id: str):
+    return {"id": customer_id, "name": "Jane Doe"}
+# -----------------------------------------------------------
+# @agent.perform_action(capability="text:generate") # auto: low risk
+# def generate_response(prompt: str):
+#     return llm.generate(prompt)
+
+# @agent.perform_action(capability="sentiment:analyze") # auto: low risk
+# def analyze_sentiment(text: str):
+#     return {"sentiment": "positive", "score": 0.92}
+
+# Critical action - requires admin approval (JIT Access)
+# @agent.perform_action(capability="customer:delete", jit_access=True)
+# def delete_customer(customer_id: str):
+#     return {"deleted": customer_id}  # Waits for admin approval!
+
+# Run your functions - AIM verifies and tracks everything!
+# response = generate_response("Hello, how can I help?")
+# print(f"Response: {response}")
+
+# ══════════════════════════════════════════════════════════════════════════
+# CAPABILITY REQUEST - Request New Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+
+# Request capabilities that need admin approval
+# agent.request_capability(
+#     "db:admin",
+#     reason="Need admin access for migration",
+#     metadata={
+#         "use_case": "quarterly migration",
+#         "expires": "2025-01-01"}
+# )`}
+                      </pre>
                       <button
-                        onClick={downloadSDK}
-                        disabled={downloadingSDK}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                        type="button"
+                        onClick={() => {
+                          const pythonCode = `from aim_sdk import secure, AgentType
+
+# ══════════════════════════════════════════════════════════════════════════
+# AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+agent = secure(
+    "my-ai-assistant",
+    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    capabilities=["db:read", "api:call"],
+    version="1.0.0", # Note: version defaults to "1.0.0" if undeclared
+    description="Customer support AI agent",
+    tags=["production", "customer-facing", "gpt-4", "support-team"],
+    metadata={
+        "model": "gpt-4",
+        "department": "support"
+    },
+    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+)
+
+# ══════════════════════════════════════════════════════════════════════════
+# TRACK ACTIONS & RISKS - Log all agent activities in AIM
+# -----------------------------------------------------------
+# AIM verifies agent has db:read and approve or reject action
+@agent.perform_action(capability="db:read")  # auto: low risk
+def get_customer(customer_id: str):
+    return {"id": customer_id, "name": "Jane Doe"}
+# -----------------------------------------------------------
+# @agent.perform_action(capability="text:generate") # auto: low risk
+# def generate_response(prompt: str):
+#     return llm.generate(prompt)
+
+# @agent.perform_action(capability="sentiment:analyze") # auto: low risk
+# def analyze_sentiment(text: str):
+#     return {"sentiment": "positive", "score": 0.92}
+
+# Critical action - requires admin approval (JIT Access)
+# @agent.perform_action(capability="customer:delete", jit_access=True)
+# def delete_customer(customer_id: str):
+#     return {"deleted": customer_id}  # Waits for admin approval!
+
+# Run your functions - AIM verifies and tracks everything!
+# response = generate_response("Hello, how can I help?")
+# print(f"Response: {response}")
+
+# ══════════════════════════════════════════════════════════════════════════
+# CAPABILITY REQUEST - Request New Capabilities
+# ══════════════════════════════════════════════════════════════════════════
+
+# Request capabilities that need admin approval
+# agent.request_capability(
+#     "db:admin",
+#     reason="Need admin access for migration",
+#     metadata={
+#         "use_case": "quarterly migration",
+#         "expires": "2025-01-01"}
+# )`;
+                          copyToClipboard(pythonCode, "python_code");
+                        }}
+                        className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
                       >
-                        {downloadingSDK ? (
+                        {copiedField === "python_code" ? (
                           <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Downloading...
+                            <CheckCircle className="h-3 w-3" />
+                            Copied!
                           </>
                         ) : (
                           <>
-                            <Download className="h-4 w-4" />
-                            Download SDK (.zip)
+                            <Copy className="h-3 w-3" />
+                            Copy
                           </>
                         )}
                       </button>
                     </div>
                   </div>
 
-                  {/* Security Warning */}
-                  <div className="flex items-start gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
-                    <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-red-800 dark:text-red-200">
-                      <strong>Contains private key.</strong> Never commit to Git or share publicly.
+                  {/* SDK Download Link and Documentation */}
+                  <div className="pt-3 border-t border-amber-200 dark:border-amber-700">
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <a
+                        href="/dashboard/sdk"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <Package className="h-4 w-4" />
+                        Download Python SDK
+                      </a>
+                      <a
+                        href="https://opena2a.org/docs/integration/python"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        SDK Documentation
+                      </a>
+                    </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      After downloading, run: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">pip install -e .</code>
                     </p>
                   </div>
 
-                  {/* Sample Python Script */}
-                  {formData.capabilities.length > 0 && (
-                    <div className="pt-3 border-t border-blue-200 dark:border-blue-700">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Terminal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        <label className="text-xs font-medium text-blue-900 dark:text-blue-100">
-                          Quick Start: Python SDK Example
-                        </label>
-                      </div>
-                      <div className="relative">
-                        <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap">
-{`from aim_sdk import secure, require_capability
-
-# Initialize your agent (auto-loads credentials from SDK)
-agent = secure("${formData.name}")
-
-# Use decorators to protect your functions
-@require_capability("${formData.capabilities[0]}")
-def my_protected_function():
-    """This function requires the ${formData.capabilities[0]} capability"""
-    print("✅ Capability verified! Executing protected action...")
-    return {"status": "success"}
-
-# Run your function - AIM will verify the capability first
-result = my_protected_function()
-print(f"Result: {result}")`}
-                        </pre>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const pythonCode = `from aim_sdk import secure, require_capability
-
-# Initialize your agent (auto-loads credentials from SDK)
-agent = secure("${formData.name}")
-
-# Use decorators to protect your functions
-@require_capability("${formData.capabilities[0]}")
-def my_protected_function():
-    """This function requires the ${formData.capabilities[0]} capability"""
-    print("✅ Capability verified! Executing protected action...")
-    return {"status": "success"}
-
-# Run your function - AIM will verify the capability first
-result = my_protected_function()
-print(f"Result: {result}")`;
-                            copyToClipboard(pythonCode, "python_code");
-                          }}
-                          className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
-                        >
-                          {copiedField === "python_code" ? (
-                            <>
-                              <CheckCircle className="h-3 w-3" />
-                              Copied!
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3 w-3" />
-                              Copy
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
-                        After downloading the SDK, extract it and run: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">pip install -e .</code> then use the code above.
-                      </p>
-                    </div>
-                  )}
-
                   {/* Change Method */}
-                  <div className="text-center">
+                  <div className="text-center pt-2">
                     <button
                       onClick={() => setIntegrationMethod(null)}
                       className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
@@ -1043,7 +1086,7 @@ print(f"Result: {result}")`;
                           {/* API Documentation Link */}
                           <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                             <a
-                              href="https://opena2a.org/docs"
+                              href="https://opena2a.org/docs/api/rest"
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
@@ -1157,16 +1200,14 @@ print(f"Result: {result}")`;
                 </div>
               )}
 
-              {/* Skip/Close Option - Show for both methods */}
-              {integrationMethod && (
+              {/* Skip/Close Option - Show for manual method only */}
+              {integrationMethod === "manual" && (
                 <div className="text-center">
                   <button
                     onClick={handleSkipSDK}
                     className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
                   >
-                    {integrationMethod === "sdk"
-                      ? "Skip for now (you can download SDK later from agent details)"
-                      : "Done (you can access credentials later from agent details)"}
+                    Done (you can access credentials later from agent details)
                   </button>
                 </div>
               )}

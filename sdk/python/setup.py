@@ -3,13 +3,19 @@ AIM Python SDK Setup
 """
 
 from setuptools import setup, find_packages
+import os
+
+# Read version from VERSION file (single source of truth)
+version_file = os.path.join(os.path.dirname(__file__), "VERSION")
+with open(version_file, "r", encoding="utf-8") as vf:
+    version = vf.read().strip()
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="aim-sdk",
-    version="1.6.0",
+    version=version,
     author="OpenA2A",
     author_email="info@opena2a.org",
     description="Python SDK for AIM (Agent Identity Management) - Automatic identity verification for AI agents",
@@ -49,6 +55,9 @@ setup(
         "mcp": [
             "mcp>=1.0.0",  # Official MCP SDK for auto-discovery
             "anyio>=4.0.0",  # Async runtime for MCP client
+        ],
+        "rich": [
+            "rich>=13.0.0",  # Beautiful terminal output (Stripe-style formatting)
         ]
     },
     keywords="aim agent identity management verification security cryptography ed25519",

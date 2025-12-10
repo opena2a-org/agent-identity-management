@@ -25,6 +25,8 @@ from .exceptions import (
 )
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
+from .console import console
+from .risk_detector import detect_risk_level
 
 
 # Capability format validation pattern (namespace:action)
@@ -366,9 +368,7 @@ class AIMClient:
                 if data:
                     json_body_str = json.dumps(data, sort_keys=True)
                     message_parts.append(json_body_str)
-                    print(f"🔍 SDK signing JSON body: {json_body_str[:200]}...")
                 message = '\n'.join(message_parts)
-                print(f"🔍 SDK signing full message:\n{message[:500]}...")
 
                 # Sign the message
                 signature = self.signing_key.sign(message.encode('utf-8')).signature
@@ -562,14 +562,17 @@ class AIMClient:
                     error_detail = response.text
                 raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
-            # Handle forbidden errors
+            # Handle forbidden errors (denied action or agent status issue)
             if response.status_code == 403:
-                raise AuthenticationError("Forbidden - insufficient permissions")
+                try:
+                    error_detail = response.json().get("error", "insufficient permissions")
+                except:
+                    error_detail = response.text or "insufficient permissions"
+                raise AuthenticationError(f"Forbidden - {error_detail}")
 
             # Handle 404 - endpoint not found (server may not be running or endpoint doesn't exist)
             if response.status_code == 404:
-                print(f" Warning: AIM verification endpoint not found (404). Server may not be running.")
-                print(f"   Returning default 'pending' status. Action will be treated as requiring approval.")
+                console.warning("AIM verification endpoint not found (404). Server may not be running.")
                 return {
                     "verified": False,
                     "verification_id": None,
@@ -586,8 +589,7 @@ class AIMClient:
                 except:
                     error_msg = f"{error_msg}: {response.text[:200]}"
                 
-                print(f" Warning: Verification request failed: {error_msg}")
-                print(f"   Returning default 'pending' status.")
+                console.warning(f"Verification request failed: {error_msg}")
                 return {
                     "verified": False,
                     "verification_id": None,
@@ -625,8 +627,7 @@ class AIMClient:
             raise
         except requests.exceptions.RequestException as e:
             # Handle network errors (connection refused, timeout, etc.)
-            print(f" Warning: Network error during verification: {type(e).__name__}: {str(e)}")
-            print(f"   Returning default 'pending' status. Action will be treated as requiring approval.")
+            console.warning(f"Network error during verification: {type(e).__name__}: {str(e)}")
             return {
                 "verified": False,
                 "verification_id": None,
@@ -635,8 +636,7 @@ class AIMClient:
             }
         except json.JSONDecodeError as e:
             # Handle JSON parsing errors
-            print(f"  Warning: Invalid JSON response from server: {str(e)}")
-            print(f"   Returning default 'pending' status.")
+            console.warning(f"Invalid JSON response from server: {str(e)}")
             return {
                 "verified": False,
                 "verification_id": None,
@@ -645,8 +645,7 @@ class AIMClient:
             }
         except Exception as e:
             # Catch all other exceptions
-            print(f"  Warning: Unexpected error during verification: {type(e).__name__}: {str(e)}")
-            print(f"   Returning default 'pending' status.")
+            console.warning(f"Unexpected error during verification: {type(e).__name__}: {str(e)}")
             return {
                 "verified": False,
                 "verification_id": None,
@@ -740,7 +739,7 @@ class AIMClient:
 
                 # Handle 404 - endpoint not found
                 if response.status_code == 404:
-                    print(f" Warning: Verification endpoint not found (404). Cannot poll for approval.")
+                    console.warning("Verification endpoint not found (404). Cannot poll for approval.")
                     raise VerificationError("Verification endpoint not available - cannot complete approval process")
 
                 # Handle other HTTP errors
@@ -752,7 +751,7 @@ class AIMClient:
                     except:
                         error_msg = f"{error_msg}: {response.text[:200]}"
                     # Continue polling on transient errors, but log the issue
-                    print(f" Warning: Error polling verification status: {error_msg}")
+                    console.warning(f"Error polling verification status: {error_msg}")
                     time.sleep(poll_interval)
                     poll_interval = min(poll_interval * 1.5, 10)
                     continue
@@ -782,17 +781,17 @@ class AIMClient:
                 raise
             except requests.exceptions.RequestException as e:
                 # Handle network errors - continue polling on transient network issues
-                print(f"  Warning: Network error while polling: {type(e).__name__}: {str(e)}")
+                console.warning(f"Network error while polling: {type(e).__name__}: {str(e)}")
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
             except json.JSONDecodeError as e:
                 # Handle JSON parsing errors - continue polling
-                print(f"  Warning: Invalid JSON response while polling: {str(e)}")
+                console.warning(f"Invalid JSON response while polling: {str(e)}")
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
             except Exception as e:
                 # Continue polling on any other transient errors
-                print(f"  Warning: Unexpected error while polling: {type(e).__name__}: {str(e)}")
+                console.warning(f"Unexpected error while polling: {type(e).__name__}: {str(e)}")
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
 
@@ -960,7 +959,8 @@ class AIMClient:
     def request_capability(
         self,
         capability_type: str,
-        reason: str
+        reason: str,
+        metadata: Optional[Dict] = None
     ) -> Dict:
         """
         Request an additional capability for the agent.
@@ -972,6 +972,7 @@ class AIMClient:
         Args:
             capability_type: Type of capability being requested (e.g., "write_database", "send_bulk_email")
             reason: Business justification for the capability request (minimum 10 characters)
+            metadata: Optional additional context for the request (e.g., {"target_table": "users", "scope": "read-write"})
 
         Returns:
             Dict containing:
@@ -980,6 +981,7 @@ class AIMClient:
             - capability_type: str - Requested capability
             - status: str - Request status ("pending", "approved", "rejected")
             - requested_at: str - ISO timestamp of request
+            - metadata: dict - Optional metadata provided with the request
 
         Raises:
             ConfigurationError: If reason is too short or capability_type is invalid
@@ -988,14 +990,15 @@ class AIMClient:
         Example:
             result = client.request_capability(
                 capability_type="write_database",
-                reason="Need to update user records in the database for analytics"
+                reason="Need to update user records in the database for analytics",
+                metadata={"target_table": "users", "scope": "read-write"}
             )
             print(f"Request ID: {result['id']}, Status: {result['status']}")
         """
         # Validate inputs
         if not capability_type or not isinstance(capability_type, str):
             raise ConfigurationError("capability_type must be a non-empty string")
-        
+
         if not reason or len(reason) < 10:
             raise ConfigurationError("reason must be at least 10 characters")
 
@@ -1004,6 +1007,10 @@ class AIMClient:
             "capabilityType": capability_type,
             "reason": reason
         }
+
+        # Add metadata if provided
+        if metadata:
+            request_data["metadata"] = metadata
 
         try:
             # Make request to SDK API endpoint
@@ -1029,7 +1036,7 @@ class AIMClient:
                     if isinstance(requests_list, list):
                         for req in requests_list:
                             if req.get("capabilityType") == capability_type or req.get("capability_type") == capability_type:
-                                print(f"ℹ️  Capability request for '{capability_type}' already exists (status: {req.get('status', 'unknown')})")
+                                console.info(f"Capability request for '{capability_type}' already exists (status: {req.get('status', 'unknown')})")
                                 return req
                     # If we can't find the specific request, return a helpful message
                     return {
@@ -1047,6 +1054,136 @@ class AIMClient:
             raise VerificationError(f"Capability request failed: {e}")
         except Exception as e:
             raise VerificationError(f"Capability request failed: {e}")
+
+    def register_capability(
+        self,
+        capability_type: str,
+        description: str = "",
+        risk_level: str = "medium"
+    ) -> Dict:
+        """
+        Register a capability that this agent intends to use.
+
+        This is different from request_capability() - it declares the agent's
+        intended capabilities for visibility and tracking, rather than requesting
+        admin approval for a new capability.
+
+        Behavior depends on organization's enforcement mode:
+        - MONITORING mode: Capabilities are automatically granted
+        - STRICT mode: Creates a pending request requiring admin approval
+
+        Note: Capabilities declared during initial agent registration (via the
+        `capabilities` parameter in `secure()`) are ALWAYS auto-granted regardless
+        of enforcement mode. This method is for adding capabilities AFTER registration.
+
+        Args:
+            capability_type: The capability to register (e.g., "weather:check", "db:read")
+            description: Optional description of what this capability does
+            risk_level: Risk level ("low", "medium", "high", "critical")
+
+        Returns:
+            Dict containing:
+            - success: bool - Whether registration succeeded
+            - capability_type: str - The registered capability
+            - status: str - "granted" (monitoring), "pending" (strict), "already_exists"
+            - message: str - Human-readable message
+            - request_id: str - Only present if status is "pending"
+
+        Example:
+            # Register capabilities after agent startup
+            result = agent.register_capability("weather:check", "Check weather data", risk_level="low")
+            if result["status"] == "pending":
+                print("Awaiting admin approval...")
+            elif result["status"] == "granted":
+                print("Capability granted!")
+        """
+        # Track locally to avoid duplicate registrations in same session
+        if not hasattr(self, '_registered_capabilities'):
+            self._registered_capabilities = set()
+
+        if capability_type in self._registered_capabilities:
+            return {
+                "success": True,
+                "capability_type": capability_type,
+                "status": "already_registered",
+                "message": f"Capability '{capability_type}' already registered in this session"
+            }
+
+        # Validate capability format
+        _warn_deprecated_capability_format(capability_type)
+
+        try:
+            # Use the capability registration endpoint
+            request_data = {
+                "capabilityType": capability_type,
+                "description": description or f"Registered capability: {capability_type}",
+                "riskLevel": risk_level,
+            }
+
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capabilities/register",
+                data=request_data
+            )
+
+            # Track as registered (even if pending - we don't want duplicate requests)
+            self._registered_capabilities.add(capability_type)
+
+            status = result.get("status", "registered")
+            message = result.get("message", f"Capability '{capability_type}' registered")
+
+            # Display appropriate console output based on status
+            if status == "granted":
+                console.capability_registered(capability_type, risk_level)
+            elif status == "pending":
+                console.info(f"Capability '{capability_type}' pending admin approval (strict mode)")
+            elif status == "already_exists":
+                pass  # Silent - already exists
+
+            response = {
+                "success": True,
+                "capability_type": capability_type,
+                "status": status,
+                "message": message
+            }
+
+            # Include request_id if pending
+            if status == "pending" and "requestId" in result:
+                response["request_id"] = result["requestId"]
+
+            return response
+
+        except VerificationError as e:
+            error_str = str(e)
+            # Handle 409 Conflict - capability already exists
+            if "409" in error_str or "already" in error_str.lower():
+                self._registered_capabilities.add(capability_type)
+                return {
+                    "success": True,
+                    "capability_type": capability_type,
+                    "status": "already_exists",
+                    "message": f"Capability '{capability_type}' already exists"
+                }
+            # Handle 404 - endpoint not available (older server version)
+            if "404" in error_str:
+                # Silently succeed - server doesn't support capability registration
+                self._registered_capabilities.add(capability_type)
+                return {
+                    "success": True,
+                    "capability_type": capability_type,
+                    "status": "not_tracked",
+                    "message": "Capability registration not supported by server"
+                }
+            raise
+        except Exception as e:
+            # Don't fail the agent if registration fails - just log it
+            console.warning(f"Failed to register capability '{capability_type}': {e}")
+            return {
+                "success": False,
+                "capability_type": capability_type,
+                "status": "error",
+                "message": str(e)
+            }
 
     def report_detections(
         self,
@@ -1118,7 +1255,7 @@ class AIMClient:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict:
         """
-        Register an MCP server to this agent's "talks_to" list.
+        Register an MCP server to this agent's mcp_servers list.
 
         This creates a relationship between the agent and an MCP server,
         indicating that the agent communicates with this MCP server.
@@ -1333,7 +1470,9 @@ class AIMClient:
         repository_url: Optional[str] = None,
         documentation_url: Optional[str] = None,
         capabilities: Optional[List[str]] = None,
-        talks_to: Optional[List[str]] = None
+        mcp_servers: Optional[List[str]] = None,
+        # Backward compatibility alias
+        talks_to: Optional[List[str]] = None  # DEPRECATED: Use mcp_servers instead
     ) -> Dict:
         """
         Create/register a new agent through an authenticated client.
@@ -1362,7 +1501,7 @@ class AIMClient:
             repository_url: GitHub/GitLab repository URL
             documentation_url: Documentation URL
             capabilities: List of capabilities the agent has
-            talks_to: List of MCP server names the agent communicates with
+            mcp_servers: List of MCP server names the agent communicates with
 
         Returns:
             Dict containing the newly created agent details:
@@ -1419,6 +1558,20 @@ class AIMClient:
         private_key_b64 = base64.b64encode(private_key_full).decode('utf-8')
         public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
 
+        # Handle backward compatibility: merge talks_to into mcp_servers
+        if talks_to is not None:
+            import warnings
+            warnings.warn(
+                "The 'talks_to' parameter is deprecated. Use 'mcp_servers' instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            if mcp_servers is None:
+                mcp_servers = talks_to
+            else:
+                # Merge both, preferring mcp_servers but adding any unique from talks_to
+                mcp_servers = list(set(mcp_servers + talks_to))
+
         # Prepare registration payload
         registration_data = {
             "name": name,
@@ -1436,8 +1589,8 @@ class AIMClient:
             registration_data["documentationUrl"] = documentation_url
         if capabilities:
             registration_data["capabilities"] = capabilities
-        if talks_to:
-            registration_data["talksTo"] = talks_to
+        if mcp_servers:
+            registration_data["talksTo"] = mcp_servers  # Backend still uses talksTo
 
         try:
             # Use authenticated endpoint
@@ -1546,7 +1699,7 @@ class AIMClient:
             - status: str - Verification status
             - trust_score: float - Current trust score
             - capabilities: List[str] - Granted capabilities
-            - talks_to: List[str] - MCP servers the agent talks to
+            - mcp_servers: List[str] - MCP servers the agent communicates with
             - organization_id: str - Organization ID
             - created_at: str - ISO timestamp
             - updated_at: str - ISO timestamp
@@ -1687,73 +1840,94 @@ class AIMClient:
 
     def perform_action(
         self,
-        action_type: str = None,
         capability: str = None,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300,
         jit_access: bool = False,
-        risk_level: str = "medium"
+        risk_level: str = None,
+        auto_register: bool = True
     ):
         """
-        Decorator for automatic capability verification.
+        Decorator for automatic capability verification and action tracking.
 
         This decorator wraps a function to automatically:
-        1. Request capability verification from AIM before execution
-        2. Wait for approval (if jit_access=True, waits for admin approval)
-        3. Execute the function if approved
-        4. Log the result back to AIM
+        1. Auto-register the capability if not already registered (configurable)
+        2. Request capability verification from AIM before execution
+        3. Wait for approval (if jit_access=True, waits for admin approval)
+        4. Execute the function if approved
+        5. Log the result back to AIM
 
         Args:
-            action_type: DEPRECATED - use capability instead
-            capability: Capability being used (e.g., "file:read", "db:query", "payment:refund")
-            resource: Resource being accessed
-            context: Additional context
+            capability: Capability being used (e.g., "file:read", "db:query").
+                       If not provided, uses the function name.
+            resource: Resource being accessed (optional)
+            context: Additional context (optional)
             timeout_seconds: Max time to wait for approval (default: 5 minutes)
             jit_access: If True, requires real-time admin approval for sensitive operations
-            risk_level: Risk level for JIT access ("low", "medium", "high", "critical")
+            risk_level: Risk level ("low", "medium", "high", "critical"). If not provided,
+                       auto-detects based on capability name.
+            auto_register: If True (default), automatically registers capability on first use
 
-        Example - Standard verification:
-            @client.perform_action(capability="db:read", resource="users_table")
+        Example - Simple usage (uses function name as capability):
+            @agent.perform_action()  # auto-detects risk level
+            def search_flights(destination):
+                return api.search(destination)
+
+        Example - Explicit capability:
+            @agent.perform_action(capability="db:read", resource="users_table")
             def get_users():
                 return database.query("SELECT * FROM users")
 
         Example - JIT Access (waits for admin approval):
-            @client.perform_action(capability="payment:refund", resource="stripe", jit_access=True)
+            @agent.perform_action(capability="payment:refund", jit_access=True, risk_level="critical")
             def process_refund(order_id: str, amount: float):
                 '''Waits for AIM approval before executing'''
                 return stripe.refund(order_id, amount)
 
-            @client.perform_action(capability="database:purge", resource="users_table",
-                                   jit_access=True, timeout_seconds=300, risk_level="critical")
-            def purge_inactive_users():
-                '''May require admin approval based on agent's trust score'''
-                return db.purge_inactive()
+        Risk Levels:
+            - "low": Read operations, safe actions (auto-approved)
+            - "medium": Write operations, data modification
+            - "high": Sensitive operations (may require approval)
+            - "critical": Destructive operations (requires approval)
 
         Raises:
             ActionDeniedError: If AIM denies the capability
             VerificationError: If verification fails or times out
         """
-        # Support both action_type (deprecated) and capability
-        cap = capability or action_type
-        if not cap:
-            raise ValueError("capability parameter is required")
-
         def decorator(func: Callable) -> Callable:
+            # Use function name as capability if not provided
+            cap = capability or func.__name__
+
+            # Auto-detect risk level if not explicitly provided
+            detected_risk = risk_level if risk_level else detect_risk_level(cap)
+
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 # Warn if using deprecated capability format (snake_case instead of namespace:action)
                 _warn_deprecated_capability_format(cap)
 
+                # Auto-register capability on first use (if enabled)
+                if auto_register:
+                    try:
+                        self.register_capability(
+                            capability_type=cap,
+                            description=f"Auto-registered by @perform_action decorator for {func.__name__}",
+                            risk_level=detected_risk
+                        )
+                        console.capability_registered(cap, detected_risk)
+                    except Exception as e:
+                        # Don't fail the action if registration fails - just log it
+                        console.warning(f"Auto-registration of '{cap}' failed: {e}")
+
                 # Build context with JIT access info
                 merged_context = context.copy() if context else {}
                 if jit_access:
                     merged_context["jit_access"] = True
-                    merged_context["risk_level"] = risk_level
+                    merged_context["risk_level"] = detected_risk
                     merged_context["function"] = func.__name__
                     merged_context["module"] = func.__module__
-                    print(f"🔐 JIT Access requested for '{cap}' - waiting for admin approval...")
-                    print(f"   Check: http://localhost:3000/dashboard/admin/verifications")
+                    console.jit_waiting(cap, detected_risk, timeout_seconds)
 
                 # Request capability verification
                 verification_result = self.verify_capability(
@@ -1797,30 +1971,27 @@ class AIMClient:
         resource: Optional[str] = None
     ):
         """
-        Decorator for automatic action tracking and verification.
+        DEPRECATED: Use @agent.perform_action() instead.
 
-        This is a user-friendly wrapper around perform_action() that uses
-        risk levels instead of requiring explicit action types.
+        This method is deprecated and will be removed in a future version.
+        Use perform_action() which provides the same functionality plus JIT access support.
 
-        Args:
-            risk_level: Risk level of the action ("low", "medium", "high", "critical")
-            action_name: Custom action name (default: function name)
-            resource: Resource being accessed (optional)
+        Migration:
+            # Old (deprecated):
+            @agent.track_action(risk_level="medium")
+            def my_function(): pass
 
-        Example:
-            @agent.track_action(risk_level="low")
-            def get_weather(city):
-                return api.get(f"/weather?city={city}")
-
-            # Automatically verified, logged, and monitored!
-            weather = get_weather("San Francisco")
-
-        Risk Levels:
-            - "low": Read operations, safe actions (auto-approved)
-            - "medium": Write operations, data modification
-            - "high": Sensitive operations (may require approval)
-            - "critical": Destructive operations (requires approval)
+            # New (recommended):
+            @agent.perform_action(capability="my_function", risk_level="medium")
+            def my_function(): pass
         """
+        import warnings
+        warnings.warn(
+            "track_action() is deprecated. Use perform_action() instead. "
+            "Example: @agent.perform_action(capability='action_name', risk_level='medium')",
+            DeprecationWarning,
+            stacklevel=2
+        )
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
@@ -1853,9 +2024,8 @@ class AIMClient:
                     )
                 except Exception as e:
                     # Handle any exceptions during verification
-                    print(f"  Warning: Verification request failed: {type(e).__name__}: {str(e)}")
-                    print(f"   Capability '{action}' cannot proceed without verification.")
-                    print(f"   Returning error result instead of raising exception.")
+                    console.warning(f"Verification request failed: {type(e).__name__}: {str(e)}")
+                    console.info(f"Capability '{action}' cannot proceed without verification")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
@@ -1867,8 +2037,8 @@ class AIMClient:
                 # Check if verification result has an error
                 if verification_result.get("error"):
                     error_msg = verification_result.get("error", "Unknown verification error")
-                    print(f"  Warning: Verification returned error: {error_msg}")
-                    print(f"   Capability '{action}' cannot proceed without successful verification.")
+                    console.warning(f"Verification returned error: {error_msg}")
+                    console.info(f"Capability '{action}' cannot proceed without successful verification")
                     return {
                         "error": True,
                         "error_type": "VerificationError",
@@ -1879,7 +2049,7 @@ class AIMClient:
 
                 if not verification_result.get("verified", False):
                     reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    print(f" Warning: Capability '{action}' not verified: {reason}")
+                    console.warning(f"Capability '{action}' not verified: {reason}")
                     return {
                         "error": True,
                         "error_type": "CapabilityDenied",
@@ -1969,7 +2139,7 @@ class AIMClient:
         if risk_level not in ["high", "critical"]:
             raise ValueError(
                 f"require_approval() only supports 'high' or 'critical' risk levels, "
-                f"got: {risk_level}. Use track_action() for lower risk levels."
+                f"got: {risk_level}. Use perform_action() for lower risk levels."
             )
 
         def decorator(func: Callable) -> Callable:
@@ -2121,11 +2291,21 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
     """
     Update an existing agent's capabilities.
 
+    Behavior depends on organization's enforcement mode:
+    - MONITORING MODE: New capabilities are auto-granted (permissive)
+    - STRICT MODE: New capabilities are rejected, must use request_capability()
+
+    This function will:
+    - Identify new capabilities
+    - In strict mode: warn that escalations are rejected
+    - In monitoring mode: capabilities are auto-granted by the backend
+    - Capability reductions are always allowed (safe direction)
+
     Args:
         aim_url: AIM server URL
         headers: Request headers with auth token
         agent_id: Agent ID
-        capabilities: List of capability strings to add
+        capabilities: List of capability strings requested
     """
     try:
         # Get existing capabilities first
@@ -2135,27 +2315,38 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
         existing_caps = set()
         if get_response.status_code == 200:
             caps_data = get_response.json()
-            existing_caps = {cap.get("action") for cap in caps_data.get("capabilities", [])}
+            # Handle both formats: {"capabilities": [...]} or just [...]
+            if isinstance(caps_data, list):
+                caps_list = caps_data
+            else:
+                caps_list = caps_data.get("capabilities", [])
+            existing_caps = {cap.get("action") for cap in caps_list if isinstance(cap, dict)}
 
-        # Add new capabilities that don't exist yet
-        new_caps = [cap for cap in capabilities if cap not in existing_caps]
+        # Identify capability changes
+        requested_caps = set(capabilities)
+        new_caps = requested_caps - existing_caps  # New capabilities
+        removed_caps = existing_caps - requested_caps  # Reductions (safe)
 
+        # Inform about new capabilities
+        # Note: Backend handles enforcement mode - in monitoring mode these will be auto-granted,
+        # in strict mode they will be rejected
         if new_caps:
-            print(f"   📝 Adding {len(new_caps)} new capabilities...")
-            for cap in new_caps:
-                add_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/capabilities"
-                cap_data = {
-                    "action": cap,
-                    "resourceType": "api",
-                    "isAllowed": True
-                }
-                requests.post(add_url, json=cap_data, headers=headers, timeout=30)
-            print(f"   ✅ Capabilities updated")
-        else:
-            print(f"   ℹ️  All capabilities already registered")
+            console.info(
+                f"New capabilities requested: {list(new_caps)}\n"
+                "   In MONITORING mode: auto-granted by backend\n"
+                "   In STRICT mode: rejected - use agent.request_capability() for admin approval"
+            )
+
+        # Capability reductions are allowed (safe direction)
+        if removed_caps:
+            console.info(f"Capabilities to be removed: {list(removed_caps)}")
+
+        # Report what capabilities are currently active
+        if existing_caps:
+            console.info(f"Current capabilities: {list(existing_caps)}")
 
     except Exception as e:
-        print(f"   ⚠️  Failed to update capabilities: {e}")
+        console.warning(f"Failed to check capabilities: {e}")
 
 
 def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
@@ -2223,16 +2414,19 @@ def register_agent(
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     agent_type: str = "ai_agent",
-    version: Optional[str] = None,
+    version: str = "1.0.0",  # Default version for new agents
     repository_url: Optional[str] = None,
     documentation_url: Optional[str] = None,
     organization_domain: Optional[str] = None,
-    talks_to: Optional[list] = None,
+    mcp_servers: Optional[list] = None,  # Explicit MCP servers to register
     capabilities: Optional[list] = None,
-    tags: Optional[list] = None,  # ✅ NEW: Tag IDs to apply during registration
+    tags: Optional[list] = None,  # Tag IDs to apply during registration
+    metadata: Optional[dict] = None,  # Custom metadata (model, department, etc.)
     auto_detect: bool = True,
     force_new: bool = False,
-    sdk_token_id: Optional[str] = None
+    sdk_token_id: Optional[str] = None,
+    # Backward compatibility alias
+    talks_to: Optional[list] = None,  # DEPRECATED: Use mcp_servers instead
 ) -> AIMClient:
     """
     ONE-LINE agent registration with AIM - Radical simplicity meets enterprise security
@@ -2267,16 +2461,38 @@ def register_agent(
             - Autonomous: "autogpt", "babyagi"
             - Generic: "custom", "ai_agent" (legacy)
             Default: "ai_agent"
-        version: Agent version (e.g., "1.0.0")
+        version: Agent version (default: "1.0.0")
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
         organization_domain: Organization domain for auto-approval
-        talks_to: Override auto-detected MCP servers (manual specification)
-        capabilities: Override auto-detected capabilities (manual specification)
-        tags: List of tag IDs to apply during registration (optional)
+        mcp_servers: Override auto-detected MCP servers (manual specification)
+        capabilities: Override auto-detected capabilities (manual specification).
+            Note: On re-registration, new capabilities are REJECTED to prevent
+            privilege escalation. Use agent.request_capability() for new capabilities.
+        tags: List of tags for categorization (e.g., ["production", "customer-facing"])
+        metadata: Custom metadata dict (e.g., {"model": "gpt-4", "department": "support"})
         auto_detect: Auto-detect capabilities and MCPs (default: True)
         force_new: Force new registration even if credentials exist
         sdk_token_id: SDK token for usage tracking (auto-loaded if available)
+        talks_to: DEPRECATED - Use mcp_servers instead (kept for backward compatibility)
+
+    Security:
+        Capability changes on re-registration depend on organization enforcement mode:
+
+        STRICT MODE (default):
+            - New capabilities are REJECTED to prevent privilege escalation
+            - To add new capabilities:
+              1. Use agent.request_capability("new:capability", "reason")
+              2. Admin approves in dashboard
+              3. Capability is granted
+
+        MONITORING MODE:
+            - New capabilities are auto-granted (permissive for development/testing)
+            - All capability changes are logged for audit
+
+        In both modes:
+            - Capability reduction is always allowed (removing capabilities is safe)
+            - All changes are logged for security audit
 
     Returns:
         AIMClient instance ready to use
@@ -2302,7 +2518,7 @@ def register_agent(
         ...     agent_type=AgentType.CREWAI,
         ...     auto_detect=False,
         ...     capabilities=["db:read", "api:call"],
-        ...     talks_to=["custom-mcp-server"]
+        ...     mcp_servers=["custom-mcp-server"]
         ... )
 
     Raises:
@@ -2313,11 +2529,13 @@ def register_agent(
     if not force_new:
         existing_creds = _load_credentials(name)
         if existing_creds:
-            print(f"✅ Found existing credentials for '{name}'")
-            print(f"   Agent ID: {existing_creds['agent_id']}")
-            print(f"   Status: {existing_creds['status']}")
-            print(f"   Trust Score: {existing_creds['trust_score']}")
-            print(f"\n   To register a new agent, use force_new=True")
+            # Use beautiful console output
+            console.agent_found(
+                name=name,
+                agent_id=existing_creds['agent_id'],
+                status=existing_creds.get('status', 'active'),
+                trust_score=existing_creds.get('trust_score', 0.85)
+            )
 
             # Create OAuth token manager if tokens are in credentials
             token_manager = None
@@ -2348,7 +2566,7 @@ def register_agent(
         auth_mode = "api_key"
         if not aim_url:
             raise ConfigurationError("aim_url is required when using API key mode")
-        print(f"🔑 API Key Mode: Using API key authentication")
+        console.info("API Key Mode: Using API key authentication")
     elif sdk_creds:
         # SDK MODE: Use embedded OAuth credentials
         auth_mode = "oauth"
@@ -2368,7 +2586,7 @@ def register_agent(
         if not aim_url:
             raise ConfigurationError("aim_url is required when using API key mode")
 
-        print(f"🔑 Manual Mode: Using API key authentication")
+        console.info("Manual Mode: Using API key authentication")
 
     else:
         # No authentication found
@@ -2376,6 +2594,20 @@ def register_agent(
             "No authentication credentials found.\n"
             "Either download SDK from dashboard (OAuth mode) or provide api_key parameter (Manual mode)."
         )
+
+    # 2.5. Handle backward compatibility: merge talks_to into mcp_servers
+    if talks_to is not None:
+        import warnings
+        warnings.warn(
+            "The 'talks_to' parameter is deprecated. Use 'mcp_servers' instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        if mcp_servers is None:
+            mcp_servers = talks_to
+        else:
+            # Merge both, preferring mcp_servers but adding any unique from talks_to
+            mcp_servers = list(set(mcp_servers + talks_to))
 
     # 3. Auto-detect capabilities, MCPs, and agent type (unless manually specified)
     if auto_detect:
@@ -2387,10 +2619,10 @@ def register_agent(
             detected_type, detection_reason = auto_detect_agent_type()
             if detected_type != "custom":
                 agent_type = detected_type
-                print(f"   ✅ Auto-detected agent type: {agent_type} ({detection_reason})")
+                console.detection_result("Agent Type", agent_type, detection_reason)
             else:
                 # Keep ai_agent as default when nothing specific is detected
-                print(f"   ℹ️  Using default agent type: ai_agent ({detection_reason})")
+                console.detection_none("Agent Type", fallback="ai_agent")
 
         # Auto-detect capabilities (unless manually provided)
         if not capabilities:
@@ -2399,39 +2631,46 @@ def register_agent(
             detected_caps = auto_detect_capabilities()
             if detected_caps:
                 capabilities = detected_caps
-                print(f"   ✅ Detected {len(capabilities)} capabilities: {', '.join(capabilities[:5])}{' ...' if len(capabilities) > 5 else ''}")
+                cap_display = ', '.join(capabilities[:5])
+                if len(capabilities) > 5:
+                    cap_display += f" (+{len(capabilities) - 5} more)"
+                console.detection_result("Capabilities", cap_display, f"{len(capabilities)} detected")
             else:
-                print(f"   ℹ️  No capabilities auto-detected (you can specify manually)")
+                console.detection_none("Capabilities")
 
         # Auto-detect MCP servers (unless manually provided)
-        if not talks_to:
+        if not mcp_servers:
             from .detection import auto_detect_mcps
 
             mcp_detections = auto_detect_mcps()
             if mcp_detections:
-                talks_to = [d["mcpServer"] for d in mcp_detections]
-                print(f"   ✅ Detected {len(talks_to)} MCP servers: {', '.join(talks_to[:3])}{' ...' if len(talks_to) > 3 else ''}")
+                mcp_servers = [d["mcpServer"] for d in mcp_detections]
+                mcp_display = ', '.join(mcp_servers[:3])
+                if len(mcp_servers) > 3:
+                    mcp_display += f" (+{len(mcp_servers) - 3} more)"
+                console.detection_result("MCP Servers", mcp_display, f"{len(mcp_servers)} detected")
             else:
-                print(f"   ℹ️  No MCP servers auto-detected")
+                console.detection_none("MCP Servers")
 
     # 4. Prepare registration request
     registration_data = {
         "name": name,
         "displayName": display_name or name,
         "description": description or f"Agent {name} registered via AIM SDK",
-        "agentType": agent_type
+        "agentType": agent_type,
+        "version": version  # Always include version (defaults to "1.0.0")
     }
 
-    if version:
-        registration_data["version"] = version
+    if metadata:
+        registration_data["metadata"] = metadata
     if repository_url:
         registration_data["repositoryUrl"] = repository_url
     if documentation_url:
         registration_data["documentationUrl"] = documentation_url
     if organization_domain:
         registration_data["organizationDomain"] = organization_domain
-    if talks_to:
-        registration_data["talksTo"] = talks_to
+    if mcp_servers:
+        registration_data["talksTo"] = mcp_servers  # Backend still uses talksTo
     if capabilities:
         registration_data["capabilities"] = capabilities
     if tags:
@@ -2515,7 +2754,7 @@ def _register_via_oauth(
 
     if check_response.status_code == 200:
         # Agent exists - connect to it
-        print(f"   ℹ️  Agent '{name}' already exists, connecting...")
+        console.info(f"Agent '{name}' already exists, connecting...")
         response_data = check_response.json()
         existing_agent = response_data.get("agent", response_data)
 
@@ -2538,15 +2777,59 @@ def _register_via_oauth(
                 aim_url=credentials["aim_url"],
                 oauth_token_manager=token_manager
             )
-            print(f"   ✅ Connected to existing agent: {name}")
+            console.success(f"Connected to existing agent: {name}")
             return client
         else:
-            # No saved credentials - provide helpful error
-            raise ConfigurationError(
-                f"Agent '{name}' exists but no local credentials found. "
-                "Either use a different agent name, delete the existing agent from the dashboard, "
-                "or ensure you're using the same machine where the agent was originally created."
+            # No saved credentials - regenerate new key pair and update the agent
+            console.info(f"Regenerating credentials for existing agent '{name}'...")
+
+            # Generate new key pair
+            signing_key = SigningKey.generate()
+            verify_key = signing_key.verify_key
+            private_key = signing_key.encode(encoder=Base64Encoder).decode('utf-8')
+            public_key = verify_key.encode(encoder=Base64Encoder).decode('utf-8')
+
+            # Update agent's public key on the server via PUT /keys endpoint
+            update_url = f"{aim_url.rstrip('/')}/api/v1/agents/{existing_agent['id']}/keys"
+            update_response = requests.put(
+                update_url,
+                json={"publicKey": public_key},
+                headers=headers,
+                timeout=30
             )
+
+            if update_response.status_code not in [200, 201]:
+                raise ConfigurationError(
+                    f"Agent '{name}' exists but credentials could not be regenerated. "
+                    "Delete the agent from the dashboard and try again, or use force_new=True."
+                )
+
+            # Build credentials
+            credentials = {
+                "agent_id": existing_agent["id"],
+                "public_key": public_key,
+                "private_key": private_key,
+                "aim_url": aim_url,
+                "status": existing_agent.get("status", "active"),
+                "trust_score": existing_agent.get("trustScore")
+            }
+
+            # Save credentials locally
+            _save_credentials(name, credentials)
+
+            # Update capabilities if new ones provided
+            if registration_data.get("capabilities"):
+                _update_agent_capabilities(aim_url, headers, existing_agent["id"], registration_data["capabilities"])
+
+            client = AIMClient(
+                agent_id=credentials["agent_id"],
+                public_key=credentials["public_key"],
+                private_key=credentials["private_key"],
+                aim_url=credentials["aim_url"],
+                oauth_token_manager=token_manager
+            )
+            console.success(f"Reconnected to existing agent: {name}")
+            return client
 
     # Agent doesn't exist - create it
     url = f"{aim_url.rstrip('/')}/api/v1/agents"
@@ -2606,11 +2889,13 @@ def _register_via_oauth(
         if mcp_detections:
             try:
                 result = client.report_detections(mcp_detections)
-                print(f"   📡 Reported {result.get('detectionsProcessed', 0)} MCP detections")
+                console.info(f"Reported {result.get('detectionsProcessed', 0)} MCP detections")
             except Exception:
                 pass  # Don't fail registration if reporting fails
 
-    _print_registration_success(credentials)
+    # Show beautiful registration success message
+    capabilities = registration_data.get("capabilities")
+    _print_registration_success(name, credentials, capabilities, talks_to)
     return client
 
 
@@ -2664,14 +2949,35 @@ def _register_via_api_key(
         if mcp_detections:
             try:
                 result = client.report_detections(mcp_detections)
-                print(f"   📡 Reported {result.get('detectionsProcessed', 0)} MCP detections")
+                console.info(f"Reported {result.get('detectionsProcessed', 0)} MCP detections")
             except Exception:
                 pass  # Don't fail registration if reporting fails
 
-    _print_registration_success(credentials)
+    # Show beautiful registration success message
+    _print_registration_success(name, credentials, registration_data.get("capabilities"), talks_to)
     return client
 
 
-def _print_registration_success(credentials: Dict[str, Any]):
-    """Print success message after registration"""
-    
+def _print_registration_success(
+    name: str,
+    credentials: Dict[str, Any],
+    capabilities: Optional[List[str]] = None,
+    mcp_servers: Optional[List[str]] = None
+):
+    """Print beautiful success message after registration using AIMConsole."""
+    agent_id = credentials.get("agent_id") or credentials.get("id", "")
+    agent_type = credentials.get("agentType") or credentials.get("agent_type", "ai_agent")
+    version = credentials.get("version", "1.0.0")
+    trust_score = credentials.get("trust_score") or credentials.get("trustScore", 0.85)
+    status = credentials.get("status", "active")
+
+    console.agent_registered(
+        name=name,
+        agent_id=agent_id,
+        agent_type=agent_type,
+        version=version,
+        trust_score=trust_score,
+        status=status,
+        capabilities=capabilities,
+        mcp_servers=mcp_servers
+    )

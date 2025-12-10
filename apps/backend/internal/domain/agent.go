@@ -95,9 +95,11 @@ type Agent struct {
 	UpdatedByName            string      `json:"updatedByName,omitempty"`  // Denormalized for display
 	UpdatedByEmail           string      `json:"updatedByEmail,omitempty"` // Denormalized for display
 	// Tags applied to this agent (populated by join)
-	Tags                     []Tag       `json:"tags"`
+	Tags                     []Tag                  `json:"tags"`
 	// Track when agent last performed an action (updated on every verify-action call)
-	LastActive               *time.Time  `json:"lastActive"`
+	LastActive               *time.Time             `json:"lastActive"`
+	// Custom metadata for the agent (model, department, owner, etc.)
+	Metadata                 map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // AgentRepository defines the interface for agent persistence

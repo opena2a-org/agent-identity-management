@@ -53,6 +53,7 @@ interface CapabilityRequest {
   agentDisplayName: string;
   capabilityType: string;
   reason: string;
+  metadata?: Record<string, any>; // Additional context provided with the request
   status: "pending" | "approved" | "rejected";
   requestedBy: string;
   requestedByEmail: string;
@@ -418,6 +419,18 @@ export default function CapabilityRequestsPage() {
                         <p className="text-sm text-muted-foreground mt-1">
                           <strong>Reason:</strong> {request.reason}
                         </p>
+                        {request.metadata && Object.keys(request.metadata).length > 0 && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs text-muted-foreground font-medium">Metadata:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(request.metadata).map(([key, value]) => (
+                                <Badge key={key} variant="secondary" className="text-xs">
+                                  {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground mt-1">
                           Requested by {request.requestedByEmail} •{" "}
                           {formatDate(request.requestedAt)}

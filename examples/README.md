@@ -8,7 +8,7 @@ This directory contains real-world examples demonstrating how to integrate AI ag
 
 A complete AI agent that searches flights and demonstrates:
 - ✅ Auto-registration with AIM using `secure("agent-name")`
-- ✅ Capability declaration with `@perform_action` decorators
+- ✅ Capability declaration with `@agent.perform_action` decorators
 - ✅ Auto-detection of MCP servers
 - ✅ Ed25519 cryptographic signatures
 - ✅ Action verification workflow
@@ -113,10 +113,10 @@ if verification.approved:
 
 ### Pattern 3: LangChain Decorator
 ```python
-from aim_sdk import perform_action
+from aim_sdk import secure
 
 class TodoTool(BaseTool):
-    @perform_action(capability="todo:create", risk_level="low")
+    @agent.perform_action(capability="todo:create", risk_level="low")
     def _run(self, task: str):
         # Capability is automatically verified by AIM
         return add_todo(task)

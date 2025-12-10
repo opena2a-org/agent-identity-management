@@ -1134,7 +1134,7 @@ export default function SecurityPage() {
                               {activity.metadata.verificationType}
                             </span>
                           )}
-                          {activity.metadata?.durationMs && activity.metadata.durationMs > 0 && (
+                          {activity.metadata?.durationMs != null && activity.metadata.durationMs > 0 && (
                             <span className="text-xs text-gray-400">
                               {activity.metadata.durationMs}ms
                             </span>

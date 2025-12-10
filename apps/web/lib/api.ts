@@ -90,6 +90,7 @@ export interface Agent {
   trustScore: number;
   talksTo?: string[];
   capabilities?: any[];
+  metadata?: Record<string, any>; // Custom agent metadata (model, department, owner, etc.)
   createdAt: string;
   updatedAt: string;
   // Audit trail fields
@@ -2132,9 +2133,10 @@ class APIClient {
   }
 
   // SDK Download with automatic token refresh on 401
+  // Returns both blob and filename (extracted from Content-Disposition header)
   async downloadSDK(
     sdkType: "python" | "go" | "javascript" = "python"
-  ): Promise<Blob> {
+  ): Promise<{ blob: Blob; filename: string }> {
     const attemptDownload = async (token: string | null): Promise<Response> => {
       return fetch(`${this.baseURL}/api/v1/sdk/download?sdk=${sdkType}`, {
         method: "GET",
@@ -2169,7 +2171,17 @@ class APIClient {
       throw new Error(error.error || "Failed to download SDK");
     }
 
-    return response.blob();
+    // Extract filename from Content-Disposition header
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = `aim-sdk-${sdkType}.zip`; // fallback
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=([^;]+)/);
+      if (match) {
+        filename = match[1].replace(/"/g, "").trim();
+      }
+    }
+
+    return { blob: await response.blob(), filename };
   }
 
   // ========================================
