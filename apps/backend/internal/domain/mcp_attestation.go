@@ -18,17 +18,17 @@ const (
 
 // AgentMCPConnection represents a bidirectional relationship between an agent and MCP server
 type AgentMCPConnection struct {
-	ID               uuid.UUID      `json:"id"`
-	AgentID          uuid.UUID      `json:"agentId"`
-	MCPServerID      uuid.UUID      `json:"mcpServerId"`
-	DetectionID      *uuid.UUID     `json:"detectionId"`
-	ConnectionType   ConnectionType `json:"connectionType"`
-	FirstConnectedAt time.Time      `json:"firstConnectedAt"`
-	LastAttestedAt   *time.Time     `json:"lastAttestedAt"`
-	AttestationCount int            `json:"attestationCount"`
-	IsActive         bool           `json:"isActive"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
+	ID               uuid.UUID      `db:"id" json:"id"`
+	AgentID          uuid.UUID      `db:"agent_id" json:"agentId"`
+	MCPServerID      uuid.UUID      `db:"mcp_server_id" json:"mcpServerId"`
+	DetectionID      *uuid.UUID     `db:"detection_id" json:"detectionId"`
+	ConnectionType   ConnectionType `db:"connection_type" json:"connectionType"`
+	FirstConnectedAt time.Time      `db:"first_connected_at" json:"firstConnectedAt"`
+	LastAttestedAt   *time.Time     `db:"last_attested_at" json:"lastAttestedAt"`
+	AttestationCount int            `db:"attestation_count" json:"attestationCount"`
+	IsActive         bool           `db:"is_active" json:"isActive"`
+	CreatedAt        time.Time      `db:"created_at" json:"createdAt"`
+	UpdatedAt        time.Time      `db:"updated_at" json:"updatedAt"`
 }
 
 // AttestationPayload represents the data that an agent attests to about an MCP server

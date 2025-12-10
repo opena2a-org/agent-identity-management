@@ -31,6 +31,16 @@ const (
 	// MinConfidenceScoreForVerification is the minimum confidence score required
 	// for automatic verification via consensus.
 	MinConfidenceScoreForVerification = 60.0
+
+	// MinAgentTrustScoreForAttestation is the minimum trust score required for an agent
+	// to create attestations. Agents below this threshold are blocked.
+	// Can be overridden via MCP_MIN_AGENT_TRUST_FOR_ATTESTATION env var.
+	DefaultMinAgentTrustForAttestation = 0.30 // 30%
+
+	// WarnAgentTrustScoreThreshold is the trust score below which we create a warning alert
+	// but still allow the attestation. Between this and min threshold.
+	// Can be overridden via MCP_WARN_AGENT_TRUST_THRESHOLD env var.
+	DefaultWarnAgentTrustThreshold = 0.50 // 50%
 )
 
 // getMinAgentsForConsensus returns the configured minimum agents for consensus
@@ -53,6 +63,26 @@ func getMinOwnersForConsensus() int {
 	return DefaultMinOwnersForConsensus
 }
 
+// getMinAgentTrustForAttestation returns the minimum trust score required for attestation
+func getMinAgentTrustForAttestation() float64 {
+	if val := os.Getenv("MCP_MIN_AGENT_TRUST_FOR_ATTESTATION"); val != "" {
+		if n, err := strconv.ParseFloat(val, 64); err == nil && n >= 0 && n <= 1 {
+			return n
+		}
+	}
+	return DefaultMinAgentTrustForAttestation
+}
+
+// getWarnAgentTrustThreshold returns the trust score threshold for warnings
+func getWarnAgentTrustThreshold() float64 {
+	if val := os.Getenv("MCP_WARN_AGENT_TRUST_THRESHOLD"); val != "" {
+		if n, err := strconv.ParseFloat(val, 64); err == nil && n >= 0 && n <= 1 {
+			return n
+		}
+	}
+	return DefaultWarnAgentTrustThreshold
+}
+
 // MCPAttestationService handles Agent Attestation operations
 type MCPAttestationService struct {
 	attestationRepo  *repository.MCPAttestationRepository
@@ -61,6 +91,7 @@ type MCPAttestationService struct {
 	userRepo         *repository.UserRepository
 	connectionRepo   *repository.AgentMCPConnectionRepository
 	capabilityRepo   *repository.MCPServerCapabilityRepository
+	alertRepo        *repository.AlertRepository
 	cryptoService    *infracrypto.ED25519Service
 }
 
@@ -79,6 +110,28 @@ func NewMCPAttestationService(
 		userRepo:         userRepo,
 		connectionRepo:   connectionRepo,
 		capabilityRepo:   capabilityRepo,
+		cryptoService:    infracrypto.NewED25519Service(),
+	}
+}
+
+// NewMCPAttestationServiceWithAlerts creates a new attestation service with alert support
+func NewMCPAttestationServiceWithAlerts(
+	attestationRepo *repository.MCPAttestationRepository,
+	agentRepo *repository.AgentRepository,
+	mcpRepo *repository.MCPServerRepository,
+	userRepo *repository.UserRepository,
+	connectionRepo *repository.AgentMCPConnectionRepository,
+	capabilityRepo *repository.MCPServerCapabilityRepository,
+	alertRepo *repository.AlertRepository,
+) *MCPAttestationService {
+	return &MCPAttestationService{
+		attestationRepo:  attestationRepo,
+		agentRepo:        agentRepo,
+		mcpRepo:          mcpRepo,
+		userRepo:         userRepo,
+		connectionRepo:   connectionRepo,
+		capabilityRepo:   capabilityRepo,
+		alertRepo:        alertRepo,
 		cryptoService:    infracrypto.NewED25519Service(),
 	}
 }
@@ -187,6 +240,92 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	}
 
 	fmt.Printf("✅ Agent status check passed: %s\n", agent.Status)
+
+	// 2b. Check agent trust score - block if too low, warn if borderline
+	minTrust := getMinAgentTrustForAttestation()
+	warnThreshold := getWarnAgentTrustThreshold()
+
+	fmt.Printf("🔍 Agent trust score: %.2f%% (min: %.0f%%, warn: %.0f%%)\n",
+		agent.TrustScore*100, minTrust*100, warnThreshold*100)
+
+	if agent.TrustScore < minTrust {
+		// BLOCK: Agent trust score is too low
+		fmt.Printf("❌ Agent trust score %.2f%% is below minimum %.0f%% - BLOCKING attestation\n",
+			agent.TrustScore*100, minTrust*100)
+
+		// Create security alert for blocked attestation
+		if s.alertRepo != nil {
+			mcpServer, _ := s.mcpRepo.GetByID(mcpServerID)
+			mcpName := mcpServerID.String()
+			if mcpServer != nil {
+				mcpName = mcpServer.Name
+			}
+
+			alert := &domain.Alert{
+				ID:             uuid.New(),
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertLowTrustAttestationBlock,
+				Severity:       domain.AlertSeverityHigh,
+				Title:          fmt.Sprintf("Low-trust agent blocked from attesting MCP server"),
+				Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) attempted to attest MCP server '%s' but was blocked due to trust score below threshold (%.0f%%).", agent.DisplayName, agent.TrustScore*100, mcpName, minTrust*100),
+				ResourceType:   "agent",
+				ResourceID:     agent.ID,
+				AgentName:      agent.DisplayName,
+				Metadata: map[string]interface{}{
+					"agentTrustScore": agent.TrustScore * 100,
+					"minThreshold":    minTrust * 100,
+					"mcpServerId":     mcpServerID.String(),
+					"mcpServerName":   mcpName,
+					"action":          "blocked",
+				},
+				CreatedAt: time.Now().UTC(),
+			}
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("⚠️ Failed to create alert for blocked attestation: %v\n", err)
+			} else {
+				fmt.Printf("🚨 Created alert for blocked low-trust attestation attempt\n")
+			}
+		}
+
+		return nil, fmt.Errorf("agent trust score (%.1f%%) is below minimum threshold (%.0f%%) required for attestation", agent.TrustScore*100, minTrust*100)
+	}
+
+	// Check for borderline trust score - allow but create warning alert
+	if agent.TrustScore < warnThreshold && s.alertRepo != nil {
+		fmt.Printf("⚠️ Agent trust score %.2f%% is below warning threshold %.0f%% - creating alert\n",
+			agent.TrustScore*100, warnThreshold*100)
+
+		mcpServer, _ := s.mcpRepo.GetByID(mcpServerID)
+		mcpName := mcpServerID.String()
+		if mcpServer != nil {
+			mcpName = mcpServer.Name
+		}
+
+		alert := &domain.Alert{
+			ID:             uuid.New(),
+			OrganizationID: agent.OrganizationID,
+			AlertType:      domain.AlertLowTrustAttestation,
+			Severity:       domain.AlertSeverityWarning,
+			Title:          fmt.Sprintf("Low-trust agent attesting MCP server"),
+			Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) is attesting MCP server '%s'. This attestation will have reduced weight in confidence calculations.", agent.DisplayName, agent.TrustScore*100, mcpName),
+			ResourceType:   "agent",
+			ResourceID:     agent.ID,
+			AgentName:      agent.DisplayName,
+			Metadata: map[string]interface{}{
+				"agentTrustScore": agent.TrustScore * 100,
+				"warnThreshold":   warnThreshold * 100,
+				"mcpServerId":     mcpServerID.String(),
+				"mcpServerName":   mcpName,
+				"action":          "allowed_with_warning",
+			},
+			CreatedAt: time.Now().UTC(),
+		}
+		if err := s.alertRepo.Create(alert); err != nil {
+			fmt.Printf("⚠️ Failed to create warning alert for low-trust attestation: %v\n", err)
+		} else {
+			fmt.Printf("⚠️ Created warning alert for low-trust attestation\n")
+		}
+	}
 
 	if agent.PublicKey == nil || *agent.PublicKey == "" {
 		return nil, fmt.Errorf("agent has no public key registered")
@@ -1098,4 +1237,82 @@ func (s *MCPAttestationService) RecordAgentMCPConnection(
 		agentID, mcpServerID, toolName)
 
 	return connection, nil
+}
+
+// ToolUsageEntry represents usage statistics for a single MCP tool
+type ToolUsageEntry struct {
+	Count     int    `json:"count"`
+	FirstUsed string `json:"firstUsed"`
+	LastUsed  string `json:"lastUsed"`
+}
+
+// RecordMCPUsageReport records MCP tool usage analytics from an agent for supply chain visibility
+func (s *MCPAttestationService) RecordMCPUsageReport(
+	ctx context.Context,
+	agentID uuid.UUID,
+	mcpServerID uuid.UUID,
+	toolUsage map[string]ToolUsageEntry,
+	capabilitiesAttested []string,
+	confidenceScore *float64,
+	lastAttestedAt *string,
+	firstSeenAt *string,
+	totalInvocations int,
+) error {
+	// 1. Verify the agent exists
+	_, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	// 2. Verify the MCP server exists
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil {
+		return fmt.Errorf("MCP server not found: %w", err)
+	}
+
+	// 3. Update or create the agent-MCP connection with usage data
+	existingConnection, err := s.connectionRepo.GetByAgentAndMCPServer(ctx, agentID, mcpServerID)
+	if err == nil && existingConnection != nil {
+		// Update existing connection with new usage data
+		if err := s.connectionRepo.UpdateAttestation(ctx, agentID, mcpServerID); err != nil {
+			return fmt.Errorf("failed to update connection: %w", err)
+		}
+	} else {
+		// Create new connection if it doesn't exist
+		now := time.Now().UTC()
+		connection := &domain.AgentMCPConnection{
+			ID:               uuid.New(),
+			AgentID:          agentID,
+			MCPServerID:      mcpServerID,
+			DetectionID:      nil,
+			ConnectionType:   domain.ConnectionTypeAttested,
+			FirstConnectedAt: now,
+			LastAttestedAt:   &now,
+			AttestationCount: 1,
+			IsActive:         true,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+
+		if err := s.connectionRepo.Create(ctx, connection); err != nil {
+			return fmt.Errorf("failed to create connection: %w", err)
+		}
+	}
+
+	// 4. Update MCP server metrics (increment usage count)
+	// This helps track overall usage patterns across all agents
+	if mcpServer != nil {
+		// Log the usage report (for now, we track this through connections)
+		// Future: store detailed tool usage in a separate table
+		fmt.Printf("📊 MCP Usage Report: agent=%s, server=%s, tools=%d, invocations=%d\n",
+			agentID, mcpServerID, len(toolUsage), totalInvocations)
+
+		// Log individual tool usage
+		for toolName, usage := range toolUsage {
+			fmt.Printf("   └─ %s: count=%d, first=%s, last=%s\n",
+				toolName, usage.Count, usage.FirstUsed, usage.LastUsed)
+		}
+	}
+
+	return nil
 }

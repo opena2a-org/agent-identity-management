@@ -26,6 +26,7 @@ import {
   Code,
   Loader2,
   Search,
+  GitBranch,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -65,6 +66,12 @@ const navigationBase: NavSection[] = [
         name: "MCP Discovery",
         href: "/dashboard/mcp/discovery",
         icon: Search,
+        roles: ["admin", "manager"],
+      },
+      {
+        name: "Supply Chain",
+        href: "/dashboard/mcp/supply-chain",
+        icon: GitBranch,
         roles: ["admin", "manager"],
       },
     ],

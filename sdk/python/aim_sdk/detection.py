@@ -7,6 +7,7 @@ that an agent uses, through various detection methods:
 1. SDK Import Analysis - Scanning Python imports for MCP packages
 2. Claude Config Parsing - Reading Claude Desktop configuration files
 3. Direct API - Manual reporting of known MCP servers
+4. Dynamic Tool Discovery - Querying MCP servers for their available tools
 
 Detection results can be reported to AIM using client.report_detections()
 """
@@ -15,7 +16,7 @@ import json
 import os
 import pathlib
 import sys
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime, timezone
 import importlib.util
 
@@ -183,6 +184,132 @@ class MCPDetector:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             detections.append(detection)
+
+        return detections
+
+    def discover_mcp_tools(
+        self,
+        server_name: str,
+        server_config: Dict[str, Any],
+        timeout: float = 30.0
+    ) -> Tuple[List[str], Optional[str]]:
+        """
+        Dynamically discover tools from an MCP server using the official MCP protocol.
+
+        This method uses the existing MCP integration to query the server for
+        its available tools, resources, and prompts.
+
+        Args:
+            server_name: Name of the MCP server
+            server_config: Server configuration from Claude Desktop config
+            timeout: Maximum time to wait for response (seconds)
+
+        Returns:
+            Tuple of (list of tool names, error message if any)
+
+        Example:
+            tools, error = detector.discover_mcp_tools(
+                "filesystem",
+                {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}
+            )
+            if not error:
+                print(f"Found tools: {tools}")
+        """
+        command = server_config.get("command", "")
+        args = server_config.get("args", [])
+
+        if not command:
+            return [], f"No command specified for server {server_name}"
+
+        # Build the MCP command string for discovery
+        mcp_command = f"{command} {' '.join(args)}"
+
+        try:
+            # Use the existing MCP integration for discovery
+            from aim_sdk.integrations.mcp.discovery import discover_capabilities
+
+            result = discover_capabilities(mcp_command, timeout_seconds=timeout)
+
+            if result.error:
+                return [], result.error
+
+            # Return all discovered capability names (tools + resources + prompts)
+            return result.all_capability_names, None
+
+        except ImportError:
+            # MCP SDK not available, try fallback
+            return [], "MCP SDK not installed. Install with: pip install mcp"
+        except Exception as e:
+            return [], f"Error discovering capabilities: {str(e)}"
+
+    def detect_with_tools(
+        self,
+        discover_tools: bool = True,
+        timeout_per_server: float = 30.0
+    ) -> List[Dict[str, Any]]:
+        """
+        Detect MCP servers from Claude config AND discover their actual tools.
+
+        This enhanced detection method not only finds MCP servers but also
+        queries each one to discover its available tools/capabilities using
+        the official MCP protocol.
+
+        Args:
+            discover_tools: Whether to query servers for their tools
+            timeout_per_server: Timeout for each server query
+
+        Returns:
+            List of detection events with 'capabilities' field populated
+
+        Example:
+            detector = MCPDetector()
+            detections = detector.detect_with_tools()
+            for d in detections:
+                print(f"{d['mcpServer']}: {len(d['details'].get('capabilities', []))} tools")
+        """
+        detections = []
+        config_path = self._get_claude_config_path()
+
+        if not config_path or not config_path.exists():
+            return detections
+
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            mcp_servers = config.get("mcpServers", {})
+
+            for server_name, server_config in mcp_servers.items():
+                capabilities = []
+                discovery_error = None
+
+                # Try to discover tools if enabled
+                if discover_tools:
+                    capabilities, discovery_error = self.discover_mcp_tools(
+                        server_name,
+                        server_config,
+                        timeout=timeout_per_server
+                    )
+
+                detection = {
+                    "mcpServer": server_name,
+                    "detectionMethod": "claude_config",
+                    "confidence": 100.0,
+                    "details": {
+                        "configPath": str(config_path),
+                        "command": server_config.get("command", ""),
+                        "args": server_config.get("args", []),
+                        "capabilities": capabilities,  # Actual discovered tools
+                        "toolCount": len(capabilities),
+                        "discoveryError": discovery_error
+                    },
+                    "sdkVersion": self.sdk_version,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                detections.append(detection)
+
+        except Exception as e:
+            pass  # Silently fail
 
         return detections
 
@@ -370,7 +497,9 @@ def track_mcp_call(mcp_server: str, tool_name: Optional[str] = None):
 
 
 def auto_detect_mcps(
-    sdk_version: str = f"aim-sdk-python@{__version__}"
+    sdk_version: str = f"aim-sdk-python@{__version__}",
+    discover_tools: bool = False,
+    timeout_per_server: float = 10.0
 ) -> List[Dict[str, Any]]:
     """
     Convenience function for quick MCP detection.
@@ -380,6 +509,8 @@ def auto_detect_mcps(
 
     Args:
         sdk_version: SDK version string
+        discover_tools: If True, dynamically query each MCP server for its tools
+        timeout_per_server: Timeout for querying each server (if discover_tools=True)
 
     Returns:
         List of detection events
@@ -388,8 +519,135 @@ def auto_detect_mcps(
         from aim_sdk import AIMClient, auto_detect_mcps
 
         client = AIMClient(...)
+
+        # Quick detection (just server names)
         detections = auto_detect_mcps()
+
+        # Full detection with tool discovery
+        detections = auto_detect_mcps(discover_tools=True)
         result = client.report_detections(detections)
     """
     detector = MCPDetector(sdk_version=sdk_version)
+
+    if discover_tools:
+        return detector.detect_with_tools(
+            discover_tools=True,
+            timeout_per_server=timeout_per_server
+        )
+
     return detector.detect_all()
+
+
+def discover_mcp_capabilities(
+    server_names: Optional[List[str]] = None,
+    timeout_per_server: float = 10.0
+) -> Dict[str, List[str]]:
+    """
+    Discover actual capabilities (tools) for MCP servers from Claude Desktop config.
+
+    This function reads your Claude Desktop configuration, finds the specified
+    MCP servers (or all if none specified), starts each one, and queries for
+    its available tools using the MCP protocol.
+
+    Args:
+        server_names: List of server names to query. If None, queries all servers in config.
+        timeout_per_server: Maximum time to wait for each server (seconds)
+
+    Returns:
+        Dict mapping server names to their list of tool names
+
+    Example:
+        from aim_sdk import discover_mcp_capabilities
+
+        # Discover tools for specific servers
+        caps = discover_mcp_capabilities(["filesystem", "github"])
+        print(caps["filesystem"])  # ['read_file', 'write_file', 'list_directory', ...]
+
+        # Discover all servers
+        all_caps = discover_mcp_capabilities()
+        for name, tools in all_caps.items():
+            print(f"{name}: {len(tools)} tools")
+    """
+    detector = MCPDetector()
+    config_path = detector._get_claude_config_path()
+
+    result: Dict[str, List[str]] = {}
+
+    if not config_path or not config_path.exists():
+        return result
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        mcp_servers = config.get("mcpServers", {})
+
+        # Filter to requested servers if specified
+        if server_names:
+            mcp_servers = {
+                name: cfg for name, cfg in mcp_servers.items()
+                if name in server_names or any(
+                    sn.lower() in name.lower() for sn in server_names
+                )
+            }
+
+        for server_name, server_config in mcp_servers.items():
+            tools, error = detector.discover_mcp_tools(
+                server_name,
+                server_config,
+                timeout=timeout_per_server
+            )
+
+            if tools:
+                result[server_name] = tools
+            elif error:
+                # Store empty list but log error internally
+                result[server_name] = []
+
+    except Exception:
+        pass
+
+    return result
+
+
+def get_mcp_server_config(server_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the configuration for a specific MCP server from Claude Desktop config.
+
+    Args:
+        server_name: Name of the MCP server
+
+    Returns:
+        Server configuration dict or None if not found
+
+    Example:
+        config = get_mcp_server_config("filesystem")
+        if config:
+            print(f"Command: {config.get('command')}")
+            print(f"Args: {config.get('args')}")
+    """
+    detector = MCPDetector()
+    config_path = detector._get_claude_config_path()
+
+    if not config_path or not config_path.exists():
+        return None
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        mcp_servers = config.get("mcpServers", {})
+
+        # Direct match
+        if server_name in mcp_servers:
+            return mcp_servers[server_name]
+
+        # Partial match (case-insensitive)
+        for name, cfg in mcp_servers.items():
+            if server_name.lower() in name.lower():
+                return cfg
+
+    except Exception:
+        pass
+
+    return None

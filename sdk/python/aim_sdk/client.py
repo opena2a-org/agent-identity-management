@@ -1305,6 +1305,299 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"MCP registration failed: {e}")
 
+    def attest_mcp(
+        self,
+        mcp_server_id: str,
+        capabilities: Optional[List[str]] = None,
+        connection_successful: bool = True,
+        health_check_passed: bool = True,
+        connection_latency_ms: int = 0,
+        mcp_url: Optional[str] = None,
+        mcp_name: Optional[str] = None
+    ) -> Dict:
+        """
+        Attest to an MCP server's capabilities and availability.
+
+        This creates a cryptographically signed attestation that this agent
+        has verified the MCP server is operational and provides the claimed capabilities.
+        Attestations from multiple agents build trust in MCP servers.
+
+        The attestation flow:
+        1. Request a challenge from the server (proof of private key possession)
+        2. Sign the attestation payload including the challenge
+        3. Submit the signed attestation
+
+        Args:
+            mcp_server_id: UUID of the MCP server to attest
+            capabilities: List of MCP capabilities/tools verified (e.g., ["read_file", "write_file"])
+            connection_successful: Whether connection to MCP server succeeded
+            health_check_passed: Whether MCP server health check passed
+            connection_latency_ms: Connection latency in milliseconds
+            mcp_url: Optional MCP server URL (for audit trail)
+            mcp_name: Optional MCP server name (for audit trail)
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - attestationId: str - Unique attestation ID
+                - mcpConfidenceScore: float - Updated MCP confidence score
+                - attestationCount: int - Total attestations for this MCP
+                - message: str
+
+        Example:
+            # Attest to filesystem MCP server
+            result = client.attest_mcp(
+                mcp_server_id="550e8400-e29b-41d4-a716-446655440000",
+                capabilities=["read_file", "write_file", "list_directory"],
+                connection_successful=True,
+                health_check_passed=True,
+                connection_latency_ms=45
+            )
+            print(f"Attestation recorded: {result['attestationId']}")
+            print(f"MCP confidence score: {result['mcpConfidenceScore']}%")
+
+        Raises:
+            AuthenticationError: If authentication fails or agent not verified
+            VerificationError: If attestation request fails
+            ConfigurationError: If signing keys not configured
+        """
+        if not self.signing_key:
+            raise ConfigurationError(
+                "attest_mcp requires Ed25519 signing keys. "
+                "API key mode does not support cryptographic attestations."
+            )
+
+        try:
+            # Step 1: Request a challenge for proof of private key possession
+            challenge_url = f"{self.aim_url}/api/v1/mcp-servers/{mcp_server_id}/challenge?agent_id={self.agent_id}"
+            challenge_response = self.session.get(challenge_url, timeout=self.timeout)
+
+            if challenge_response.status_code == 404:
+                raise VerificationError(f"MCP server {mcp_server_id} not found")
+            if challenge_response.status_code == 403:
+                raise AuthenticationError("Only verified agents can attest MCP servers")
+
+            challenge_response.raise_for_status()
+            challenge_data = challenge_response.json()
+            challenge = challenge_data.get("challenge")
+
+            if not challenge:
+                raise VerificationError("Failed to obtain attestation challenge")
+
+            # Step 2: Create attestation payload
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+            attestation_payload = {
+                "agentId": self.agent_id,
+                "mcpUrl": mcp_url or "",
+                "mcpName": mcp_name or "",
+                "capabilitiesFound": capabilities or [],
+                "connectionSuccessful": connection_successful,
+                "healthCheckPassed": health_check_passed,
+                "connectionLatencyMs": connection_latency_ms,
+                "timestamp": timestamp,
+                "sdkVersion": f"aim-sdk-python@{__version__}",
+                "challenge": challenge  # Include server-generated challenge
+            }
+
+            # Step 3: Create canonical JSON and sign it
+            # The backend verifies by reconstructing this exact JSON
+            canonical_json = json.dumps(attestation_payload, sort_keys=True, separators=(',', ':'))
+            signature = self._sign_message(canonical_json)
+
+            # Step 4: Submit the attestation
+            attest_url = f"{self.aim_url}/api/v1/mcp-servers/{mcp_server_id}/attest"
+            attest_request = {
+                "attestation": attestation_payload,
+                "signature": signature
+            }
+
+            attest_response = self.session.post(
+                attest_url,
+                json=attest_request,
+                timeout=self.timeout
+            )
+
+            if attest_response.status_code == 403:
+                error_msg = attest_response.json().get("message", "Attestation forbidden")
+                raise AuthenticationError(f"Attestation denied: {error_msg}")
+
+            attest_response.raise_for_status()
+            return attest_response.json()
+
+        except (AuthenticationError, ConfigurationError):
+            raise
+        except requests.exceptions.RequestException as e:
+            raise VerificationError(f"MCP attestation failed: {e}")
+        except Exception as e:
+            raise VerificationError(f"MCP attestation failed: {e}")
+
+    def use_mcp_tool(
+        self,
+        server_id: str,
+        tool_name: str,
+        mcp_url: str = "",
+        mcp_name: str = "",
+        auto_attest: bool = True,
+        force_attest: bool = False,
+        discovery_timeout: float = 30.0
+    ) -> Dict:
+        """
+        Record MCP tool usage with smart attestation for supply chain security.
+
+        This is a convenience method that wraps integrations.mcp.use_mcp_tool(),
+        providing smart attestation that automatically creates attestations when:
+        - First use of an MCP server by this agent
+        - First use of a NEW tool on a known server
+        - Attestation is stale (>24 hours old)
+        - Capability drift detected (tools added/removed)
+
+        Args:
+            server_id: UUID of the MCP server being used
+            tool_name: Name of the tool being used (e.g., "read_file", "search")
+            mcp_url: URL of the MCP server (required for attestation on first use)
+            mcp_name: Name of the MCP server (required for attestation on first use)
+            auto_attest: Enable smart attestation (default: True)
+            force_attest: Force attestation even if cached (default: False)
+            discovery_timeout: Timeout for capability discovery in seconds (default: 30.0)
+
+        Returns:
+            Dict containing connection response and attestation info
+
+        Example:
+            result = client.use_mcp_tool(
+                server_id="04531081-dd02-43aa-9067-a4e656de5591",
+                tool_name="read_file",
+                mcp_url="npx -y @modelcontextprotocol/server-filesystem /tmp",
+                mcp_name="filesystem-mcp"
+            )
+
+            if result.get("attestation"):
+                print(f"Attestation: {result['attestation']['reason']}")
+        """
+        from aim_sdk.integrations.mcp import use_mcp_tool
+        return use_mcp_tool(
+            aim_client=self,
+            server_id=server_id,
+            tool_name=tool_name,
+            mcp_url=mcp_url,
+            mcp_name=mcp_name,
+            auto_attest=auto_attest,
+            force_attest=force_attest,
+            discovery_timeout=discovery_timeout
+        )
+
+    def get_attestation_cache(self):
+        """
+        Get the attestation cache for this agent.
+
+        Returns:
+            AttestationCache instance for this agent
+
+        Example:
+            cache = client.get_attestation_cache()
+            stats = cache.get_supply_chain_report()
+            print(f"MCP servers used: {stats['mcpServerCount']}")
+        """
+        from aim_sdk.attestation_cache import AttestationCache
+        return AttestationCache(agent_id=self.agent_id)
+
+    def report_mcp_supply_chain(self) -> Dict:
+        """
+        Report MCP supply chain analytics to the AIM backend.
+
+        This syncs local tool usage statistics to the backend for:
+        - Dashboard visualization of MCP usage patterns
+        - Anomaly detection (sudden spike in dangerous tool usage)
+        - Compliance reporting (which agents used which tools when)
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - serversReported: int
+                - totalInvocations: int
+                - message: str
+
+        Example:
+            result = client.report_mcp_supply_chain()
+            print(f"Reported {result['serversReported']} MCP servers")
+        """
+        try:
+            from aim_sdk.attestation_cache import AttestationCache
+
+            cache = AttestationCache(agent_id=self.agent_id)
+            report = cache.get_supply_chain_report()
+
+            # Transform report for backend
+            payload = {
+                "agentId": self.agent_id,
+                "mcpServers": {},
+                "reportedAt": report["generatedAt"]
+            }
+
+            # Get full cache data for detailed reporting
+            full_stats = cache.get_all_stats()
+            servers_data = full_stats.get("mcpServers", {})
+
+            for server_id, server_stats in servers_data.items():
+                payload["mcpServers"][server_id] = {
+                    "toolUsage": server_stats.get("toolsUsed", {}),
+                    "lastAttestedAt": server_stats.get("lastAttestedAt"),
+                    "capabilitiesAttested": server_stats.get("capabilitiesAttested", []),
+                    "confidenceScore": server_stats.get("confidenceScore"),
+                    "firstSeenAt": server_stats.get("firstSeenAt")
+                }
+
+            # Submit to backend
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-usage-report",
+                data=payload
+            )
+
+            return {
+                "success": True,
+                "serversReported": len(payload["mcpServers"]),
+                "totalInvocations": report["totalToolInvocations"],
+                "message": f"Reported {len(payload['mcpServers'])} MCP servers with {report['totalToolInvocations']} tool invocations"
+            }
+
+        except Exception as e:
+            console.warning(f"Failed to report MCP supply chain: {e}")
+            return {
+                "success": False,
+                "serversReported": 0,
+                "totalInvocations": 0,
+                "error": str(e)
+            }
+
+    def get_mcp_supply_chain_report(self) -> Dict:
+        """
+        Generate a local MCP supply chain analytics report.
+
+        Returns a comprehensive view of MCP usage patterns for this agent,
+        including attestation status, tool usage counts, and top tools.
+
+        Returns:
+            Dict with supply chain analytics:
+                - agentId: str
+                - mcpServerCount: int
+                - totalToolsUsed: int
+                - totalToolInvocations: int
+                - servers: dict of server stats
+                - generatedAt: str
+
+        Example:
+            report = client.get_mcp_supply_chain_report()
+            for server_id, stats in report["servers"].items():
+                print(f"{server_id}: {stats['invocationCount']} invocations")
+                for tool, count in stats["topTools"]:
+                    print(f"  {tool}: {count}")
+        """
+        from aim_sdk.attestation_cache import AttestationCache
+        cache = AttestationCache(agent_id=self.agent_id)
+        return cache.get_supply_chain_report()
+
     def report_capabilities(
         self,
         capabilities: List[str],
@@ -2465,7 +2758,15 @@ def register_agent(
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
         organization_domain: Organization domain for auto-approval
-        mcp_servers: Override auto-detected MCP servers (manual specification)
+        mcp_servers: MCP servers this agent communicates with. Supports two formats:
+            - Simple names: ["github", "filesystem"] - for quick reference only
+            - Full definitions: [{"name": "github", "url": "...", "version": "1.0.0", ...}]
+              Full definition fields:
+              - name (required): MCP server name
+              - url (optional): MCP server endpoint URL
+              - version (optional): Server version
+              - description (optional): Human-readable description
+              - tags (optional): List of tags for categorization
         capabilities: Override auto-detected capabilities (manual specification).
             Note: On re-registration, new capabilities are REJECTED to prevent
             privilege escalation. Use agent.request_capability() for new capabilities.
@@ -2669,8 +2970,26 @@ def register_agent(
         registration_data["documentationUrl"] = documentation_url
     if organization_domain:
         registration_data["organizationDomain"] = organization_domain
+
+    # Process MCP servers: extract names for talksTo, preserve full definitions for later
+    mcp_server_names = []
+    mcp_full_definitions = []  # Store full definitions for post-registration MCP creation
     if mcp_servers:
-        registration_data["talksTo"] = mcp_servers  # Backend still uses talksTo
+        for mcp in mcp_servers:
+            if isinstance(mcp, str):
+                # Simple string name
+                mcp_server_names.append(mcp)
+            elif isinstance(mcp, dict):
+                # Full definition with name, url, version, etc.
+                mcp_name = mcp.get("name")
+                if mcp_name:
+                    mcp_server_names.append(mcp_name)
+                    mcp_full_definitions.append(mcp)
+                else:
+                    console.warning(f"MCP server definition missing 'name' field: {mcp}")
+        if mcp_server_names:
+            registration_data["talksTo"] = mcp_server_names  # Backend expects list of names
+
     if capabilities:
         registration_data["capabilities"] = capabilities
     if tags:
@@ -2686,7 +3005,8 @@ def register_agent(
                 sdk_creds=sdk_creds,
                 registration_data=registration_data,
                 sdk_token_id=sdk_token_id,
-                talks_to=talks_to
+                mcp_server_names=mcp_server_names,
+                mcp_full_definitions=mcp_full_definitions
             )
         else:
             # API Key Mode: Use public endpoint with API key header
@@ -2696,7 +3016,8 @@ def register_agent(
                 api_key=api_key,
                 registration_data=registration_data,
                 sdk_token_id=sdk_token_id,
-                talks_to=talks_to
+                mcp_server_names=mcp_server_names,
+                mcp_full_definitions=mcp_full_definitions
             )
 
     except requests.RequestException as e:
@@ -2711,7 +3032,8 @@ def _register_via_oauth(
     sdk_creds: Dict[str, Any],
     registration_data: Dict[str, Any],
     sdk_token_id: Optional[str],
-    talks_to: Optional[List[str]]
+    mcp_server_names: List[str],
+    mcp_full_definitions: List[Dict[str, Any]]
 ) -> AIMClient:
     """Register agent using OAuth token from SDK credentials"""
     # Generate Ed25519 keypair client-side (for OAuth mode)
@@ -2883,19 +3205,54 @@ def _register_via_oauth(
         oauth_token_manager=token_manager  # Pass token manager for OAuth authentication
     )
 
-    if talks_to:
-        from .detection import auto_detect_mcps
-        mcp_detections = auto_detect_mcps()
-        if mcp_detections:
-            try:
-                result = client.report_detections(mcp_detections)
-                console.info(f"Reported {result.get('detectionsProcessed', 0)} MCP detections")
-            except Exception:
-                pass  # Don't fail registration if reporting fails
+    # Register MCP servers (creates entries in the MCP Servers dashboard)
+    # Convert simple string names to full definitions for proper registration and attestation
+    all_mcp_definitions = list(mcp_full_definitions)  # Start with explicit definitions
+
+    # Convert simple string names to definitions with detected capabilities
+    detected_capabilities = _detect_mcp_capabilities_from_config()
+    for mcp_name in mcp_server_names:
+        # Check if this name was already included as a full definition
+        if any(d.get("name") == mcp_name for d in mcp_full_definitions):
+            continue  # Skip - already have full definition
+
+        # Create a definition from the simple name
+        simple_def = {
+            "name": mcp_name,
+            "description": f"MCP server '{mcp_name}' registered via SDK",
+            "url": "",  # URL not provided for simple names
+            "version": "1.0.0",
+            "capabilities": detected_capabilities.get(mcp_name, [])
+        }
+        all_mcp_definitions.append(simple_def)
+
+    # Register all MCP servers (both explicit and inferred from simple names)
+    if all_mcp_definitions:
+        _register_mcp_servers(client, aim_url, headers, all_mcp_definitions, credentials["agent_id"])
+
+    # Also report detections for tracking in agent's MCPs tab
+    if mcp_server_names:
+        import datetime
+        manual_detections = [
+            {
+                "mcpServer": mcp,
+                "detectionMethod": "manual",
+                "confidence": 100.0,
+                "sdkVersion": f"aim-sdk-python@{__version__}",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "details": {"source": "sdk_registration", "explicit": True}
+            }
+            for mcp in mcp_server_names
+        ]
+        try:
+            result = client.report_detections(manual_detections)
+            console.info(f"Linked {result.get('detectionsProcessed', 0)} MCP server(s) to agent")
+        except Exception:
+            pass  # Don't fail registration if reporting fails
 
     # Show beautiful registration success message
     capabilities = registration_data.get("capabilities")
-    _print_registration_success(name, credentials, capabilities, talks_to)
+    _print_registration_success(name, credentials, capabilities, mcp_server_names)
     return client
 
 
@@ -2905,7 +3262,8 @@ def _register_via_api_key(
     api_key: str,
     registration_data: Dict[str, Any],
     sdk_token_id: Optional[str],
-    talks_to: Optional[List[str]]
+    mcp_server_names: List[str],
+    mcp_full_definitions: List[Dict[str, Any]]
 ) -> AIMClient:
     """Register agent using API key (manual mode)"""
     # Call public registration endpoint
@@ -2943,19 +3301,181 @@ def _register_via_api_key(
         aim_url=credentials["aim_url"]
     )
 
-    if talks_to:
-        from .detection import auto_detect_mcps
-        mcp_detections = auto_detect_mcps()
-        if mcp_detections:
-            try:
-                result = client.report_detections(mcp_detections)
-                console.info(f"Reported {result.get('detectionsProcessed', 0)} MCP detections")
-            except Exception:
-                pass  # Don't fail registration if reporting fails
+    # Register MCP servers (creates entries in the MCP Servers dashboard)
+    # Convert simple string names to full definitions for proper registration and attestation
+    all_mcp_definitions = list(mcp_full_definitions)  # Start with explicit definitions
+
+    # Convert simple string names to definitions with detected capabilities
+    detected_capabilities = _detect_mcp_capabilities_from_config()
+    for mcp_name in mcp_server_names:
+        # Check if this name was already included as a full definition
+        if any(d.get("name") == mcp_name for d in mcp_full_definitions):
+            continue  # Skip - already have full definition
+
+        # Create a definition from the simple name
+        simple_def = {
+            "name": mcp_name,
+            "description": f"MCP server '{mcp_name}' registered via SDK",
+            "url": "",  # URL not provided for simple names
+            "version": "1.0.0",
+            "capabilities": detected_capabilities.get(mcp_name, [])
+        }
+        all_mcp_definitions.append(simple_def)
+
+    # Register all MCP servers (both explicit and inferred from simple names)
+    if all_mcp_definitions:
+        _register_mcp_servers(client, aim_url, headers, all_mcp_definitions, credentials["agent_id"])
+
+    # Also report detections for tracking in agent's MCPs tab
+    if mcp_server_names:
+        import datetime
+        manual_detections = [
+            {
+                "mcpServer": mcp,
+                "detectionMethod": "manual",
+                "confidence": 100.0,
+                "sdkVersion": f"aim-sdk-python@{__version__}",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "details": {"source": "sdk_registration", "explicit": True}
+            }
+            for mcp in mcp_server_names
+        ]
+        try:
+            result = client.report_detections(manual_detections)
+            console.info(f"Linked {result.get('detectionsProcessed', 0)} MCP server(s) to agent")
+        except Exception:
+            pass  # Don't fail registration if reporting fails
 
     # Show beautiful registration success message
-    _print_registration_success(name, credentials, registration_data.get("capabilities"), talks_to)
+    _print_registration_success(name, credentials, registration_data.get("capabilities"), mcp_server_names)
     return client
+
+
+def _register_mcp_servers(
+    client: AIMClient,
+    aim_url: str,
+    headers: Dict[str, str],
+    mcp_definitions: List[Dict[str, Any]],
+    agent_id: str
+) -> None:
+    """
+    Register full MCP server definitions in the dashboard and auto-attest with capabilities.
+
+    Creates actual MCP server entries in the mcp_servers table,
+    making them visible in the MCP Servers dashboard. After registration,
+    the agent automatically attests to the MCP server with its capabilities.
+
+    Args:
+        client: AIMClient instance for API calls
+        aim_url: Base URL of the AIM server
+        headers: HTTP headers with authentication
+        mcp_definitions: List of MCP server definitions with name, url, version, etc.
+        agent_id: ID of the agent registering these servers
+    """
+    # First, try to detect MCP capabilities from Claude config
+    # This gives us actual tool names like read_file, write_file, etc.
+    detected_capabilities = _detect_mcp_capabilities_from_config()
+
+    for mcp_def in mcp_definitions:
+        mcp_name = mcp_def.get("name", "")
+        mcp_server_id = None
+
+        try:
+            mcp_data = {
+                "name": mcp_name,
+                "description": mcp_def.get("description", f"MCP server registered via SDK"),
+                "url": mcp_def.get("url", ""),
+                "version": mcp_def.get("version", "1.0.0"),
+                "capabilities": mcp_def.get("capabilities", []),
+                "registeredByAgent": agent_id,
+                "verificationMethod": "agent_attestation"  # Registered by agent
+            }
+
+            # Call the MCP servers API to create the entry
+            url = f"{aim_url.rstrip('/')}/api/v1/mcp-servers"
+            response = requests.post(url, json=mcp_data, headers=headers, timeout=30)
+
+            if response.status_code in [200, 201]:
+                console.success(f"Registered MCP server: {mcp_name}")
+                # Extract MCP server ID from response for attestation
+                try:
+                    response_data = response.json()
+                    mcp_server_id = response_data.get("id")
+                except Exception:
+                    pass
+            elif response.status_code == 409:
+                # Server already exists - try to get its ID for attestation
+                console.info(f"MCP server '{mcp_name}' already exists")
+                # TODO: Could fetch MCP server by name to get ID
+            else:
+                console.warning(f"Failed to register MCP server '{mcp_name}': {response.text}")
+                continue
+
+            # Auto-attest to the MCP server with detected capabilities
+            # This makes the registering agent the first to vouch for this MCP
+            if mcp_server_id and client.signing_key:
+                try:
+                    # Get capabilities for this specific MCP server
+                    mcp_capabilities = detected_capabilities.get(mcp_name, [])
+
+                    # If we have explicit capabilities from the definition, use those
+                    if mcp_def.get("capabilities"):
+                        mcp_capabilities = mcp_def.get("capabilities")
+
+                    # Attest to the MCP server
+                    attest_result = client.attest_mcp(
+                        mcp_server_id=mcp_server_id,
+                        capabilities=mcp_capabilities,
+                        connection_successful=True,
+                        health_check_passed=True,
+                        mcp_url=mcp_def.get("url", ""),
+                        mcp_name=mcp_name
+                    )
+
+                    if attest_result.get("success"):
+                        cap_count = len(mcp_capabilities)
+                        console.success(f"Auto-attested MCP server '{mcp_name}' with {cap_count} capabilities")
+                except Exception as e:
+                    # Don't fail registration if attestation fails
+                    console.warning(f"Auto-attestation failed for '{mcp_name}': {e}")
+
+        except Exception as e:
+            console.warning(f"Error registering MCP server '{mcp_name}': {e}")
+
+
+def _detect_mcp_capabilities_from_config(
+    server_names: Optional[List[str]] = None,
+    timeout_per_server: float = 30.0
+) -> Dict[str, List[str]]:
+    """
+    Dynamically discover MCP server capabilities by querying each server.
+
+    This function uses the official MCP protocol to query each server for its
+    actual tools, resources, and prompts. No hardcoded fallbacks - we get the
+    real capabilities directly from the servers.
+
+    Args:
+        server_names: Optional list of specific server names to discover.
+                      If None, discovers all servers in Claude Desktop config.
+        timeout_per_server: Timeout for each server query (seconds)
+
+    Returns:
+        Dict mapping MCP server names to their list of capability names
+    """
+    try:
+        from aim_sdk.detection import discover_mcp_capabilities
+
+        return discover_mcp_capabilities(
+            server_names=server_names,
+            timeout_per_server=timeout_per_server
+        )
+
+    except ImportError:
+        console.warning("MCP SDK not available for capability discovery")
+        return {}
+    except Exception as e:
+        console.warning(f"Failed to discover MCP capabilities: {e}")
+        return {}
 
 
 def _print_registration_success(

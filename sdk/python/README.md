@@ -88,6 +88,7 @@ The demo agent is an interactive menu that lets you trigger different actions (w
 | **Trust Scoring** | Real-time ML risk assessment | ✅ Automatic |
 | **Capability Detection** | Scans your code, finds what your agent does | ✅ Automatic |
 | **MCP Server Detection** | Finds Claude Desktop configs automatically | ✅ Automatic |
+| **MCP Capability Discovery** | Queries MCP servers for actual tools | ✅ Automatic |
 | **Audit Trail** | SOC 2 compliant logging | ✅ Automatic |
 | **Action Verification** | Every API call cryptographically signed | ✅ Automatic |
 
@@ -333,9 +334,29 @@ elif result["status"] == "approved":
 
 ## MCP Server Registration
 
+### Automatic Registration with Dynamic Capability Discovery
+
+When you specify MCP servers, the SDK **automatically discovers their capabilities** by querying each server using the MCP protocol:
+
+```python
+from aim_sdk import secure
+
+# Just provide server names - capabilities discovered automatically!
+agent = secure(
+    "my-agent",
+    mcp_servers=["filesystem", "github"]  # Capabilities auto-discovered
+)
+
+# What happens:
+# 1. SDK finds these servers in Claude Desktop config
+# 2. SDK queries each server via MCP protocol (tools/list)
+# 3. Agent auto-attests with discovered capabilities
+# 4. Console shows: "Auto-attested MCP server 'filesystem' with 14 capabilities"
+```
+
 ### Register MCP Servers Programmatically
 
-Use `register_mcp()` to register MCP servers your agent connects to:
+Use `register_mcp()` for manual registration:
 
 ```python
 # Register an MCP server
@@ -352,6 +373,20 @@ This is useful when:
 - Auto-detection doesn't find your MCP servers
 - You're connecting to dynamically provisioned MCP servers
 - You want to pre-register servers before connecting
+
+### Discover MCP Capabilities Programmatically
+
+```python
+from aim_sdk.detection import discover_mcp_capabilities
+
+# Discover what tools MCP servers actually have
+caps = discover_mcp_capabilities(["filesystem", "github"])
+
+for server, tools in caps.items():
+    print(f"{server}: {len(tools)} tools - {tools[:3]}...")
+# filesystem: 14 tools - ['read_file', 'write_file', 'edit_file']...
+# github: 26 tools - ['create_repository', 'create_issue', 'create_pull_request']...
+```
 
 ## Credential Storage
 
@@ -500,7 +535,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.4.0
+**Current Version**: 1.8.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -509,7 +544,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.4.0"
+print(aim_sdk.__version__)  # "1.8.0"
 ```
 
 **See Also**:

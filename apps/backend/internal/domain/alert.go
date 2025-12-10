@@ -10,14 +10,16 @@ import (
 type AlertType string
 
 const (
-	AlertCertificateExpiring    AlertType = "certificate_expiring"
-	AlertAPIKeyExpiring         AlertType = "api_key_expiring"
-	AlertTrustScoreLow          AlertType = "trust_score_low"
-	AlertTrustScoreDrop         AlertType = "trust_score_drop" // Significant decrease in trust score
-	AlertAgentOffline           AlertType = "agent_offline"
-	AlertSecurityBreach         AlertType = "security_breach"
-	AlertUnusualActivity        AlertType = "unusual_activity"
-	AlertTypeConfigurationDrift AlertType = "configuration_drift"
+	AlertCertificateExpiring      AlertType = "certificate_expiring"
+	AlertAPIKeyExpiring           AlertType = "api_key_expiring"
+	AlertTrustScoreLow            AlertType = "trust_score_low"
+	AlertTrustScoreDrop           AlertType = "trust_score_drop" // Significant decrease in trust score
+	AlertAgentOffline             AlertType = "agent_offline"
+	AlertSecurityBreach           AlertType = "security_breach"
+	AlertUnusualActivity          AlertType = "unusual_activity"
+	AlertTypeConfigurationDrift   AlertType = "configuration_drift"
+	AlertLowTrustAttestation      AlertType = "low_trust_attestation"       // Low-trust agent attempted MCP attestation
+	AlertLowTrustAttestationBlock AlertType = "low_trust_attestation_block" // Low-trust agent blocked from attestation
 )
 
 // AlertSeverity represents alert severity level

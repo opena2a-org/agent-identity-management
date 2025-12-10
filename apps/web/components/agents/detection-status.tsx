@@ -7,8 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { api, type DetectionStatusResponse, type DetectedMCPSummary } from '@/lib/api'
 import {
   DetectionMethodBadge,
-  DetectionMethodsBadges,
-  ConfidenceBadge
+  DetectionMethodsBadges
 } from './detection-method-badge'
 import {
   CheckCircle2,
@@ -245,10 +244,7 @@ function DetectedMCPsTable({ detections }: { detections: DetectedMCPSummary[] })
               MCP Server
             </th>
             <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
-              Confidence
-            </th>
-            <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
-              Detection Methods
+              Source
             </th>
             <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
               First / Last Seen
@@ -265,15 +261,6 @@ function DetectedMCPsTable({ detections }: { detections: DetectedMCPSummary[] })
               <tr key={detection.name} className="border-b last:border-0">
                 <td className="py-3 px-2">
                   <p className="text-sm font-mono font-medium">{detection.name}</p>
-                </td>
-                <td className="py-3 px-2">
-                  {isManual ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <span className="text-xs">Manual</span>
-                    </Badge>
-                  ) : (
-                    <ConfidenceBadge score={detection.confidenceScore} />
-                  )}
                 </td>
                 <td className="py-3 px-2">
                   <DetectionMethodsBadges methods={detection.detectedBy} maxDisplay={2} />

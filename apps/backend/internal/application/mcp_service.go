@@ -130,6 +130,33 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		}
 	}
 
+	// ✅ AUTO-VERIFICATION: MCP servers registered via SDK are auto-verified
+	// This matches agent behavior where SDK-registered agents are auto-verified
+	// Manual registrations (no agentID) remain pending for admin review
+	isSDKRegistration := agentID != nil
+	var status domain.MCPServerStatus
+	var isVerified bool
+	var trustScore float64
+	var verificationMethod string
+	var lastVerifiedAt *time.Time
+
+	if isSDKRegistration {
+		// SDK registration: auto-verify since agent is authenticated
+		status = domain.MCPServerStatusVerified
+		isVerified = true
+		trustScore = 75.0 // Initial trust score for SDK-verified servers
+		verificationMethod = "sdk_registration"
+		now := time.Now()
+		lastVerifiedAt = &now
+		fmt.Printf("✅ Auto-verifying MCP server %s (registered via SDK by agent %s)\n", req.Name, agentID)
+	} else {
+		// Manual registration: requires admin verification
+		status = domain.MCPServerStatusPending
+		isVerified = false
+		trustScore = 0.0
+		verificationMethod = "manual"
+	}
+
 	server := &domain.MCPServer{
 		ID:                  uuid.New(),
 		OrganizationID:      orgID,
@@ -138,11 +165,14 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		URL:                 strings.TrimSpace(req.URL), // ✅ Trim spaces from URL
 		Version:             req.Version,
 		PublicKey:           publicKey, // ✅ Auto-generated if not provided
-		Status:              domain.MCPServerStatusPending,
-		IsVerified:          false,
+		Status:              status,
+		IsVerified:          isVerified,
+		LastVerifiedAt:      lastVerifiedAt,
 		VerificationURL:     strings.TrimSpace(req.VerificationURL), // ✅ Trim spaces
 		Capabilities:        req.Capabilities,
-		TrustScore:          0.0,
+		TrustScore:          trustScore,
+		VerificationMethod:  verificationMethod,
+		RegisteredByAgent:   agentID,         // ✅ Track which agent registered this MCP (for SDK registrations)
 		CreatedBy:           userID,
 		CreatedByName:       createdByName,   // ✅ Audit trail: creator name
 		CreatedByEmail:      createdByEmail,  // ✅ Audit trail: creator email

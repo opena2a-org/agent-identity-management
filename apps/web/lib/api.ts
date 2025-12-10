@@ -2769,6 +2769,65 @@ class APIClient {
       body: JSON.stringify({ enforcementMode: mode }),
     });
   }
+
+  // ===== Supply Chain Analytics =====
+
+  async getSupplyChainAnalytics(days: number = 7): Promise<{
+    stats: {
+      totalConnections: number;
+      activeConnections: number;
+      totalAttestations: number;
+      attestationsLast24h: number;
+      uniqueAgents: number;
+      uniqueMCPServers: number;
+    };
+    attestationTrend: Array<{
+      date: string;
+      attestationCount: number;
+      newConnections: number;
+    }>;
+    connections: Array<{
+      id: string;
+      agentId: string;
+      agentName: string;
+      mcpServerId: string;
+      mcpServerName: string;
+      connectionType: string;
+      attestationCount: number;
+      firstConnectedAt: string;
+      lastAttestedAt: string | null;
+      isActive: boolean;
+    }>;
+  }> {
+    return this.request(`/api/v1/supply-chain/analytics?days=${days}`);
+  }
+
+  async getCapabilityDriftAlerts(days: number = 7): Promise<{
+    stats: {
+      totalAlerts: number;
+      addedCapabilities: number;
+      removedCapabilities: number;
+      highSeverity: number;
+      mediumSeverity: number;
+      lowSeverity: number;
+      unacknowledgedCount: number;
+    };
+    alerts: Array<{
+      id: string;
+      mcpServerId: string;
+      mcpServerName: string;
+      driftType: "added" | "removed" | "modified";
+      severity: "low" | "medium" | "high";
+      capabilityName: string;
+      capabilityType: string;
+      description: string;
+      detectedAt: string;
+      previousVerifiedAt?: string;
+      isAcknowledged: boolean;
+    }>;
+  }> {
+    return this.request(`/api/v1/supply-chain/drift-alerts?days=${days}`);
+  }
 }
 
 // Lazy singleton instance - created ONLY on first access in browser

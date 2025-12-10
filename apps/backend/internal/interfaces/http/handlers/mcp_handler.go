@@ -219,10 +219,31 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// ✅ Enrich each server with tags
+	// ✅ Enrich each server with tags and tool count
 	enriched := make([]fiber.Map, 0, len(servers))
 	for _, server := range servers {
-		enriched = append(enriched, h.enrichMCPServerResponse(c, server))
+		serverMap := h.enrichMCPServerResponse(c, server)
+
+		// ✅ Add actual tool count from mcp_server_capabilities table
+		if h.mcpCapabilityService != nil {
+			capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), server.ID)
+			if err == nil {
+				// Count only tools (not prompts/resources)
+				toolCount := 0
+				for _, cap := range capabilities {
+					if cap.CapabilityType == "tool" {
+						toolCount++
+					}
+				}
+				serverMap["toolCount"] = toolCount
+			} else {
+				serverMap["toolCount"] = 0
+			}
+		} else {
+			serverMap["toolCount"] = 0
+		}
+
+		enriched = append(enriched, serverMap)
 	}
 
 	return c.JSON(fiber.Map{

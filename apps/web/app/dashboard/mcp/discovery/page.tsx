@@ -62,7 +62,7 @@ export default function MCPDiscoveryPage() {
     fetchDiscoveryData();
   }, [fetchDiscoveryData]);
 
-  const filteredMCPs = data?.discovered.filter((mcp) => {
+  const filteredMCPs = (data?.discovered || []).filter((mcp) => {
     // Apply status filter
     if (filter === "unmapped" && mcp.isRegistered) return false;
     if (filter === "mapped" && !mcp.isRegistered) return false;
