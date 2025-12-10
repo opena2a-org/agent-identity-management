@@ -106,7 +106,8 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		"updatedAt":                agent.UpdatedAt,
 		"talksTo":                  agent.TalksTo,
 		"capabilities":             capabilityTypes,
-		"tags":                     tags, // ✅ Include tags in response
+		"tags":                     tags,            // ✅ Include tags in response
+		"metadata":                 agent.Metadata,  // ✅ Include custom metadata (model, department, etc.)
 		"capabilityViolationCount": agent.CapabilityViolationCount,
 		"isCompromised":            agent.IsCompromised,
 		"certificateUrl":           agent.CertificateURL,

@@ -12,6 +12,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GraphQL API support
 - CLI tool for automation
 
+## [1.8.0] - 2025-12-10
+
+### Added
+- **Smart MCP Attestation System**: Intelligent, automatic attestation that builds trust in MCP servers for supply chain security
+  - Attestations triggered on: first use, new tool, stale cache (>24h), capability drift
+  - Zero friction - attestations happen automatically without developer effort
+  - Caching prevents redundant attestations while maintaining security
+- **`AttestationCache` Class**: New persistent cache for tracking attestation state
+  - `should_attest()` - Determines if attestation is needed based on triggers
+  - `record_attestation()` - Records successful attestations
+  - `record_tool_usage()` - Tracks tool usage for analytics
+  - `get_supply_chain_report()` - Generates supply chain analytics report
+- **Capability Drift Detection**: Automatically detects when MCP servers change their tools
+  - Severity levels: low (tools added), medium (tools removed), high (>30% change)
+  - Triggers re-attestation when drift is detected
+- **Supply Chain Analytics**: Track MCP tool usage for security visibility
+  - `get_mcp_supply_chain_report()` - Local analytics for this agent
+  - `report_mcp_supply_chain()` - Sync analytics to backend for dashboard
+  - Usage patterns visible in AIM dashboard
+- **Enhanced `use_mcp_tool()`**: Now includes smart attestation
+  - `auto_attest` parameter (default: True) - Enable smart attestation
+  - `force_attest` parameter - Force attestation even if cached
+  - Returns attestation info and tool usage stats
+- **New AIMClient Methods**:
+  - `use_mcp_tool()` - Convenience method with smart attestation
+  - `get_attestation_cache()` - Access attestation cache
+  - `get_mcp_supply_chain_report()` - Local supply chain report
+  - `report_mcp_supply_chain()` - Sync to backend
+
+### Changed
+- `use_mcp_tool()` now automatically triggers attestations when appropriate
+- Tool usage is tracked locally for supply chain analytics
+- Documentation updated with smart attestation and supply chain features
+
+### Supply Chain Security Value
+This release positions AIM as an MCP supply chain security platform:
+- **Trust Graphs**: Visualize which agents trust which MCP servers
+- **Anomaly Detection**: Alert when MCP servers suddenly change capabilities
+- **Compliance**: Full audit trail of tool usage across the organization
+- **Risk Assessment**: Identify high-risk MCP servers (low attestations, frequent changes)
+
+## [1.7.0] - 2025-12-10
+
+### Added
+- **Dynamic MCP Capability Discovery**: SDK now automatically queries MCP servers for their actual tools, resources, and prompts using the official MCP protocol (`tools/list`, `resources/list`, `prompts/list`)
+  - No more hardcoded capability lists - capabilities are discovered at runtime
+  - Works with any MCP server, not just known ones
+  - `discover_mcp_capabilities()` function for programmatic discovery
+  - `auto_detect_mcps(discover_tools=True)` for full detection with tools
+- **Auto-Attestation on Registration**: When agents register MCP servers via `secure()` or `register_mcp()`, the SDK automatically:
+  - Discovers actual capabilities from the MCP server
+  - Creates a cryptographically signed attestation
+  - Submits the attestation to build trust in the MCP server
+- **New `attest_mcp()` method**: Manual attestation API on AIMClient for attesting to MCP server capabilities
+- **MCP Connection Recording**: `use_mcp_tool()` function to record agent-MCP connections
+
+### Changed
+- Removed hardcoded `KNOWN_MCP_CAPABILITIES` lookup table - capabilities now always discovered dynamically
+- `_detect_mcp_capabilities_from_config()` now uses dynamic discovery exclusively
+- MCP server registration flow now includes automatic attestation with discovered capabilities
+
+### Improved
+- MCP integration documentation with new sections on dynamic discovery and auto-attestation
+- README updated with MCP capability discovery examples
+
 ## [1.4.0] - 2025-12-05
 
 ### Added
@@ -189,4 +254,4 @@ Found a bug? Please report it:
 
 ---
 
-**Last Updated**: 2025-11-06
+**Last Updated**: 2025-12-10

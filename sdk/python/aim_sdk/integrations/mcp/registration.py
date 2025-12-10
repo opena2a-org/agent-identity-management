@@ -237,36 +237,61 @@ def use_mcp_tool(
     server_id: str,
     tool_name: str,
     mcp_url: str = "",
-    mcp_name: str = ""
+    mcp_name: str = "",
+    auto_attest: bool = True,
+    force_attest: bool = False,
+    discovery_timeout: float = 30.0
 ) -> Dict[str, Any]:
     """
-    Record that this agent is using an MCP server tool.
+    Record MCP tool usage with smart attestation for supply chain security.
 
-    This function creates or updates the agent-MCP connection record, tracking
-    that this agent is actively using the MCP server. This helps build the
-    "Connected Agents" relationship and updates the dashboard display.
+    This function:
+    1. Checks the attestation cache to determine if re-attestation is needed
+    2. Creates attestations when: first use, new tool, stale cache (>24h), or capability drift
+    3. Records tool usage for supply chain analytics
+    4. Records the agent-MCP connection in the backend
+
+    Smart Attestation Triggers:
+    - First use of an MCP server by this agent
+    - First use of a NEW tool on a known server
+    - Attestation is stale (>24 hours old)
+    - Capability drift detected (tools added/removed)
 
     Args:
         aim_client: AIMClient instance for authentication
         server_id: UUID of the MCP server being used
         tool_name: Name of the tool being used (e.g., "read_file", "search")
-        mcp_url: URL of the MCP server (optional, for first connection)
-        mcp_name: Name of the MCP server (optional, for first connection)
+        mcp_url: URL of the MCP server (required for attestation on first use)
+        mcp_name: Name of the MCP server (required for attestation on first use)
+        auto_attest: Enable smart attestation (default: True)
+        force_attest: Force attestation even if cached (default: False)
+        discovery_timeout: Timeout for capability discovery in seconds (default: 30.0)
 
     Returns:
-        Dictionary containing connection response:
+        Dictionary containing connection response and attestation info:
         {
             "success": True,
             "connection_id": "connection-uuid",
             "agent_id": "agent-uuid",
             "mcp_server_id": "server-uuid",
             "connection_type": "attested",
+            "attestation": {  # Only present if attestation occurred
+                "id": "attestation-uuid",
+                "reason": "first_use" | "new_tool" | "stale" | "capability_drift" | "forced",
+                "confidenceScore": 85.5,
+                "capabilitiesAttested": [...]
+            },
+            "toolUsage": {  # Tool usage stats
+                "count": 5,
+                "firstUsed": "...",
+                "lastUsed": "..."
+            },
             ...
         }
 
     Raises:
         requests.exceptions.RequestException: If connection recording fails
-        ValueError: If server_id is invalid
+        ValueError: If server_id is invalid or attestation fails
 
     Example:
         from aim_sdk import AIMClient
@@ -274,22 +299,134 @@ def use_mcp_tool(
 
         aim_client = AIMClient.auto_register_or_load("my-agent", "http://localhost:8080")
 
-        # Record MCP tool usage
+        # Smart attestation happens automatically
         response = use_mcp_tool(
             aim_client=aim_client,
             server_id="04531081-dd02-43aa-9067-a4e656de5591",
             tool_name="read_file",
-            mcp_url="http://localhost:3000",
+            mcp_url="npx -y @modelcontextprotocol/server-filesystem /tmp",
             mcp_name="filesystem-mcp"
         )
 
-        print(f"Connection recorded: {response['connection_id']}")
+        # Check if attestation occurred
+        if response.get("attestation"):
+            print(f"Attestation created: {response['attestation']['reason']}")
+
+        # Force re-attestation
+        response = use_mcp_tool(
+            aim_client=aim_client,
+            server_id="...",
+            tool_name="write_file",
+            force_attest=True  # Force attestation even if cached
+        )
     """
+    from aim_sdk.attestation_cache import AttestationCache
+    from aim_sdk.console import console
+
     if not server_id:
         raise ValueError("server_id cannot be empty")
 
     if not tool_name:
         raise ValueError("tool_name cannot be empty")
+
+    result = {
+        "success": False,
+        "agent_id": aim_client.agent_id,
+        "mcp_server_id": server_id,
+        "tool_name": tool_name
+    }
+
+    # Initialize attestation cache
+    cache = AttestationCache(agent_id=aim_client.agent_id)
+
+    # Smart attestation logic
+    attestation_result = None
+    if auto_attest or force_attest:
+        try:
+            # Check if attestation is needed
+            if force_attest:
+                attest_decision = {"shouldAttest": True, "reason": "forced", "driftInfo": None}
+            else:
+                # First, try to discover current capabilities for drift detection
+                current_capabilities = None
+                if mcp_url:
+                    try:
+                        from aim_sdk.integrations.mcp.discovery import discover_capabilities
+                        discovery = discover_capabilities(mcp_url, timeout_seconds=discovery_timeout)
+                        if not discovery.error:
+                            current_capabilities = discovery.tool_names
+                    except Exception:
+                        pass  # Continue without drift detection
+
+                attest_decision = cache.should_attest(
+                    mcp_server_id=server_id,
+                    tool_name=tool_name,
+                    current_capabilities=current_capabilities
+                )
+
+            if attest_decision["shouldAttest"]:
+                reason = attest_decision["reason"]
+                console.info(f"Smart attestation triggered: {reason}")
+
+                # Check if we have required params for attestation
+                if not mcp_url:
+                    console.warning(
+                        f"Attestation needed ({reason}) but mcp_url not provided. "
+                        "Provide mcp_url for attestation."
+                    )
+                else:
+                    # Perform attestation with auto-discovery
+                    attestation_response = attest_mcp_server(
+                        aim_client=aim_client,
+                        server_id=server_id,
+                        mcp_url=mcp_url,
+                        mcp_name=mcp_name or server_id,
+                        auto_discover=True,
+                        discovery_timeout=discovery_timeout
+                    )
+
+                    # Get capabilities from attestation response
+                    capabilities_attested = []
+                    if "discovery" in attestation_response:
+                        capabilities_attested = attestation_response["discovery"].get("discoveredTools", [])
+
+                    # Record attestation in cache
+                    attestation_id = attestation_response.get("attestationId") or attestation_response.get("id", "")
+                    confidence_score = attestation_response.get("mcpConfidenceScore") or attestation_response.get("confidenceScore")
+
+                    cache.record_attestation(
+                        mcp_server_id=server_id,
+                        attestation_id=attestation_id,
+                        capabilities=capabilities_attested,
+                        confidence_score=confidence_score
+                    )
+
+                    attestation_result = {
+                        "id": attestation_id,
+                        "reason": reason,
+                        "confidenceScore": confidence_score,
+                        "capabilitiesAttested": capabilities_attested
+                    }
+
+                    # Log capability drift if detected
+                    drift_info = attest_decision.get("driftInfo")
+                    if drift_info and drift_info.get("driftDetected"):
+                        console.warning(
+                            f"Capability drift detected (severity: {drift_info['severity']}): "
+                            f"+{len(drift_info['addedCapabilities'])} added, "
+                            f"-{len(drift_info['removedCapabilities'])} removed"
+                        )
+                        attestation_result["driftInfo"] = drift_info
+
+                    console.success(f"Attestation recorded (confidence: {confidence_score}%)")
+
+        except Exception as e:
+            console.warning(f"Smart attestation failed: {e}")
+            # Continue with tool usage recording even if attestation fails
+
+    # Record tool usage in local cache for analytics
+    tool_stats = cache.record_tool_usage(server_id, tool_name)
+    result["toolUsage"] = tool_stats
 
     # Prepare connection payload
     payload = {
@@ -302,13 +439,23 @@ def use_mcp_tool(
 
     # Submit connection via AIM client's authenticated request method
     # This uses the agent's Ed25519 authentication automatically
-    response = aim_client._make_request(
-        method="POST",
-        endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-connections",
-        data=payload
-    )
+    try:
+        response = aim_client._make_request(
+            method="POST",
+            endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-connections",
+            data=payload
+        )
+        result.update(response)
+        result["success"] = True
+    except Exception as e:
+        console.error(f"Failed to record MCP connection: {e}")
+        result["error"] = str(e)
 
-    return response
+    # Add attestation result if it occurred
+    if attestation_result:
+        result["attestation"] = attestation_result
+
+    return result
 
 
 def get_attestation_challenge(

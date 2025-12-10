@@ -15,9 +15,15 @@ CREATE TABLE IF NOT EXISTS capability_definitions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    -- Unique constraint: namespace+action must be unique per org (NULL org = global core)
-    CONSTRAINT uq_capability_definition UNIQUE NULLS NOT DISTINCT (namespace, action, organization_id)
+    -- Unique constraint: namespace+action must be unique per org
+    -- For PostgreSQL 14 compatibility, we use a partial unique index for NULL org_id
+    CONSTRAINT uq_capability_definition_with_org UNIQUE (namespace, action, organization_id)
 );
+
+-- For core capabilities (NULL organization_id), use a partial unique index
+CREATE UNIQUE INDEX IF NOT EXISTS idx_capability_definitions_unique_core
+    ON capability_definitions (namespace, action)
+    WHERE organization_id IS NULL;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_capability_definitions_namespace ON capability_definitions(namespace);

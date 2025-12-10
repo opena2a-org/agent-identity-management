@@ -312,6 +312,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	var agents []*domain.Agent
 	for rows.Next() {
 		agent := &domain.Agent{}
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -324,7 +325,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -347,6 +348,9 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}

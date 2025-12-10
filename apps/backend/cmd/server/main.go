@@ -273,6 +273,7 @@ func main() {
 	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                               // SDK MCP registration (create new MCP server)
 	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                 // SDK list MCP servers for agent's org
 	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)            // SDK record agent-MCP connection (use_mcp_tool)
+	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)         // SDK MCP supply chain usage analytics
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                    // SDK MCP detection and integration reporting
 
 	// API v1 routes (JWT authenticated)
@@ -557,13 +558,15 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	)
 
 	// ✅ Initialize MCP Attestation Service for agent attestation of MCPs
-	mcpAttestationService := application.NewMCPAttestationService(
+	// Uses alert-enabled constructor to create security alerts for low-trust attestation attempts
+	mcpAttestationService := application.NewMCPAttestationServiceWithAlerts(
 		repos.MCPAttestation,
 		repos.Agent,
 		repos.MCPServer,
 		repos.User,
 		repos.AgentMCPConnection,
 		repos.MCPCapability, // ✅ For syncing capabilities from attestations
+		repos.Alert,         // ✅ For low-trust attestation alerts
 	)
 
 	securityService := application.NewSecurityService(
@@ -668,6 +671,7 @@ type Handlers struct {
 	CapabilityRequest  *handlers.CapabilityRequestHandlers // ✅ For capability request approval
 	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
+	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -810,6 +814,12 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		MCPDiscovery: handlers.NewMCPDiscoveryHandler(
 			services.MCP,
 			repos.Agent,
+		),
+		SupplyChain: handlers.NewSupplyChainHandler(
+			repos.AgentMCPConnection,
+			repos.Agent,
+			repos.MCPServer,
+			repos.MCPCapability,
 		),
 	}
 }
@@ -1087,6 +1097,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	attestations.Use(middleware.AuthMiddleware(jwtService))
 	attestations.Use(middleware.RateLimitMiddleware())
 	attestations.Post("/:attestation_id/revoke", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAttestation) // 🔴 Revoke single attestation
+
+	// ⭐ Supply Chain Analytics routes (authentication required)
+	// Dashboard for MCP supply chain visibility: connections, attestations, trends
+	supplyChain := v1.Group("/supply-chain")
+	supplyChain.Use(middleware.AuthMiddleware(jwtService))
+	supplyChain.Use(middleware.RateLimitMiddleware())
+	supplyChain.Get("/analytics", h.SupplyChain.GetSupplyChainAnalytics)       // 📊 Full supply chain dashboard data
+	supplyChain.Get("/drift-alerts", h.SupplyChain.GetCapabilityDriftAlerts)   // 🔔 Capability drift detection alerts
 
 	// Security routes (admin/manager)
 	security := v1.Group("/security")

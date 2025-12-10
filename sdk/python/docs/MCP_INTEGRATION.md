@@ -1,7 +1,7 @@
 # 🔌 AIM + MCP (Model Context Protocol) Integration Guide
 
 **Status**: ✅ **SDK IMPLEMENTATION COMPLETE** - Backend endpoints exist, SDK ready
-**Last Updated**: October 8, 2025
+**Last Updated**: December 10, 2025
 **Note**: Integration testing requires authentication setup
 
 ---
@@ -13,6 +13,8 @@ Seamless integration between **AIM (Agent Identity Management)** and **MCP (Mode
 ### What This Enables
 
 - ✅ **MCP Server Registration** with cryptographic verification
+- ✅ **Dynamic Capability Discovery** - Automatically queries MCP servers for their tools
+- ✅ **Auto-Attestation** - Agents automatically attest to MCP capabilities on registration
 - ✅ **Action Verification** for MCP tools, resources, and prompts
 - ✅ **Trust Scoring** for MCP servers based on usage history
 - ✅ **Audit Trail** for all MCP server interactions
@@ -144,6 +146,254 @@ print(f"Results: {result}")
 - ✅ Automatic result logging after completion
 - ✅ Error handling and logging
 - ✅ Clean, simple API
+
+---
+
+## 🔍 Dynamic Capability Discovery
+
+The SDK automatically discovers MCP server capabilities by querying each server using the official MCP protocol. **No hardcoded capability lists** - capabilities are discovered at runtime directly from the servers.
+
+### How It Works
+
+1. **SDK reads Claude Desktop config** (`~/Library/Application Support/Claude/claude_desktop_config.json`)
+2. **For each MCP server**, the SDK:
+   - Spawns the MCP server process
+   - Sends `tools/list`, `resources/list`, `prompts/list` requests
+   - Collects all available capabilities
+3. **Capabilities are used for attestation** when registering MCP servers
+
+### Example: Discover Capabilities
+
+```python
+from aim_sdk.detection import discover_mcp_capabilities
+
+# Discover capabilities for specific MCP servers
+caps = discover_mcp_capabilities(["filesystem", "github"])
+
+for server_name, tools in caps.items():
+    print(f"{server_name}: {len(tools)} capabilities")
+    print(f"  Tools: {tools[:5]}...")  # First 5 tools
+
+# Example output:
+# filesystem: 14 capabilities
+#   Tools: ['read_file', 'read_text_file', 'write_file', 'edit_file', 'create_directory']...
+# github: 26 capabilities
+#   Tools: ['create_or_update_file', 'search_repositories', 'create_repository', ...]...
+```
+
+### Auto-Discovery During Registration
+
+When you register an agent with MCP servers, capabilities are **automatically discovered**:
+
+```python
+from aim_sdk import secure
+
+# MCP capabilities discovered automatically!
+agent = secure(
+    "my-agent",
+    mcp_servers=["filesystem", "github"]  # Just names - capabilities auto-discovered
+)
+
+# What happens behind the scenes:
+# 1. SDK finds "filesystem" and "github" in Claude Desktop config
+# 2. SDK queries each server for its actual tools via MCP protocol
+# 3. Agent automatically attests to discovered capabilities
+# 4. Dashboard shows real tool names (read_file, write_file, etc.)
+```
+
+### Benefits
+
+| Without Dynamic Discovery | With Dynamic Discovery |
+|---------------------------|------------------------|
+| ❌ Hardcoded capability lists | ✅ Real capabilities from servers |
+| ❌ Lists become outdated | ✅ Always up-to-date |
+| ❌ Manual maintenance | ✅ Zero maintenance |
+| ❌ Limited to known servers | ✅ Works with any MCP server |
+| ❌ Users must list all tools | ✅ Automatic - just provide server names |
+
+### Advanced: Full Detection with Tools
+
+```python
+from aim_sdk import auto_detect_mcps
+
+# Detect all MCP servers AND their tools
+detections = auto_detect_mcps(discover_tools=True, timeout_per_server=30.0)
+
+for d in detections:
+    server = d['mcpServer']
+    tools = d['details'].get('capabilities', [])
+    print(f"{server}: {len(tools)} tools")
+```
+
+---
+
+## 🔐 Smart Attestation System
+
+The SDK provides **smart attestation** - intelligent, automatic attestation that builds trust in MCP servers through cryptographic verification while minimizing overhead.
+
+### Two Types of Attestation
+
+1. **Registration-Time Attestation**: When agents register MCP servers via `secure()` or `register_mcp()`
+2. **Smart Attestation on Tool Use**: When agents use MCP tools via `use_mcp_tool()` (NEW in v1.8.0)
+
+### Smart Attestation Triggers
+
+Smart attestation automatically creates attestations when:
+
+| Trigger | Description |
+|---------|-------------|
+| **First Use** | First time this agent uses an MCP server |
+| **New Tool** | First use of a NEW tool on a known server |
+| **Stale Attestation** | Attestation is >24 hours old |
+| **Capability Drift** | MCP server tools have changed (added/removed) |
+
+### Example: Smart Attestation on Tool Use
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-agent")
+
+# Smart attestation happens automatically!
+result = agent.use_mcp_tool(
+    server_id="04531081-dd02-43aa-9067-a4e656de5591",
+    tool_name="read_file",
+    mcp_url="npx -y @modelcontextprotocol/server-filesystem /tmp",
+    mcp_name="filesystem-mcp"
+)
+
+# Check if attestation was created
+if result.get("attestation"):
+    print(f"Attestation triggered: {result['attestation']['reason']}")
+    print(f"New confidence score: {result['attestation']['confidenceScore']}%")
+
+# Tool usage is always tracked for analytics
+print(f"Tool usage count: {result['toolUsage']['count']}")
+```
+
+### Capability Drift Detection
+
+The SDK automatically detects when MCP servers change their capabilities:
+
+```python
+# If capability drift is detected, you'll see:
+# ⚠️ Capability drift detected (severity: medium): +2 added, -1 removed
+
+# Drift severity levels:
+# - low: New tools added (expansion)
+# - medium: Tools removed (contraction)
+# - high: >30% change in capabilities
+```
+
+### Registration-Time Attestation
+
+Attestations also happen automatically at registration:
+
+```python
+from aim_sdk import secure
+
+# Registration automatically includes attestation
+agent = secure(
+    "my-agent",
+    mcp_servers=["filesystem"]  # Capabilities auto-discovered and attested
+)
+
+# Console output:
+# ✅ Registered MCP server: filesystem
+# ✅ Auto-attested MCP server 'filesystem' with 14 capabilities
+```
+
+### Manual Attestation
+
+You can also manually attest to MCP servers:
+
+```python
+# Attest to an MCP server's capabilities
+result = agent.attest_mcp(
+    mcp_server_id="550e8400-e29b-41d4-a716-446655440000",
+    capabilities=["read_file", "write_file", "list_directory"],
+    connection_successful=True,
+    health_check_passed=True,
+    connection_latency_ms=45
+)
+
+print(f"Attestation ID: {result['attestationId']}")
+print(f"MCP Trust Score: {result['mcpConfidenceScore']}%")
+```
+
+### Force Re-Attestation
+
+To force an attestation even if cached:
+
+```python
+result = agent.use_mcp_tool(
+    server_id="...",
+    tool_name="write_file",
+    mcp_url="...",
+    force_attest=True  # Force attestation even if cached
+)
+```
+
+---
+
+## 📊 Supply Chain Analytics
+
+The SDK tracks MCP tool usage for supply chain visibility, enabling:
+
+- Dashboard visualization of MCP usage patterns
+- Anomaly detection (sudden spike in dangerous tool usage)
+- Compliance reporting (which agents used which tools when)
+- Trust graph visualization
+
+### View Local Analytics
+
+```python
+# Get supply chain report for this agent
+report = agent.get_mcp_supply_chain_report()
+
+print(f"MCP Servers Used: {report['mcpServerCount']}")
+print(f"Total Tools: {report['totalToolsUsed']}")
+print(f"Total Invocations: {report['totalToolInvocations']}")
+
+for server_id, stats in report["servers"].items():
+    print(f"\n{server_id}:")
+    print(f"  Attestation Age: {stats['attestationAge']}")
+    print(f"  Invocations: {stats['invocationCount']}")
+    print(f"  Top Tools:")
+    for tool, count in stats["topTools"]:
+        print(f"    - {tool}: {count} uses")
+```
+
+### Report to Dashboard
+
+```python
+# Sync analytics to AIM backend for dashboard visualization
+result = agent.report_mcp_supply_chain()
+
+print(f"Reported {result['serversReported']} MCP servers")
+print(f"Total invocations: {result['totalInvocations']}")
+```
+
+### Access Attestation Cache
+
+```python
+from aim_sdk import AttestationCache
+
+# Access the cache directly
+cache = AttestationCache(agent_id=agent.agent_id)
+
+# Check attestation status for a server
+stats = cache.get_server_stats("server-uuid")
+if stats:
+    print(f"Last attested: {stats['lastAttestedAt']}")
+    print(f"Tools attested: {stats['capabilitiesAttested']}")
+    print(f"Confidence: {stats['confidenceScore']}%")
+
+# Check if attestation is needed
+decision = cache.should_attest("server-uuid", "new_tool")
+if decision["shouldAttest"]:
+    print(f"Attestation needed: {decision['reason']}")
+```
 
 ---
 
@@ -289,6 +539,97 @@ result = mcp_wrapper.execute_tool(
     tool_function=lambda: search_files("*.py"),
     risk_level="low"
 )
+```
+
+---
+
+### use_mcp_tool() (NEW in v1.8.0)
+
+Record MCP tool usage with smart attestation for supply chain security.
+
+```python
+def use_mcp_tool(
+    server_id: str,
+    tool_name: str,
+    mcp_url: str = "",
+    mcp_name: str = "",
+    auto_attest: bool = True,
+    force_attest: bool = False,
+    discovery_timeout: float = 30.0
+) -> Dict[str, Any]
+```
+
+**Parameters**:
+- **`server_id`**: UUID of the MCP server being used
+- **`tool_name`**: Name of the tool being used (e.g., `"read_file"`, `"search"`)
+- **`mcp_url`**: URL of the MCP server (required for attestation on first use)
+- **`mcp_name`**: Name of the MCP server
+- **`auto_attest`**: Enable smart attestation (default: True)
+- **`force_attest`**: Force attestation even if cached (default: False)
+- **`discovery_timeout`**: Timeout for capability discovery in seconds (default: 30.0)
+
+**Returns**:
+```python
+{
+    "success": True,
+    "connection_id": "uuid",
+    "agent_id": "agent-uuid",
+    "mcp_server_id": "server-uuid",
+    "attestation": {  # Only present if attestation occurred
+        "id": "attestation-uuid",
+        "reason": "first_use",  # or "new_tool", "stale", "capability_drift", "forced"
+        "confidenceScore": 85.5,
+        "capabilitiesAttested": ["read_file", "write_file", ...],
+        "driftInfo": {...}  # Only if capability drift detected
+    },
+    "toolUsage": {
+        "count": 5,
+        "firstUsed": "2025-12-01T00:00:00Z",
+        "lastUsed": "2025-12-10T15:30:00Z"
+    }
+}
+```
+
+---
+
+### AttestationCache
+
+Manage attestation state for smart re-attestation decisions.
+
+```python
+from aim_sdk import AttestationCache
+
+cache = AttestationCache(
+    agent_id="agent-uuid",
+    cache_dir=None,     # Optional: defaults to ~/.aim
+    ttl_hours=24        # Hours before attestation is considered stale
+)
+
+# Check if attestation is needed
+decision = cache.should_attest(
+    mcp_server_id="server-uuid",
+    tool_name="read_file",
+    current_capabilities=["read_file", "write_file"]  # For drift detection
+)
+# Returns: {"shouldAttest": bool, "reason": str, "driftInfo": {...}}
+
+# Detect capability drift
+drift = cache.detect_capability_drift("server-uuid", ["read_file", "write_file", "new_tool"])
+# Returns: {"driftDetected": bool, "addedCapabilities": [...], "removedCapabilities": [...], "severity": str}
+
+# Record attestation
+cache.record_attestation(
+    mcp_server_id="server-uuid",
+    attestation_id="attestation-uuid",
+    capabilities=["read_file", "write_file"],
+    confidence_score=85.5
+)
+
+# Record tool usage
+cache.record_tool_usage("server-uuid", "read_file")
+
+# Get supply chain report
+report = cache.get_supply_chain_report()
 ```
 
 ---
@@ -556,8 +897,8 @@ public_key_b64 = base64.b64encode(public_key_bytes).decode()
 
 **Integration Status**: ✅ **SDK IMPLEMENTATION COMPLETE**
 **Backend Status**: ✅ **ENDPOINTS IMPLEMENTED**
-**Last Updated**: October 8, 2025
-**AIM SDK Version**: 1.1.0
+**Last Updated**: December 10, 2025
+**AIM SDK Version**: 1.8.0
 
 ---
 

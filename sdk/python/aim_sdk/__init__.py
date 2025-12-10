@@ -78,6 +78,7 @@ from .exceptions import AIMError, AuthenticationError, VerificationError, Action
 from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
+from .attestation_cache import AttestationCache
 
 # Read version from VERSION file (single source of truth)
 # Supports both development (file in parent dir) and installed package scenarios
@@ -116,5 +117,6 @@ __all__ = [
     "auto_detect_capabilities",
     "auto_detect_agent_type",
     "ProtocolDetector",
-    "auto_detect_protocol"
+    "auto_detect_protocol",
+    "AttestationCache"
 ]

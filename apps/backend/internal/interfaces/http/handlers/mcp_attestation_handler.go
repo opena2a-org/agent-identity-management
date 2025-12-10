@@ -718,6 +718,130 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 	})
 }
 
+// RecordMCPUsageReport handles agent reporting MCP supply chain usage analytics
+// @Summary Record MCP usage report
+// @Description Record agent's MCP tool usage statistics for supply chain analytics
+// @Tags sdk-api
+// @Accept json
+// @Produce json
+// @Param agent_id path string true "Agent ID"
+// @Param request body MCPUsageReportRequest true "Usage report data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/sdk-api/agents/{agent_id}/mcp-usage-report [post]
+func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
+	// Get agent ID from URL path (already authenticated by SDK middleware)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Invalid agent ID",
+			"message": err.Error(),
+		})
+	}
+
+	// Parse request body
+	type ToolUsageEntry struct {
+		Count     int    `json:"count"`
+		FirstUsed string `json:"firstUsed"`
+		LastUsed  string `json:"lastUsed"`
+	}
+
+	type MCPServerUsage struct {
+		ToolUsage            map[string]ToolUsageEntry `json:"toolUsage"`
+		LastAttestedAt       *string                   `json:"lastAttestedAt"`
+		CapabilitiesAttested []string                  `json:"capabilitiesAttested"`
+		ConfidenceScore      *float64                  `json:"confidenceScore"`
+		FirstSeenAt          *string                   `json:"firstSeenAt"`
+	}
+
+	type MCPUsageReportRequest struct {
+		AgentID    string                    `json:"agentId"`
+		MCPServers map[string]MCPServerUsage `json:"mcpServers"`
+		ReportedAt string                    `json:"reportedAt"`
+	}
+
+	var req MCPUsageReportRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Invalid request body",
+			"message": err.Error(),
+		})
+	}
+
+	// Calculate totals for response
+	serversReported := len(req.MCPServers)
+	totalInvocations := 0
+
+	for serverID, serverUsage := range req.MCPServers {
+		// Calculate total invocations for this server
+		serverInvocations := 0
+		for _, toolUsage := range serverUsage.ToolUsage {
+			serverInvocations += toolUsage.Count
+			totalInvocations += toolUsage.Count
+		}
+
+		// Try to parse server ID and record the usage data
+		mcpServerID, parseErr := uuid.Parse(serverID)
+		if parseErr != nil {
+			// Log but continue - invalid UUIDs are skipped
+			continue
+		}
+
+		// Convert local ToolUsageEntry to application.ToolUsageEntry
+		serviceToolUsage := make(map[string]application.ToolUsageEntry)
+		for toolName, usage := range serverUsage.ToolUsage {
+			serviceToolUsage[toolName] = application.ToolUsageEntry{
+				Count:     usage.Count,
+				FirstUsed: usage.FirstUsed,
+				LastUsed:  usage.LastUsed,
+			}
+		}
+
+		// Record the usage report via service
+		err := h.attestationService.RecordMCPUsageReport(
+			c.Context(),
+			agentID,
+			mcpServerID,
+			serviceToolUsage,
+			serverUsage.CapabilitiesAttested,
+			serverUsage.ConfidenceScore,
+			serverUsage.LastAttestedAt,
+			serverUsage.FirstSeenAt,
+			serverInvocations,
+		)
+		if err != nil {
+			// Log error but continue processing other servers
+			// Don't fail the whole request for one server's failure
+			continue
+		}
+	}
+
+	// Audit log
+	h.auditService.LogAction(
+		c.Context(),
+		uuid.Nil, // No organization context for SDK endpoints
+		agentID,
+		domain.AuditActionCreate,
+		"mcp_usage_report",
+		agentID, // Use agent ID as entity ID for reports
+		c.IP(),
+		c.Get("User-Agent"),
+		fiber.Map{
+			"servers_reported":   serversReported,
+			"total_invocations":  totalInvocations,
+			"reported_at":        req.ReportedAt,
+		},
+	)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":          true,
+		"serversReported":  serversReported,
+		"totalInvocations": totalInvocations,
+		"message":          fmt.Sprintf("Recorded usage report for %d MCP servers with %d total invocations", serversReported, totalInvocations),
+	})
+}
+
 // GetConsensusStatus returns the multi-agent consensus status for an MCP server
 // @Summary Get MCP consensus status
 // @Description Get the current multi-agent consensus verification status and progress

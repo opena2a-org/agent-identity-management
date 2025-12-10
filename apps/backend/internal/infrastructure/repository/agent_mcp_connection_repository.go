@@ -176,3 +176,113 @@ func (r *AgentMCPConnectionRepository) Delete(ctx context.Context, agentID, mcpS
 
 	return nil
 }
+
+// ListByOrganization lists all connections for an organization's agents
+func (r *AgentMCPConnectionRepository) ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.AgentMCPConnection, error) {
+	query := `
+		SELECT c.id, c.agent_id, c.mcp_server_id, c.detection_id, c.connection_type,
+		       c.first_connected_at, c.last_attested_at, c.attestation_count, c.is_active,
+		       c.created_at, c.updated_at
+		FROM agent_mcp_connections c
+		JOIN agents a ON c.agent_id = a.id
+		WHERE a.organization_id = $1
+		ORDER BY c.last_attested_at DESC NULLS LAST, c.first_connected_at DESC
+	`
+
+	var connections []*domain.AgentMCPConnection
+	err := r.db.SelectContext(ctx, &connections, query, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list connections for organization: %w", err)
+	}
+
+	return connections, nil
+}
+
+// AttestationTrendEntry represents a single day's attestation count
+type AttestationTrendEntry struct {
+	Date             string `db:"date" json:"date"`
+	AttestationCount int    `db:"attestation_count" json:"attestationCount"`
+	NewConnections   int    `db:"new_connections" json:"newConnections"`
+}
+
+// GetAttestationTrend returns daily attestation counts for the last N days
+func (r *AgentMCPConnectionRepository) GetAttestationTrend(ctx context.Context, orgID uuid.UUID, days int) ([]AttestationTrendEntry, error) {
+	query := `
+		WITH date_series AS (
+			SELECT generate_series(
+				CURRENT_DATE - $2::integer * INTERVAL '1 day',
+				CURRENT_DATE,
+				'1 day'::interval
+			)::date AS date
+		),
+		attestations_per_day AS (
+			SELECT
+				DATE(c.last_attested_at) AS date,
+				COUNT(*) AS attestation_count
+			FROM agent_mcp_connections c
+			JOIN agents a ON c.agent_id = a.id
+			WHERE a.organization_id = $1
+			  AND c.last_attested_at >= CURRENT_DATE - $2::integer * INTERVAL '1 day'
+			GROUP BY DATE(c.last_attested_at)
+		),
+		new_connections_per_day AS (
+			SELECT
+				DATE(c.first_connected_at) AS date,
+				COUNT(*) AS new_connections
+			FROM agent_mcp_connections c
+			JOIN agents a ON c.agent_id = a.id
+			WHERE a.organization_id = $1
+			  AND c.first_connected_at >= CURRENT_DATE - $2::integer * INTERVAL '1 day'
+			GROUP BY DATE(c.first_connected_at)
+		)
+		SELECT
+			TO_CHAR(d.date, 'Mon DD') AS date,
+			COALESCE(a.attestation_count, 0) AS attestation_count,
+			COALESCE(n.new_connections, 0) AS new_connections
+		FROM date_series d
+		LEFT JOIN attestations_per_day a ON d.date = a.date
+		LEFT JOIN new_connections_per_day n ON d.date = n.date
+		ORDER BY d.date
+	`
+
+	var entries []AttestationTrendEntry
+	err := r.db.SelectContext(ctx, &entries, query, orgID, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestation trend: %w", err)
+	}
+
+	return entries, nil
+}
+
+// GetSupplyChainStats returns aggregate statistics for supply chain dashboard
+type SupplyChainStats struct {
+	TotalConnections    int `db:"total_connections" json:"totalConnections"`
+	ActiveConnections   int `db:"active_connections" json:"activeConnections"`
+	TotalAttestations   int `db:"total_attestations" json:"totalAttestations"`
+	AttestationsLast24h int `db:"attestations_last_24h" json:"attestationsLast24h"`
+	UniqueAgents        int `db:"unique_agents" json:"uniqueAgents"`
+	UniqueMCPServers    int `db:"unique_mcp_servers" json:"uniqueMCPServers"`
+}
+
+func (r *AgentMCPConnectionRepository) GetSupplyChainStats(ctx context.Context, orgID uuid.UUID) (*SupplyChainStats, error) {
+	query := `
+		SELECT
+			COUNT(*) AS total_connections,
+			COUNT(*) FILTER (WHERE c.is_active = true) AS active_connections,
+			COALESCE(SUM(c.attestation_count), 0) AS total_attestations,
+			COUNT(*) FILTER (WHERE c.last_attested_at >= NOW() - INTERVAL '24 hours') AS attestations_last_24h,
+			COUNT(DISTINCT c.agent_id) AS unique_agents,
+			COUNT(DISTINCT c.mcp_server_id) AS unique_mcp_servers
+		FROM agent_mcp_connections c
+		JOIN agents a ON c.agent_id = a.id
+		WHERE a.organization_id = $1
+	`
+
+	var stats SupplyChainStats
+	err := r.db.GetContext(ctx, &stats, query, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supply chain stats: %w", err)
+	}
+
+	return &stats, nil
+}

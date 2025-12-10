@@ -274,6 +274,196 @@ func (r *MCPServerCapabilityRepository) DeleteByServerID(serverID uuid.UUID) err
 	return nil
 }
 
+// CapabilityDriftAlert represents a detected change in MCP server capabilities
+type CapabilityDriftAlert struct {
+	ID                 string    `json:"id"`
+	MCPServerID        string    `json:"mcpServerId"`
+	MCPServerName      string    `json:"mcpServerName"`
+	DriftType          string    `json:"driftType"` // "added", "removed", "modified"
+	Severity           string    `json:"severity"`  // "low", "medium", "high"
+	CapabilityName     string    `json:"capabilityName"`
+	CapabilityType     string    `json:"capabilityType"`
+	Description        string    `json:"description"`
+	DetectedAt         time.Time `json:"detectedAt"`
+	PreviousVerifiedAt time.Time `json:"previousVerifiedAt,omitempty"`
+	IsAcknowledged     bool      `json:"isAcknowledged"`
+}
+
+// CapabilityDriftStats provides aggregate drift statistics
+type CapabilityDriftStats struct {
+	TotalAlerts        int `json:"totalAlerts"`
+	AddedCapabilities  int `json:"addedCapabilities"`
+	RemovedCapabilities int `json:"removedCapabilities"`
+	HighSeverity       int `json:"highSeverity"`
+	MediumSeverity     int `json:"mediumSeverity"`
+	LowSeverity        int `json:"lowSeverity"`
+	UnacknowledgedCount int `json:"unacknowledgedCount"`
+}
+
+// GetCapabilityDriftAlerts detects capability changes by comparing current vs recently verified capabilities
+// Returns alerts for capabilities that were added (never seen before) or removed/stale (not verified recently)
+func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID, days int) ([]CapabilityDriftAlert, *CapabilityDriftStats, error) {
+	var alerts []CapabilityDriftAlert
+	stats := &CapabilityDriftStats{}
+
+	// Query 1: Stale capabilities (not verified in last N days)
+	staleQuery := `
+		SELECT c.id, c.mcp_server_id, m.name, c.name, c.capability_type,
+		       c.detected_at, c.last_verified_at
+		FROM mcp_server_capabilities c
+		JOIN mcp_servers m ON c.mcp_server_id = m.id
+		WHERE m.organization_id = $1
+		  AND c.is_active = true
+		  AND c.last_verified_at IS NOT NULL
+		  AND c.last_verified_at < NOW() - ($2 || ' days')::interval
+		ORDER BY c.last_verified_at ASC
+	`
+
+	rows, err := r.db.Query(staleQuery, orgID, days)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query stale capabilities: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var capID, mcpServerID uuid.UUID
+		var mcpServerName, capName, capType string
+		var detectedAt time.Time
+		var lastVerifiedAt sql.NullTime
+
+		if err := rows.Scan(&capID, &mcpServerID, &mcpServerName, &capName, &capType, &detectedAt, &lastVerifiedAt); err != nil {
+			continue
+		}
+
+		severity := "low"
+		if capType == "tool" {
+			severity = "high"
+		} else if capType == "resource" {
+			severity = "medium"
+		}
+
+		alert := CapabilityDriftAlert{
+			ID:             capID.String(),
+			MCPServerID:    mcpServerID.String(),
+			MCPServerName:  mcpServerName,
+			CapabilityName: capName,
+			CapabilityType: capType,
+			DriftType:      "stale",
+			Severity:       severity,
+			Description:    fmt.Sprintf("Capability '%s' on %s has not been verified in %d+ days", capName, mcpServerName, days),
+			DetectedAt:     detectedAt,
+		}
+		if lastVerifiedAt.Valid {
+			alert.PreviousVerifiedAt = lastVerifiedAt.Time
+		}
+		alerts = append(alerts, alert)
+
+		switch severity {
+		case "high":
+			stats.HighSeverity++
+		case "medium":
+			stats.MediumSeverity++
+		default:
+			stats.LowSeverity++
+		}
+	}
+
+	// Query 2: New capabilities (detected recently but never verified)
+	addedQuery := `
+		SELECT c.id, c.mcp_server_id, m.name, c.name, c.capability_type,
+		       c.detected_at
+		FROM mcp_server_capabilities c
+		JOIN mcp_servers m ON c.mcp_server_id = m.id
+		WHERE m.organization_id = $1
+		  AND c.is_active = true
+		  AND c.last_verified_at IS NULL
+		  AND c.detected_at >= NOW() - ($2 || ' days')::interval
+		ORDER BY c.detected_at DESC
+	`
+
+	rows2, err := r.db.Query(addedQuery, orgID, days)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query added capabilities: %w", err)
+	}
+	defer rows2.Close()
+
+	for rows2.Next() {
+		var capID, mcpServerID uuid.UUID
+		var mcpServerName, capName, capType string
+		var detectedAt time.Time
+
+		if err := rows2.Scan(&capID, &mcpServerID, &mcpServerName, &capName, &capType, &detectedAt); err != nil {
+			continue
+		}
+
+		alert := CapabilityDriftAlert{
+			ID:             capID.String(),
+			MCPServerID:    mcpServerID.String(),
+			MCPServerName:  mcpServerName,
+			CapabilityName: capName,
+			CapabilityType: capType,
+			DriftType:      "added",
+			Severity:       "medium",
+			Description:    fmt.Sprintf("New %s capability '%s' detected on %s but not verified", capType, capName, mcpServerName),
+			DetectedAt:     detectedAt,
+		}
+		alerts = append(alerts, alert)
+		stats.AddedCapabilities++
+		stats.MediumSeverity++
+	}
+
+	// Query 3: Removed capabilities (marked inactive recently)
+	removedQuery := `
+		SELECT c.id, c.mcp_server_id, m.name, c.name, c.capability_type,
+		       c.updated_at, c.last_verified_at
+		FROM mcp_server_capabilities c
+		JOIN mcp_servers m ON c.mcp_server_id = m.id
+		WHERE m.organization_id = $1
+		  AND c.is_active = false
+		  AND c.updated_at >= NOW() - ($2 || ' days')::interval
+		ORDER BY c.updated_at DESC
+	`
+
+	rows3, err := r.db.Query(removedQuery, orgID, days)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query removed capabilities: %w", err)
+	}
+	defer rows3.Close()
+
+	for rows3.Next() {
+		var capID, mcpServerID uuid.UUID
+		var mcpServerName, capName, capType string
+		var updatedAt time.Time
+		var lastVerifiedAt sql.NullTime
+
+		if err := rows3.Scan(&capID, &mcpServerID, &mcpServerName, &capName, &capType, &updatedAt, &lastVerifiedAt); err != nil {
+			continue
+		}
+
+		alert := CapabilityDriftAlert{
+			ID:             capID.String(),
+			MCPServerID:    mcpServerID.String(),
+			MCPServerName:  mcpServerName,
+			CapabilityName: capName,
+			CapabilityType: capType,
+			DriftType:      "removed",
+			Severity:       "high",
+			Description:    fmt.Sprintf("Capability '%s' was removed or disabled on %s", capName, mcpServerName),
+			DetectedAt:     updatedAt,
+		}
+		if lastVerifiedAt.Valid {
+			alert.PreviousVerifiedAt = lastVerifiedAt.Time
+		}
+		alerts = append(alerts, alert)
+		stats.RemovedCapabilities++
+		stats.HighSeverity++
+	}
+
+	stats.TotalAlerts = len(alerts)
+
+	return alerts, stats, nil
+}
+
 // UpsertFromAttestation syncs capabilities discovered during attestation
 // Creates new capabilities if they don't exist, or updates last_verified_at if they do
 func (r *MCPServerCapabilityRepository) UpsertFromAttestation(serverID uuid.UUID, capabilityNames []string) error {

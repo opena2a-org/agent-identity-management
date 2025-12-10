@@ -291,15 +291,56 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	// ✅ AUTO-APPLY TAGS: Apply tags during registration (no separate API call needed)
+	// Supports both tag UUIDs and tag names (keys). If a name is provided, it will
+	// find an existing tag or create a new one automatically.
 	if len(req.TagIds) > 0 && s.tagRepo != nil {
 		tagUUIDs := make([]uuid.UUID, 0, len(req.TagIds))
 		for _, tagIDStr := range req.TagIds {
+			// Try to parse as UUID first
 			tagID, err := uuid.Parse(tagIDStr)
-			if err != nil {
-				fmt.Printf("⚠️  Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
+			if err == nil {
+				// It's a valid UUID, use it directly
+				tagUUIDs = append(tagUUIDs, tagID)
 				continue
 			}
-			tagUUIDs = append(tagUUIDs, tagID)
+
+			// Not a UUID - treat as tag name/key. Find existing or create new tag.
+			existingTags, searchErr := s.tagRepo.SearchTags(ctx, orgID, tagIDStr, nil)
+			if searchErr != nil {
+				fmt.Printf("⚠️  Warning: failed to search for tag '%s': %v\n", tagIDStr, searchErr)
+				continue
+			}
+
+			// Check if we found an exact match by key
+			var foundTag *domain.Tag
+			for _, t := range existingTags {
+				if t.Key == tagIDStr {
+					foundTag = t
+					break
+				}
+			}
+
+			if foundTag != nil {
+				// Found existing tag by name
+				tagUUIDs = append(tagUUIDs, foundTag.ID)
+			} else {
+				// Create new tag with this name
+				newTag := &domain.Tag{
+					OrganizationID: orgID,
+					Key:            tagIDStr,
+					Value:          tagIDStr, // Use key as value for simple tags
+					Category:       domain.TagCategoryCustom,
+					Description:    fmt.Sprintf("Auto-created tag from SDK registration"),
+					Color:          "#6b7280", // Gray color for auto-created tags
+					CreatedBy:      userID,
+				}
+				if createErr := s.tagRepo.Create(ctx, newTag); createErr != nil {
+					fmt.Printf("⚠️  Warning: failed to create tag '%s': %v\n", tagIDStr, createErr)
+					continue
+				}
+				tagUUIDs = append(tagUUIDs, newTag.ID)
+				fmt.Printf("✅ Auto-created tag '%s' for agent %s\n", tagIDStr, agent.Name)
+			}
 		}
 
 		if len(tagUUIDs) > 0 {
