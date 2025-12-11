@@ -694,6 +694,8 @@ export default function MCPServerDetailsPage({
               <p className="text-xs text-muted-foreground mt-2">
                 {server.lastVerifiedAt
                   ? `Verified ${new Date(server.lastVerifiedAt).toLocaleDateString()}`
+                  : server.status === "verified"
+                  ? "Via Attestation"
                   : "Not yet verified"}
               </p>
             </CardContent>

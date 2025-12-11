@@ -616,6 +616,13 @@ export default function MCPServersPage() {
                           {formatRelativeTime(server.lastVerifiedAt)}
                         </span>
                       </div>
+                    ) : server?.status === "verified" ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                          Via Attestation
+                        </span>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <XCircle className="h-4 w-4 text-gray-400" />
