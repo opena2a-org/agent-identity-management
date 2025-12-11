@@ -302,6 +302,11 @@ func (m *TrustCalcMockAgentRepository) UpdateLastActive(ctx context.Context, age
 	return args.Error(0)
 }
 
+func (m *TrustCalcMockAgentRepository) IncrementViolationCount(agentID uuid.UUID) error {
+	args := m.Called(agentID)
+	return args.Error(0)
+}
+
 // TrustCalcMockAlertRepository mocks the AlertRepository for trust calculator tests
 type TrustCalcMockAlertRepository struct {
 	mock.Mock

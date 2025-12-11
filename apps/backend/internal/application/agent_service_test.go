@@ -80,6 +80,11 @@ func (m *AgentServiceMockTrustScoreRepository) GetHistoryAuditTrail(agentID uuid
 	return args.Get(0).([]*domain.TrustScoreHistoryEntry), args.Error(1)
 }
 
+func (m *AgentServiceMockTrustScoreRepository) UpdateScore(agentID uuid.UUID, newScore float64) error {
+	args := m.Called(agentID, newScore)
+	return args.Error(0)
+}
+
 // AgentServiceMockSecurityPolicyRepository for testing
 type AgentServiceMockSecurityPolicyRepository struct {
 	mock.Mock
