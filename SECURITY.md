@@ -64,10 +64,21 @@ AIM includes the following security features:
 - **OAuth/OIDC Support**: SSO integration
 
 ### Cryptographic Security
-- **Ed25519 Key Pairs**: Modern elliptic curve cryptography for agent identity
+- **Ed25519 Key Pairs**: Modern elliptic curve cryptography for agent identity (RFC 8032)
+- **AES-256-GCM**: Authenticated encryption for stored private keys (NIST SP 800-38D)
 - **SHA-256 API Key Hashing**: Secure API key storage
-- **Certificate Validation**: PKI infrastructure for agent verification
-- **TLS/SSL**: Encrypted data in transit
+- **bcrypt (cost=12)**: Password hashing per OWASP guidelines
+- **TLS 1.2+**: Encrypted data in transit (TLS 1.3 recommended)
+
+#### Cryptographic Standards Reference
+
+| Component | Algorithm | Key Size | Standard |
+|-----------|-----------|----------|----------|
+| Agent Signatures | Ed25519 | 256-bit | RFC 8032 |
+| JWT Signing | HMAC-SHA256 | 256-bit | RFC 7519 |
+| Key Encryption | AES-256-GCM | 256-bit | NIST SP 800-38D |
+| Password Hashing | bcrypt | cost=12 | OWASP |
+| API Key Hashing | SHA-256 | 256-bit | FIPS 180-4 |
 
 ### Application Security
 - **Input Validation**: Comprehensive request validation
@@ -113,6 +124,47 @@ We conduct regular security assessments:
 - **Dependency Scanning**: Automated vulnerability scanning
 - **Penetration Testing**: Periodic security audits
 - **Compliance Reviews**: SOC 2, HIPAA, GDPR assessments
+
+## Enterprise Compliance
+
+### SOC 2 Type II Alignment
+
+| Control Area | Implementation |
+|--------------|----------------|
+| CC6.1 Logical Access | RBAC, JWT authentication, API key scoping |
+| CC6.6 System Boundaries | Network segmentation, CORS, rate limiting |
+| CC6.7 Data Classification | Credential encryption, log sanitization |
+| CC6.8 Data Retention | Configurable retention, secure deletion |
+| CC7.1 Configuration Management | Environment variables, no hardcoded secrets |
+| CC7.2 Change Management | Git history, audit logs |
+
+### GDPR Compliance
+
+- **Data Minimization**: Only essential data collected
+- **Right to Erasure**: Agent and credential deletion supported
+- **Encryption**: All PII encrypted at rest and in transit
+- **Audit Trail**: Complete logging of data access
+- **No PII in Logs**: Token IDs and sensitive data truncated/hashed
+
+### Security Logging (SOC/SIEM Integration)
+
+AIM provides JSON Lines format security logs compatible with:
+- Splunk
+- ELK Stack
+- Datadog
+- Sumo Logic
+- AWS CloudWatch
+
+```python
+# Enable security logging
+from aim_sdk import configure_security_logging
+configure_security_logging()
+```
+
+Environment variables:
+- `AIM_SECURITY_LOG_FILE`: Path to security log file
+- `AIM_SECURITY_LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR, CRITICAL
+- `AIM_SECURITY_LOG_STDOUT`: Include stdout logging (true/false)
 
 ## Known Security Considerations
 
