@@ -166,9 +166,13 @@ class OAuthTokenManager:
         """Check if credentials are available."""
         return self.credentials is not None
 
-    def get_access_token(self) -> Optional[str]:
+    def get_access_token(self, suppress_errors: bool = False) -> Optional[str]:
         """
         Get a valid access token, refreshing if necessary.
+
+        Args:
+            suppress_errors: If True, suppress error messages when refresh fails.
+                           Use this when you have a fallback authentication mechanism.
 
         Returns:
             Valid access token or None if not available
@@ -182,9 +186,9 @@ class OAuthTokenManager:
                 return self.access_token
 
         # Need to refresh token
-        return self._refresh_token()
+        return self._refresh_token(suppress_errors=suppress_errors)
 
-    def _refresh_token(self) -> Optional[str]:
+    def _refresh_token(self, suppress_errors: bool = False) -> Optional[str]:
         """
         Refresh access token using refresh token.
 
@@ -192,6 +196,10 @@ class OAuthTokenManager:
         - Server returns new access_token AND new refresh_token
         - Old refresh token is invalidated
         - New refresh token is saved to credentials
+
+        Args:
+            suppress_errors: If True, suppress error messages when refresh fails.
+                           Use this when you have a fallback authentication mechanism.
 
         Returns:
             New access token or None if refresh failed
@@ -231,7 +239,8 @@ class OAuthTokenManager:
                         success=False,
                         details={"token_id": token_id, "attempting_recovery": True}
                     )
-                    print("🔄 Token was revoked - attempting automatic recovery...")
+                    if not suppress_errors:
+                        print("🔄 Token was revoked - attempting automatic recovery...")
 
                     # Try token recovery endpoint (new feature - zero downtime!)
                     recovery_url = f"{aim_url.rstrip('/')}/api/v1/auth/sdk/recover"
@@ -298,13 +307,15 @@ class OAuthTokenManager:
                         )
 
                     # If recovery failed, show manual instructions using centralized error
+                    # Only show if suppress_errors is False (i.e., no fallback auth available)
                     security_logger.log_authentication(
                         AuthnEventType.TOKEN_EXPIRED,
                         success=False,
                         error="Token expired and recovery failed",
                         details={"token_id": token_id}
                     )
-                    print_token_expired_error(aim_url)
+                    if not suppress_errors:
+                        print_token_expired_error(aim_url)
                 else:
                     security_logger.log_authentication(
                         AuthnEventType.TOKEN_REFRESH_FAILED,
@@ -312,7 +323,8 @@ class OAuthTokenManager:
                         error=error_msg,
                         details={"token_id": token_id, "http_status": response.status_code}
                     )
-                    print(f"⚠️  Token refresh failed with status {response.status_code}: {error_msg}")
+                    if not suppress_errors:
+                        print(f"⚠️  Token refresh failed with status {response.status_code}: {error_msg}")
 
                 return None
 
@@ -389,7 +401,8 @@ class OAuthTokenManager:
                 error=str(e),
                 details={"token_id": local_token_id}
             )
-            print(f"⚠️  Warning: Token refresh failed: {e}")
+            if not suppress_errors:
+                print(f"⚠️  Warning: Token refresh failed: {e}")
             return None
 
     def get_auth_header(self) -> Dict[str, str]:

@@ -2,11 +2,14 @@
 AIM Client - Core SDK functionality for automatic identity verification
 """
 
+import atexit
 import base64
 import functools
 import hashlib
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional, Dict, List
 from datetime import datetime, timezone
 
@@ -57,6 +60,19 @@ CAPABILITY_PATTERN = re.compile(r'^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$')
 
 # Reserved namespaces for core capabilities
 RESERVED_NAMESPACES = ['file', 'db', 'api', 'network', 'system', 'user', 'mcp', 'data']
+
+# Track pending MCP registration threads so we can wait for them on exit
+_pending_mcp_threads: List = []
+
+def _cleanup_mcp_threads():
+    """Wait for any pending MCP registration threads to complete on program exit."""
+    for thread in _pending_mcp_threads:
+        if thread.is_alive():
+            thread.join(timeout=10.0)  # Wait up to 10s per thread
+    _pending_mcp_threads.clear()
+
+# Register cleanup function to run at program exit
+atexit.register(_cleanup_mcp_threads)
 
 
 # =============================================================================
@@ -1398,7 +1414,7 @@ class AIMClient:
         capabilities: Optional[List[str]] = None,
         connection_successful: bool = True,
         health_check_passed: bool = True,
-        connection_latency_ms: int = 0,
+        connection_latency_ms: float = 0.0,
         mcp_url: Optional[str] = None,
         mcp_name: Optional[str] = None
     ) -> Dict:
@@ -1481,7 +1497,7 @@ class AIMClient:
                 "capabilitiesFound": capabilities or [],
                 "connectionSuccessful": connection_successful,
                 "healthCheckPassed": health_check_passed,
-                "connectionLatencyMs": connection_latency_ms,
+                "connectionLatencyMs": float(connection_latency_ms),  # Ensure float for consistent JSON serialization
                 "timestamp": timestamp,
                 "sdkVersion": f"aim-sdk-python@{__version__}",
                 "challenge": challenge  # Include server-generated challenge
@@ -2838,11 +2854,12 @@ def _validate_cached_credentials(
         if sdk_creds:
             try:
                 # Create a temporary token manager to get an access token
+                # Note: suppress_errors=True because we have Ed25519 fallback auth
                 from pathlib import Path
                 temp_creds_path = Path.home() / ".aim" / "temp_validation_creds.json"
                 token_manager = OAuthTokenManager(str(temp_creds_path))
                 token_manager.credentials = sdk_creds
-                access_token = token_manager.get_access_token()
+                access_token = token_manager.get_access_token(suppress_errors=True)
                 if access_token:
                     headers["Authorization"] = f"Bearer {access_token}"
             except Exception:
@@ -2910,6 +2927,7 @@ def register_agent(
     tags: Optional[list] = None,  # Tag IDs to apply during registration
     metadata: Optional[dict] = None,  # Custom metadata (model, department, etc.)
     auto_detect: bool = True,
+    auto_detect_mcp: bool = False,  # Explicitly opt-in to scan user's Claude config for MCP servers
     force_new: bool = False,
     sdk_token_id: Optional[str] = None,
     # Backward compatibility alias
@@ -2952,21 +2970,20 @@ def register_agent(
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
         organization_domain: Organization domain for auto-approval
-        mcp_servers: MCP servers this agent communicates with. Supports two formats:
-            - Simple names: ["github", "filesystem"] - for quick reference only
-            - Full definitions: [{"name": "github", "url": "...", "version": "1.0.0", ...}]
-              Full definition fields:
-              - name (required): MCP server name
-              - url (optional): MCP server endpoint URL
-              - version (optional): Server version
-              - description (optional): Human-readable description
-              - tags (optional): List of tags for categorization
+        mcp_servers: MCP servers this agent communicates with (must be configured in Claude Desktop).
+            - Simple names: ["github", "filesystem"]
+            - With description: [{"name": "github", "description": "GitHub API for code operations"}]
+            The SDK automatically looks up the server configuration from Claude Desktop,
+            discovers capabilities, and derives URL from the Claude config command+args.
+            Only 'name' and optional 'description' are accepted - URL/version are auto-derived.
         capabilities: Override auto-detected capabilities (manual specification).
             Note: On re-registration, new capabilities are REJECTED to prevent
             privilege escalation. Use agent.request_capability() for new capabilities.
         tags: List of tags for categorization (e.g., ["production", "customer-facing"])
         metadata: Custom metadata dict (e.g., {"model": "gpt-4", "department": "support"})
-        auto_detect: Auto-detect capabilities and MCPs (default: True)
+        auto_detect: Auto-detect capabilities and agent type (default: True)
+        auto_detect_mcp: Auto-detect MCP servers from user's Claude config (default: False).
+            Requires explicit opt-in for privacy - set to True to scan Claude config files.
         force_new: Force new registration even if credentials exist
         sdk_token_id: SDK token for usage tracking (auto-loaded if available)
         talks_to: DEPRECATED - Use mcp_servers instead (kept for backward compatibility)
@@ -3005,7 +3022,18 @@ def register_agent(
         >>> from aim_sdk import secure
         >>> agent = secure("my-agent", api_key="aim_abc123")
 
-        # Power User Mode (disable auto-detection):
+        # Explicit MCP Server Mode (recommended):
+        >>> from aim_sdk import secure
+        >>> agent = secure(
+        ...     "my-agent",
+        ...     mcp_servers=["github", "filesystem"]  # Must be in Claude Desktop config
+        ... )
+
+        # Auto-detect MCP from Claude config (requires explicit opt-in):
+        >>> from aim_sdk import secure
+        >>> agent = secure("my-agent", auto_detect_mcp=True)
+
+        # Power User Mode (disable all auto-detection):
         >>> from aim_sdk import secure, AgentType
         >>> agent = secure(
         ...     "my-agent",
@@ -3096,7 +3124,7 @@ def register_agent(
                     token_manager.credentials = existing_creds
                     token_manager.access_token = existing_creds.get("access_token")
 
-                return AIMClient(
+                client = AIMClient(
                     agent_id=existing_creds["agent_id"],
                     public_key=existing_creds["public_key"],
                     private_key=existing_creds["private_key"],
@@ -3104,6 +3132,27 @@ def register_agent(
                     api_key=api_key,  # Pass API key for verification requests
                     oauth_token_manager=token_manager
                 )
+
+                # Register MCP servers even for cached credentials (user may have changed mcp_servers param)
+                if mcp_servers:
+                    # Build headers for MCP registration
+                    _headers = {"Content-Type": "application/json"}
+                    if api_key:
+                        _headers["X-AIM-API-Key"] = api_key
+                    # Split raw mcp_servers into names vs full definitions
+                    _mcp_names = []
+                    _mcp_defs = []
+                    for mcp in mcp_servers:
+                        if isinstance(mcp, str):
+                            _mcp_names.append(mcp)
+                        elif isinstance(mcp, dict):
+                            _mcp_defs.append(mcp)
+                    _start_background_mcp_registration(
+                        client, existing_creds["aim_url"], _headers,
+                        _mcp_names, _mcp_defs, existing_creds["agent_id"]
+                    )
+
+                return client
 
     # 2. Detect authentication mode (SDK vs Manual)
     sdk_creds = load_sdk_credentials()
@@ -3186,8 +3235,9 @@ def register_agent(
             else:
                 console.detection_none("Capabilities")
 
-        # Auto-detect MCP servers (unless manually provided)
-        if not mcp_servers:
+        # Auto-detect MCP servers only if explicitly opted-in via auto_detect_mcp=True
+        # This requires explicit consent to scan user's Claude config files for privacy
+        if auto_detect_mcp and not mcp_servers:
             from .detection import auto_detect_mcps
 
             mcp_detections = auto_detect_mcps()
@@ -3218,22 +3268,42 @@ def register_agent(
     if organization_domain:
         registration_data["organizationDomain"] = organization_domain
 
-    # Process MCP servers: extract names for talksTo, preserve full definitions for later
+    # Process MCP servers: extract names for talksTo
+    # URL is NOT accepted - SDK derives it from Claude Desktop config
     mcp_server_names = []
-    mcp_full_definitions = []  # Store full definitions for post-registration MCP creation
+    mcp_full_definitions = []  # Store definitions for post-registration MCP creation
     if mcp_servers:
         for mcp in mcp_servers:
             if isinstance(mcp, str):
                 # Simple string name
                 mcp_server_names.append(mcp)
             elif isinstance(mcp, dict):
-                # Full definition with name, url, version, etc.
                 mcp_name = mcp.get("name")
-                if mcp_name:
-                    mcp_server_names.append(mcp_name)
-                    mcp_full_definitions.append(mcp)
-                else:
+                if not mcp_name:
                     console.warning(f"MCP server definition missing 'name' field: {mcp}")
+                    continue
+                # Reject URL and version - these are auto-derived from Claude config
+                # Description is allowed since it can't be auto-detected
+                rejected_fields = []
+                if mcp.get("url"):
+                    rejected_fields.append("url")
+                if mcp.get("version"):
+                    rejected_fields.append("version")
+                if rejected_fields:
+                    fields_str = ", ".join(f"'{f}'" for f in rejected_fields)
+                    raise ConfigurationError(
+                        f"MCP server '{mcp_name}' has {fields_str} specified. "
+                        f"These fields are not accepted - the SDK auto-derives them from Claude Desktop config. "
+                        f"Just use: mcp_servers=['{mcp_name}'] or mcp_servers=[{{'name': '{mcp_name}', 'description': '...'}}]"
+                    )
+                mcp_server_names.append(mcp_name)
+                # Keep name and optional description
+                mcp_def = {"name": mcp_name}
+                if mcp.get("description"):
+                    mcp_def["description"] = mcp["description"]
+                mcp_full_definitions.append(mcp_def)
+            else:
+                console.warning(f"Invalid MCP server format (expected str or dict): {mcp}")
         if mcp_server_names:
             registration_data["talksTo"] = mcp_server_names  # Backend expects list of names
 
@@ -3346,6 +3416,13 @@ def _register_via_oauth(
                 aim_url=credentials["aim_url"],
                 oauth_token_manager=token_manager
             )
+
+            # Register MCP servers even for existing agent (user may have added new ones)
+            if mcp_full_definitions or mcp_server_names:
+                _start_background_mcp_registration(
+                    client, aim_url, headers, mcp_server_names, mcp_full_definitions, credentials["agent_id"]
+                )
+
             console.success(f"Connected to existing agent: {name}")
             return client
         else:
@@ -3397,6 +3474,13 @@ def _register_via_oauth(
                 aim_url=credentials["aim_url"],
                 oauth_token_manager=token_manager
             )
+
+            # Register MCP servers even for existing agent (user may have added new ones)
+            if mcp_full_definitions or mcp_server_names:
+                _start_background_mcp_registration(
+                    client, aim_url, headers, mcp_server_names, mcp_full_definitions, credentials["agent_id"]
+                )
+
             console.success(f"Reconnected to existing agent: {name}")
             return client
 
@@ -3564,6 +3648,61 @@ def _register_via_api_key(
     return client
 
 
+def _get_mcp_config_from_claude(server_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Look up MCP server configuration from Claude Desktop config.
+
+    This allows users to register MCPs by name only (e.g., mcp_servers=["github"])
+    when the MCP is already configured in their Claude Desktop.
+
+    Args:
+        server_name: Name of the MCP server to look up
+
+    Returns:
+        Claude Desktop config for the server, or None if not found
+    """
+    try:
+        from .detection import get_mcp_server_config
+        return get_mcp_server_config(server_name)
+    except Exception:
+        return None
+
+
+def _get_cached_mcp_capabilities(
+    client: 'AIMClient',
+    server_names: List[str]
+) -> Dict[str, List[str]]:
+    """
+    Query backend for cached MCP capabilities by server name.
+
+    This avoids running expensive local MCP discovery when capabilities
+    are already cached in the backend from previous registrations.
+
+    Args:
+        client: AIMClient instance for making authenticated requests
+        server_names: List of MCP server names to query
+
+    Returns:
+        Dict mapping server names to their cached capability lists
+    """
+    cached: Dict[str, List[str]] = {}
+
+    for name in server_names:
+        try:
+            endpoint = f"/api/v1/sdk-api/agents/{client.agent_id}/mcp-servers/by-name?name={name}"
+            response = client._make_request("GET", endpoint)
+
+            if response.get("hasCachedCapabilities"):
+                capabilities = response.get("capabilities", [])
+                if capabilities:
+                    cached[name] = capabilities
+        except Exception:
+            # Server doesn't have cached capabilities or request failed
+            pass
+
+    return cached
+
+
 def _start_background_mcp_registration(
     client: AIMClient,
     aim_url: str,
@@ -3577,69 +3716,143 @@ def _start_background_mcp_registration(
 
     Industry pattern: Agent registers immediately, MCP discovery happens async.
     This ensures fast startup regardless of how many MCP servers exist.
+
+    MCP servers MUST be configured in Claude Desktop config. The SDK looks up
+    the server configuration by name and generates a synthetic URL from the
+    command+args for uniqueness. If an MCP is not found in Claude config,
+    an error is logged and that MCP is skipped.
     """
-    import threading
+    # PRE-COMPUTE: Build all definitions and detect capabilities BEFORE starting background thread
+    # This prevents atexit conflicts from subprocess spawning during shutdown
+    all_mcp_definitions = []
+    missing_mcps = []
+
+    # Build a map of user-provided descriptions
+    user_descriptions = {}
+    for mcp_def in mcp_full_definitions:
+        name = mcp_def.get("name")
+        if name and mcp_def.get("description"):
+            user_descriptions[name] = mcp_def["description"]
+
+    # Collect all MCP names from both sources
+    all_names = set(mcp_server_names)
+    for mcp_def in mcp_full_definitions:
+        if mcp_def.get("name"):
+            all_names.add(mcp_def["name"])
+
+    # Look up each MCP in Claude Desktop config - this is now REQUIRED
+    for mcp_name in all_names:
+        claude_config = _get_mcp_config_from_claude(mcp_name)
+        if not claude_config:
+            missing_mcps.append(mcp_name)
+            continue
+
+        # Generate synthetic URL from command+args for uniqueness
+        command = claude_config.get("command", "")
+        args = claude_config.get("args", [])
+        if not command:
+            missing_mcps.append(mcp_name)
+            continue
+
+        synthetic_url = f"stdio://{command}/{'/'.join(str(a) for a in args[:2]) if args else ''}"
+
+        # Use user-provided description if available, otherwise auto-generate
+        description = user_descriptions.get(mcp_name, f"MCP server '{mcp_name}' registered via SDK")
+
+        all_mcp_definitions.append({
+            "name": mcp_name,
+            "description": description,
+            "url": synthetic_url,
+            "version": "1.0.0",
+            "capabilities": [],
+            "_claude_config": claude_config  # For capability discovery
+        })
+
+    # Fail with clear error if any MCP not found in Claude config
+    if missing_mcps:
+        missing_list = ", ".join(f"'{m}'" for m in missing_mcps)
+        console.error(
+            f"MCP server(s) not found in Claude Desktop config: {missing_list}\n"
+            f"Please ensure these MCP servers are configured in your Claude Desktop settings.\n"
+            f"Config file: ~/Library/Application Support/Claude/claude_desktop_config.json"
+        )
+        return  # Don't block agent registration, just skip MCP registration
+
+    if not all_mcp_definitions:
+        return
+
+    # Get server names that need capabilities
+    server_names = [d.get("name") for d in all_mcp_definitions if d.get("name") and not d.get("capabilities")]
+
+    # Step 1: Check backend cache first (fast - no subprocess spawning)
+    cached_capabilities: Dict[str, List[str]] = {}
+    try:
+        if server_names:
+            cached_capabilities = _get_cached_mcp_capabilities(client, server_names)
+            # Apply cached capabilities to definitions
+            for mcp_def in all_mcp_definitions:
+                name = mcp_def.get("name", "")
+                if name in cached_capabilities:
+                    mcp_def["capabilities"] = cached_capabilities[name]
+    except Exception:
+        pass  # Cache lookup failed - will fall back to local discovery
+
+    # Step 2: For servers without cached capabilities, run local discovery
+    # This also gets the real server version from MCP protocol
+    servers_needing_discovery = [
+        name for name in server_names
+        if name not in cached_capabilities
+    ]
+
+    if servers_needing_discovery:
+        try:
+            from aim_sdk.detection import discover_mcp_metadata
+            discovered_metadata = discover_mcp_metadata(
+                server_names=servers_needing_discovery,
+                timeout_per_server=5.0
+            )
+            # Merge discovered metadata (version + capabilities) into definitions
+            for mcp_def in all_mcp_definitions:
+                name = mcp_def.get("name", "")
+                if name in discovered_metadata:
+                    metadata = discovered_metadata[name]
+                    if not mcp_def.get("capabilities"):
+                        mcp_def["capabilities"] = metadata.capabilities
+                    if metadata.version and metadata.version != "unknown":
+                        mcp_def["version"] = metadata.version
+        except Exception:
+            pass  # Detection failed - continue without capabilities
 
     def _background_task():
         try:
-            all_mcp_definitions = list(mcp_full_definitions)
-
-            # Convert simple string names to definitions (skip capability discovery for speed)
-            for mcp_name in mcp_server_names:
-                if any(d.get("name") == mcp_name for d in mcp_full_definitions):
-                    continue
-                simple_def = {
-                    "name": mcp_name,
-                    "description": f"MCP server '{mcp_name}' registered via SDK",
-                    "url": "",
-                    "version": "1.0.0",
-                    "capabilities": []  # Capabilities discovered on-demand later
-                }
-                all_mcp_definitions.append(simple_def)
-
             # Register MCP servers (parallel, with short timeout)
-            if all_mcp_definitions:
-                _register_mcp_servers(client, aim_url, headers, all_mcp_definitions, agent_id)
+            _register_mcp_servers(client, aim_url, headers, all_mcp_definitions, agent_id)
+        except Exception as e:
+            console.warning(f"MCP registration failed: {e}")
 
-            # Report detections for tracking
-            if mcp_server_names:
-                import datetime
-                manual_detections = [
-                    {
-                        "mcpServer": mcp,
-                        "detectionMethod": "manual",
-                        "confidence": 100.0,
-                        "sdkVersion": f"aim-sdk-python@{__version__}",
-                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                        "details": {"source": "sdk_registration", "explicit": True}
-                    }
-                    for mcp in mcp_server_names
-                ]
-                try:
-                    client.report_detections(manual_detections)
-                except Exception:
-                    pass
-        except Exception:
-            pass  # Never fail agent if MCP registration fails
-
-    # Start background thread (daemon=True so it doesn't block program exit)
-    thread = threading.Thread(target=_background_task, daemon=True)
+    # Start background thread (daemon=False so atexit handler can wait for it)
+    thread = threading.Thread(target=_background_task, daemon=False)
     thread.start()
 
     # Store reference for optional waiting
     client._mcp_registration_thread = thread
 
+    # Track thread globally so atexit cleanup can wait for it
+    _pending_mcp_threads.append(thread)
+
 
 def _register_single_mcp(
     client: AIMClient,
     aim_url: str,
-    headers: Dict[str, str],
+    headers: Dict[str, str],  # Legacy param, now unused - client handles auth
     mcp_def: Dict[str, Any],
     agent_id: str,
     detected_capabilities: Dict[str, List[str]]
 ) -> Dict[str, Any]:
     """
     Register a single MCP server (called in parallel).
+
+    Uses the AIMClient's _make_request method for proper Ed25519 authentication.
 
     Returns:
         Dict with 'name', 'success', 'status' ('registered', 'exists', 'failed'), 'error'
@@ -3658,40 +3871,67 @@ def _register_single_mcp(
             "verificationMethod": "agent_attestation"
         }
 
-        # Call the MCP servers API with shorter timeout (10s instead of 30s)
-        url = f"{aim_url.rstrip('/')}/api/v1/mcp-servers"
-        response = requests.post(url, json=mcp_data, headers=headers, timeout=10)
+        # Use direct request instead of _make_request to properly handle 409 response body
+        # The endpoint is /api/v1/sdk-api/agents/:id/mcp-servers
+        import time
+        import json as json_module
+        from nacl.encoding import Base64Encoder
 
-        mcp_server_id = None
-        if response.status_code in [200, 201]:
-            result["success"] = True
-            result["status"] = "registered"
-            try:
-                response_data = response.json()
-                mcp_server_id = response_data.get("id")
-            except Exception:
-                pass
-        elif response.status_code == 409:
-            result["success"] = True
-            result["status"] = "exists"
-            # Fetch existing MCP server ID so we can still attest
-            try:
-                response_data = response.json()
-                mcp_server_id = response_data.get("id") or response_data.get("existingId")
-                # If not in response, try to fetch by name
-                if not mcp_server_id:
-                    list_url = f"{aim_url.rstrip('/')}/api/v1/mcp-servers?search={mcp_name}"
-                    list_resp = requests.get(list_url, headers=headers, timeout=5)
-                    if list_resp.status_code == 200:
-                        servers = list_resp.json().get("servers", [])
+        endpoint = f"/api/v1/sdk-api/agents/{agent_id}/mcp-servers"
+        url = f"{client.aim_url}{endpoint}"
+
+        # Build Ed25519 authentication headers
+        headers = {'Content-Type': 'application/json'}
+        if client.signing_key and client.public_key:
+            timestamp = str(int(time.time()))
+            json_body_str = json_module.dumps(mcp_data, sort_keys=True)
+            message = '\n'.join(['POST', endpoint, timestamp, json_body_str])
+            signature = client.signing_key.sign(message.encode('utf-8')).signature
+            signature_b64 = Base64Encoder.encode(signature).decode('utf-8')
+            headers['X-Agent-ID'] = client.agent_id
+            headers['X-Signature'] = signature_b64
+            headers['X-Timestamp'] = timestamp
+            headers['X-Public-Key'] = client.public_key
+
+        try:
+            response = requests.post(url, data=json_body_str, headers=headers, timeout=15)
+
+            if response.status_code in [200, 201]:
+                result["success"] = True
+                result["status"] = "registered"
+                mcp_server_id = response.json().get("id")
+            elif response.status_code == 409:
+                # 409 Conflict - server already exists (by URL)
+                result["success"] = True
+                result["status"] = "exists"
+                try:
+                    response_data = response.json()
+                    # Backend returns existingId in 409 response
+                    mcp_server_id = response_data.get("existingId") or response_data.get("id")
+                    if not mcp_server_id:
+                        # Fallback: try to find by URL in list
+                        list_endpoint = f"/api/v1/sdk-api/agents/{agent_id}/mcp-servers"
+                        list_response = client._make_request("GET", list_endpoint)
+                        servers = list_response.get("mcpServers", list_response.get("servers", []))
+                        mcp_url = mcp_def.get("url", "")
                         for srv in servers:
-                            if srv.get("name") == mcp_name:
+                            if srv.get("url") == mcp_url or srv.get("name") == mcp_name:
                                 mcp_server_id = srv.get("id")
                                 break
-            except Exception:
-                pass
-        else:
-            result["error"] = f"HTTP {response.status_code}"
+                except Exception:
+                    pass
+            else:
+                try:
+                    error_body = response.json()
+                except:
+                    error_body = response.text[:200]
+                result["error"] = f"HTTP {response.status_code}: {error_body}"
+                return result
+        except requests.Timeout:
+            result["error"] = "timeout"
+            return result
+        except Exception as e:
+            result["error"] = str(e)
             return result
 
         # Auto-attest to the MCP server with detected capabilities
@@ -3714,8 +3954,6 @@ def _register_single_mcp(
             except Exception as e:
                 result["attest_error"] = str(e)
 
-    except requests.Timeout:
-        result["error"] = "timeout"
     except Exception as e:
         result["error"] = str(e)
 
@@ -3742,13 +3980,12 @@ def _register_mcp_servers(
         mcp_definitions: List of MCP server definitions with name, url, version, etc.
         agent_id: ID of the agent registering these servers
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     if not mcp_definitions:
         return
 
-    # First, try to detect MCP capabilities from Claude config
-    detected_capabilities = _detect_mcp_capabilities_from_config()
+    # Note: Capability detection is done in _start_background_mcp_registration
+    # BEFORE this function is called, so capabilities are already in mcp_definitions
+    detected_capabilities: Dict[str, List[str]] = {}
 
     # Use parallel registration for performance (max 10 concurrent)
     max_workers = min(10, len(mcp_definitions))
@@ -3786,10 +4023,14 @@ def _register_mcp_servers(
         console.info(f"{len(existing)} MCP server(s) already exist")
     if failed:
         failed_names = [r.get("name", "?") for r in failed[:3]]  # Show max 3
+        failed_errors = [r.get("error", "unknown") for r in failed[:3]]
         if len(failed) > 3:
             console.warning(f"Failed to register {len(failed)} MCP server(s): {', '.join(failed_names)}... and {len(failed)-3} more")
         else:
             console.warning(f"Failed to register: {', '.join(failed_names)}")
+        # Log first error for debugging
+        if failed_errors and failed_errors[0]:
+            console.warning(f"Error: {failed_errors[0]}")
 
 
 def _detect_mcp_capabilities_from_config(
