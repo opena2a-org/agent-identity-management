@@ -12,6 +12,7 @@ import (
 
 // TestCreateWebhookUnauthorized tests that creating webhook requires authentication
 func TestCreateWebhookUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -30,6 +31,7 @@ func TestCreateWebhookUnauthorized(t *testing.T) {
 
 // TestListWebhooksUnauthorized tests that listing webhooks requires authentication
 func TestListWebhooksUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/webhooks")
@@ -41,6 +43,7 @@ func TestListWebhooksUnauthorized(t *testing.T) {
 
 // TestGetWebhookUnauthorized tests that getting webhook requires authentication
 func TestGetWebhookUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	webhookID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -53,6 +56,7 @@ func TestGetWebhookUnauthorized(t *testing.T) {
 
 // TestDeleteWebhookUnauthorized tests that deleting webhook requires authentication
 func TestDeleteWebhookUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	webhookID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -69,6 +73,7 @@ func TestDeleteWebhookUnauthorized(t *testing.T) {
 
 // TestTestWebhookUnauthorized tests that testing webhook requires authentication
 func TestTestWebhookUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	webhookID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -81,6 +86,7 @@ func TestTestWebhookUnauthorized(t *testing.T) {
 
 // TestCreateWebhookWithInvalidData tests creating webhook with invalid data
 func TestCreateWebhookWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -98,6 +104,7 @@ func TestCreateWebhookWithInvalidData(t *testing.T) {
 
 // TestCreateWebhookWithEmptyEvents tests creating webhook with empty events array
 func TestCreateWebhookWithEmptyEvents(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -116,6 +123,7 @@ func TestCreateWebhookWithEmptyEvents(t *testing.T) {
 
 // TestTestWebhookWithPayload tests webhook test with custom payload
 func TestTestWebhookWithPayload(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	webhookID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -134,4 +142,3 @@ func TestTestWebhookWithPayload(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Should return 401 without auth token")
 }
-

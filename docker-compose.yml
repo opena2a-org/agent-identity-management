@@ -184,22 +184,31 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.backend
     container_name: aim-backend
     environment:
+      # Database Configuration (connects to postgres service)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=identity
       - POSTGRES_SSL_MODE=disable
+      # Redis Configuration (connects to redis service)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production-now}
+      # Security Configuration
+      # NOTE: For production, override these with your own secrets via .env file or environment
+      - JWT_SECRET=${JWT_SECRET:-pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=}
       - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=}
-      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-}
+      # Email Configuration (optional - platform works without email)
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USERNAME=${SMTP_USERNAME:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - ENVIRONMENT=production
+      # Frontend URL for CORS and links
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     ports:
       - "8080:8080"
     depends_on:

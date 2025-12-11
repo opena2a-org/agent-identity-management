@@ -3,6 +3,7 @@ package integration
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,35 @@ func TestHealthEndpointWithInvalidMethod(t *testing.T) {
 // getBaseURL returns the base URL for the API server
 // Override with BACKEND_URL environment variable
 func getBaseURL() string {
+	if url := os.Getenv("BACKEND_URL"); url != "" {
+		return url
+	}
 	// Default to localhost:8080
 	// In CI/CD, set BACKEND_URL environment variable
 	return "http://localhost:8080"
+}
+
+// ensureAIMBackendRunning checks if the AIM backend is running on the expected port
+// This prevents false failures when other services (like Jenkins) occupy the port
+func ensureAIMBackendRunning(t *testing.T) {
+	baseURL := getBaseURL()
+	resp, err := http.Get(baseURL + "/health")
+	if err != nil {
+		t.Skipf("AIM backend not reachable at %s: %v (is the backend running?)", baseURL, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Check if it's actually the AIM backend by verifying the response
+	var healthResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
+		t.Skipf("AIM backend not responding correctly at %s: response is not valid JSON (another service may be running on this port)", baseURL)
+		return
+	}
+
+	// AIM health endpoint returns {"status": "healthy", "service": "agent-identity-management"}
+	if healthResp["service"] != "agent-identity-management" {
+		t.Skipf("AIM backend not running at %s: got service=%v (expected 'agent-identity-management'). Another service may be running on this port.", baseURL, healthResp["service"])
+		return
+	}
 }
