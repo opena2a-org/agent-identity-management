@@ -8,11 +8,13 @@ This manages the JWT tokens embedded in downloaded SDKs for zero-config authenti
 Handles automatic token refresh with token rotation and secure storage.
 """
 
-import os
+import base64
 import json
+import os
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
+
 import requests
 
 from .exceptions import AuthenticationError
@@ -250,7 +252,6 @@ class OAuthTokenManager:
                                 self.credentials['refreshToken'] = new_refresh_token
 
                                 # Update sdkTokenId
-                                import base64
                                 try:
                                     token_parts = new_refresh_token.split('.')
                                     if len(token_parts) == 3:
@@ -271,7 +272,6 @@ class OAuthTokenManager:
 
                                 # Decode new access token expiry
                                 try:
-                                    import base64
                                     payload_part = self.access_token.split('.')[1]
                                     padding = 4 - len(payload_part) % 4
                                     if padding != 4:
@@ -326,7 +326,6 @@ class OAuthTokenManager:
                 self.credentials['refreshToken'] = new_refresh_token
 
                 # Also update sdkTokenId if present in the new token
-                import base64
                 new_token_id_full = None
                 try:
                     # Decode new refresh token to get JTI
@@ -358,8 +357,8 @@ class OAuthTokenManager:
             # Decode token to get expiry (JWT format)
             if self.access_token:
                 try:
-                    # JWT tokens are base64 encoded: header.payload.signature
-                    import base64
+                    # JWT tokens are base64url encoded: header.payload.signature
+                    # Note: base64 here is for decoding JWT claims, NOT for security
                     payload_part = self.access_token.split('.')[1]
                     # Add padding if needed
                     padding = 4 - len(payload_part) % 4
@@ -381,11 +380,14 @@ class OAuthTokenManager:
             return self.access_token
 
         except Exception as e:
+            # token_id is defined earlier in the function, so it should always be available
+            # Use getattr on locals() as a safer alternative to dir() check
+            local_token_id = locals().get('token_id')
             security_logger.log_authentication(
                 AuthnEventType.TOKEN_REFRESH_FAILED,
                 success=False,
                 error=str(e),
-                details={"token_id": token_id if 'token_id' in dir() else None}
+                details={"token_id": local_token_id}
             )
             print(f"⚠️  Warning: Token refresh failed: {e}")
             return None

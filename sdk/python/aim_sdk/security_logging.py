@@ -718,6 +718,11 @@ class SecurityLogger:
 def _get_sdk_version() -> str:
     """Get the SDK version string."""
     try:
+        # Read version from VERSION file directly to avoid circular imports
+        version_file = Path(__file__).parent.parent / "VERSION"
+        if version_file.exists():
+            return f"aim-sdk-python@{version_file.read_text().strip()}"
+        # Fallback to package metadata
         from aim_sdk import __version__
         return f"aim-sdk-python@{__version__}"
     except Exception:

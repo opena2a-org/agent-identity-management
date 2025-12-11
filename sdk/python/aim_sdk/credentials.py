@@ -302,12 +302,13 @@ def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
         try:
             with open(agent_file, 'r') as f:
                 data = json.load(f)
+            agent_id = data.get("agent_id", "")
             security_logger.log_credential_event(
                 CredEventType.CREDENTIAL_LOADED,
                 credential_type="agent",
                 agent_name=agent_name,
                 success=True,
-                details={"source": f"agents/{agent_name}.json", "agent_id": data.get("agent_id", "")[:8] + "..."}
+                details={"source": f"agents/{agent_name}.json", "agent_id": (agent_id[:8] + "...") if agent_id else None}
             )
             return data
         except Exception as e:
@@ -381,6 +382,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
             json.dump(credentials, f, indent=2)
         os.chmod(agent_file, 0o600)
 
+        agent_id = credentials.get("agent_id", "")
         security_logger.log_credential_event(
             CredEventType.CREDENTIAL_SAVED,
             credential_type="agent",
@@ -389,7 +391,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
             details={
                 "path": str(agent_file),
                 "permissions": "0600",
-                "agent_id": credentials.get("agent_id", "")[:8] + "..." if credentials.get("agent_id") else None
+                "agent_id": (agent_id[:8] + "...") if agent_id else None
             }
         )
         return True
