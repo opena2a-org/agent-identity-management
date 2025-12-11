@@ -177,7 +177,8 @@ def aim_verify(
                         )
                     else:
                         # Monitoring mode: warn but continue execution
-                        print(f"⚠️  AIM verification warning: {denial_reason}")
+                        from aim_sdk.console import console
+                        console.warning(f"AIM verification warning: {denial_reason}")
                         try:
                             result = func(*args, **kwargs)
                             # Report that we executed despite denial (monitoring mode)
@@ -236,7 +237,8 @@ def aim_verify(
                     raise
                 else:
                     # Monitoring mode: warn but continue execution
-                    print(f"⚠️  AIM verification warning: {e}")
+                    from aim_sdk.console import console
+                    console.warning(f"AIM verification warning: {e}")
                     try:
                         result = func(*args, **kwargs)
                         # Report that we executed despite verification error
@@ -297,7 +299,8 @@ def _get_or_create_client(agent_name: Optional[str] = None, aim_url: Optional[st
                 return None
 
     except Exception as e:
-        print(f"⚠️  Failed to initialize AIM client: {e}")
+        from aim_sdk.console import console
+        console.warning(f"Failed to initialize AIM client: {e}")
         return None
 
 

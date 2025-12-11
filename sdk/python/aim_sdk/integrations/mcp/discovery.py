@@ -10,8 +10,12 @@ server using the official MCP protocol rather than relying on manual capability 
 """
 
 import asyncio
+import os
 import shlex
+import subprocess
+import sys
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,6 +29,35 @@ except ImportError:
     ClientSession = None
     StdioServerParameters = None
     stdio_client = None
+
+
+def _get_quiet_env() -> Dict[str, str]:
+    """
+    Get environment variables that suppress noisy subprocess output.
+
+    This provides a cleaner UX during MCP capability discovery by hiding
+    noisy output from MCP server initialization (e.g., npm warnings).
+    """
+    env = os.environ.copy()
+
+    # Suppress npm output
+    env["NPM_CONFIG_LOGLEVEL"] = "silent"
+    env["NPM_CONFIG_PROGRESS"] = "false"
+    env["NPM_CONFIG_FUND"] = "false"
+    env["NPM_CONFIG_AUDIT"] = "false"
+    env["NPM_CONFIG_UPDATE_NOTIFIER"] = "false"
+
+    # Suppress npx output
+    env["NPX_CONFIG_LOGLEVEL"] = "silent"
+
+    # Suppress node warnings
+    env["NODE_NO_WARNINGS"] = "1"
+    env["NODE_OPTIONS"] = "--no-warnings"
+
+    # Python-based MCP servers
+    env["PYTHONWARNINGS"] = "ignore"
+
+    return env
 
 
 @dataclass
@@ -159,7 +192,8 @@ def parse_mcp_command(mcp_url: str) -> Tuple[str, List[str]]:
 
 async def _discover_capabilities_async(
     mcp_url: str,
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = 30.0,
+    quiet: bool = True
 ) -> MCPDiscoveryResult:
     """
     Asynchronously discover all capabilities from an MCP server.
@@ -172,6 +206,7 @@ async def _discover_capabilities_async(
     Args:
         mcp_url: MCP server command (e.g., "npx -y @modelcontextprotocol/server-filesystem /tmp")
         timeout_seconds: Maximum time to wait for discovery (default: 30s)
+        quiet: If True, suppress subprocess output for cleaner UX (default: True)
 
     Returns:
         MCPDiscoveryResult containing all discovered capabilities
@@ -190,10 +225,12 @@ async def _discover_capabilities_async(
         # Parse the MCP command
         command, args = parse_mcp_command(mcp_url)
 
-        # Create server parameters
+        # Create server parameters with optional quiet mode env
+        env = _get_quiet_env() if quiet else None
         server_params = StdioServerParameters(
             command=command,
-            args=args
+            args=args,
+            env=env
         )
 
         # Connect to MCP server via stdio
@@ -276,7 +313,8 @@ async def _discover_capabilities_async(
 
 def discover_capabilities(
     mcp_url: str,
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = 30.0,
+    quiet: bool = True
 ) -> MCPDiscoveryResult:
     """
     Discover all capabilities from an MCP server.
@@ -288,6 +326,7 @@ def discover_capabilities(
     Args:
         mcp_url: MCP server command (e.g., "npx -y @modelcontextprotocol/server-filesystem /tmp")
         timeout_seconds: Maximum time to wait for discovery (default: 30s)
+        quiet: If True, suppress subprocess output for cleaner UX (default: True)
 
     Returns:
         MCPDiscoveryResult containing all discovered capabilities
@@ -325,17 +364,17 @@ def discover_capabilities(
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
                     asyncio.run,
-                    _discover_capabilities_async(mcp_url, timeout_seconds)
+                    _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
                 )
                 return future.result(timeout=timeout_seconds)
         else:
             return loop.run_until_complete(
-                _discover_capabilities_async(mcp_url, timeout_seconds)
+                _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
             )
     except RuntimeError:
         # No event loop, create new one
         return asyncio.run(
-            _discover_capabilities_async(mcp_url, timeout_seconds)
+            _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
         )
 
 

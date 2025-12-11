@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import sys
+from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime, timezone
 import importlib.util
@@ -675,3 +676,130 @@ def get_mcp_server_config(server_name: str) -> Optional[Dict[str, Any]]:
         pass
 
     return None
+
+
+@dataclass
+class MCPServerMetadata:
+    """Metadata discovered from an MCP server."""
+    name: str
+    version: str
+    capabilities: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "capabilities": self.capabilities
+        }
+
+
+def _discover_single_server_metadata(
+    detector: 'MCPDetector',
+    server_name: str,
+    server_config: Dict[str, Any],
+    timeout: float
+) -> Tuple[str, MCPServerMetadata]:
+    """Discover metadata (version + capabilities) for a single MCP server."""
+    try:
+        command = server_config.get("command", "")
+        args = server_config.get("args", [])
+
+        if not command:
+            return (server_name, MCPServerMetadata(name=server_name, version="unknown", capabilities=[]))
+
+        mcp_command = f"{command} {' '.join(str(a) for a in args)}"
+
+        from aim_sdk.integrations.mcp.discovery import discover_capabilities
+        result = discover_capabilities(mcp_command, timeout_seconds=timeout)
+
+        return (server_name, MCPServerMetadata(
+            name=server_name,
+            version=result.server_version if result.server_version else "unknown",
+            capabilities=result.all_capability_names if not result.error else []
+        ))
+    except Exception:
+        return (server_name, MCPServerMetadata(name=server_name, version="unknown", capabilities=[]))
+
+
+def discover_mcp_metadata(
+    server_names: Optional[List[str]] = None,
+    timeout_per_server: float = 15.0
+) -> Dict[str, MCPServerMetadata]:
+    """
+    Discover metadata (version + capabilities) for MCP servers from Claude Desktop config.
+
+    Uses parallel execution to query multiple servers concurrently for fast discovery.
+
+    Args:
+        server_names: List of server names to query. If None, queries all servers in config.
+        timeout_per_server: Maximum time to wait for each server (seconds)
+
+    Returns:
+        Dict mapping server names to their MCPServerMetadata (version + capabilities)
+
+    Example:
+        from aim_sdk.detection import discover_mcp_metadata
+
+        # Discover metadata for specific servers
+        metadata = discover_mcp_metadata(["github", "filesystem"])
+        for name, meta in metadata.items():
+            print(f"{name}: v{meta.version}, {len(meta.capabilities)} capabilities")
+
+        # Access individual fields
+        github = metadata.get("github")
+        if github:
+            print(f"GitHub version: {github.version}")
+            print(f"GitHub tools: {github.capabilities[:5]}")
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    detector = MCPDetector()
+    config_path = detector._get_claude_config_path()
+
+    result: Dict[str, MCPServerMetadata] = {}
+
+    if not config_path or not config_path.exists():
+        return result
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        mcp_servers = config.get("mcpServers", {})
+
+        # Filter to requested servers if specified
+        if server_names:
+            mcp_servers = {
+                name: cfg for name, cfg in mcp_servers.items()
+                if name in server_names or any(
+                    sn.lower() in name.lower() for sn in server_names
+                )
+            }
+
+        if not mcp_servers:
+            return result
+
+        # Use parallel discovery for performance (max 10 concurrent)
+        max_workers = min(10, len(mcp_servers))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _discover_single_server_metadata,
+                    detector, server_name, server_config, timeout_per_server
+                ): server_name
+                for server_name, server_config in mcp_servers.items()
+            }
+
+            for future in as_completed(futures, timeout=timeout_per_server * 2):
+                try:
+                    server_name, metadata = future.result(timeout=timeout_per_server)
+                    result[server_name] = metadata
+                except Exception:
+                    # Skip failed servers silently
+                    pass
+
+    except Exception:
+        pass
+
+    return result

@@ -2469,7 +2469,7 @@ class AIMClient:
                         )
                     except Exception as log_error:
                         # Don't fail the function if logging fails
-                        print(f" Warning: Failed to log capability result: {str(log_error)}")
+                        console.warning(f"Failed to log capability result: {str(log_error)}")
 
                     return result
 
@@ -2483,10 +2483,10 @@ class AIMClient:
                         )
                     except Exception as log_error:
                         # Don't fail if logging fails
-                        print(f"  Warning: Failed to log capability failure: {str(log_error)}")
+                        console.warning(f"Failed to log capability failure: {str(log_error)}")
 
                     # Return error result instead of raising
-                    print(f" Error executing capability '{action}': {type(e).__name__}: {str(e)}")
+                    console.error(f"Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
@@ -2559,10 +2559,7 @@ class AIMClient:
                 if kwargs:
                     context["kwargs"] = str(kwargs)
 
-                print(f"\n⏸️  Waiting for approval: {action}...")
-                print(f"   Risk Level: {risk_level.upper()}")
-                print(f"   Check AIM dashboard to approve/deny this capability")
-                print(f"   Timeout: {timeout_seconds} seconds")
+                console.show_jit_awaiting(action, risk_level, timeout_seconds)
 
                 # Request capability verification with extended timeout
                 try:
@@ -2574,9 +2571,8 @@ class AIMClient:
                     )
                 except Exception as e:
                     # Handle any exceptions during verification
-                    print(f" Warning: Verification request failed: {type(e).__name__}: {str(e)}")
-                    print(f"   Capability '{action}' cannot proceed without verification.")
-                    print(f"   Returning error result instead of raising exception.")
+                    console.warning(f"Verification request failed: {type(e).__name__}: {str(e)}")
+                    console.warning(f"Capability '{action}' cannot proceed without verification.")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
@@ -2588,8 +2584,8 @@ class AIMClient:
                 # Check if verification result has an error
                 if verification_result.get("error"):
                     error_msg = verification_result.get("error", "Unknown verification error")
-                    print(f" Warning: Verification returned error: {error_msg}")
-                    print(f"   Capability '{action}' cannot proceed without successful verification.")
+                    console.warning(f"Verification returned error: {error_msg}")
+                    console.warning(f"Capability '{action}' cannot proceed without successful verification.")
                     return {
                         "error": True,
                         "error_type": "VerificationError",
@@ -2600,7 +2596,7 @@ class AIMClient:
 
                 if not verification_result.get("verified", False):
                     reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    print(f" Capability '{action}' DENIED or not verified: {reason}")
+                    console.show_jit_denied(action, reason)
                     return {
                         "error": True,
                         "error_type": "CapabilityDenied",
@@ -2609,7 +2605,7 @@ class AIMClient:
                         "status": "denied"
                     }
 
-                print(f"✅ Capability '{action}' APPROVED by admin")
+                console.show_jit_approved(action)
                 verification_id = verification_result.get("verification_id")
 
                 try:
@@ -2625,7 +2621,7 @@ class AIMClient:
                         )
                     except Exception as log_error:
                         # Don't fail the function if logging fails
-                        print(f"  Warning: Failed to log capability result: {str(log_error)}")
+                        console.warning(f"Failed to log capability result: {str(log_error)}")
 
                     return result
 
@@ -2639,10 +2635,10 @@ class AIMClient:
                         )
                     except Exception as log_error:
                         # Don't fail if logging fails
-                        print(f"  Warning: Failed to log capability failure: {str(log_error)}")
+                        console.warning(f"Failed to log capability failure: {str(log_error)}")
 
                     # Return error result instead of raising
-                    print(f" Error executing capability '{action}': {type(e).__name__}: {str(e)}")
+                    console.error(f"Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {
                         "error": True,
                         "error_type": type(e).__name__,
@@ -2731,7 +2727,8 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
                 caps_list = caps_data
             else:
                 caps_list = caps_data.get("capabilities", [])
-            existing_caps = {cap.get("action") for cap in caps_list if isinstance(cap, dict)}
+            # Backend returns capabilityType (e.g., "db:read") not action
+            existing_caps = {cap.get("capabilityType") or cap.get("action") for cap in caps_list if isinstance(cap, dict)}
 
         # Identify capability changes
         requested_caps = set(capabilities)
@@ -2758,6 +2755,60 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
 
     except Exception as e:
         console.warning(f"Failed to check capabilities: {e}")
+
+
+def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags: List[str]):
+    """
+    Sync tags for an existing agent.
+
+    This adds any tags that aren't already associated with the agent.
+    Tags can be either UUIDs or tag names/keys. If a name is provided,
+    the backend will find or create the tag automatically.
+
+    Args:
+        aim_url: AIM server URL
+        headers: Request headers with auth token
+        agent_id: Agent ID
+        tags: List of tag IDs or tag names
+    """
+    try:
+        # Get existing tags for this agent
+        get_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/tags"
+        get_response = requests.get(get_url, headers=headers, timeout=30)
+
+        existing_tag_keys = set()
+        if get_response.status_code == 200:
+            tags_data = get_response.json()
+            # Extract tag keys from response
+            if isinstance(tags_data, list):
+                existing_tag_keys = {t.get("key") for t in tags_data if isinstance(t, dict)}
+            elif isinstance(tags_data, dict) and "tags" in tags_data:
+                existing_tag_keys = {t.get("key") for t in tags_data["tags"] if isinstance(t, dict)}
+
+        # Identify which tags need to be added
+        requested_tags = set(tags)
+        new_tags = requested_tags - existing_tag_keys
+
+        if not new_tags:
+            return  # All tags already applied
+
+        # Add new tags via POST /agents/{id}/tags
+        add_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/tags"
+        add_response = requests.post(
+            add_url,
+            json={"tagIds": list(new_tags)},
+            headers=headers,
+            timeout=30
+        )
+
+        if add_response.status_code in [200, 201]:
+            console.success(f"Applied {len(new_tags)} tag(s): {', '.join(new_tags)}")
+        else:
+            error_msg = add_response.json().get("error", "Unknown error")
+            console.warning(f"Failed to apply tags: {error_msg}")
+
+    except Exception as e:
+        console.warning(f"Failed to sync tags: {e}")
 
 
 def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
@@ -3426,6 +3477,10 @@ def _register_via_oauth(
             if registration_data.get("capabilities"):
                 _update_agent_capabilities(aim_url, headers, existing_agent["id"], registration_data["capabilities"])
 
+            # Sync tags for existing agent (user may have changed tags param)
+            if registration_data.get("tagIds"):
+                _sync_agent_tags(aim_url, headers, existing_agent["id"], registration_data["tagIds"])
+
             client = AIMClient(
                 agent_id=credentials["agent_id"],
                 public_key=credentials["public_key"],
@@ -3483,6 +3538,10 @@ def _register_via_oauth(
             # Update capabilities if new ones provided
             if registration_data.get("capabilities"):
                 _update_agent_capabilities(aim_url, headers, existing_agent["id"], registration_data["capabilities"])
+
+            # Sync tags for existing agent (user may have changed tags param)
+            if registration_data.get("tagIds"):
+                _sync_agent_tags(aim_url, headers, existing_agent["id"], registration_data["tagIds"])
 
             client = AIMClient(
                 agent_id=credentials["agent_id"],
