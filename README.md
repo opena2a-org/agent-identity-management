@@ -176,29 +176,19 @@ Navigate to **Settings → SDK Download** in the dashboard.
 ```python
 from aim_sdk import secure, AgentType
 
-# ══════════════════════════════════════════════════════════════════════════
-# AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
-# ══════════════════════════════════════════════════════════════════════════
+# Note - Agent Registration only requires Agent's Name & Capabilities
 agent = secure(
     "my-ai-assistant",
     agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
     capabilities=["db:read", "api:call"],
-    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
+    mcp_servers=["filesystem"],
+    version="1.0.0", # Note: version defaults to "1.0.0" if undeclared
     description="Customer support AI agent",
     tags=["production", "customer-facing", "gpt-4", "support-team"],
     metadata={
         "model": "gpt-4",
         "department": "support"
-    },
-    # Remove to use MCP auto-detect from Claude Desktop config
-    mcp_servers=[
-        {
-            "name": "github",
-            "url": "https://api.github.com",
-            "version": "1.0.0",
-            "description": "GitHub API MCP server"
-        },
-    ]
+    }  
 )
 
 # All actions are now verified, logged, and monitored
@@ -215,6 +205,29 @@ Watch the dashboard update in real-time as your agent registers and performs act
 ---
 
 ## SDK Features
+
+### SDK Parameters Reference
+
+The `secure()` function accepts the following parameters:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | str | Yes | Unique agent identifier |
+| `agent_type` | AgentType | No | Agent type (auto-detected from imports) |
+| `capabilities` | list | No | Capabilities to grant (e.g., `["db:read", "api:call"]`) |
+| `mcp_servers` | list | No | MCP servers the agent uses (e.g., `["filesystem"]`) |
+| `tags` | list | No | Tags for categorization (auto-created if they don't exist) |
+| `metadata` | dict | No | Custom metadata (model, department, owner, etc.) |
+| `description` | str | No | Human-readable agent description |
+| `version` | str | No | Agent version (default: `"1.0.0"`) |
+| `force_new` | bool | No | Force new registration even if cached credentials exist (default: `False`) |
+
+**Credential Caching**: The SDK caches agent credentials locally (`~/.aim/agents/`). Use `force_new=True` to force a fresh registration when you need to update tags, metadata, or other settings.
+
+```python
+# Re-register with updated settings
+agent = secure("my-agent", tags=["new-tag"], force_new=True)
+```
 
 ### What the SDK Does Automatically
 
