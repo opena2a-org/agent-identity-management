@@ -313,25 +313,20 @@ func (s *DetectionService) GetDetectionStatus(
 		response.Protocol = protocol.String
 	}
 
-	// 4. Get ALL connected MCPs from talks_to with their detection metadata
-	// This query shows all servers in Connections tab, enriched with detection data
+	// 4. Get ONLY auto-detected MCPs from agent_mcp_detections table
+	// These are MCPs discovered by SDK runtime monitoring (not explicit mcp_servers=[])
+	// Explicitly registered MCPs are shown in "Manually Connected" section via GetAgentMCPServers
 	rows, err := s.db.QueryContext(ctx, `
-		WITH connected_mcps AS (
-			SELECT jsonb_array_elements_text(talks_to) as mcp_name
-			FROM agents WHERE id = $1
-		)
 		SELECT
-			t.mcp_name,
-			COALESCE(ARRAY_AGG(DISTINCT d.detection_method::text) FILTER (WHERE d.detection_method IS NOT NULL), ARRAY['manual']::text[]) as methods,
-			COALESCE(AVG(d.confidence_score), 0) as avg_confidence,
+			d.mcp_server_name,
+			ARRAY_AGG(DISTINCT d.detection_method::text) as methods,
+			AVG(d.confidence_score) as avg_confidence,
 			MIN(d.first_detected_at) as first_detected,
-			MAX(d.last_seen_at) as last_seen,
-			CASE WHEN COUNT(d.mcp_server_name) = 0 THEN true ELSE false END as is_manual
-		FROM connected_mcps t
-		LEFT JOIN agent_mcp_detections d
-			ON d.agent_id = $1 AND d.mcp_server_name = t.mcp_name
-		GROUP BY t.mcp_name
-		ORDER BY is_manual ASC, last_seen DESC NULLS LAST
+			MAX(d.last_seen_at) as last_seen
+		FROM agent_mcp_detections d
+		WHERE d.agent_id = $1
+		GROUP BY d.mcp_server_name
+		ORDER BY last_seen DESC NULLS LAST
 	`, agentID)
 
 	if err != nil {
@@ -342,21 +337,25 @@ func (s *DetectionService) GetDetectionStatus(
 	for rows.Next() {
 		var mcp domain.DetectedMCPSummary
 		var methods []string
-		var isManual bool
 		var firstDetectedNull, lastSeenNull sql.NullTime
 
 		err := rows.Scan(&mcp.Name, pq.Array(&methods), &mcp.ConfidenceScore,
-			&firstDetectedNull, &lastSeenNull, &isManual)
+			&firstDetectedNull, &lastSeenNull)
 		if err != nil {
 			continue
 		}
 
+		// All MCPs from agent_mcp_detections are auto-detected (not manual)
+		mcp.IsManual = false
+
 		// Handle nullable timestamps
 		if firstDetectedNull.Valid {
-			mcp.FirstDetected = firstDetectedNull.Time
+			t := firstDetectedNull.Time
+			mcp.FirstDetected = &t
 		}
 		if lastSeenNull.Valid {
-			mcp.LastSeen = lastSeenNull.Time
+			t := lastSeenNull.Time
+			mcp.LastSeen = &t
 		}
 
 		// Convert methods to DetectionMethod type
@@ -364,15 +363,13 @@ func (s *DetectionService) GetDetectionStatus(
 			mcp.DetectedBy = append(mcp.DetectedBy, domain.DetectionMethod(m))
 		}
 
-		// Boost confidence if multiple detection methods (only for auto-detected)
-		if !isManual {
-			methodCount := len(mcp.DetectedBy)
-			if methodCount >= 2 {
-				mcp.ConfidenceScore = min(99.0, mcp.ConfidenceScore+10)
-			}
-			if methodCount >= 3 {
-				mcp.ConfidenceScore = min(99.0, mcp.ConfidenceScore+20)
-			}
+		// Boost confidence if multiple detection methods
+		methodCount := len(mcp.DetectedBy)
+		if methodCount >= 2 {
+			mcp.ConfidenceScore = min(99.0, mcp.ConfidenceScore+10)
+		}
+		if methodCount >= 3 {
+			mcp.ConfidenceScore = min(99.0, mcp.ConfidenceScore+20)
 		}
 
 		response.DetectedMCPs = append(response.DetectedMCPs, mcp)

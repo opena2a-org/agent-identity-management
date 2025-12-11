@@ -40,41 +40,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_tags_tag ON agent_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_server_tags_server ON mcp_server_tags(mcp_server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_server_tags_tag ON mcp_server_tags(tag_id);
 
--- Create trigger function to enforce Community Edition 3-tag limit for agents
-CREATE OR REPLACE FUNCTION enforce_community_edition_agent_tag_limit()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF (SELECT COUNT(*) FROM agent_tags WHERE agent_id = NEW.agent_id) >= 3 THEN
-        RAISE EXCEPTION 'Community Edition: Maximum 3 tags per agent. Upgrade to Enterprise for unlimited tags.';
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger for agent tag limit
+-- NOTE: Tag limits removed - Community Edition now has unlimited tags
+-- Drop any existing tag limit triggers (cleanup from previous versions)
 DROP TRIGGER IF EXISTS enforce_agent_tag_limit ON agent_tags;
-CREATE TRIGGER enforce_agent_tag_limit
-BEFORE INSERT ON agent_tags
-FOR EACH ROW
-EXECUTE FUNCTION enforce_community_edition_agent_tag_limit();
-
--- Create trigger function to enforce Community Edition 3-tag limit for MCP servers
-CREATE OR REPLACE FUNCTION enforce_community_edition_mcp_tag_limit()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF (SELECT COUNT(*) FROM mcp_server_tags WHERE mcp_server_id = NEW.mcp_server_id) >= 3 THEN
-        RAISE EXCEPTION 'Community Edition: Maximum 3 tags per MCP server. Upgrade to Enterprise for unlimited tags.';
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger for MCP server tag limit
 DROP TRIGGER IF EXISTS enforce_mcp_server_tag_limit ON mcp_server_tags;
-CREATE TRIGGER enforce_mcp_server_tag_limit
-BEFORE INSERT ON mcp_server_tags
-FOR EACH ROW
-EXECUTE FUNCTION enforce_community_edition_mcp_tag_limit();
+DROP FUNCTION IF EXISTS enforce_community_edition_agent_tag_limit();
+DROP FUNCTION IF EXISTS enforce_community_edition_mcp_tag_limit();
 
 -- Add comments for documentation
 COMMENT ON TABLE tags IS 'Tags for organizing agents and MCP servers (Sprint 1)';

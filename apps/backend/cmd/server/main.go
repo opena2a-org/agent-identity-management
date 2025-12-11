@@ -275,6 +275,7 @@ func main() {
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest)    // SDK capability request creation
 	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                               // SDK MCP registration (create new MCP server)
 	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                 // SDK list MCP servers for agent's org
+	sdkAPI.Get("/agents/:id/mcp-servers/by-name", h.MCP.GetMCPServerByName)                    // SDK get MCP by name (capability caching)
 	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)            // SDK record agent-MCP connection (use_mcp_tool)
 	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)         // SDK MCP supply chain usage analytics
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                    // SDK MCP detection and integration reporting
@@ -696,6 +697,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Capability,
 			services.Tag,              // ✅ For fetching agent tags in responses
 			repos.Organization,        // ✅ For enforcement mode lookup in verify-capability
+			services.MCPAttestation,   // ✅ For getting MCP connections via attestations
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
@@ -1076,6 +1078,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Get("/", h.MCP.ListMCPServers)
 	mcpServers.Get("/graph", h.MCPGraph.GetConnectionGraph)         // ✅ MCP-Agent network graph (must be before /:id routes)
 	mcpServers.Get("/discovered", h.MCPDiscovery.GetDiscoveredMCPs) // ✅ MCP Discovery dashboard (must be before /:id routes)
+	mcpServers.Get("/by-name", h.MCP.GetMCPServerByName)            // ✅ Get MCP by name (for SDK capability caching)
 	mcpServers.Post("/", middleware.MemberMiddleware(), h.MCP.CreateMCPServer)
 	mcpServers.Get("/:id", h.MCP.GetMCPServer)
 	mcpServers.Put("/:id", middleware.MemberMiddleware(), h.MCP.UpdateMCPServer)

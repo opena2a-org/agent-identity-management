@@ -32,19 +32,21 @@ type AgentMCPConnection struct {
 }
 
 // AttestationPayload represents the data that an agent attests to about an MCP server
-// IMPORTANT: Fields MUST be in alphabetical order by JSON key name to match SDK canonical JSON
+// IMPORTANT: Fields MUST be in alphabetical order by camelCase JSON key name to match SDK canonical JSON
 // SDK uses Python's json.dumps(sort_keys=True) which produces alphabetically sorted keys
+// SDK sends: agentId, capabilitiesFound, challenge, connectionLatencyMs, connectionSuccessful,
+//            healthCheckPassed, mcpName, mcpUrl, sdkVersion, timestamp
 type AttestationPayload struct {
-	AgentID              string   `json:"agent_id"`                // 1. agent_id
-	CapabilitiesFound    []string `json:"capabilities_found"`      // 2. capabilities_found
-	Challenge            string   `json:"challenge,omitempty"`     // 2.5. challenge (server nonce for proof of key possession)
-	ConnectionLatencyMs  float64  `json:"connection_latency_ms"`   // 3. connection_latency_ms
-	ConnectionSuccessful bool     `json:"connection_successful"`   // 4. connection_successful
-	HealthCheckPassed    bool     `json:"health_check_passed"`     // 5. health_check_passed
-	MCPName              string   `json:"mcp_name"`                // 6. mcp_name
-	MCPURL               string   `json:"mcp_url"`                 // 7. mcp_url
-	SDKVersion           string   `json:"sdk_version"`             // 8. sdk_version
-	Timestamp            string   `json:"timestamp"`               // 9. timestamp
+	AgentID              string   `json:"agentId"`              // 1. agentId
+	CapabilitiesFound    []string `json:"capabilitiesFound"`    // 2. capabilitiesFound
+	Challenge            string   `json:"challenge,omitempty"`  // 3. challenge (server nonce for proof of key possession)
+	ConnectionLatencyMs  float64  `json:"connectionLatencyMs"`  // 4. connectionLatencyMs
+	ConnectionSuccessful bool     `json:"connectionSuccessful"` // 5. connectionSuccessful
+	HealthCheckPassed    bool     `json:"healthCheckPassed"`    // 6. healthCheckPassed
+	MCPName              string   `json:"mcpName"`              // 7. mcpName
+	MCPURL               string   `json:"mcpUrl"`               // 8. mcpUrl
+	SDKVersion           string   `json:"sdkVersion"`           // 9. sdkVersion
+	Timestamp            string   `json:"timestamp"`            // 10. timestamp
 }
 
 // AttestationChallenge represents a server-generated nonce for proof of private key possession
@@ -61,9 +63,11 @@ type AttestationChallenge struct {
 
 // ToCanonicalJSON converts attestation payload to canonical JSON for signature verification
 // CRITICAL: Must match SDK's canonical JSON format exactly:
-// - Sorted keys (alphabetically by JSON key name)
+// - Sorted keys (alphabetically by camelCase JSON key name)
 // - No whitespace (compact JSON)
 // - Consistent float formatting (Python's json.dumps formats 35.0 as "35.0", not "35")
+// SDK sends: agentId, capabilitiesFound, challenge, connectionLatencyMs, connectionSuccessful,
+//            healthCheckPassed, mcpName, mcpUrl, sdkVersion, timestamp
 func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
 	// Build ordered map to match Python's json.dumps(sort_keys=True) exactly
 	// We use a custom approach because:
@@ -72,9 +76,9 @@ func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
 
 	parts := []string{}
 
-	// Fields in alphabetical order by JSON key name
-	parts = append(parts, formatJSONField("agent_id", ap.AgentID))
-	parts = append(parts, formatJSONArray("capabilities_found", ap.CapabilitiesFound))
+	// Fields in alphabetical order by camelCase JSON key name (matching SDK)
+	parts = append(parts, formatJSONField("agentId", ap.AgentID))
+	parts = append(parts, formatJSONArray("capabilitiesFound", ap.CapabilitiesFound))
 
 	// Challenge is optional - only include if non-empty (matches Python's behavior)
 	if ap.Challenge != "" {
@@ -82,12 +86,12 @@ func (ap *AttestationPayload) ToCanonicalJSON() ([]byte, error) {
 	}
 
 	// Format float with decimal point to match Python's behavior
-	parts = append(parts, formatJSONFloat("connection_latency_ms", ap.ConnectionLatencyMs))
-	parts = append(parts, formatJSONBool("connection_successful", ap.ConnectionSuccessful))
-	parts = append(parts, formatJSONBool("health_check_passed", ap.HealthCheckPassed))
-	parts = append(parts, formatJSONField("mcp_name", ap.MCPName))
-	parts = append(parts, formatJSONField("mcp_url", ap.MCPURL))
-	parts = append(parts, formatJSONField("sdk_version", ap.SDKVersion))
+	parts = append(parts, formatJSONFloat("connectionLatencyMs", ap.ConnectionLatencyMs))
+	parts = append(parts, formatJSONBool("connectionSuccessful", ap.ConnectionSuccessful))
+	parts = append(parts, formatJSONBool("healthCheckPassed", ap.HealthCheckPassed))
+	parts = append(parts, formatJSONField("mcpName", ap.MCPName))
+	parts = append(parts, formatJSONField("mcpUrl", ap.MCPURL))
+	parts = append(parts, formatJSONField("sdkVersion", ap.SDKVersion))
 	parts = append(parts, formatJSONField("timestamp", ap.Timestamp))
 
 	// Build final JSON object
