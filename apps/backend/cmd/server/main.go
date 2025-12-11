@@ -87,6 +87,9 @@ func main() {
 	// Initialize repositories
 	repos, oauthRepo := initRepositories(db)
 
+	// Wire up alert repository to MCPCapability repository for drift alerts
+	repos.MCPCapability.SetAlertRepository(repos.Alert)
+
 	// Initialize cache (optional - skip if Redis is unavailable)
 	var cacheService *cache.RedisCache
 	if redisClient != nil {

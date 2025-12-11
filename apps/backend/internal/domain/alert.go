@@ -20,6 +20,7 @@ const (
 	AlertTypeConfigurationDrift   AlertType = "configuration_drift"
 	AlertLowTrustAttestation      AlertType = "low_trust_attestation"       // Low-trust agent attempted MCP attestation
 	AlertLowTrustAttestationBlock AlertType = "low_trust_attestation_block" // Low-trust agent blocked from attestation
+	AlertMCPCapabilityDrift       AlertType = "mcp_capability_drift"        // MCP server capability added/removed/stale
 )
 
 // AlertSeverity represents alert severity level

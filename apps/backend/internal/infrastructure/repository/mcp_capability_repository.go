@@ -10,11 +10,17 @@ import (
 )
 
 type MCPServerCapabilityRepository struct {
-	db *sql.DB
+	db        *sql.DB
+	alertRepo *AlertRepository
 }
 
 func NewMCPServerCapabilityRepository(db *sql.DB) *MCPServerCapabilityRepository {
 	return &MCPServerCapabilityRepository{db: db}
+}
+
+// SetAlertRepository sets the alert repository for creating drift alerts
+func (r *MCPServerCapabilityRepository) SetAlertRepository(alertRepo *AlertRepository) {
+	r.alertRepo = alertRepo
 }
 
 func (r *MCPServerCapabilityRepository) Create(capability *domain.MCPServerCapability) error {
@@ -302,6 +308,7 @@ type CapabilityDriftStats struct {
 
 // GetCapabilityDriftAlerts detects capability changes by comparing current vs recently verified capabilities
 // Returns alerts for capabilities that were added (never seen before) or removed/stale (not verified recently)
+// Also creates real alerts in the alerts table for the security dashboard
 func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID, days int) ([]CapabilityDriftAlert, *CapabilityDriftStats, error) {
 	var alerts []CapabilityDriftAlert
 	stats := &CapabilityDriftStats{}
@@ -461,7 +468,87 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 
 	stats.TotalAlerts = len(alerts)
 
+	// Create real alerts in the alerts table for new drift events
+	if r.alertRepo != nil {
+		r.createRealAlertsForDrift(orgID, alerts)
+	}
+
 	return alerts, stats, nil
+}
+
+// createRealAlertsForDrift creates alerts in the alerts table for drift events that don't already have alerts
+func (r *MCPServerCapabilityRepository) createRealAlertsForDrift(orgID uuid.UUID, driftAlerts []CapabilityDriftAlert) {
+	for _, drift := range driftAlerts {
+		// Check if alert already exists for this capability drift
+		// Use capability ID + drift type as unique identifier
+		existingQuery := `
+			SELECT COUNT(*) FROM alerts
+			WHERE organization_id = $1
+			  AND alert_type = $2
+			  AND metadata->>'capabilityId' = $3
+			  AND metadata->>'driftType' = $4
+			  AND is_acknowledged = false
+		`
+		var count int
+		err := r.db.QueryRow(existingQuery, orgID, domain.AlertMCPCapabilityDrift, drift.ID, drift.DriftType).Scan(&count)
+		if err != nil || count > 0 {
+			// Alert already exists or error checking, skip
+			continue
+		}
+
+		// Map severity string to domain severity
+		var severity domain.AlertSeverity
+		switch drift.Severity {
+		case "high":
+			severity = domain.AlertSeverityHigh
+		case "medium":
+			severity = domain.AlertSeverityWarning
+		default:
+			severity = domain.AlertSeverityInfo
+		}
+
+		// Build alert title based on drift type
+		var title string
+		switch drift.DriftType {
+		case "added":
+			title = fmt.Sprintf("New MCP Capability Detected: %s", drift.CapabilityName)
+		case "removed":
+			title = fmt.Sprintf("MCP Capability Removed: %s", drift.CapabilityName)
+		case "stale":
+			title = fmt.Sprintf("MCP Capability Not Verified: %s", drift.CapabilityName)
+		default:
+			title = fmt.Sprintf("MCP Capability Drift: %s", drift.CapabilityName)
+		}
+
+		mcpServerID, _ := uuid.Parse(drift.MCPServerID)
+
+		alert := &domain.Alert{
+			ID:             uuid.New(),
+			OrganizationID: orgID,
+			AlertType:      domain.AlertMCPCapabilityDrift,
+			Severity:       severity,
+			Title:          title,
+			Description:    drift.Description,
+			ResourceType:   "mcp_server",
+			ResourceID:     mcpServerID,
+			AgentName:      drift.MCPServerName,
+			IsAcknowledged: false,
+			CreatedAt:      time.Now(),
+			Metadata: map[string]interface{}{
+				"capabilityId":   drift.ID,
+				"capabilityName": drift.CapabilityName,
+				"capabilityType": drift.CapabilityType,
+				"driftType":      drift.DriftType,
+				"mcpServerId":    drift.MCPServerID,
+				"mcpServerName":  drift.MCPServerName,
+			},
+		}
+
+		if err := r.alertRepo.Create(alert); err != nil {
+			// Log but don't fail - alerts are supplementary
+			fmt.Printf("Failed to create drift alert: %v\n", err)
+		}
+	}
 }
 
 // UpsertFromAttestation syncs capabilities discovered during attestation
