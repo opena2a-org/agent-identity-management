@@ -393,6 +393,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 		WHERE agent_id = $1
 		AND created_at >= NOW() - INTERVAL '1 hour'
 		AND resource_type IS NOT NULL
+		AND resource_type != ''
 		AND (resource_type, resource_id) NOT IN (
 			SELECT DISTINCT resource_type, resource_id
 			FROM verification_events
@@ -400,6 +401,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 			AND created_at >= NOW() - INTERVAL '7 days'
 			AND created_at < NOW() - INTERVAL '1 hour'
 			AND resource_type IS NOT NULL
+			AND resource_type != ''
 		)
 	`, agentID)
 
@@ -421,7 +423,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 			continue
 		}
 
-		if resourceType.Valid {
+		if resourceType.Valid && resourceType.String != "" {
 			alerts = append(alerts, &domain.Alert{
 				OrganizationID: orgID,
 				AlertType:      domain.AlertUnusualActivity,

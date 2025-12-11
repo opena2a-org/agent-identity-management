@@ -538,16 +538,28 @@ def auto_detect_mcps(
     return detector.detect_all()
 
 
+def _discover_single_server_capabilities(
+    detector: 'MCPDetector',
+    server_name: str,
+    server_config: Dict[str, Any],
+    timeout: float
+) -> Tuple[str, List[str]]:
+    """Discover capabilities for a single MCP server (for parallel execution)."""
+    try:
+        tools, _ = detector.discover_mcp_tools(server_name, server_config, timeout=timeout)
+        return (server_name, tools or [])
+    except Exception:
+        return (server_name, [])
+
+
 def discover_mcp_capabilities(
     server_names: Optional[List[str]] = None,
-    timeout_per_server: float = 10.0
+    timeout_per_server: float = 15.0  # 15s per server (runs in parallel)
 ) -> Dict[str, List[str]]:
     """
     Discover actual capabilities (tools) for MCP servers from Claude Desktop config.
 
-    This function reads your Claude Desktop configuration, finds the specified
-    MCP servers (or all if none specified), starts each one, and queries for
-    its available tools using the MCP protocol.
+    Uses parallel execution to query multiple servers concurrently for fast discovery.
 
     Args:
         server_names: List of server names to query. If None, queries all servers in config.
@@ -568,6 +580,8 @@ def discover_mcp_capabilities(
         for name, tools in all_caps.items():
             print(f"{name}: {len(tools)} tools")
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     detector = MCPDetector()
     config_path = detector._get_claude_config_path()
 
@@ -591,18 +605,28 @@ def discover_mcp_capabilities(
                 )
             }
 
-        for server_name, server_config in mcp_servers.items():
-            tools, error = detector.discover_mcp_tools(
-                server_name,
-                server_config,
-                timeout=timeout_per_server
-            )
+        if not mcp_servers:
+            return result
 
-            if tools:
-                result[server_name] = tools
-            elif error:
-                # Store empty list but log error internally
-                result[server_name] = []
+        # Use parallel discovery for performance (max 10 concurrent)
+        max_workers = min(10, len(mcp_servers))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _discover_single_server_capabilities,
+                    detector, server_name, server_config, timeout_per_server
+                ): server_name
+                for server_name, server_config in mcp_servers.items()
+            }
+
+            for future in as_completed(futures, timeout=timeout_per_server * 2):
+                try:
+                    server_name, tools = future.result(timeout=timeout_per_server)
+                    result[server_name] = tools
+                except Exception:
+                    # Skip failed servers silently
+                    pass
 
     except Exception:
         pass

@@ -62,14 +62,15 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 
 // CreateMCPServerRequest represents the request to create an MCP server
 type CreateMCPServerRequest struct {
-	Name            string   `json:"name" validate:"required"`
-	Description     string   `json:"description"`
-	URL             string   `json:"url" validate:"required,url"`
-	Version         string   `json:"version"`
-	PublicKey       string   `json:"publicKey"`
-	VerificationURL string   `json:"verificationUrl"`
-	Capabilities    []string `json:"capabilities"`
-	TagIds          []string `json:"tagIds,omitempty"` // ✅ Tags to apply during registration
+	Name              string   `json:"name" validate:"required"`
+	Description       string   `json:"description"`
+	URL               string   `json:"url" validate:"required,url"`
+	Version           string   `json:"version"`
+	PublicKey         string   `json:"publicKey"`
+	VerificationURL   string   `json:"verificationUrl"`
+	Capabilities      []string `json:"capabilities"`
+	TagIds            []string `json:"tagIds,omitempty"`          // ✅ Tags to apply during registration
+	RegisteredByAgent string   `json:"registeredByAgent,omitempty"` // ✅ Agent ID when SDK registers MCP
 }
 
 // UpdateMCPServerRequest represents the request to update an MCP server
@@ -97,7 +98,36 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	// Check if MCP server with this URL already exists
 	existing, _ := s.mcpRepo.GetByURL(req.URL)
 	if existing != nil {
-		return nil, fmt.Errorf("mcp server with this URL already exists")
+		// ✅ Even if MCP server exists, create agent-MCP connection for THIS agent
+		// This allows multiple agents to register connections to the same MCP server
+		if agentID != nil && s.connectionRepo != nil {
+			// Check if connection already exists
+			existingConn, _ := s.connectionRepo.GetByAgentAndMCPServer(ctx, *agentID, existing.ID)
+			if existingConn == nil {
+				now := time.Now().UTC()
+				connection := &domain.AgentMCPConnection{
+					ID:               uuid.New(),
+					AgentID:          *agentID,
+					MCPServerID:      existing.ID,
+					DetectionID:      nil,
+					ConnectionType:   domain.ConnectionTypeUserRegistered,
+					FirstConnectedAt: now,
+					LastAttestedAt:   nil,
+					AttestationCount: 0,
+					IsActive:         true,
+					CreatedAt:        now,
+					UpdatedAt:        now,
+				}
+
+				if err := s.connectionRepo.Create(ctx, connection); err != nil {
+					fmt.Printf("⚠️  Warning: Failed to create agent-MCP connection for agent %s and existing MCP %s: %v\n", agentID, existing.Name, err)
+				} else {
+					fmt.Printf("✅ Created agent-MCP connection for agent %s → existing MCP server %s\n", agentID, existing.Name)
+				}
+			}
+		}
+		// Return error with existing server ID for 409 response
+		return existing, fmt.Errorf("mcp server with this URL already exists")
 	}
 
 	// ✅ AUTOMATIC KEY GENERATION - Zero effort for developers
