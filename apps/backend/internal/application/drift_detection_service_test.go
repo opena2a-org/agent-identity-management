@@ -82,6 +82,11 @@ func (m *MockAgentRepository) UpdateLastActive(ctx context.Context, agentID uuid
 	return args.Error(0)
 }
 
+func (m *MockAgentRepository) IncrementViolationCount(agentID uuid.UUID) error {
+	args := m.Called(agentID)
+	return args.Error(0)
+}
+
 // MockAlertRepository mocks the AlertRepository interface
 type MockAlertRepository struct {
 	mock.Mock
