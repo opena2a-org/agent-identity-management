@@ -228,27 +228,48 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
 
 
 def _find_sdk_package_credentials() -> Optional[Dict[str, Any]]:
-    """Find SDK credentials in the installed package (for fresh downloads)."""
+    """
+    Find SDK credentials in the installed package (for fresh downloads).
+
+    Search order:
+    1. Current working directory .aim/sdk_credentials.json
+    2. SDK package root .aim/sdk_credentials.json
+    3. Legacy locations with credentials.json
+    """
+    search_paths = []
+
+    # 1. Current working directory (when user runs from extracted SDK folder)
+    cwd = Path.cwd()
+    search_paths.append(cwd / ".aim" / "sdk_credentials.json")
+    search_paths.append(cwd / ".aim" / "credentials.json")
+
+    # 2. SDK package installation directory
     try:
         import aim_sdk
         sdk_root = Path(aim_sdk.__file__).parent.parent
-
-        # Check new location in package
-        new_path = sdk_root / ".aim" / "sdk_credentials.json"
-        if new_path.exists():
-            with open(new_path, 'r') as f:
-                return json.load(f)
-
-        # Check legacy location in package
-        legacy_path = sdk_root / ".aim" / "credentials.json"
-        if legacy_path.exists():
-            with open(legacy_path, 'r') as f:
-                data = json.load(f)
-            if detect_credential_type(data) == CredentialType.SDK_OAUTH:
-                return data
-
+        search_paths.append(sdk_root / ".aim" / "sdk_credentials.json")
+        search_paths.append(sdk_root / ".aim" / "credentials.json")
     except Exception:
         pass
+
+    # 3. Parent directories (if running from subdirectory of SDK)
+    for parent in cwd.parents:
+        aim_dir = parent / ".aim"
+        if aim_dir.exists():
+            search_paths.append(aim_dir / "sdk_credentials.json")
+            search_paths.append(aim_dir / "credentials.json")
+            break  # Only check first parent with .aim
+
+    # Search all paths
+    for path in search_paths:
+        if path.exists():
+            try:
+                with open(path, 'r') as f:
+                    data = json.load(f)
+                if detect_credential_type(data) == CredentialType.SDK_OAUTH:
+                    return data
+            except Exception:
+                continue
 
     return None
 

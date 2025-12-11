@@ -158,7 +158,7 @@ export default function SDKDownloadPage() {
                     ✅ Stable Release
                   </span>
                   <span className="inline-flex items-center px-2 py-1 rounded text-sm font-mono font-medium bg-gray-100 text-gray-700">
-                    v1.7.0
+                    v1.9.0
                   </span>
                 </div>
               </div>
