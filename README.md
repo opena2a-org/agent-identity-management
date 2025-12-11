@@ -176,7 +176,9 @@ Navigate to **Settings → SDK Download** in the dashboard.
 ```python
 from aim_sdk import secure, AgentType
 
-# Full-featured agent registration
+# ══════════════════════════════════════════════════════════════════════════
+# AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
+# ══════════════════════════════════════════════════════════════════════════
 agent = secure(
     "my-ai-assistant",
     agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
@@ -188,7 +190,15 @@ agent = secure(
         "model": "gpt-4",
         "department": "support"
     },
-    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+    # Remove to use MCP auto-detect from Claude Desktop config
+    mcp_servers=[
+        {
+            "name": "github",
+            "url": "https://api.github.com",
+            "version": "1.0.0",
+            "description": "GitHub API MCP server"
+        },
+    ]
 )
 
 # All actions are now verified, logged, and monitored
