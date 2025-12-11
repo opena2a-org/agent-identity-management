@@ -1896,10 +1896,10 @@ class AIMClient:
                 capabilities=["db:read", "file:write"]
             )
 
-            print(f"Created agent: {new_agent['id']}")
-            print(f"Store these credentials securely!")
-            print(f"  Public Key: {new_agent['public_key']}")
-            print(f"  Private Key: {new_agent['private_key']}")
+            # SECURITY: Never print private keys - they're saved to secure file storage
+            # Credentials are stored in ~/.aim/agents/{name}.json with 0600 permissions
+            print(f"✅ Created agent: {new_agent['id']}")
+            print(f"🔐 Credentials saved to: ~/.aim/agents/{name}.json")
 
         Raises:
             ConfigurationError: If name is missing or invalid

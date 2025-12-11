@@ -40,7 +40,7 @@ setup(
     install_requires=[
         "requests>=2.28.0",
         "PyNaCl>=1.5.0",  # Ed25519 signing
-        "cryptography>=41.0.0",  # REQUIRED: Secure credential encryption
+        "cryptography>=43.0.1",  # REQUIRED: Secure credential encryption (CVE-2023-50782 fix)
         "keyring>=24.0.0",  # REQUIRED: System keyring for encryption keys
     ],
     extras_require={
@@ -48,12 +48,12 @@ setup(
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
             "pytest-mock>=3.10.0",
-            "black>=23.0.0",
+            "black>=24.3.0",  # CVE-2024-48 fix
             "flake8>=6.0.0",
             "mypy>=1.0.0",
         ],
         "mcp": [
-            "mcp>=1.0.0",  # Official MCP SDK for auto-discovery
+            "mcp>=1.23.0",  # Official MCP SDK (CVE-2025-53366, CVE-2025-66416 fix)
             "anyio>=4.0.0",  # Async runtime for MCP client
         ],
         "rich": [
