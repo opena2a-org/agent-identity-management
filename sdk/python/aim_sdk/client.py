@@ -3375,7 +3375,24 @@ def _register_via_oauth(
     access_token = token_manager.get_access_token()
 
     if not access_token:
-        raise ConfigurationError("Failed to obtain OAuth access token")
+        # Check if there are any cached credentials for this agent that we could use
+        # This provides a better error message when OAuth is expired but agent exists
+        from pathlib import Path
+        agent_creds_path = Path.home() / ".aim" / "agents" / f"{name}.json"
+        if agent_creds_path.exists():
+            # Agent has credentials but OAuth token expired - inform user
+            raise ConfigurationError(
+                f"OAuth token expired but agent '{name}' has cached credentials.\n"
+                f"The SDK OAuth token needs to be refreshed. Download a new SDK from your AIM dashboard.\n"
+                f"Your agent credentials at {agent_creds_path} are still valid."
+            )
+        else:
+            # No credentials at all - this is a new agent registration that failed
+            raise ConfigurationError(
+                f"Cannot register new agent '{name}': OAuth access token failed.\n"
+                f"This happens when your SDK OAuth token has expired or been revoked.\n"
+                f"To fix: Download a fresh SDK from your AIM dashboard (Settings → SDK Downloads)."
+            )
 
     # Set up headers for API calls
     headers = {
