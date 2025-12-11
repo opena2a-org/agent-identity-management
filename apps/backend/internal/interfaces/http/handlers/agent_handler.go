@@ -23,6 +23,7 @@ type AgentHandler struct {
 	capabilityService        *application.CapabilityService
 	tagService               *application.TagService              // ✅ For fetching agent tags in responses
 	orgRepo                  domain.OrganizationRepository        // ✅ For enforcement mode lookup
+	attestationService       *application.MCPAttestationService   // ✅ For getting MCP connections via attestations
 }
 
 func NewAgentHandler(
@@ -36,6 +37,7 @@ func NewAgentHandler(
 	capabilityService *application.CapabilityService,
 	tagService *application.TagService,
 	orgRepo domain.OrganizationRepository, // ✅ For enforcement mode lookup
+	attestationService *application.MCPAttestationService, // ✅ For MCP connections via attestations
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -48,6 +50,7 @@ func NewAgentHandler(
 		capabilityService:        capabilityService,
 		tagService:               tagService,
 		orgRepo:                  orgRepo,
+		attestationService:       attestationService,
 	}
 }
 
@@ -1117,30 +1120,78 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// Resolve talks_to entries to full MCP server details
-	// Each entry can be a UUID (server ID) or a name
+	// Return MCP server details with connection metadata
 	type MCPServerSummary struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description,omitempty"`
-		Status      string `json:"status"`
-		URL         string `json:"url,omitempty"`
+		ID           string   `json:"id"`
+		Name         string   `json:"name"`
+		Description  string   `json:"description,omitempty"`
+		Status       string   `json:"status"`
+		URL          string   `json:"url,omitempty"`
+		Source       string   `json:"source,omitempty"`       // "attestation" or "talks_to"
+		Capabilities []string `json:"capabilities,omitempty"` // Cached capabilities
 	}
 
-	mcpServers := make([]MCPServerSummary, 0)
+	// Use a map to deduplicate by ID
+	mcpServerMap := make(map[string]MCPServerSummary)
+
+	// PRIORITY 1: Get MCP servers from agent_mcp_connections table (attestations)
+	// This is the primary source of truth for agent-MCP relationships
+	if h.attestationService != nil {
+		attestedServers, err := h.attestationService.GetMCPServersForAgent(c.Context(), agentID)
+		if err == nil {
+			for _, server := range attestedServers {
+				if server != nil && server.OrganizationID == orgID {
+					mcpServerMap[server.ID.String()] = MCPServerSummary{
+						ID:           server.ID.String(),
+						Name:         server.Name,
+						Description:  server.Description,
+						Status:       string(server.Status),
+						URL:          server.URL,
+						Source:       "attestation",
+						Capabilities: server.Capabilities,
+					}
+				}
+			}
+		}
+	}
+
+	// PRIORITY 2: Also include MCP servers from agent.TalksTo (legacy/manual mapping)
+	// This provides backwards compatibility for agents mapped via UI
+	// Build a set of names already added from attestations to avoid duplicates
+	existingNames := make(map[string]bool)
+	for _, summary := range mcpServerMap {
+		existingNames[summary.Name] = true
+	}
+
 	for _, entry := range agent.TalksTo {
+		// Skip if we already have a server with this name from attestations
+		if existingNames[entry] {
+			continue
+		}
+
 		// Try to parse as UUID first
 		if serverID, parseErr := uuid.Parse(entry); parseErr == nil {
+			// Skip if already added from attestations
+			if _, exists := mcpServerMap[serverID.String()]; exists {
+				continue
+			}
 			// It's a UUID, look up by ID
 			server, lookupErr := h.mcpService.GetMCPServer(c.Context(), serverID)
 			if lookupErr == nil && server != nil && server.OrganizationID == orgID {
-				mcpServers = append(mcpServers, MCPServerSummary{
-					ID:          server.ID.String(),
-					Name:        server.Name,
-					Description: server.Description,
-					Status:      string(server.Status),
-					URL:         server.URL,
-				})
+				// Skip if name already exists
+				if existingNames[server.Name] {
+					continue
+				}
+				mcpServerMap[server.ID.String()] = MCPServerSummary{
+					ID:           server.ID.String(),
+					Name:         server.Name,
+					Description:  server.Description,
+					Status:       string(server.Status),
+					URL:          server.URL,
+					Source:       "talks_to",
+					Capabilities: server.Capabilities,
+				}
+				existingNames[server.Name] = true
 			}
 		} else {
 			// It's a name, look up all servers and find by name
@@ -1148,18 +1199,34 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 			if listErr == nil {
 				for _, server := range servers {
 					if server.Name == entry {
-						mcpServers = append(mcpServers, MCPServerSummary{
-							ID:          server.ID.String(),
-							Name:        server.Name,
-							Description: server.Description,
-							Status:      string(server.Status),
-							URL:         server.URL,
-						})
+						// Skip if already added by ID or name
+						if _, exists := mcpServerMap[server.ID.String()]; exists {
+							continue
+						}
+						if existingNames[server.Name] {
+							continue
+						}
+						mcpServerMap[server.ID.String()] = MCPServerSummary{
+							ID:           server.ID.String(),
+							Name:         server.Name,
+							Description:  server.Description,
+							Status:       string(server.Status),
+							URL:          server.URL,
+							Source:       "talks_to",
+							Capabilities: server.Capabilities,
+						}
+						existingNames[server.Name] = true
 						break
 					}
 				}
 			}
 		}
+	}
+
+	// Convert map to slice
+	mcpServers := make([]MCPServerSummary, 0, len(mcpServerMap))
+	for _, server := range mcpServerMap {
+		mcpServers = append(mcpServers, server)
 	}
 
 	return c.JSON(fiber.Map{

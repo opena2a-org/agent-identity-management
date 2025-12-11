@@ -85,8 +85,9 @@ type DetectedMCPSummary struct {
 	Name            string            `json:"name"`
 	ConfidenceScore float64           `json:"confidenceScore"`
 	DetectedBy      []DetectionMethod `json:"detectedBy"`
-	FirstDetected   time.Time         `json:"firstDetected"`
-	LastSeen        time.Time         `json:"lastSeen"`
+	FirstDetected   *time.Time        `json:"firstDetected,omitempty"`  // Pointer to omit zero time for manual MCPs
+	LastSeen        *time.Time        `json:"lastSeen,omitempty"`       // Pointer to omit zero time for manual MCPs
+	IsManual        bool              `json:"isManual"`                 // True if manually added (not auto-detected by SDK)
 }
 
 // AgentCapabilityReport represents a capability detection report from SDK

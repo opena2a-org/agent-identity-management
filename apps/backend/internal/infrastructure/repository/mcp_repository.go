@@ -326,6 +326,81 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 	return server, nil
 }
 
+// GetByName retrieves an MCP server by name within an organization
+// This allows SDK clients to check if capabilities are cached before running discovery
+func (r *MCPServerRepository) GetByName(orgID uuid.UUID, name string) (*domain.MCPServer, error) {
+	query := `
+		SELECT
+			id, organization_id, name, description, url, version,
+			public_key, status, is_verified, last_verified_at, verification_url,
+			capabilities, trust_score, registered_by_agent, created_by, created_at, updated_at,
+			verification_method, attestation_count, confidence_score, last_attested_at
+		FROM mcp_servers
+		WHERE organization_id = $1 AND name = $2
+	`
+
+	server := &domain.MCPServer{}
+	var capabilitiesJSON []byte
+	var description sql.NullString
+	var version sql.NullString
+	var publicKey sql.NullString
+	var verificationURL sql.NullString
+
+	err := r.db.QueryRow(query, orgID, name).Scan(
+		&server.ID,
+		&server.OrganizationID,
+		&server.Name,
+		&description,
+		&server.URL,
+		&version,
+		&publicKey,
+		&server.Status,
+		&server.IsVerified,
+		&server.LastVerifiedAt,
+		&verificationURL,
+		&capabilitiesJSON,
+		&server.TrustScore,
+		&server.RegisteredByAgent,
+		&server.CreatedBy,
+		&server.CreatedAt,
+		&server.UpdatedAt,
+		&server.VerificationMethod,
+		&server.AttestationCount,
+		&server.ConfidenceScore,
+		&server.LastAttestedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("mcp server not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get mcp server: %w", err)
+	}
+
+	// Convert nullable fields
+	if description.Valid {
+		server.Description = description.String
+	}
+	if version.Valid {
+		server.Version = version.String
+	}
+	if publicKey.Valid {
+		server.PublicKey = publicKey.String
+	}
+	if verificationURL.Valid {
+		server.VerificationURL = verificationURL.String
+	}
+
+	// Unmarshal capabilities from JSONB
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &server.Capabilities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal capabilities: %w", err)
+		}
+	}
+
+	return server, nil
+}
+
 func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 	query := `
 		UPDATE mcp_servers

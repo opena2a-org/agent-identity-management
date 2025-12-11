@@ -303,6 +303,45 @@ func (h *MCPHandler) GetMCPServer(c fiber.Ctx) error {
 	return c.JSON(h.enrichMCPServerResponse(c, server))
 }
 
+// GetMCPServerByName retrieves an MCP server by name (for SDK capability caching)
+// @Summary Get MCP server by name
+// @Description Get details of an MCP server by name - useful for SDK capability caching
+// @Tags mcp-servers
+// @Produce json
+// @Param name query string true "MCP Server name"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/mcp-servers/by-name [get]
+func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	name := c.Query("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Name query parameter is required",
+		})
+	}
+
+	server, err := h.mcpService.GetMCPServerByName(c.Context(), orgID, name)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "MCP server not found",
+			"name":    name,
+			"message": "No cached capabilities available - SDK should run local discovery",
+		})
+	}
+
+	// Return server with capabilities (for SDK caching)
+	return c.JSON(fiber.Map{
+		"id":           server.ID,
+		"name":         server.Name,
+		"url":          server.URL,
+		"capabilities": server.Capabilities,
+		"hasCachedCapabilities": len(server.Capabilities) > 0,
+		"toolCount":    len(server.Capabilities),
+	})
+}
+
 // UpdateMCPServer updates an MCP server
 // @Summary Update MCP server
 // @Description Update an existing MCP server

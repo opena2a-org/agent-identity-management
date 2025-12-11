@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,6 +90,50 @@ func isValidAgentType(agentType domain.AgentType) bool {
 	return validTypes[agentType]
 }
 
+// sanitizeTalksTo validates and cleans up TalksTo entries
+// - Splits comma-separated values into individual entries
+// - Trims whitespace from each entry
+// - Removes empty entries
+// - Returns a clean slice of MCP server names
+func sanitizeTalksTo(talksTo []string) []string {
+	if len(talksTo) == 0 {
+		return talksTo
+	}
+
+	sanitized := make([]string, 0, len(talksTo))
+	seen := make(map[string]bool)
+
+	for _, entry := range talksTo {
+		// Trim whitespace
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		// Check if entry contains comma (malformed: "memory,aws-terraform" instead of ["memory", "aws-terraform"])
+		if strings.Contains(entry, ",") {
+			// Split and add individual entries
+			parts := strings.Split(entry, ",")
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part != "" && !seen[part] {
+					sanitized = append(sanitized, part)
+					seen[part] = true
+					fmt.Printf("⚠️  Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
+				}
+			}
+		} else {
+			// Valid single entry
+			if !seen[entry] {
+				sanitized = append(sanitized, entry)
+				seen[entry] = true
+			}
+		}
+	}
+
+	return sanitized
+}
+
 // CreateAgentRequest represents agent creation request
 type CreateAgentRequest struct {
 	Name             string                 `json:"name"`
@@ -119,6 +164,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	if !isValidAgentType(req.AgentType) {
 		return nil, fmt.Errorf("invalid agent_type: %s", req.AgentType)
 	}
+
+	// ✅ Validate and sanitize TalksTo entries
+	// Reject malformed entries (e.g., comma-separated values in a single string)
+	req.TalksTo = sanitizeTalksTo(req.TalksTo)
 
 	// ✅ KEY MANAGEMENT - Support both SDK-provided and auto-generated keys
 	var publicKeyBase64 string
@@ -1341,18 +1390,24 @@ func (s *AgentService) AddMCPServers(
 		return nil, nil, fmt.Errorf("agent not found: %w", err)
 	}
 
-	// 2. Initialize talks_to if nil
+	// 2. Sanitize input identifiers (handle malformed entries like "memory,aws-terraform")
+	mcpServerIdentifiers = sanitizeTalksTo(mcpServerIdentifiers)
+
+	// 3. Initialize talks_to if nil, and sanitize existing entries
 	if agent.TalksTo == nil {
 		agent.TalksTo = []string{}
+	} else {
+		// Sanitize any existing malformed entries
+		agent.TalksTo = sanitizeTalksTo(agent.TalksTo)
 	}
 
-	// 3. Create a map to track existing entries (prevent duplicates)
+	// 4. Create a map to track existing entries (prevent duplicates)
 	existingMap := make(map[string]bool)
 	for _, existing := range agent.TalksTo {
 		existingMap[existing] = true
 	}
 
-	// 4. Add new MCP servers (only unique ones)
+	// 5. Add new MCP servers (only unique ones)
 	addedServers := []string{}
 	for _, identifier := range mcpServerIdentifiers {
 		if !existingMap[identifier] {
@@ -1362,7 +1417,7 @@ func (s *AgentService) AddMCPServers(
 		}
 	}
 
-	// 5. Update agent in database
+	// 6. Update agent in database
 	if len(addedServers) > 0 {
 		if err := s.agentRepo.Update(agent); err != nil {
 			return nil, nil, fmt.Errorf("failed to update agent: %w", err)

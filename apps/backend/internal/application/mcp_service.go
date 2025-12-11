@@ -125,7 +125,36 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 					fmt.Printf("✅ Created agent-MCP connection for agent %s → existing MCP server %s\n", agentID, existing.Name)
 				}
 			}
+
+			// ✅ Always ensure agent's talks_to field contains this MCP server
+			// This handles both new connections and existing connections created before this fix
+			s.updateAgentTalksTo(*agentID, existing.Name)
 		}
+
+		// ✅ Update capabilities and version if new ones were detected by the registering agent
+		// This allows capability discovery and version info to improve over time as more agents attest
+		needsUpdate := false
+
+		if len(req.Capabilities) > 0 && len(existing.Capabilities) == 0 {
+			existing.Capabilities = req.Capabilities
+			needsUpdate = true
+		}
+
+		// Update version if a real version was discovered (not "1.0.0" placeholder or empty)
+		if req.Version != "" && req.Version != "1.0.0" && (existing.Version == "" || existing.Version == "1.0.0") {
+			existing.Version = req.Version
+			needsUpdate = true
+		}
+
+		if needsUpdate {
+			existing.UpdatedAt = time.Now().UTC()
+			if err := s.mcpRepo.Update(existing); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to update existing MCP %s: %v\n", existing.Name, err)
+			} else {
+				fmt.Printf("✅ Updated existing MCP server %s (version: %s, capabilities: %d)\n", existing.Name, existing.Version, len(existing.Capabilities))
+			}
+		}
+
 		// Return error with existing server ID for 409 response
 		return existing, fmt.Errorf("mcp server with this URL already exists")
 	}
@@ -266,6 +295,9 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 			// Don't fail the entire operation if connection creation fails
 		} else {
 			fmt.Printf("✅ Created agent-MCP connection for agent %s → MCP server %s\n", agentID, server.Name)
+
+			// ✅ Also update agent's talks_to field so GetMCPServerAgents can find this connection
+			s.updateAgentTalksTo(*agentID, server.Name)
 		}
 	}
 
@@ -314,6 +346,12 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 // GetMCPServer retrieves an MCP server by ID
 func (s *MCPService) GetMCPServer(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error) {
 	return s.mcpRepo.GetByID(id)
+}
+
+// GetMCPServerByName retrieves an MCP server by name within an organization
+// This is useful for SDK clients to check if capabilities are cached before running discovery
+func (s *MCPService) GetMCPServerByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.MCPServer, error) {
+	return s.mcpRepo.GetByName(orgID, name)
 }
 
 // ListMCPServers lists all MCP servers for an organization
@@ -771,4 +809,89 @@ func (s *MCPService) GetConnectedAgentsCount(ctx context.Context, mcpServerID uu
 		return 0, err
 	}
 	return len(agents), nil
+}
+
+// updateAgentTalksTo adds an MCP server name to an agent's talks_to field
+// This ensures GetMCPServerAgents can find the connection
+func (s *MCPService) updateAgentTalksTo(agentID uuid.UUID, mcpServerName string) {
+	if s.agentRepo == nil {
+		return
+	}
+
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Failed to get agent %s for talks_to update: %v\n", agentID, err)
+		return
+	}
+
+	// Initialize talks_to if nil
+	if agent.TalksTo == nil {
+		agent.TalksTo = []string{}
+	}
+
+	// Sanitize existing talks_to entries (fix any malformed entries from legacy registrations)
+	agent.TalksTo = sanitizeTalksToEntries(agent.TalksTo)
+
+	// Check if MCP server is already in talks_to
+	for _, existing := range agent.TalksTo {
+		if existing == mcpServerName {
+			// Already present, no update needed (but still save sanitized version)
+			if err := s.agentRepo.Update(agent); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to sanitize agent %s talks_to: %v\n", agentID, err)
+			}
+			return
+		}
+	}
+
+	// Add the MCP server name to talks_to
+	agent.TalksTo = append(agent.TalksTo, mcpServerName)
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		fmt.Printf("⚠️  Warning: Failed to update agent %s talks_to: %v\n", agentID, err)
+	} else {
+		fmt.Printf("✅ Updated agent %s talks_to with MCP server %s\n", agentID, mcpServerName)
+	}
+}
+
+// sanitizeTalksToEntries cleans up malformed talks_to entries
+// - Splits comma-separated values into individual entries
+// - Trims whitespace from each entry
+// - Removes empty entries
+func sanitizeTalksToEntries(talksTo []string) []string {
+	if len(talksTo) == 0 {
+		return talksTo
+	}
+
+	sanitized := make([]string, 0, len(talksTo))
+	seen := make(map[string]bool)
+
+	for _, entry := range talksTo {
+		// Trim whitespace
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		// Check if entry contains comma (malformed: "memory,aws-terraform" instead of ["memory", "aws-terraform"])
+		if strings.Contains(entry, ",") {
+			// Split and add individual entries
+			parts := strings.Split(entry, ",")
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part != "" && !seen[part] {
+					sanitized = append(sanitized, part)
+					seen[part] = true
+					fmt.Printf("⚠️  Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
+				}
+			}
+		} else {
+			// Valid single entry
+			if !seen[entry] {
+				sanitized = append(sanitized, entry)
+				seen[entry] = true
+			}
+		}
+	}
+
+	return sanitized
 }
