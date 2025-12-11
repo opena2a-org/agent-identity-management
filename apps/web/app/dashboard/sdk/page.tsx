@@ -16,29 +16,32 @@ agent = secure(
     "my-ai-assistant",
     agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
     capabilities=["db:read", "api:call"],
-    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
+    mcp_servers=["filesystem"],
+    version="1.0.0", # Note: version defaults to "1.0.0" if undeclared
     description="Customer support AI agent",
     tags=["production", "customer-facing", "gpt-4", "support-team"],
     metadata={
         "model": "gpt-4",
         "department": "support"
-    },
-    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+    }
 )
 
 # ══════════════════════════════════════════════════════════════════════════
 # TRACK ACTIONS & RISKS - Log all agent activities in AIM
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------
 # AIM verifies agent has db:read and approve or reject action
 @agent.perform_action(capability="db:read")  # auto: low risk
 def get_customer(customer_id: str):
     return {"id": customer_id, "name": "Jane Doe"}
-# ------------------------------------------------------------------------------
-# @agent.perform_action(capability="text:generate")  # auto: low risk
+result = get_customer("cust-123")
+print(f"Result: {result}")
+
+# -----------------------------------------------------------
+# @agent.perform_action(capability="text:generate") # auto: low risk
 # def generate_response(prompt: str):
 #     return llm.generate(prompt)
 
-# @agent.perform_action(capability="sentiment:analyze")  # auto: low risk
+# @agent.perform_action(capability="sentiment:analyze") # auto: low risk
 # def analyze_sentiment(text: str):
 #     return {"sentiment": "positive", "score": 0.92}
 
@@ -61,8 +64,7 @@ def get_customer(customer_id: str):
 #     reason="Need admin access for migration",
 #     metadata={
 #         "use_case": "quarterly migration",
-#         "expires": "2025-01-01"
-#     }
+#         "expires": "2025-01-01"}
 # )`
 
 export default function SDKDownloadPage() {
@@ -158,7 +160,7 @@ export default function SDKDownloadPage() {
                     ✅ Stable Release
                   </span>
                   <span className="inline-flex items-center px-2 py-1 rounded text-sm font-mono font-medium bg-gray-100 text-gray-700">
-                    v1.13.0
+                    v1.14.0
                   </span>
                 </div>
               </div>

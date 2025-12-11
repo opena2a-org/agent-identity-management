@@ -241,6 +241,7 @@ function SupplyChainPage() {
   );
   const [driftAlerts, setDriftAlerts] = useState<CapabilityDriftAlert[]>([]);
   const [driftAlertCount, setDriftAlertCount] = useState(0);
+  const [unmappedMcpCount, setUnmappedMcpCount] = useState(0);
 
   // Filters and pagination
   const [mcpSearchFilter, setMcpSearchFilter] = useState("");
@@ -369,6 +370,15 @@ function SupplyChainPage() {
 
       // Update stats with drift alert count
       setStats((prev) => prev ? { ...prev, capabilityDriftAlerts: driftCount } : null);
+
+      // Fetch unmapped MCP count from discovery endpoint
+      try {
+        const discoveryResponse = await api.getDiscoveredMCPs();
+        setUnmappedMcpCount(discoveryResponse.totalUnmapped || 0);
+      } catch (discoveryError) {
+        console.error("Failed to fetch discovered MCPs:", discoveryError);
+        setUnmappedMcpCount(0);
+      }
     } catch (error) {
       console.error("Failed to fetch supply chain data:", error);
     } finally {
@@ -510,12 +520,11 @@ function SupplyChainPage() {
           suffix={`/ ${stats?.totalConnections || 0}`}
         />
         <StatCard
-          icon={TrendingUp}
-          label="Avg Confidence Score"
-          value={stats?.avgConfidenceScore.toFixed(1) || "0"}
-          suffix="%"
+          icon={AlertCircle}
+          label="Unmapped MCPs"
+          value={unmappedMcpCount}
           changeType={
-            (stats?.avgConfidenceScore || 0) >= 70 ? "positive" : "negative"
+            unmappedMcpCount > 0 ? "negative" : "positive"
           }
         />
       </div>
@@ -717,9 +726,6 @@ function SupplyChainPage() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Confidence
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Attestations
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -737,7 +743,7 @@ function SupplyChainPage() {
               {paginatedMcpServers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                   >
                     <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -774,9 +780,6 @@ function SupplyChainPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={server.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <ConfidenceScoreBadge score={server.confidenceScore || 0} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {server.attestationCount || 0}
