@@ -134,14 +134,14 @@ agent = secure(
     "my-ai-assistant",
     agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
     capabilities=["db:read", "api:call"],
+    mcp_servers=["filesystem"],
     version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
     description="Customer support AI agent",
     tags=["production", "customer-facing", "gpt-4", "support-team"],
     metadata={
         "model": "gpt-4",
         "department": "support"
-    },
-    mcp_servers=["github", "filesystem"],  # Remove to use mcp auto detect
+    }
 )
 ```
 
@@ -457,6 +457,28 @@ agent = secure("my-agent", capabilities=["api:call", "db:read"])
 agent = secure("my-agent", auto_detect=False, capabilities=["db:read", "db:write"])
 ```
 
+## Advanced Options
+
+### Force New Credentials (`force_new`)
+
+By default, the SDK caches credentials locally in `~/.aim/agents/{name}.json`. Use `force_new=True` to bypass cached credentials and reconnect to the backend:
+
+```python
+# Force a fresh connection (ignores local credential cache)
+agent = secure(
+    "my-agent",
+    force_new=True  # Bypasses local cache, reconnects to backend
+)
+```
+
+**When to use `force_new=True`:**
+- Your cached credentials became stale (e.g., after database reset)
+- You want to update agent metadata or capabilities on the server
+- You're debugging credential issues
+- Testing credential rotation
+
+**Note:** If an agent with the same name already exists on the server, `force_new=True` will reconnect to it (with fresh local credentials). To create a completely new agent, use a different name.
+
 ## 📁 SDK Structure
 
 ```
@@ -476,7 +498,7 @@ sdk/python/
 ├── demos/                # Demo projects
 ├── README.md             # This file
 ├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.4.0)
+├── VERSION               # Current SDK version (1.14.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -535,7 +557,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.8.0
+**Current Version**: 1.14.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -544,7 +566,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.8.0"
+print(aim_sdk.__version__)  # "1.14.0"
 ```
 
 **See Also**:

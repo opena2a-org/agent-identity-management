@@ -387,6 +387,16 @@ class AIMConsole:
         else:
             print(f"✓ {message}")
 
+    def debug(self, message: str):
+        """Display debug message (only when not in quiet mode and DEBUG env is set)."""
+        import os
+        if self.quiet or not os.environ.get("AIM_DEBUG"):
+            return
+        if RICH_AVAILABLE:
+            self.console.print(f"[dim]🔍 {message}[/]")
+        else:
+            print(f"🔍 {message}")
+
 
 # Global console instance for the SDK
 console = AIMConsole()
