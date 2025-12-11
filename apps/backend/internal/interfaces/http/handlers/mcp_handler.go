@@ -148,6 +148,14 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		})
 	}
 
+	// ✅ If SDK passes RegisteredByAgent in request body, use it for connection tracking
+	// This allows OAuth-authenticated requests to still create agent-MCP connections
+	if req.RegisteredByAgent != "" && agentID == nil {
+		if parsedAgentID, err := uuid.Parse(req.RegisteredByAgent); err == nil {
+			agentID = &parsedAgentID
+		}
+	}
+
 	// ✅ Extract SDK token ID from context (set by SDK token tracking middleware)
 	var sdkTokenID *uuid.UUID
 	if sdkTokenIDLocal := c.Locals("sdk_token_id"); sdkTokenIDLocal != nil {
@@ -169,11 +177,17 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	// SECURITY: No error logging to prevent information leakage
 	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
 	if err != nil {
-		// Return 409 Conflict for duplicate URL errors
+		// Return 409 Conflict for duplicate URL errors - include existing server ID for SDK
 		if err.Error() == "mcp server with this URL already exists" {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			response := fiber.Map{
 				"error": err.Error(),
-			})
+			}
+			// ✅ Include existing server ID so SDK can still use it for attestation
+			if server != nil {
+				response["existingId"] = server.ID.String()
+				response["name"] = server.Name
+			}
+			return c.Status(fiber.StatusConflict).JSON(response)
 		}
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
