@@ -1,15 +1,17 @@
 # 🔌 MCP Integration - Secure Model Context Protocol Servers
 
-Register and attest your MCP servers with AIM for cryptographic verification and trust scoring.
+Register and attest your MCP servers with AIM for cryptographic verification, supply chain security, and trust scoring.
 
 ## What You'll Build
 
 An MCP integration that:
 - ✅ Registers MCP servers with cryptographic verification
 - ✅ Attests to MCP server authenticity with Ed25519 signatures
+- ✅ **Auto-attests** on first tool use (zero friction)
 - ✅ Tracks agent-MCP connections for audit trails
-- ✅ Monitors MCP server trust scores
+- ✅ Monitors MCP server trust scores and confidence
 - ✅ Detects drift when agents connect to unregistered servers
+- ✅ **Supply Chain Analytics** dashboard for full ecosystem visibility
 
 **Integration Time**: 5 minutes
 **Use Case**: Claude Desktop, MCP servers, AI assistants
@@ -336,6 +338,83 @@ The dashboard shows:
 - Connected agents
 - Attestation history
 - Tool usage audit trail
+
+---
+
+## Supply Chain Analytics
+
+Monitor your entire MCP ecosystem from a single dashboard:
+
+**Dashboard URL**: http://localhost:3000/dashboard/mcp/supply-chain
+
+![MCP Supply Chain Analytics](../images/supply-chain.png)
+
+### Key Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Total MCP Servers** | All servers registered in your organization |
+| **Verified Servers** | Servers that have passed attestation verification |
+| **Pending Verification** | Servers awaiting first attestation |
+| **Avg Confidence Score** | Average trust score across all servers |
+| **Attestation Activity** | 7-day trend of attestation events |
+| **Capability Drift Alerts** | Servers with changed tool capabilities |
+
+### Confidence Score Distribution
+
+Servers are categorized by confidence level:
+- 🟢 **High (90-100%)** - Multiple attestations, stable capabilities
+- 🔵 **Good (70-89%)** - Verified, regular attestations
+- 🟡 **Medium (50-69%)** - Few attestations, needs more verification
+- 🔴 **Low (0-49%)** - Unverified or suspicious activity
+
+### Server Dependencies Table
+
+View all MCP servers with:
+- Verification status (verified/pending)
+- Confidence score
+- Number of attestations
+- Available capabilities (tools)
+- Last attestation timestamp
+
+---
+
+## Auto-Attestation
+
+The SDK can automatically create attestations when you use MCP tools, requiring zero manual intervention:
+
+```python
+from aim_sdk import secure
+from aim_sdk.integrations.mcp import use_mcp_tool
+
+aim_agent = secure("my-agent")
+
+# Auto-attestation happens automatically on first tool use
+result = use_mcp_tool(
+    aim_client=aim_agent,
+    server_id="server-uuid",
+    tool_name="read_file",
+    mcp_url="http://localhost:3001",
+    mcp_name="filesystem",
+    auto_attest=True  # Default: automatically creates attestation
+)
+```
+
+### How Auto-Attestation Works
+
+1. **First Tool Use**: When an agent uses an MCP tool for the first time
+2. **Automatic Discovery**: SDK discovers server capabilities
+3. **Create Attestation**: Attestation created with discovered tools
+4. **Update Confidence**: Server confidence score increases
+5. **Database Sync**: MCP server verification status automatically updates
+
+### Attestation Triggers
+
+Auto-attestation occurs when:
+- First use of an MCP server by an agent
+- First use of a NEW tool on a known server
+- 24+ hours since last attestation (configurable)
+- Capability drift detected (tools added/removed)
 
 ---
 

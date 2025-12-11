@@ -74,6 +74,19 @@ Verify the Model Context Protocol servers your agents connect to.
 - **Configuration Drift Detection** — Detect when server configs change unexpectedly
 - **Tool Inventory** — Track available tools per MCP server
 
+### MCP Supply Chain Analytics
+
+Monitor your entire MCP ecosystem with comprehensive supply chain visibility.
+
+![MCP Supply Chain Analytics](docs/images/supply-chain.png)
+
+- **Supply Chain Dashboard** — View all MCP servers, verification status, and attestation health
+- **Confidence Score Distribution** — Visual breakdown of server trust levels (High/Good/Medium/Low)
+- **Attestation Activity Trends** — 7-day graph showing attestation patterns across your organization
+- **Capability Drift Alerts** — Automatic detection when MCP server tools change unexpectedly
+- **Auto-Attestation** — SDK automatically creates attestations on first tool use
+- **Server Dependencies** — Track which agents depend on which MCP servers
+
 ### Trust Scoring Algorithm
 
 8-factor algorithm that continuously evaluates agent trustworthiness based on behavior.
@@ -363,6 +376,8 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 - [x] Cryptographic agent identity (Ed25519)
 - [x] Capability-based access control
 - [x] MCP server attestation
+- [x] MCP Supply Chain Analytics dashboard
+- [x] Smart auto-attestation with capability drift detection
 - [x] 8-factor trust scoring
 - [x] Security dashboard with alerts
 - [x] Complete audit trail
@@ -375,7 +390,6 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 - [ ] GraphQL API
 - [ ] CLI tool for automation
 - [ ] Webhook integrations (Slack, PagerDuty, SIEM)
-- [ ] Advanced analytics dashboard
 
 See [ROADMAP.md](ROADMAP.md) for full details.
 

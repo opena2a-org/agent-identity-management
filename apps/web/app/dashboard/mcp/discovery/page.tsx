@@ -204,7 +204,7 @@ export default function MCPDiscoveryPage() {
               </span>
             </div>
             <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-              {data?.discovered.length || 0}
+              {data?.discovered?.length || 0}
             </span>
           </div>
         </div>
