@@ -33,12 +33,16 @@ func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepo
 }
 
 // SDKCredentials represents the credentials file embedded in SDK
+// These are stored in .aim/sdk_credentials.json (NOT credentials.json)
+// This separation prevents collisions with agent credentials
 type SDKCredentials struct {
-	AIMUrl       string `json:"aimUrl"`
-	RefreshToken string `json:"refreshToken"`
-	SDKTokenID   string `json:"sdkTokenId"` // For usage tracking via X-SDK-Token header
-	UserID       string `json:"userId"`
-	Email        string `json:"email"`
+	SchemaVersion string `json:"schemaVersion"`       // Schema version for future evolution
+	Type          string `json:"type"`                // Credential type: "sdk_oauth"
+	AIMUrl        string `json:"aimUrl"`
+	RefreshToken  string `json:"refreshToken"`
+	SDKTokenID    string `json:"sdkTokenId"`          // For usage tracking via X-SDK-Token header
+	UserID        string `json:"userId"`
+	Email         string `json:"email"`
 }
 
 // DownloadSDK generates a pre-configured SDK with embedded credentials
@@ -157,13 +161,16 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		aimURL = c.BaseURL()
 	}
 
-	// Create credentials object
+	// Create credentials object with schema version and type
+	// These fields help the SDK distinguish between SDK credentials and agent credentials
 	credentials := SDKCredentials{
-		AIMUrl:       aimURL,
-		RefreshToken: refreshToken,
-		SDKTokenID:   tokenID, // Include SDK token ID for usage tracking
-		UserID:       userID.String(),
-		Email:        email,
+		SchemaVersion: "1.0",      // Schema version for future evolution
+		Type:          "sdk_oauth", // Explicitly mark as SDK OAuth credentials
+		AIMUrl:        aimURL,
+		RefreshToken:  refreshToken,
+		SDKTokenID:    tokenID,    // Include SDK token ID for usage tracking
+		UserID:        userID.String(),
+		Email:         email,
 	}
 
 	// Generate SDK zip with embedded credentials
@@ -280,7 +287,8 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	}
 
 	// Add credentials file to zip (in .aim directory)
-	credPath := filepath.Join(zipPrefix, ".aim", "credentials.json")
+	// Using sdk_credentials.json to avoid collision with agent credentials
+	credPath := filepath.Join(zipPrefix, ".aim", "sdk_credentials.json")
 	credFile, err := zipWriter.Create(credPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create credentials file: %w", err)
@@ -462,7 +470,9 @@ Your SDK contains embedded OAuth credentials that automatically:
 
 ## Security
 
-Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
+
+Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
 
 ⚠️ **Important Security Notes:**
 - Credentials are valid for 90 days
@@ -534,7 +544,9 @@ Your SDK contains embedded OAuth credentials that automatically:
 
 ## Security
 
-Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
+
+Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
 
 ⚠️ **Important Security Notes:**
 - Credentials are valid for 90 days
@@ -615,7 +627,9 @@ Your SDK contains embedded OAuth credentials that automatically:
 
 ## Security
 
-Your credentials are stored in ` + "`.aim/credentials.json`" + `. Keep this file secure!
+Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
+
+Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
 
 ⚠️ **Important Security Notes:**
 - Credentials are valid for 90 days

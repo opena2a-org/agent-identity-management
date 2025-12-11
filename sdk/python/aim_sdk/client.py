@@ -27,6 +27,14 @@ from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
 from .console import console
 from .risk_detector import detect_risk_level
+from .security_logging import (
+    security_logger,
+    AuthnEventType,
+    AuthzEventType,
+    AgentEventType,
+    SecurityEventType,
+    EventSeverity,
+)
 
 
 # Capability format validation pattern (namespace:action)
@@ -605,6 +613,18 @@ class AIMClient:
 
             # If auto-approved, return immediately
             if status == "approved":
+                security_logger.log_authorization(
+                    AuthzEventType.CAPABILITY_GRANTED,
+                    action=capability,
+                    resource=resource,
+                    granted=True,
+                    agent_id=self.agent_id,
+                    details={
+                        "verification_id": verification_id,
+                        "approved_by": result.get("approved_by"),
+                        "auto_approved": True
+                    }
+                )
                 return {
                     "verified": True,
                     "verification_id": verification_id,
@@ -615,6 +635,14 @@ class AIMClient:
             # If denied, raise error
             if status == "denied":
                 reason = result.get("denial_reason", "Action denied by policy")
+                security_logger.log_authorization(
+                    AuthzEventType.CAPABILITY_DENIED,
+                    action=capability,
+                    resource=resource,
+                    granted=False,
+                    agent_id=self.agent_id,
+                    details={"verification_id": verification_id, "denial_reason": reason}
+                )
                 raise ActionDeniedError(f"Action denied: {reason}")
 
             # If pending, poll for result
@@ -623,10 +651,26 @@ class AIMClient:
 
             raise VerificationError(f"Unexpected verification status: {status}")
 
-        except (AuthenticationError, ActionDeniedError):
+        except (AuthenticationError, ActionDeniedError) as e:
+            security_logger.log_authorization(
+                AuthzEventType.CAPABILITY_CHECK,
+                action=capability,
+                resource=resource,
+                granted=False,
+                agent_id=self.agent_id,
+                error=str(e)
+            )
             raise
         except requests.exceptions.RequestException as e:
             # Handle network errors (connection refused, timeout, etc.)
+            security_logger.log_authorization(
+                AuthzEventType.CAPABILITY_CHECK,
+                action=capability,
+                resource=resource,
+                granted=False,
+                agent_id=self.agent_id,
+                error=f"Network error: {type(e).__name__}: {str(e)}"
+            )
             console.warning(f"Network error during verification: {type(e).__name__}: {str(e)}")
             return {
                 "verified": False,
@@ -762,6 +806,18 @@ class AIMClient:
                 status = result.get("status")
 
                 if status == "approved":
+                    security_logger.log_authorization(
+                        AuthzEventType.JIT_APPROVED,
+                        action="capability_verification",
+                        resource=None,
+                        granted=True,
+                        agent_id=self.agent_id,
+                        details={
+                            "verification_id": verification_id,
+                            "approved_by": result.get("approved_by"),
+                            "expires_at": result.get("expires_at")
+                        }
+                    )
                     return {
                         "verified": True,
                         "verification_id": verification_id,
@@ -771,6 +827,14 @@ class AIMClient:
 
                 if status == "denied":
                     reason = result.get("denial_reason", "Action denied")
+                    security_logger.log_authorization(
+                        AuthzEventType.JIT_DENIED,
+                        action="capability_verification",
+                        resource=None,
+                        granted=False,
+                        agent_id=self.agent_id,
+                        details={"verification_id": verification_id, "denial_reason": reason}
+                    )
                     raise ActionDeniedError(f"Action denied: {reason}")
 
                 # Still pending, wait and retry
@@ -795,6 +859,14 @@ class AIMClient:
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
 
+        security_logger.log_authorization(
+            AuthzEventType.JIT_TIMEOUT,
+            action="capability_verification",
+            resource=None,
+            granted=False,
+            agent_id=self.agent_id,
+            details={"verification_id": verification_id, "timeout_seconds": timeout_seconds}
+        )
         raise VerificationError(f"Verification timeout after {timeout_seconds} seconds")
 
     def log_capability_result(
@@ -2571,13 +2643,28 @@ class AIMClient:
 import os
 import pathlib
 
+# Import centralized credential management
+from .credentials import (
+    get_agent_credentials_path,
+    load_agent_credentials as _load_agent_creds_from_module,
+    save_agent_credentials as _save_agent_creds_to_module,
+    list_agent_credentials,
+    AGENTS_DIR,
+    LEGACY_CREDENTIALS_FILE,
+)
+
 
 def _get_credentials_path():
-    """Get path to credentials file (~/.aim/credentials.json)."""
-    home = pathlib.Path.home()
-    aim_dir = home / ".aim"
-    aim_dir.mkdir(exist_ok=True)
-    return aim_dir / "credentials.json"
+    """
+    Get path to credentials file.
+
+    DEPRECATED: This function is kept for backward compatibility.
+    Agent credentials are now stored per-agent in ~/.aim/agents/{agent-name}.json
+
+    Returns:
+        Legacy credentials path for migration purposes
+    """
+    return LEGACY_CREDENTIALS_FILE
 
 
 def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: str, capabilities: List[str]):
@@ -2644,25 +2731,18 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
 
 def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
     """
-    Save agent credentials locally.
+    Save agent credentials to per-agent file.
+
+    Credentials are stored in ~/.aim/agents/{agent-name}.json
+    This ensures clean separation from SDK credentials and allows
+    multiple agents to have their own credential files.
 
     Args:
         agent_name: Name of the agent
         credentials: Credentials dict from registration response
     """
-    creds_path = _get_credentials_path()
-
-    # Load existing credentials
-    all_creds = {}
-    if creds_path.exists():
-        try:
-            with open(creds_path, 'r') as f:
-                all_creds = json.load(f)
-        except Exception:
-            pass  # Start fresh if corrupted
-
-    # Add new agent credentials
-    all_creds[agent_name] = {
+    # Prepare the agent credential data
+    agent_data = {
         "agent_id": credentials["agent_id"],
         "public_key": credentials["public_key"],
         "private_key": credentials["private_key"],
@@ -2672,15 +2752,17 @@ def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
         "registered_at": datetime.now(timezone.utc).isoformat()
     }
 
-    # Save with secure permissions (owner read/write only)
-    with open(creds_path, 'w') as f:
-        json.dump(all_creds, f, indent=2)
-    os.chmod(creds_path, 0o600)  # -rw------- (owner only)
+    # Use centralized credentials module for storage
+    _save_agent_creds_to_module(agent_name, agent_data)
 
 
 def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     """
-    Load agent credentials from local storage.
+    Load agent credentials from per-agent file.
+
+    Credentials are stored in ~/.aim/agents/{agent-name}.json
+    This function also handles migration from legacy format
+    where all agents were stored in a single credentials.json file.
 
     Args:
         agent_name: Name of the agent
@@ -2688,16 +2770,8 @@ def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     Returns:
         Credentials dict if found, None otherwise
     """
-    creds_path = _get_credentials_path()
-    if not creds_path.exists():
-        return None
-
-    try:
-        with open(creds_path, 'r') as f:
-            all_creds = json.load(f)
-        return all_creds.get(agent_name)
-    except Exception:
-        return None
+    # Use centralized credentials module (handles migration automatically)
+    return _load_agent_creds_from_module(agent_name)
 
 
 def register_agent(
@@ -2830,6 +2904,18 @@ def register_agent(
     if not force_new:
         existing_creds = _load_credentials(name)
         if existing_creds:
+            # Log agent loaded from cache
+            security_logger.log_agent_event(
+                AgentEventType.AGENT_LOADED,
+                agent_id=existing_creds['agent_id'],
+                agent_name=name,
+                details={
+                    "source": "cached_credentials",
+                    "status": existing_creds.get('status', 'active'),
+                    "trust_score": existing_creds.get('trust_score')
+                }
+            )
+
             # Use beautiful console output
             console.agent_found(
                 name=name,
@@ -3164,6 +3250,15 @@ def _register_via_oauth(
 
     if response.status_code not in [200, 201]:
         error_msg = response.json().get("error", "Unknown error")
+        security_logger.log_agent_event(
+            AgentEventType.AGENT_REGISTRATION_FAILED,
+            agent_name=name,
+            error=error_msg,
+            details={
+                "registration_mode": "oauth",
+                "http_status": response.status_code
+            }
+        )
         raise ConfigurationError(f"Registration failed: {error_msg}")
 
     credentials = response.json()
@@ -3250,6 +3345,19 @@ def _register_via_oauth(
         except Exception:
             pass  # Don't fail registration if reporting fails
 
+    # Log agent registration success
+    security_logger.log_agent_event(
+        AgentEventType.AGENT_REGISTERED,
+        agent_id=credentials["agent_id"],
+        agent_name=name,
+        details={
+            "registration_mode": "oauth",
+            "agent_type": registration_data.get("agentType"),
+            "capabilities_count": len(registration_data.get("capabilities", [])),
+            "mcp_servers_count": len(mcp_server_names)
+        }
+    )
+
     # Show beautiful registration success message
     capabilities = registration_data.get("capabilities")
     _print_registration_success(name, credentials, capabilities, mcp_server_names)
@@ -3286,6 +3394,15 @@ def _register_via_api_key(
 
     if response.status_code != 201:
         error_msg = response.json().get("error", "Unknown error")
+        security_logger.log_agent_event(
+            AgentEventType.AGENT_REGISTRATION_FAILED,
+            agent_name=name,
+            error=error_msg,
+            details={
+                "registration_mode": "api_key",
+                "http_status": response.status_code
+            }
+        )
         raise ConfigurationError(f"Registration failed: {error_msg}")
 
     credentials = response.json()
@@ -3345,6 +3462,19 @@ def _register_via_api_key(
             console.info(f"Linked {result.get('detectionsProcessed', 0)} MCP server(s) to agent")
         except Exception:
             pass  # Don't fail registration if reporting fails
+
+    # Log agent registration success
+    security_logger.log_agent_event(
+        AgentEventType.AGENT_REGISTERED,
+        agent_id=credentials["agent_id"],
+        agent_name=name,
+        details={
+            "registration_mode": "api_key",
+            "agent_type": registration_data.get("agentType"),
+            "capabilities_count": len(registration_data.get("capabilities", [])),
+            "mcp_servers_count": len(mcp_server_names)
+        }
+    )
 
     # Show beautiful registration success message
     _print_registration_success(name, credentials, registration_data.get("capabilities"), mcp_server_names)
