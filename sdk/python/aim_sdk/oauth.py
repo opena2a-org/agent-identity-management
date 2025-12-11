@@ -94,10 +94,20 @@ class OAuthTokenManager:
                         sdk_data = json.load(f)
                     with open(home_creds, 'r') as f:
                         home_data = json.load(f)
-                    sdkTokenId = sdk_data.get('sdkTokenId')
-                    home_token_id = home_data.get('sdkTokenId')
-                    if sdkTokenId and sdkTokenId != home_token_id:
+
+                    # Check if home credentials are SDK OAuth format (has refreshToken)
+                    # vs agent credentials format (has agent_id/private_key)
+                    home_is_oauth = 'refreshToken' in home_data or 'refresh_token' in home_data
+
+                    if not home_is_oauth:
+                        # Home has agent credentials, not SDK credentials - install SDK creds
                         should_install = True
+                    else:
+                        # Both are OAuth format - compare token IDs
+                        sdkTokenId = sdk_data.get('sdkTokenId')
+                        home_token_id = home_data.get('sdkTokenId')
+                        if sdkTokenId and sdkTokenId != home_token_id:
+                            should_install = True
                 except:
                     pass
 
