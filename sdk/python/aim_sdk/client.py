@@ -2789,6 +2789,111 @@ def _load_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     return _load_agent_creds_from_module(agent_name)
 
 
+def _validate_cached_credentials(
+    agent_id: str,
+    aim_url: str,
+    agent_name: str,
+    api_key: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """
+    Validate cached agent credentials against the backend.
+
+    This is CRITICAL for production reliability. Cached credentials can become
+    stale when:
+    - Database is reset/wiped
+    - Agent is deleted from the backend
+    - Backend is moved to a different server
+    - Organization changes
+
+    Without this validation, the SDK would silently fail with confusing errors
+    like "invalid agent credentials" deep in capability registration.
+
+    Args:
+        agent_id: Agent UUID from cached credentials
+        aim_url: AIM server URL
+        agent_name: Agent name (for error messages)
+        api_key: Optional API key for authentication
+
+    Returns:
+        Tuple of (is_valid, error_message)
+        - (True, None) if credentials are valid
+        - (False, "error reason") if credentials are stale/invalid
+    """
+    try:
+        # Try to fetch the agent from the backend
+        # This validates both that the backend is reachable AND the agent exists
+        url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}"
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-SDK-Version": __version__,
+        }
+
+        # Add API key if provided
+        if api_key:
+            headers["X-API-Key"] = api_key
+
+        # Try to use SDK OAuth credentials for auth if available
+        sdk_creds = load_sdk_credentials()
+        if sdk_creds:
+            try:
+                # Create a temporary token manager to get an access token
+                from pathlib import Path
+                temp_creds_path = Path.home() / ".aim" / "temp_validation_creds.json"
+                token_manager = OAuthTokenManager(str(temp_creds_path))
+                token_manager.credentials = sdk_creds
+                access_token = token_manager.get_access_token()
+                if access_token:
+                    headers["Authorization"] = f"Bearer {access_token}"
+            except Exception:
+                # If OAuth fails, continue without it - we'll get a 401 which is still useful
+                pass
+
+        # Make the validation request with a short timeout
+        response = requests.get(url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            # Agent exists and is accessible
+            return True, None
+
+        elif response.status_code == 404:
+            # Agent not found - credentials are definitely stale
+            return False, f"Agent '{agent_name}' (ID: {agent_id[:8]}...) not found in backend"
+
+        elif response.status_code == 401:
+            # Authentication failed - but this doesn't mean credentials are stale
+            # It could be an SDK auth issue. We should still try to use the agent credentials
+            # since agent auth uses Ed25519 signatures, not OAuth tokens
+            console.debug(f"Backend auth check returned 401 - proceeding with agent credentials")
+            return True, None
+
+        elif response.status_code == 403:
+            # Forbidden - agent exists but we don't have permission
+            # This is a valid state, credentials aren't stale
+            return True, None
+
+        else:
+            # Other error - log but don't invalidate credentials
+            console.debug(f"Backend validation returned {response.status_code} - proceeding with cached credentials")
+            return True, None
+
+    except requests.exceptions.ConnectionError:
+        # Backend unreachable - can't validate, but don't invalidate credentials
+        # The user might be offline or backend is down temporarily
+        console.warning(f"Cannot reach AIM backend at {aim_url} - using cached credentials")
+        return True, None
+
+    except requests.exceptions.Timeout:
+        # Timeout - same as connection error, don't invalidate
+        console.warning(f"Timeout connecting to AIM backend - using cached credentials")
+        return True, None
+
+    except Exception as e:
+        # Unexpected error - log and proceed with cached credentials
+        console.debug(f"Credential validation error: {e} - proceeding with cached credentials")
+        return True, None
+
+
 def register_agent(
     name: str,
     aim_url: Optional[str] = None,
@@ -2919,45 +3024,86 @@ def register_agent(
     if not force_new:
         existing_creds = _load_credentials(name)
         if existing_creds:
-            # Log agent loaded from cache
-            security_logger.log_agent_event(
-                AgentEventType.AGENT_LOADED,
-                agent_id=existing_creds['agent_id'],
+            # CRITICAL: Validate credentials against backend before using
+            # This prevents the "credentials worked yesterday, fail today" production issue
+            # where local credentials become stale (e.g., after database reset)
+            agent_id = existing_creds['agent_id']
+            cached_aim_url = existing_creds.get('aim_url', aim_url or 'http://localhost:8080')
+
+            # Validate agent still exists in backend
+            is_valid, validation_error = _validate_cached_credentials(
+                agent_id=agent_id,
+                aim_url=cached_aim_url,
                 agent_name=name,
-                details={
-                    "source": "cached_credentials",
-                    "status": existing_creds.get('status', 'active'),
-                    "trust_score": existing_creds.get('trust_score')
-                }
+                api_key=api_key,
             )
 
-            # Use beautiful console output
-            console.agent_found(
-                name=name,
-                agent_id=existing_creds['agent_id'],
-                status=existing_creds.get('status', 'active'),
-                trust_score=existing_creds.get('trust_score', 0.85)
-            )
+            if not is_valid:
+                # Credentials are stale - delete and re-register
+                console.warning(f"Cached credentials for '{name}' are stale: {validation_error}")
+                console.info("Deleting stale credentials and re-registering agent...")
 
-            # Create OAuth token manager if tokens are in credentials
-            token_manager = None
-            if "refresh_token" in existing_creds or "access_token" in existing_creds:
-                # Create a temporary credentials file for the token manager
-                from pathlib import Path
-                temp_creds_path = Path.home() / ".aim" / f"temp_{name}_creds.json"
-                token_manager = OAuthTokenManager(str(temp_creds_path))
-                # Directly set the credentials with OAuth tokens
-                token_manager.credentials = existing_creds
-                token_manager.access_token = existing_creds.get("access_token")
+                # Log the stale credential detection
+                security_logger.log_agent_event(
+                    AgentEventType.AGENT_STALE_CREDENTIALS,
+                    agent_id=agent_id,
+                    agent_name=name,
+                    details={
+                        "error": "stale_credentials",
+                        "reason": validation_error,
+                        "action": "re-registering"
+                    }
+                )
 
-            return AIMClient(
-                agent_id=existing_creds["agent_id"],
-                public_key=existing_creds["public_key"],
-                private_key=existing_creds["private_key"],
-                aim_url=existing_creds["aim_url"],
-                api_key=api_key,  # Pass API key for verification requests
-                oauth_token_manager=token_manager
-            )
+                # Delete stale credentials
+                from .credentials import delete_agent_credentials
+                delete_agent_credentials(name)
+
+                # Fall through to re-registration below
+                existing_creds = None
+
+            else:
+                # Credentials are valid - use them
+                # Log agent loaded from cache
+                security_logger.log_agent_event(
+                    AgentEventType.AGENT_LOADED,
+                    agent_id=existing_creds['agent_id'],
+                    agent_name=name,
+                    details={
+                        "source": "cached_credentials",
+                        "status": existing_creds.get('status', 'active'),
+                        "trust_score": existing_creds.get('trust_score'),
+                        "validated": True
+                    }
+                )
+
+                # Use beautiful console output
+                console.agent_found(
+                    name=name,
+                    agent_id=existing_creds['agent_id'],
+                    status=existing_creds.get('status', 'active'),
+                    trust_score=existing_creds.get('trust_score', 0.85)
+                )
+
+                # Create OAuth token manager if tokens are in credentials
+                token_manager = None
+                if "refresh_token" in existing_creds or "access_token" in existing_creds:
+                    # Create a temporary credentials file for the token manager
+                    from pathlib import Path
+                    temp_creds_path = Path.home() / ".aim" / f"temp_{name}_creds.json"
+                    token_manager = OAuthTokenManager(str(temp_creds_path))
+                    # Directly set the credentials with OAuth tokens
+                    token_manager.credentials = existing_creds
+                    token_manager.access_token = existing_creds.get("access_token")
+
+                return AIMClient(
+                    agent_id=existing_creds["agent_id"],
+                    public_key=existing_creds["public_key"],
+                    private_key=existing_creds["private_key"],
+                    aim_url=existing_creds["aim_url"],
+                    api_key=api_key,  # Pass API key for verification requests
+                    oauth_token_manager=token_manager
+                )
 
     # 2. Detect authentication mode (SDK vs Manual)
     sdk_creds = load_sdk_credentials()
