@@ -215,7 +215,7 @@ export function RegisterAgentModal({
           }> = [];
 
           // Add registered MCP servers
-          registeredResponse.mcpServers.forEach((server) => {
+          (registeredResponse.mcpServers || []).forEach((server) => {
             suggestions.push({
               id: server.id,
               name: server.name,
@@ -227,9 +227,9 @@ export function RegisterAgentModal({
           });
 
           // Add discovered MCPs that aren't already registered
-          discoveredResponse.discovered.forEach((discovered) => {
+          (discoveredResponse.discovered || []).forEach((discovered) => {
             // Check if this discovered MCP is already in the registered list
-            const alreadyRegistered = registeredResponse.mcpServers.some(
+            const alreadyRegistered = (registeredResponse.mcpServers || []).some(
               (server) => server.name.toLowerCase() === discovered.name.toLowerCase() ||
                          server.url === discovered.url
             );
