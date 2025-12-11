@@ -12,6 +12,7 @@ import (
 
 // TestGetAgentCapabilitiesUnauthorized tests that getting agent capabilities requires authentication
 func TestGetAgentCapabilitiesUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -24,6 +25,7 @@ func TestGetAgentCapabilitiesUnauthorized(t *testing.T) {
 
 // TestGrantCapabilityUnauthorized tests that granting capability requires authentication
 func TestGrantCapabilityUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -43,6 +45,7 @@ func TestGrantCapabilityUnauthorized(t *testing.T) {
 
 // TestRevokeCapabilityUnauthorized tests that revoking capability requires authentication
 func TestRevokeCapabilityUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 	capabilityID := "123e4567-e89b-12d3-a456-426614174001"
@@ -60,6 +63,7 @@ func TestRevokeCapabilityUnauthorized(t *testing.T) {
 
 // TestGetViolationsByAgentUnauthorized tests that getting violations requires authentication
 func TestGetViolationsByAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -72,6 +76,7 @@ func TestGetViolationsByAgentUnauthorized(t *testing.T) {
 
 // TestGrantCapabilityWithInvalidData tests granting capability with invalid data
 func TestGrantCapabilityWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -90,6 +95,7 @@ func TestGrantCapabilityWithInvalidData(t *testing.T) {
 
 // TestGrantMultipleCapabilities tests granting multiple capabilities
 func TestGrantMultipleCapabilities(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -109,6 +115,7 @@ func TestGrantMultipleCapabilities(t *testing.T) {
 
 // TestGetViolationsByAgentWithParams tests getting violations with query parameters
 func TestGetViolationsByAgentWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -121,6 +128,7 @@ func TestGetViolationsByAgentWithParams(t *testing.T) {
 
 // TestRevokeCapabilityWithInvalidID tests revoking capability with invalid ID
 func TestRevokeCapabilityWithInvalidID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -137,6 +145,7 @@ func TestRevokeCapabilityWithInvalidID(t *testing.T) {
 
 // TestGetAgentCapabilitiesWithInvalidAgentID tests getting capabilities with invalid agent ID
 func TestGetAgentCapabilitiesWithInvalidAgentID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/agents/invalid-id/capabilities")

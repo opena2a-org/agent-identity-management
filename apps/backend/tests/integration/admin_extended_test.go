@@ -12,6 +12,7 @@ import (
 
 // TestGetPendingUsersUnauthorized tests that getting pending users requires authentication
 func TestGetPendingUsersUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/users/pending")
@@ -23,6 +24,7 @@ func TestGetPendingUsersUnauthorized(t *testing.T) {
 
 // TestApproveUserUnauthorized tests that approving user requires authentication
 func TestApproveUserUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -41,6 +43,7 @@ func TestApproveUserUnauthorized(t *testing.T) {
 
 // TestRejectUserUnauthorized tests that rejecting user requires authentication
 func TestRejectUserUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -59,6 +62,7 @@ func TestRejectUserUnauthorized(t *testing.T) {
 
 // TestUpdateUserRoleUnauthorized tests that updating user role requires authentication
 func TestUpdateUserRoleUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -82,6 +86,7 @@ func TestUpdateUserRoleUnauthorized(t *testing.T) {
 
 // TestDeactivateUserUnauthorized tests that deactivating user requires authentication
 func TestDeactivateUserUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -94,6 +99,7 @@ func TestDeactivateUserUnauthorized(t *testing.T) {
 
 // TestActivateUserUnauthorized tests that activating user requires authentication
 func TestActivateUserUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -106,6 +112,7 @@ func TestActivateUserUnauthorized(t *testing.T) {
 
 // TestPermanentlyDeleteUserUnauthorized tests that permanently deleting user requires authentication
 func TestPermanentlyDeleteUserUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -122,6 +129,7 @@ func TestPermanentlyDeleteUserUnauthorized(t *testing.T) {
 
 // TestApproveRegistrationRequestUnauthorized tests that approving registration request requires authentication
 func TestApproveRegistrationRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -140,6 +148,7 @@ func TestApproveRegistrationRequestUnauthorized(t *testing.T) {
 
 // TestRejectRegistrationRequestUnauthorized tests that rejecting registration request requires authentication
 func TestRejectRegistrationRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -158,6 +167,7 @@ func TestRejectRegistrationRequestUnauthorized(t *testing.T) {
 
 // TestGetOrganizationSettingsUnauthorized tests that getting organization settings requires authentication
 func TestGetOrganizationSettingsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/organization/settings")
@@ -169,6 +179,7 @@ func TestGetOrganizationSettingsUnauthorized(t *testing.T) {
 
 // TestUpdateOrganizationSettingsUnauthorized tests that updating organization settings requires authentication
 func TestUpdateOrganizationSettingsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -192,6 +203,7 @@ func TestUpdateOrganizationSettingsUnauthorized(t *testing.T) {
 
 // TestGetDashboardStatsUnauthorized tests that getting dashboard stats requires authentication
 func TestGetDashboardStatsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/dashboard/stats")
@@ -203,6 +215,7 @@ func TestGetDashboardStatsUnauthorized(t *testing.T) {
 
 // TestUpdateUserRoleWithInvalidRole tests updating user role with invalid role
 func TestUpdateUserRoleWithInvalidRole(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -226,6 +239,7 @@ func TestUpdateUserRoleWithInvalidRole(t *testing.T) {
 
 // TestApproveUserWithEmptyBody tests approving user with empty body
 func TestApproveUserWithEmptyBody(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -238,6 +252,7 @@ func TestApproveUserWithEmptyBody(t *testing.T) {
 
 // TestDeactivateUserWithInvalidID tests deactivating user with invalid ID
 func TestDeactivateUserWithInvalidID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Post(baseURL+"/api/v1/admin/users/invalid-id/deactivate", "application/json", nil)
@@ -249,6 +264,7 @@ func TestDeactivateUserWithInvalidID(t *testing.T) {
 
 // TestGetPendingUsersWithParams tests getting pending users with query parameters
 func TestGetPendingUsersWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/users/pending?limit=10&offset=0")
@@ -260,6 +276,7 @@ func TestGetPendingUsersWithParams(t *testing.T) {
 
 // TestUpdateOrganizationSettingsWithInvalidData tests updating organization settings with invalid data
 func TestUpdateOrganizationSettingsWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -282,6 +299,7 @@ func TestUpdateOrganizationSettingsWithInvalidData(t *testing.T) {
 
 // TestGetDashboardStatsWithParams tests getting dashboard stats with query parameters
 func TestGetDashboardStatsWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/dashboard/stats?period=30d")

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAdminEndpoints(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}
@@ -122,6 +123,7 @@ func TestAdminEndpoints(t *testing.T) {
 }
 
 func TestSecurityEndpoints(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}
@@ -222,6 +224,7 @@ func TestSecurityEndpoints(t *testing.T) {
 }
 
 func TestAnalyticsEndpoints(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}

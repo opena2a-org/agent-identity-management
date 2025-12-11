@@ -12,6 +12,7 @@ import (
 
 // TestListAPIKeysUnauthorized verifies API keys endpoint requires authentication
 func TestListAPIKeysUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/api-keys")
@@ -23,6 +24,7 @@ func TestListAPIKeysUnauthorized(t *testing.T) {
 
 // TestGenerateAPIKeyUnauthorized verifies API key generation requires authentication
 func TestGenerateAPIKeyUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	keyData := map[string]interface{}{
@@ -41,6 +43,7 @@ func TestGenerateAPIKeyUnauthorized(t *testing.T) {
 
 // TestRevokeAPIKeyUnauthorized verifies API key revocation requires authentication
 func TestRevokeAPIKeyUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	keyID := "00000000-0000-0000-0000-000000000000"
@@ -57,6 +60,7 @@ func TestRevokeAPIKeyUnauthorized(t *testing.T) {
 
 // TestVerifyAPIKeyUnauthorized verifies API key verification endpoint
 func TestVerifyAPIKeyUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	keyID := "00000000-0000-0000-0000-000000000000"

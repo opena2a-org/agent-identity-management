@@ -12,6 +12,7 @@ import (
 
 // TestGetTagsUnauthorized tests that getting tags requires authentication
 func TestGetTagsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/tags")
@@ -23,6 +24,7 @@ func TestGetTagsUnauthorized(t *testing.T) {
 
 // TestCreateTagUnauthorized tests that creating tag requires authentication
 func TestCreateTagUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -42,6 +44,7 @@ func TestCreateTagUnauthorized(t *testing.T) {
 
 // TestDeleteTagUnauthorized tests that deleting tag requires authentication
 func TestDeleteTagUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	tagID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -58,6 +61,7 @@ func TestDeleteTagUnauthorized(t *testing.T) {
 
 // TestGetAgentTagsUnauthorized tests that getting agent tags requires authentication
 func TestGetAgentTagsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -70,6 +74,7 @@ func TestGetAgentTagsUnauthorized(t *testing.T) {
 
 // TestAddTagsToAgentUnauthorized tests that adding tags to agent requires authentication
 func TestAddTagsToAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -88,6 +93,7 @@ func TestAddTagsToAgentUnauthorized(t *testing.T) {
 
 // TestRemoveTagFromAgentUnauthorized tests that removing tag from agent requires authentication
 func TestRemoveTagFromAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 	tagID := "123e4567-e89b-12d3-a456-426614174001"
@@ -105,6 +111,7 @@ func TestRemoveTagFromAgentUnauthorized(t *testing.T) {
 
 // TestSuggestTagsForAgentUnauthorized tests that suggesting tags for agent requires authentication
 func TestSuggestTagsForAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -117,6 +124,7 @@ func TestSuggestTagsForAgentUnauthorized(t *testing.T) {
 
 // TestGetMCPServerTagsUnauthorized tests that getting MCP server tags requires authentication
 func TestGetMCPServerTagsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -129,6 +137,7 @@ func TestGetMCPServerTagsUnauthorized(t *testing.T) {
 
 // TestAddTagsToMCPServerUnauthorized tests that adding tags to MCP server requires authentication
 func TestAddTagsToMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -147,6 +156,7 @@ func TestAddTagsToMCPServerUnauthorized(t *testing.T) {
 
 // TestRemoveTagFromMCPServerUnauthorized tests that removing tag from MCP server requires authentication
 func TestRemoveTagFromMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 	tagID := "123e4567-e89b-12d3-a456-426614174001"
@@ -164,6 +174,7 @@ func TestRemoveTagFromMCPServerUnauthorized(t *testing.T) {
 
 // TestSuggestTagsForMCPServerUnauthorized tests that suggesting tags for MCP server requires authentication
 func TestSuggestTagsForMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -176,6 +187,7 @@ func TestSuggestTagsForMCPServerUnauthorized(t *testing.T) {
 
 // TestCreateTagWithInvalidData tests creating tag with invalid data
 func TestCreateTagWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -193,6 +205,7 @@ func TestCreateTagWithInvalidData(t *testing.T) {
 
 // TestAddTagsToAgentWithEmptyArray tests adding empty tag array to agent
 func TestAddTagsToAgentWithEmptyArray(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 

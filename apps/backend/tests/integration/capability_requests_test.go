@@ -12,6 +12,7 @@ import (
 
 // TestCreateCapabilityRequestUnauthorized tests that creating capability request requires authentication
 func TestCreateCapabilityRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -31,6 +32,7 @@ func TestCreateCapabilityRequestUnauthorized(t *testing.T) {
 
 // TestListCapabilityRequestsUnauthorized tests that listing capability requests requires authentication
 func TestListCapabilityRequestsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/capability-requests")
@@ -42,6 +44,7 @@ func TestListCapabilityRequestsUnauthorized(t *testing.T) {
 
 // TestGetCapabilityRequestUnauthorized tests that getting capability request requires authentication
 func TestGetCapabilityRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -54,6 +57,7 @@ func TestGetCapabilityRequestUnauthorized(t *testing.T) {
 
 // TestApproveCapabilityRequestUnauthorized tests that approving capability request requires authentication
 func TestApproveCapabilityRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -72,6 +76,7 @@ func TestApproveCapabilityRequestUnauthorized(t *testing.T) {
 
 // TestRejectCapabilityRequestUnauthorized tests that rejecting capability request requires authentication
 func TestRejectCapabilityRequestUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -90,6 +95,7 @@ func TestRejectCapabilityRequestUnauthorized(t *testing.T) {
 
 // TestCreateCapabilityRequestWithInvalidData tests creating capability request with invalid data
 func TestCreateCapabilityRequestWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -107,6 +113,7 @@ func TestCreateCapabilityRequestWithInvalidData(t *testing.T) {
 
 // TestListCapabilityRequestsWithParams tests listing capability requests with query parameters
 func TestListCapabilityRequestsWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/capability-requests?status=pending&limit=10")
@@ -118,6 +125,7 @@ func TestListCapabilityRequestsWithParams(t *testing.T) {
 
 // TestApproveCapabilityRequestEmptyBody tests approving capability request with empty body
 func TestApproveCapabilityRequestEmptyBody(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -130,6 +138,7 @@ func TestApproveCapabilityRequestEmptyBody(t *testing.T) {
 
 // TestRejectCapabilityRequestEmptyBody tests rejecting capability request with empty body
 func TestRejectCapabilityRequestEmptyBody(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	requestID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -142,6 +151,7 @@ func TestRejectCapabilityRequestEmptyBody(t *testing.T) {
 
 // TestGetCapabilityRequestWithInvalidID tests getting capability request with invalid ID
 func TestGetCapabilityRequestWithInvalidID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/capability-requests/invalid-id")

@@ -11,6 +11,7 @@ import (
 
 // TestOAuthGoogleInitiation verifies Google OAuth login endpoint
 func TestOAuthGoogleInitiation(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/auth/login/google")
@@ -32,6 +33,7 @@ func TestOAuthGoogleInitiation(t *testing.T) {
 
 // TestOAuthMicrosoftInitiation verifies Microsoft OAuth login endpoint
 func TestOAuthMicrosoftInitiation(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/auth/login/microsoft")
@@ -55,6 +57,7 @@ func TestOAuthMicrosoftInitiation(t *testing.T) {
 
 // TestMeEndpointUnauthorized verifies /me endpoint requires authentication
 func TestMeEndpointUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/auth/me")
@@ -66,6 +69,7 @@ func TestMeEndpointUnauthorized(t *testing.T) {
 
 // TestLogoutEndpoint verifies logout endpoint clears authentication
 func TestLogoutEndpoint(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	req, err := http.NewRequest("POST", baseURL+"/api/v1/auth/logout", nil)
@@ -90,6 +94,7 @@ func TestLogoutEndpoint(t *testing.T) {
 
 // TestInvalidOAuthProvider verifies invalid OAuth provider returns error
 func TestInvalidOAuthProvider(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/auth/login/invalid-provider")

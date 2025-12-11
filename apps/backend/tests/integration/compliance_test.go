@@ -12,6 +12,7 @@ import (
 
 // TestGetComplianceStatusUnauthorized tests that getting compliance status requires authentication
 func TestGetComplianceStatusUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/status")
@@ -23,6 +24,7 @@ func TestGetComplianceStatusUnauthorized(t *testing.T) {
 
 // TestGetComplianceMetricsUnauthorized tests that getting compliance metrics requires authentication
 func TestGetComplianceMetricsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/metrics")
@@ -34,6 +36,7 @@ func TestGetComplianceMetricsUnauthorized(t *testing.T) {
 
 // TestExportAuditLogUnauthorized tests that exporting audit log requires authentication
 func TestExportAuditLogUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/audit-log/export")
@@ -45,6 +48,7 @@ func TestExportAuditLogUnauthorized(t *testing.T) {
 
 // TestGetAccessReviewUnauthorized tests that getting access review requires authentication
 func TestGetAccessReviewUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/access-review")
@@ -56,6 +60,7 @@ func TestGetAccessReviewUnauthorized(t *testing.T) {
 
 // TestGetDataRetentionUnauthorized tests that getting data retention requires authentication
 func TestGetDataRetentionUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/audit-log/data-retention")
@@ -67,6 +72,7 @@ func TestGetDataRetentionUnauthorized(t *testing.T) {
 
 // TestRunComplianceCheckUnauthorized tests that running compliance check requires authentication
 func TestRunComplianceCheckUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Post(baseURL+"/api/v1/compliance/check", "application/json", nil)
@@ -78,6 +84,7 @@ func TestRunComplianceCheckUnauthorized(t *testing.T) {
 
 // TestGenerateComplianceReportUnauthorized tests that generating compliance report requires authentication
 func TestGenerateComplianceReportUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Post(baseURL+"/api/v1/compliance/reports/generate", "application/json", nil)
@@ -89,6 +96,7 @@ func TestGenerateComplianceReportUnauthorized(t *testing.T) {
 
 // TestRunComplianceCheckWithValidPayload tests compliance check with valid payload
 func TestRunComplianceCheckWithValidPayload(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -107,6 +115,7 @@ func TestRunComplianceCheckWithValidPayload(t *testing.T) {
 
 // TestGenerateComplianceReportWithParams tests generating compliance report with parameters
 func TestGenerateComplianceReportWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -126,6 +135,7 @@ func TestGenerateComplianceReportWithParams(t *testing.T) {
 
 // TestExportAuditLogWithParams tests audit log export with query parameters
 func TestExportAuditLogWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/compliance/audit-log/export?format=csv&start=2024-01-01")

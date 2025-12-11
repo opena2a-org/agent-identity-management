@@ -10,6 +10,7 @@ import (
 
 // TestGetAnalyticsDashboardUnauthorized tests that getting analytics dashboard requires authentication
 func TestGetAnalyticsDashboardUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/dashboard")
@@ -21,6 +22,7 @@ func TestGetAnalyticsDashboardUnauthorized(t *testing.T) {
 
 // TestGetUsageStatisticsUnauthorized tests that getting usage statistics requires authentication
 func TestGetUsageStatisticsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/usage")
@@ -32,6 +34,7 @@ func TestGetUsageStatisticsUnauthorized(t *testing.T) {
 
 // TestGetAnalyticsTrendsUnauthorized tests that getting analytics trends requires authentication
 func TestGetAnalyticsTrendsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/trends")
@@ -43,6 +46,7 @@ func TestGetAnalyticsTrendsUnauthorized(t *testing.T) {
 
 // TestGetVerificationActivityUnauthorized tests that getting verification activity requires authentication
 func TestGetVerificationActivityUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/verification-activity")
@@ -54,6 +58,7 @@ func TestGetVerificationActivityUnauthorized(t *testing.T) {
 
 // TestGenerateAnalyticsReportUnauthorized tests that generating reports requires authentication
 func TestGenerateAnalyticsReportUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/reports/generate")
@@ -65,6 +70,7 @@ func TestGenerateAnalyticsReportUnauthorized(t *testing.T) {
 
 // TestGetAgentActivityUnauthorized tests that getting agent activity requires authentication
 func TestGetAgentActivityUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/agents/activity")
@@ -76,6 +82,7 @@ func TestGetAgentActivityUnauthorized(t *testing.T) {
 
 // TestGetAnalyticsDashboardWithParams tests dashboard stats with query parameters
 func TestGetAnalyticsDashboardWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/dashboard?period=7d")
@@ -87,6 +94,7 @@ func TestGetAnalyticsDashboardWithParams(t *testing.T) {
 
 // TestGetUsageStatisticsWithParams tests usage statistics with query parameters
 func TestGetUsageStatisticsWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/usage?start=2024-01-01&end=2024-12-31")
@@ -98,6 +106,7 @@ func TestGetUsageStatisticsWithParams(t *testing.T) {
 
 // TestGetAgentActivityWithParams tests agent activity with query parameters
 func TestGetAgentActivityWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/agents/activity?agent_id=123e4567-e89b-12d3-a456-426614174000")

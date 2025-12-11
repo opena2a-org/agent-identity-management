@@ -13,6 +13,7 @@ import (
 
 // TestReportCapabilitiesUnauthorized verifies report capabilities requires authentication
 func TestReportCapabilitiesUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -63,6 +64,7 @@ func TestReportCapabilitiesUnauthorized(t *testing.T) {
 
 // TestReportCapabilitiesInvalidAgentID verifies validation of agent ID format
 func TestReportCapabilitiesInvalidAgentID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	invalidAgentID := "not-a-uuid"
 
@@ -105,6 +107,7 @@ func TestReportCapabilitiesInvalidAgentID(t *testing.T) {
 
 // TestReportCapabilitiesMissingDetectedAt verifies validation of required detectedAt field
 func TestReportCapabilitiesMissingDetectedAt(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -146,6 +149,7 @@ func TestReportCapabilitiesMissingDetectedAt(t *testing.T) {
 
 // TestReportCapabilitiesLowRisk verifies handling of low-risk capability report
 func TestReportCapabilitiesLowRisk(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -226,6 +230,7 @@ func TestReportCapabilitiesLowRisk(t *testing.T) {
 
 // TestReportCapabilitiesHighRisk verifies handling of high-risk capability report
 func TestReportCapabilitiesHighRisk(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -311,6 +316,7 @@ func TestReportCapabilitiesHighRisk(t *testing.T) {
 
 // TestReportCapabilitiesCriticalRisk verifies handling of critical-risk capability report
 func TestReportCapabilitiesCriticalRisk(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -392,6 +398,7 @@ func TestReportCapabilitiesCriticalRisk(t *testing.T) {
 
 // TestReportCapabilitiesRiskLevels verifies different risk level handling
 func TestReportCapabilitiesRiskLevels(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -449,6 +456,7 @@ func TestReportCapabilitiesRiskLevels(t *testing.T) {
 
 // TestReportCapabilitiesMultipleAlerts verifies handling of multiple security alerts
 func TestReportCapabilitiesMultipleAlerts(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -527,6 +535,7 @@ func TestReportCapabilitiesMultipleAlerts(t *testing.T) {
 
 // TestReportCapabilitiesBrowserAutomation verifies browser automation capability detection
 func TestReportCapabilitiesBrowserAutomation(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 

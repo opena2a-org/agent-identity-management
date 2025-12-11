@@ -12,6 +12,7 @@ import (
 
 // TestGetVerificationUnauthorized verifies GET verification requires authentication
 func TestGetVerificationUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	// Use a sample verification UUID
@@ -25,6 +26,7 @@ func TestGetVerificationUnauthorized(t *testing.T) {
 
 // TestGetVerificationInvalidUUID verifies validation of UUID format
 func TestGetVerificationInvalidUUID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	// Use invalid UUID format
@@ -45,6 +47,7 @@ func TestGetVerificationInvalidUUID(t *testing.T) {
 
 // TestSubmitVerificationResultUnauthorized verifies POST result requires authentication
 func TestSubmitVerificationResultUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	verificationID := "00000000-0000-0000-0000-000000000000"
@@ -63,6 +66,7 @@ func TestSubmitVerificationResultUnauthorized(t *testing.T) {
 
 // TestSubmitVerificationResultInvalidData verifies validation on result submission
 func TestSubmitVerificationResultInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	verificationID := "00000000-0000-0000-0000-000000000000"
@@ -90,6 +94,7 @@ func TestSubmitVerificationResultInvalidData(t *testing.T) {
 
 // TestSubmitVerificationResultInvalidValue verifies result value validation
 func TestSubmitVerificationResultInvalidValue(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	verificationID := "00000000-0000-0000-0000-000000000000"
@@ -118,6 +123,7 @@ func TestSubmitVerificationResultInvalidValue(t *testing.T) {
 
 // TestCreateVerificationUnauthorized verifies POST verification requires authentication
 func TestCreateVerificationUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	verificationData := map[string]interface{}{

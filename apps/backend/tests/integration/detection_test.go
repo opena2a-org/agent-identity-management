@@ -12,6 +12,7 @@ import (
 
 // TestReportDetectionUnauthorized verifies report detection requires authentication
 func TestReportDetectionUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -41,6 +42,7 @@ func TestReportDetectionUnauthorized(t *testing.T) {
 
 // TestReportDetectionInvalidAgentID verifies validation of agent ID format
 func TestReportDetectionInvalidAgentID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	invalidAgentID := "not-a-uuid"
 
@@ -78,6 +80,7 @@ func TestReportDetectionInvalidAgentID(t *testing.T) {
 
 // TestReportDetectionEmptyArray verifies validation of empty detections array
 func TestReportDetectionEmptyArray(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -110,6 +113,7 @@ func TestReportDetectionEmptyArray(t *testing.T) {
 
 // TestReportDetectionInvalidConfidence verifies confidence score validation
 func TestReportDetectionInvalidConfidence(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -163,6 +167,7 @@ func TestReportDetectionInvalidConfidence(t *testing.T) {
 
 // TestGetDetectionStatusUnauthorized verifies get detection status requires authentication
 func TestGetDetectionStatusUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -175,6 +180,7 @@ func TestGetDetectionStatusUnauthorized(t *testing.T) {
 
 // TestGetDetectionStatusInvalidAgentID verifies validation of agent ID format
 func TestGetDetectionStatusInvalidAgentID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	invalidAgentID := "not-a-uuid"
 
@@ -200,6 +206,7 @@ func TestGetDetectionStatusInvalidAgentID(t *testing.T) {
 
 // TestReportDetectionMethods verifies different detection methods are accepted
 func TestReportDetectionMethods(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -250,6 +257,7 @@ func TestReportDetectionMethods(t *testing.T) {
 
 // TestReportDetectionWithDetails verifies details field is properly handled
 func TestReportDetectionWithDetails(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 
@@ -293,6 +301,7 @@ func TestReportDetectionWithDetails(t *testing.T) {
 
 // TestReportDetectionMultiple verifies multiple detections in single request
 func TestReportDetectionMultiple(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "00000000-0000-0000-0000-000000000000"
 

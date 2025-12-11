@@ -16,6 +16,7 @@ import (
 
 // TestGetAnalyticsDashboardUnauthorized_Extended verifies dashboard requires authentication with proper error
 func TestGetAnalyticsDashboardUnauthorized_Extended(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/analytics/dashboard")
@@ -38,6 +39,7 @@ func TestGetAnalyticsDashboardUnauthorized_Extended(t *testing.T) {
 // ========================================
 
 func TestGetUsageStatistics_PeriodParameterValidation(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	testCases := []struct {
@@ -68,6 +70,7 @@ func TestGetUsageStatistics_PeriodParameterValidation(t *testing.T) {
 // ========================================
 
 func TestGetTrustScoreTrends_PeriodParameters(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	testCases := []struct {
@@ -97,6 +100,7 @@ func TestGetTrustScoreTrends_PeriodParameters(t *testing.T) {
 // ========================================
 
 func TestGetVerificationActivity_MonthsParameterRange(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	testCases := []int{1, 3, 6, 12}
@@ -118,6 +122,7 @@ func TestGetVerificationActivity_MonthsParameterRange(t *testing.T) {
 // ========================================
 
 func TestGetAgentActivity_PaginationParameters(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	testCases := []struct {
@@ -148,6 +153,7 @@ func TestGetAgentActivity_PaginationParameters(t *testing.T) {
 // ========================================
 
 func TestAnalyticsEndpoints_InvalidParameters(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	testCases := []struct {
@@ -176,6 +182,7 @@ func TestAnalyticsEndpoints_InvalidParameters(t *testing.T) {
 }
 
 func TestAnalyticsEndpoints_MissingParameters(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	endpoints := []string{
@@ -200,6 +207,7 @@ func TestAnalyticsEndpoints_MissingParameters(t *testing.T) {
 }
 
 func TestAnalyticsEndpoints_ResponseContentType(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	endpoints := []string{
