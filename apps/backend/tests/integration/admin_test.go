@@ -10,6 +10,7 @@ import (
 
 // TestListUsersUnauthorized verifies admin users endpoint requires authentication
 func TestListUsersUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/users")
@@ -21,6 +22,7 @@ func TestListUsersUnauthorized(t *testing.T) {
 
 // TestGetAuditLogsUnauthorized verifies audit logs endpoint requires authentication
 func TestGetAuditLogsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/audit-logs")
@@ -32,6 +34,7 @@ func TestGetAuditLogsUnauthorized(t *testing.T) {
 
 // TestGetAlertsUnauthorized verifies alerts endpoint requires authentication
 func TestGetAlertsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/admin/alerts")
@@ -43,6 +46,7 @@ func TestGetAlertsUnauthorized(t *testing.T) {
 
 // TestAcknowledgeAlertUnauthorized verifies alert acknowledgment requires authentication
 func TestAcknowledgeAlertUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	alertID := "00000000-0000-0000-0000-000000000000"

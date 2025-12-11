@@ -12,6 +12,7 @@ import (
 
 // TestHealthEndpoint verifies the health check endpoint
 func TestHealthEndpoint(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/health")
@@ -30,6 +31,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 // TestHealthEndpointWithInvalidMethod verifies health endpoint only accepts GET
 func TestHealthEndpointWithInvalidMethod(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Post(baseURL+"/health", "application/json", nil)

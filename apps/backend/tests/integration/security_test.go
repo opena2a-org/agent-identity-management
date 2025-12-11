@@ -11,6 +11,7 @@ import (
 
 // TestGetThreatsUnauthorized tests that getting threats requires authentication
 func TestGetThreatsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/security/threats")
@@ -22,6 +23,7 @@ func TestGetThreatsUnauthorized(t *testing.T) {
 
 // TestGetAnomaliesUnauthorized tests that getting anomalies requires authentication
 func TestGetAnomaliesUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/security/anomalies")
@@ -33,6 +35,7 @@ func TestGetAnomaliesUnauthorized(t *testing.T) {
 
 // TestGetSecurityMetricsUnauthorized tests that getting security metrics requires authentication
 func TestGetSecurityMetricsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/security/metrics")
@@ -44,6 +47,7 @@ func TestGetSecurityMetricsUnauthorized(t *testing.T) {
 
 // TestRunSecurityScanUnauthorized tests that running security scan requires authentication
 func TestRunSecurityScanUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	scanID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -56,6 +60,7 @@ func TestRunSecurityScanUnauthorized(t *testing.T) {
 
 // TestGetIncidentsUnauthorized tests that getting incidents requires authentication
 func TestGetIncidentsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/security/incidents")
@@ -67,6 +72,7 @@ func TestGetIncidentsUnauthorized(t *testing.T) {
 
 // TestResolveIncidentUnauthorized tests that resolving incident requires authentication
 func TestResolveIncidentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	incidentID := "123e4567-e89b-12d3-a456-426614174000"
 

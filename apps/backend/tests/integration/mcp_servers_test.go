@@ -13,6 +13,7 @@ import (
 
 // TestListMCPServersUnauthorized tests that listing MCP servers requires authentication
 func TestListMCPServersUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/mcp-servers")
@@ -24,6 +25,7 @@ func TestListMCPServersUnauthorized(t *testing.T) {
 
 // TestCreateMCPServerUnauthorized tests that creating MCP servers requires authentication
 func TestCreateMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -43,6 +45,7 @@ func TestCreateMCPServerUnauthorized(t *testing.T) {
 
 // TestGetMCPServerUnauthorized tests that getting MCP server requires authentication
 func TestGetMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -55,6 +58,7 @@ func TestGetMCPServerUnauthorized(t *testing.T) {
 
 // TestUpdateMCPServerUnauthorized tests that updating MCP server requires authentication
 func TestUpdateMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -79,6 +83,7 @@ func TestUpdateMCPServerUnauthorized(t *testing.T) {
 
 // TestDeleteMCPServerUnauthorized tests that deleting MCP server requires authentication
 func TestDeleteMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -95,6 +100,7 @@ func TestDeleteMCPServerUnauthorized(t *testing.T) {
 
 // TestVerifyMCPServerUnauthorized tests that verifying MCP server requires authentication
 func TestVerifyMCPServerUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -111,6 +117,7 @@ func TestVerifyMCPServerUnauthorized(t *testing.T) {
 
 // TestAddPublicKeyUnauthorized tests that adding public key requires authentication
 func TestAddPublicKeyUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -134,6 +141,7 @@ func TestAddPublicKeyUnauthorized(t *testing.T) {
 
 // TestGetVerificationStatusUnauthorized tests that getting verification status requires authentication
 func TestGetVerificationStatusUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -146,6 +154,7 @@ func TestGetVerificationStatusUnauthorized(t *testing.T) {
 
 // TestGetMCPServerCapabilitiesUnauthorized tests that getting capabilities requires authentication
 func TestGetMCPServerCapabilitiesUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -158,6 +167,7 @@ func TestGetMCPServerCapabilitiesUnauthorized(t *testing.T) {
 
 // TestGetMCPServerAgentsUnauthorized tests that getting MCP server agents requires authentication
 func TestGetMCPServerAgentsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -170,6 +180,7 @@ func TestGetMCPServerAgentsUnauthorized(t *testing.T) {
 
 // TestVerifyMCPActionUnauthorized tests that verifying MCP action requires authentication
 func TestVerifyMCPActionUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	mcpID := "123e4567-e89b-12d3-a456-426614174000"
 

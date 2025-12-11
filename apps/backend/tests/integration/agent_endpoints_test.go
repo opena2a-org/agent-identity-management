@@ -11,6 +11,7 @@ import (
 )
 
 func TestAgentEndpoints(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}

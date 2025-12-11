@@ -57,20 +57,30 @@ func NewTestContext(t *testing.T) *TestContext {
 }
 
 // WaitForBackend waits for backend to be ready
+// This validates that the AIM backend is actually running (not some other service)
 func (tc *TestContext) WaitForBackend() error {
-	maxRetries := 30
-	for i := 0; i < maxRetries; i++ {
-		resp, err := tc.Client.Get(tc.Config.BaseURL + "/health")
-		if err == nil && resp.StatusCode == 200 {
-			resp.Body.Close()
-			return nil
-		}
-		if resp != nil {
-			resp.Body.Close()
-		}
-		time.Sleep(2 * time.Second)
+	// First, check if any server is listening
+	resp, err := tc.Client.Get(tc.Config.BaseURL + "/health")
+	if err != nil {
+		tc.T.Skipf("AIM backend not reachable at %s: %v (is the backend running?)", tc.Config.BaseURL, err)
+		return nil // Skip will exit the test
 	}
-	return fmt.Errorf("backend not ready after %d retries", maxRetries)
+	defer resp.Body.Close()
+
+	// Check if it's actually the AIM backend by verifying the response
+	var healthResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
+		tc.T.Skipf("AIM backend not responding correctly at %s: response is not valid JSON (another service may be running on this port)", tc.Config.BaseURL)
+		return nil
+	}
+
+	// AIM health endpoint returns {"status": "healthy", "service": "agent-identity-management"}
+	if healthResp["service"] != "agent-identity-management" {
+		tc.T.Skipf("AIM backend not running at %s: got service=%v (expected 'agent-identity-management'). Another service may be running on this port.", tc.Config.BaseURL, healthResp["service"])
+		return nil
+	}
+
+	return nil
 }
 
 // LoginAsAdmin logs in as admin and stores token

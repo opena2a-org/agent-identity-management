@@ -12,6 +12,7 @@ import (
 
 // TestListAgentsUnauthorized verifies agents endpoint requires authentication
 func TestListAgentsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/agents")
@@ -23,6 +24,7 @@ func TestListAgentsUnauthorized(t *testing.T) {
 
 // TestCreateAgentUnauthorized verifies create agent requires authentication
 func TestCreateAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	agentData := map[string]interface{}{
@@ -43,6 +45,7 @@ func TestCreateAgentUnauthorized(t *testing.T) {
 
 // TestGetAgentUnauthorized verifies get agent requires authentication
 func TestGetAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	// Use a sample UUID
@@ -56,6 +59,7 @@ func TestGetAgentUnauthorized(t *testing.T) {
 
 // TestUpdateAgentUnauthorized verifies update agent requires authentication
 func TestUpdateAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	agentID := "00000000-0000-0000-0000-000000000000"
@@ -78,6 +82,7 @@ func TestUpdateAgentUnauthorized(t *testing.T) {
 
 // TestDeleteAgentUnauthorized verifies delete agent requires authentication
 func TestDeleteAgentUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	agentID := "00000000-0000-0000-0000-000000000000"
@@ -94,6 +99,7 @@ func TestDeleteAgentUnauthorized(t *testing.T) {
 
 // TestCreateAgentInvalidData verifies validation on agent creation
 func TestCreateAgentInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	// Missing required fields

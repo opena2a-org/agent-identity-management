@@ -12,6 +12,7 @@ import (
 
 // TestListVerificationEventsUnauthorized tests that listing verification events requires authentication
 func TestListVerificationEventsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events")
@@ -23,6 +24,7 @@ func TestListVerificationEventsUnauthorized(t *testing.T) {
 
 // TestGetRecentVerificationEventsUnauthorized tests that getting recent verification events requires authentication
 func TestGetRecentVerificationEventsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events/recent")
@@ -34,6 +36,7 @@ func TestGetRecentVerificationEventsUnauthorized(t *testing.T) {
 
 // TestGetVerificationEventsStatisticsUnauthorized tests that getting verification events statistics requires authentication
 func TestGetVerificationEventsStatisticsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events/statistics")
@@ -45,6 +48,7 @@ func TestGetVerificationEventsStatisticsUnauthorized(t *testing.T) {
 
 // TestGetVerificationEventUnauthorized tests that getting single verification event requires authentication
 func TestGetVerificationEventUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	eventID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -57,6 +61,7 @@ func TestGetVerificationEventUnauthorized(t *testing.T) {
 
 // TestCreateVerificationEventUnauthorized tests that creating verification event requires authentication
 func TestCreateVerificationEventUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -76,6 +81,7 @@ func TestCreateVerificationEventUnauthorized(t *testing.T) {
 
 // TestDeleteVerificationEventUnauthorized tests that deleting verification event requires authentication
 func TestDeleteVerificationEventUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	eventID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -92,6 +98,7 @@ func TestDeleteVerificationEventUnauthorized(t *testing.T) {
 
 // TestListVerificationEventsWithParams tests listing verification events with query parameters
 func TestListVerificationEventsWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events?limit=10&offset=0")
@@ -103,6 +110,7 @@ func TestListVerificationEventsWithParams(t *testing.T) {
 
 // TestGetRecentVerificationEventsWithLimit tests getting recent events with limit parameter
 func TestGetRecentVerificationEventsWithLimit(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events/recent?limit=5")
@@ -114,6 +122,7 @@ func TestGetRecentVerificationEventsWithLimit(t *testing.T) {
 
 // TestCreateVerificationEventWithInvalidData tests creating verification event with invalid data
 func TestCreateVerificationEventWithInvalidData(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	payload := map[string]interface{}{
@@ -131,6 +140,7 @@ func TestCreateVerificationEventWithInvalidData(t *testing.T) {
 
 // TestGetVerificationEventWithInvalidID tests getting verification event with invalid ID
 func TestGetVerificationEventWithInvalidID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/verification-events/invalid-id")

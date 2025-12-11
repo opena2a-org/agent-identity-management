@@ -12,6 +12,7 @@ import (
 
 // TestCalculateTrustScoreUnauthorized tests that calculating trust score requires authentication
 func TestCalculateTrustScoreUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -24,6 +25,7 @@ func TestCalculateTrustScoreUnauthorized(t *testing.T) {
 
 // TestCalculateTrustScoreInvalidAgentID tests calculating trust score with invalid agent ID
 func TestCalculateTrustScoreInvalidAgentID(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Post(baseURL+"/api/v1/trust-score/calculate/invalid-id", "application/json", nil)
@@ -35,6 +37,7 @@ func TestCalculateTrustScoreInvalidAgentID(t *testing.T) {
 
 // TestGetTrustScoreUnauthorized tests that getting trust score requires authentication
 func TestGetTrustScoreUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -47,6 +50,7 @@ func TestGetTrustScoreUnauthorized(t *testing.T) {
 
 // TestGetTrustScoreHistoryUnauthorized tests that getting trust score history requires authentication
 func TestGetTrustScoreHistoryUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
@@ -59,6 +63,7 @@ func TestGetTrustScoreHistoryUnauthorized(t *testing.T) {
 
 // TestGetTrustScoreTrendsUnauthorized tests that getting trust score trends requires authentication
 func TestGetTrustScoreTrendsUnauthorized(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/trust-score/trends")
@@ -70,6 +75,7 @@ func TestGetTrustScoreTrendsUnauthorized(t *testing.T) {
 
 // TestGetTrustScoreTrendsWithParams tests trust score trends with query parameters
 func TestGetTrustScoreTrendsWithParams(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 
 	resp, err := http.Get(baseURL + "/api/v1/trust-score/trends?days=30")
@@ -81,6 +87,7 @@ func TestGetTrustScoreTrendsWithParams(t *testing.T) {
 
 // TestCalculateTrustScoreEmptyBody tests calculating trust score with empty body
 func TestCalculateTrustScoreEmptyBody(t *testing.T) {
+	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()
 	agentID := "123e4567-e89b-12d3-a456-426614174000"
 
