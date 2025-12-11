@@ -80,6 +80,34 @@ from .capability_detection import CapabilityDetector, auto_detect_capabilities, 
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 from .attestation_cache import AttestationCache
 
+# Credential management utilities
+from .credentials import (
+    load_sdk_credentials,
+    save_sdk_credentials,
+    load_agent_credentials,
+    save_agent_credentials,
+    list_agent_credentials,
+    delete_agent_credentials,
+    CredentialType,
+)
+
+# Security logging for SOC/SIEM integration
+from .security_logging import (
+    SecurityLogger,
+    SecurityEvent,
+    security_logger,
+    configure_from_environment as configure_security_logging,
+    # Event types for custom logging
+    EventCategory,
+    EventSeverity,
+    AuthnEventType,
+    AuthzEventType,
+    AgentEventType,
+    CredEventType,
+    MCPEventType,
+    SecurityEventType,
+)
+
 # Read version from VERSION file (single source of truth)
 # Supports both development (file in parent dir) and installed package scenarios
 import os as _os
@@ -118,5 +146,26 @@ __all__ = [
     "auto_detect_agent_type",
     "ProtocolDetector",
     "auto_detect_protocol",
-    "AttestationCache"
+    "AttestationCache",
+    # Credential management
+    "load_sdk_credentials",
+    "save_sdk_credentials",
+    "load_agent_credentials",
+    "save_agent_credentials",
+    "list_agent_credentials",
+    "delete_agent_credentials",
+    "CredentialType",
+    # Security logging (SOC/SIEM integration)
+    "SecurityLogger",
+    "SecurityEvent",
+    "security_logger",
+    "configure_security_logging",
+    "EventCategory",
+    "EventSeverity",
+    "AuthnEventType",
+    "AuthzEventType",
+    "AgentEventType",
+    "CredEventType",
+    "MCPEventType",
+    "SecurityEventType",
 ]

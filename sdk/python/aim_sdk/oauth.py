@@ -16,6 +16,18 @@ from typing import Optional, Dict, Any
 import requests
 
 from .exceptions import AuthenticationError
+from .credentials import (
+    load_sdk_credentials as _load_sdk_credentials_from_module,
+    save_sdk_credentials as _save_sdk_credentials_to_module,
+    get_sdk_credentials_path,
+    print_sdk_credentials_not_found_error,
+    print_wrong_credential_type_error,
+    print_token_expired_error,
+    detect_credential_type,
+    CredentialType,
+    SDK_CREDENTIALS_FILE,
+)
+from .security_logging import security_logger, AuthnEventType, CredEventType
 
 # Try to import secure storage (optional dependency)
 try:
@@ -41,14 +53,14 @@ class OAuthTokenManager:
         Initialize OAuth token manager with intelligent credential discovery.
 
         Args:
-            credentials_path: Path to credentials.json file (default: auto-discover)
+            credentials_path: Path to credentials.json file (default: auto-discover via credentials module)
             use_secure_storage: Use encrypted storage if available (default: True)
         """
+        # Use the centralized credentials module for path discovery
         if credentials_path:
             self.credentials_path = Path(credentials_path)
         else:
-            # Intelligent credential discovery
-            self.credentials_path = self._discover_credentials_path()
+            self.credentials_path = get_sdk_credentials_path()
 
         self.credentials: Optional[Dict[str, Any]] = None
         self.access_token: Optional[str] = None
@@ -65,67 +77,6 @@ class OAuthTokenManager:
         if self._credentials_exist():
             self.load_credentials()
 
-    def _discover_credentials_path(self) -> Path:
-        """Intelligently discover credentials location with auto-copy for downloaded SDKs."""
-        import shutil
-        home_creds = Path.home() / ".aim" / "credentials.json"
-        home_encrypted = Path.home() / ".aim" / "credentials.encrypted"
-
-        # Check if SDK package has credentials (fresh download)
-        sdk_creds = None
-        try:
-            import aim_sdk
-            sdk_package_root = Path(aim_sdk.__file__).parent.parent
-            sdk_creds = sdk_package_root / ".aim" / "credentials.json"
-            if not sdk_creds.exists():
-                sdk_creds = None
-        except:
-            pass
-
-        # If SDK package has credentials, check if they're different from home
-        if sdk_creds:
-            should_install = False
-            if not home_creds.exists():
-                should_install = True
-            else:
-                # Compare token IDs - if different, new SDK was downloaded
-                try:
-                    with open(sdk_creds, 'r') as f:
-                        sdk_data = json.load(f)
-                    with open(home_creds, 'r') as f:
-                        home_data = json.load(f)
-
-                    # Check if home credentials are SDK OAuth format (has refreshToken)
-                    # vs agent credentials format (has agent_id/private_key)
-                    home_is_oauth = 'refreshToken' in home_data or 'refresh_token' in home_data
-
-                    if not home_is_oauth:
-                        # Home has agent credentials, not SDK credentials - install SDK creds
-                        should_install = True
-                    else:
-                        # Both are OAuth format - compare token IDs
-                        sdkTokenId = sdk_data.get('sdkTokenId')
-                        home_token_id = home_data.get('sdkTokenId')
-                        if sdkTokenId and sdkTokenId != home_token_id:
-                            should_install = True
-                except:
-                    pass
-
-            if should_install:
-                try:
-                    home_creds.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy(sdk_creds, home_creds)
-                    os.chmod(home_creds, 0o600)
-                    # Clear old encrypted credentials - they have stale tokens
-                    if home_encrypted.exists():
-                        home_encrypted.unlink()
-                    print(f"✅ SDK credentials installed to {home_creds}")
-                except Exception:
-                    return sdk_creds
-
-        # Always use home directory for credentials
-        return home_creds
-
     def _credentials_exist(self) -> bool:
         """Check if credentials exist (encrypted or plaintext)."""
         if self.secure_storage:
@@ -134,22 +85,42 @@ class OAuthTokenManager:
 
     def load_credentials(self) -> bool:
         """
-        Load credentials from file (encrypted or plaintext).
+        Load SDK credentials with proper type validation.
+
+        Uses the centralized credentials module which:
+        - Checks the correct SDK credentials path
+        - Migrates from legacy locations if needed
+        - Validates credential type (SDK vs Agent)
 
         Returns:
-            True if credentials were loaded successfully
+            True if SDK credentials were loaded successfully
         """
         try:
+            # Try secure storage first
             if self.secure_storage:
-                # Try secure storage first
-                self.credentials = self.secure_storage.load_credentials()
-                if self.credentials:
-                    return True
+                creds = self.secure_storage.load_credentials()
+                if creds:
+                    # Validate it's SDK credentials, not agent credentials
+                    cred_type = detect_credential_type(creds)
+                    if cred_type == CredentialType.SDK_OAUTH:
+                        self.credentials = creds
+                        return True
+                    elif cred_type == CredentialType.AGENT:
+                        # Wrong credential type in secure storage - this shouldn't happen
+                        # but handle it gracefully
+                        print_wrong_credential_type_error(cred_type)
+                        return False
 
-            # Fall back to plaintext
-            if self.credentials_path.exists():
-                with open(self.credentials_path, 'r') as f:
-                    self.credentials = json.load(f)
+            # Use centralized credentials module for discovery and migration
+            creds = _load_sdk_credentials_from_module()
+            if creds:
+                self.credentials = creds
+                # Migrate to secure storage if available
+                if self.secure_storage:
+                    try:
+                        self.secure_storage.save_credentials(creds)
+                    except Exception:
+                        pass  # Continue even if secure storage fails
                 return True
 
             return False
@@ -160,24 +131,27 @@ class OAuthTokenManager:
 
     def save_credentials(self, credentials: Dict[str, Any]) -> bool:
         """
-        Save credentials securely.
+        Save SDK credentials securely.
+
+        Uses the centralized credentials module to ensure proper
+        file location and schema versioning.
 
         Args:
-            credentials: Credentials dictionary to save
+            credentials: SDK credentials dictionary to save
 
         Returns:
             True if saved successfully
         """
         try:
+            # Use centralized module for proper path and schema
+            _save_sdk_credentials_to_module(credentials)
+
+            # Also save to secure storage if available
             if self.secure_storage:
-                self.secure_storage.save_credentials(credentials)
-            else:
-                # Fall back to plaintext
-                self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.credentials_path, 'w') as f:
-                    json.dump(credentials, f, indent=2)
-                # Set restrictive permissions
-                os.chmod(self.credentials_path, 0o600)
+                try:
+                    self.secure_storage.save_credentials(credentials)
+                except Exception:
+                    pass  # Continue even if secure storage fails
 
             self.credentials = credentials
             return True
@@ -223,10 +197,16 @@ class OAuthTokenManager:
         # Support both camelCase and snake_case for backward compatibility
         has_refresh_token = 'refreshToken' in self.credentials or 'refresh_token' in self.credentials
         if not self.credentials or not has_refresh_token:
+            security_logger.log_authentication(
+                AuthnEventType.TOKEN_REFRESH_FAILED,
+                success=False,
+                error="No refresh token available"
+            )
             return None
 
         aim_url = self.credentials.get('aimUrl') or self.credentials.get('aim_url', 'http://localhost:8080')
         refresh_token = self.credentials.get('refreshToken') or self.credentials.get('refresh_token')
+        token_id = self.credentials.get('sdkTokenId', '')[:8] + "..." if self.credentials.get('sdkTokenId') else None
 
         try:
             # Call token refresh endpoint (with rotation support)
@@ -244,6 +224,11 @@ class OAuthTokenManager:
 
                 # Check if token was revoked/expired - try automatic recovery
                 if 'revoked' in error_msg.lower() or 'invalid' in error_msg.lower():
+                    security_logger.log_authentication(
+                        AuthnEventType.TOKEN_REVOKED,
+                        success=False,
+                        details={"token_id": token_id, "attempting_recovery": True}
+                    )
                     print("🔄 Token was revoked - attempting automatic recovery...")
 
                     # Try token recovery endpoint (new feature - zero downtime!)
@@ -296,28 +281,37 @@ class OAuthTokenManager:
                                 except Exception:
                                     self.access_token_expiry = time.time() + 3600
 
+                                security_logger.log_authentication(
+                                    AuthnEventType.TOKEN_RECOVERED,
+                                    success=True,
+                                    details={"token_id": token_id, "recovery": "automatic"}
+                                )
                                 return self.access_token
 
                     except Exception as recovery_error:
                         # Recovery failed - fall back to manual instructions
-                        pass
+                        security_logger.log_authentication(
+                            AuthnEventType.TOKEN_REFRESH_FAILED,
+                            success=False,
+                            error=f"Recovery failed: {recovery_error}",
+                            details={"token_id": token_id}
+                        )
 
-                    # If recovery failed, show manual instructions
-                    print("\n" + "=" * 80)
-                    print("⚠️  SDK TOKEN EXPIRED OR REVOKED")
-                    print("=" * 80)
-                    print("\nYour SDK refresh token is no longer valid. This can happen if:")
-                    print("  • The token expired (90 days since last use)")
-                    print("  • The token was revoked for security reasons")
-                    print("  • Another SDK/tool rotated your token")
-                    print("\n📥 TO FIX: Download a fresh SDK from the AIM dashboard")
-                    print(f"   1. Visit: {aim_url}")
-                    print("   2. Go to Settings → SDK Downloads")
-                    print("   3. Click 'Download Python SDK'")
-                    print("   4. Extract and run your code again")
-                    print("\n💡 TIP: Your agents and data are safe! Only the SDK credentials need updating.")
-                    print("=" * 80 + "\n")
+                    # If recovery failed, show manual instructions using centralized error
+                    security_logger.log_authentication(
+                        AuthnEventType.TOKEN_EXPIRED,
+                        success=False,
+                        error="Token expired and recovery failed",
+                        details={"token_id": token_id}
+                    )
+                    print_token_expired_error(aim_url)
                 else:
+                    security_logger.log_authentication(
+                        AuthnEventType.TOKEN_REFRESH_FAILED,
+                        success=False,
+                        error=error_msg,
+                        details={"token_id": token_id, "http_status": response.status_code}
+                    )
                     print(f"⚠️  Token refresh failed with status {response.status_code}: {error_msg}")
 
                 return None
@@ -333,6 +327,7 @@ class OAuthTokenManager:
 
                 # Also update sdkTokenId if present in the new token
                 import base64
+                new_token_id_full = None
                 try:
                     # Decode new refresh token to get JTI
                     token_parts = new_refresh_token.split('.')
@@ -342,13 +337,22 @@ class OAuthTokenManager:
                         if padding != 4:
                             payload_part += '=' * padding
                         token_payload = json.loads(base64.b64decode(payload_part))
-                        new_token_id = token_payload.get('jti')
-                        if new_token_id:
-                            self.credentials['sdkTokenId'] = new_token_id
+                        new_token_id_full = token_payload.get('jti')
+                        if new_token_id_full:
+                            self.credentials['sdkTokenId'] = new_token_id_full
                 except Exception:
                     pass  # Continue even if JTI extraction fails
 
                 self.save_credentials(self.credentials)
+                security_logger.log_credential_event(
+                    CredEventType.CREDENTIAL_ROTATED,
+                    credential_type="sdk_oauth",
+                    success=True,
+                    details={
+                        "old_token_id": token_id,
+                        "new_token_id": new_token_id_full[:8] + "..." if new_token_id_full else None
+                    }
+                )
                 print("🔄 Token rotated successfully")
 
             # Decode token to get expiry (JWT format)
@@ -369,9 +373,20 @@ class OAuthTokenManager:
                     # Assume 1 hour expiry if we can't decode
                     self.access_token_expiry = time.time() + 3600
 
+            security_logger.log_authentication(
+                AuthnEventType.TOKEN_REFRESH,
+                success=True,
+                details={"token_id": token_id}
+            )
             return self.access_token
 
         except Exception as e:
+            security_logger.log_authentication(
+                AuthnEventType.TOKEN_REFRESH_FAILED,
+                success=False,
+                error=str(e),
+                details={"token_id": token_id if 'token_id' in dir() else None}
+            )
             print(f"⚠️  Warning: Token refresh failed: {e}")
             return None
 
@@ -437,99 +452,33 @@ class OAuthTokenManager:
 
 def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, Any]]:
     """
-    Load credentials from SDK-embedded location.
+    Load SDK credentials with intelligent discovery and migration.
 
-    This function looks for credentials in multiple locations:
-    1. Home directory (~/.aim/credentials.json) - for installed SDK
-    2. SDK package directory (aim_sdk/../.aim/credentials.json) - for downloaded SDK
+    This function uses the centralized credentials module which:
+    1. Checks ~/.aim/sdk_credentials.json (new location)
+    2. Migrates from ~/.aim/credentials.json if it contains SDK credentials
+    3. Installs from SDK package if found (fresh download)
+
+    Note: This only returns SDK OAuth credentials (refreshToken, sdkTokenId).
+    For agent credentials, use load_agent_credentials() from the credentials module.
 
     Args:
         use_secure_storage: Try encrypted storage first (default: True)
 
     Returns:
-        Credentials dict or None if not found
+        SDK credentials dict or None if not found
     """
-    # Build list of credential paths to check
-    home_credentials_path = Path.home() / ".aim" / "credentials.json"
-    credentials_paths = [home_credentials_path]
-
-    # Also check SDK package directory for downloaded SDKs
-    try:
-        import aim_sdk
-        sdk_package_root = Path(aim_sdk.__file__).parent.parent
-        sdk_creds = sdk_package_root / ".aim" / "credentials.json"
-        if sdk_creds.exists() and sdk_creds not in credentials_paths:
-            credentials_paths.append(sdk_creds)
-    except Exception:
-        pass  # Continue without SDK path
-
-    for credentials_path in credentials_paths:
-        # Try secure storage first
-        if use_secure_storage and SECURE_STORAGE_AVAILABLE:
-            try:
-                storage = SecureCredentialStorage(str(credentials_path))
-                credentials = storage.load_credentials()
-                if credentials:
-                    _persist_credentials_to_home(
-                        credentials,
-                        credentials_path,
-                        home_credentials_path,
-                        use_secure_storage
-                    )
+    # Try secure storage first
+    if use_secure_storage and SECURE_STORAGE_AVAILABLE:
+        try:
+            storage = SecureCredentialStorage(str(SDK_CREDENTIALS_FILE))
+            credentials = storage.load_credentials()
+            if credentials:
+                cred_type = detect_credential_type(credentials)
+                if cred_type == CredentialType.SDK_OAUTH:
                     return credentials
-            except Exception as e:
-                # Continue to next path
-                pass
+        except Exception:
+            pass
 
-        # Fall back to plaintext
-        if credentials_path.exists():
-            try:
-                with open(credentials_path, 'r') as f:
-                    credentials = json.load(f)
-                    _persist_credentials_to_home(
-                        credentials,
-                        credentials_path,
-                        home_credentials_path,
-                        use_secure_storage
-                    )
-                    return credentials
-            except Exception as e:
-                # Continue to next path
-                pass
-
-    # No credentials found in any location
-    return None
-
-
-def _persist_credentials_to_home(
-    credentials: Dict[str, Any],
-    source_path: Path,
-    home_credentials_path: Path,
-    use_secure_storage: bool
-) -> None:
-    """
-    Ensure credentials are stored under the user's home directory (encrypted or plaintext).
-    """
-    try:
-        source_path = Path(source_path)
-        if source_path == home_credentials_path:
-            return
-
-        home_credentials_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if use_secure_storage and SECURE_STORAGE_AVAILABLE:
-            try:
-                storage = SecureCredentialStorage(str(home_credentials_path))
-                storage.save_credentials(credentials)
-                return
-            except Exception:
-                pass
-
-        # Plaintext fallback
-        with open(home_credentials_path, 'w') as f:
-            json.dump(credentials, f, indent=2)
-        os.chmod(home_credentials_path, 0o600)
-
-    except Exception:
-        # Best-effort only; ignore failures so caller can still use in-memory creds
-        pass
+    # Fall back to centralized credentials module
+    return _load_sdk_credentials_from_module()
