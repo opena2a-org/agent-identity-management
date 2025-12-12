@@ -41,10 +41,20 @@ export function MCPSetupGuide({ mcpServerId, mcpServerName, mcpServerUrl }: MCPS
 
   // Quick attestation example (Python only - the only SDK available)
   const quickStartCode = `from aim_sdk import secure
+from aim_sdk.integrations.mcp import attest_mcp_server
+
 agent = secure("my-agent")
 
-# Attest to MCP server
-agent.attest_mcp("${mcpServerName}", "${mcpServerUrl}")`;
+# Attest to MCP server (auto-discovers capabilities)
+result = attest_mcp_server(
+    aim_client=agent._client,
+    server_id="${mcpServerId}",
+    mcp_url="${mcpServerUrl}",
+    mcp_name="${mcpServerName}",
+    auto_discover=True  # Automatically discover MCP capabilities
+)
+print(f"Attestation ID: {result['attestation_id']}")
+print(f"MCP Confidence: {result['mcp_confidence_score']}%")`;
 
   // cURL example for verification (READ-only operations)
   const curlExample = `# cURL can READ MCP data, but CANNOT create attestations
@@ -62,31 +72,32 @@ curl -X GET "${apiUrl}/api/v1/mcp-servers/${mcpServerId}/attestations" \\
   -H "Authorization: Bearer $API_KEY"`;
 
   // Advanced Python example
-  const advancedCode = `# Full MCP attestation with capability verification
+  const advancedCode = `# Full MCP attestation with manual capability list
 from aim_sdk import AIMClient
-import os
+from aim_sdk.integrations.mcp import attest_mcp_server
 
-# Initialize client with your agent credentials
-client = AIMClient(
-    api_url="${apiUrl}",
-    agent_id="YOUR_AGENT_ID",
-    private_key=os.getenv("AIM_PRIVATE_KEY")
-)
+# Load existing agent credentials
+client = AIMClient.from_credentials("my-agent")
 
 # MCP Server: ${mcpServerName}
 # URL: ${mcpServerUrl}
 
-# Create cryptographically-signed attestation
-attestation = client.attest_mcp_server(
-    mcp_server_id="${mcpServerId}",
-    mcp_server_url="${mcpServerUrl}",
-    capabilities=["tools", "resources"],  # Verified capabilities
-    health_check=True  # Run connectivity check
+# Create cryptographically-signed attestation with manual capabilities
+result = attest_mcp_server(
+    aim_client=client,
+    server_id="${mcpServerId}",
+    mcp_url="${mcpServerUrl}",
+    mcp_name="${mcpServerName}",
+    capabilities_found=["tool1", "tool2"],  # Manual capability list
+    connection_successful=True,
+    health_check_passed=True,
+    connection_latency_ms=45.0
 )
 
-print(f"Attestation created: {attestation['id']}")
-print(f"Signature: {attestation['signature'][:32]}...")
-print(f"Confidence score: {attestation['confidence_score']}%")`;
+print(f"Success: {result['success']}")
+print(f"Attestation ID: {result['attestation_id']}")
+print(f"MCP Confidence Score: {result['mcp_confidence_score']}%")
+print(f"Total Attestations: {result['attestation_count']}")`;
 
   return (
     <div className="space-y-6">
