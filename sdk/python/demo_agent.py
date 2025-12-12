@@ -362,15 +362,20 @@ it's NOT authorized to do...
                 resource=attack['resource'],
                 context={"source": "prompt_injection_demo", "prompt": attack['prompt'][:100]}
             )
-            # Even if it returns, check if denied
+            # Check if denied or not verified
             if result.get("status") == "denied" or not result.get("verified", True):
                 print("  [AIM] ❌ ACTION BLOCKED!")
                 print(f"        Reason: '{attack['action']}' not in agent's declared capabilities")
                 print("        → Security alert created")
                 print("        → Violation logged for audit")
             else:
-                print("  [AIM] Action result:", result.get("status", "unknown"))
+                # Action was allowed - this happens in MONITORING mode
+                print("  [AIM] ⚠️  ACTION LOGGED (MONITORING mode)")
+                print(f"        Capability '{attack['action']}' was allowed but flagged")
+                print("        → Security alert created for review")
+                print("        → Switch to STRICT mode to block unauthorized actions")
         except Exception as e:
+            # ActionDeniedError or other exception = blocked
             print("  [AIM] ❌ ACTION BLOCKED!")
             print(f"        Reason: '{attack['action']}' not in agent's declared capabilities")
             print("        → Security alert created")
@@ -383,14 +388,16 @@ it's NOT authorized to do...
               Capability-Based Access Control (CBAC) Demo Complete
 ================================================================================
 
-All 4 prompt injection attacks were BLOCKED by AIM's capability enforcement.
+All 4 prompt injection attempts were intercepted by AIM's capability enforcement.
+
+• In STRICT mode: Unauthorized actions are BLOCKED
+• In MONITORING mode: Actions are LOGGED for review (not blocked)
+
+To enable blocking, go to Settings → Security Policies → Set mode to STRICT
 
 Key takeaway: Even if an attacker tricks your agent's LLM into wanting to
-perform an unauthorized action, AIM blocks it because the action isn't in
-the agent's declared capabilities.
-
-This is why Capability-Based Access Control matters - security at the API
-layer, not just the prompt layer.
+perform an unauthorized action, AIM intercepts it because the action isn't
+in the agent's declared capabilities.
 
 Check your dashboard to see the security alerts:
   → http://localhost:3000/dashboard/alerts
