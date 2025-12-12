@@ -19,7 +19,7 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 
 ---
 
-## The Problem
+## Challenges with AI Agents
 
 Your AI agents are autonomous. They call APIs, access databases, and make decisions. But right now:
 
