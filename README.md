@@ -15,6 +15,8 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 
 </div>
 
+> **📢 December 2024 Update:** We've shipped significant improvements to the SDK v1.14.0 including enhanced credential management, streamlined agent registration, and improved MCP attestation workflows. Updated demo video coming soon!
+
 ---
 
 ## The Problem
