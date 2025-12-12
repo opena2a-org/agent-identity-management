@@ -43,11 +43,11 @@ export function MCPSetupGuide({ mcpServerId, mcpServerName, mcpServerUrl }: MCPS
   const quickStartCode = `from aim_sdk import secure
 from aim_sdk.integrations.mcp import attest_mcp_server
 
-agent = secure("my-agent")
+client = secure("my-agent")
 
 # Attest to MCP server (auto-discovers capabilities)
 result = attest_mcp_server(
-    aim_client=agent._client,
+    aim_client=client,
     server_id="${mcpServerId}",
     mcp_url="${mcpServerUrl}",
     mcp_name="${mcpServerName}",
