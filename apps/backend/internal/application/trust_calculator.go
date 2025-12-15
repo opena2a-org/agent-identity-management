@@ -265,73 +265,64 @@ func (c *TrustCalculator) calculateSuccessRate(agent *domain.Agent) float64 {
 }
 
 // Factor 4: Security Alerts (15% weight)
-// Measures active security alerts by severity
+// Measures security posture based on violations with CUMULATIVE impact
+// Each violation reduces score; blocked violations have 50% impact
 func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
-	// Query alerts table for agent-specific unacknowledged alerts
+	score := 1.0
+
+	// Check active security alerts first
 	if c.alertRepo != nil {
 		alerts, err := c.alertRepo.GetUnacknowledgedByResourceID(agent.ID)
 		if err == nil && len(alerts) > 0 {
-			// Count by severity
-			criticalCount := 0
-			highCount := 0
-			warningCount := 0
-
 			for _, alert := range alerts {
 				switch alert.Severity {
 				case domain.AlertSeverityCritical:
-					criticalCount++
+					score -= 0.25 // Critical alerts have major impact
 				case domain.AlertSeverityHigh:
-					highCount++
+					score -= 0.10
 				case domain.AlertSeverityWarning:
-					warningCount++
+					score -= 0.05
 				}
 			}
-
-			// Apply scoring logic from documentation
-			if criticalCount > 0 {
-				return 0.0
-			} else if highCount > 0 {
-				return 0.50
-			} else if warningCount > 0 {
-				return 0.75
-			}
 		}
 	}
 
-	// Also check capability violations as additional security signal
-	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 100, 0)
+	// Check capability violations with cumulative impact
+	violations, _, err := c.capabilityRepo.GetViolationsByAgentID(agent.ID, 500, 0)
 	if err != nil || len(violations) == 0 {
-		return 1.0 // No violations = perfect security score
+		return math.Max(0.0, score)
 	}
 
-	// Count violations by severity in last 30 days
-	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
-	criticalCount := 0
-	highCount := 0
-	mediumCount := 0
+	// Only count violations from last 90 days
+	ninetyDaysAgo := time.Now().AddDate(0, 0, -90)
 
 	for _, v := range violations {
-		if v.CreatedAt.After(thirtyDaysAgo) {
+		if v.CreatedAt.After(ninetyDaysAgo) {
+			// Base impact by severity
+			var impact float64
 			switch v.Severity {
 			case domain.ViolationSeverityCritical:
-				criticalCount++
+				impact = 0.25
 			case domain.ViolationSeverityHigh:
-				highCount++
+				impact = 0.10
 			case domain.ViolationSeverityMedium:
-				mediumCount++
+				impact = 0.05
+			case domain.ViolationSeverityLow:
+				impact = 0.02
+			default:
+				impact = 0.02
 			}
+
+			// Blocked violations have 50% impact (system successfully prevented the attack)
+			if v.IsBlocked {
+				impact *= 0.5
+			}
+
+			score -= impact
 		}
 	}
 
-	// Apply scoring logic from documentation
-	if criticalCount > 0 {
-		return 0.0
-	} else if highCount > 0 {
-		return 0.50
-	} else if mediumCount > 0 {
-		return 0.75
-	}
-	return 1.0
+	return math.Max(0.0, score)
 }
 
 // Factor 5: Compliance Score (10% weight)

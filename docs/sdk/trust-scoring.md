@@ -175,34 +175,50 @@ def get_weather(city: str) -> dict:
 
 ### Factor 4: Security Alerts (15% weight)
 
-**What it measures**: Number and severity of security alerts triggered
+**What it measures**: Cumulative security impact from violations and alerts
 
-**Calculation**:
+**Calculation** (Cumulative Impact Model):
 ```python
-if critical_alerts > 0:
-    security_score = 0.0
-elif high_alerts > 0:
-    security_score = 0.50
-elif medium_alerts > 0:
-    security_score = 0.75
-else:
-    security_score = 1.0
+score = 1.0
+
+# Each violation reduces score based on severity
+for violation in violations_last_90_days:
+    if violation.severity == "CRITICAL":
+        impact = 0.25
+    elif violation.severity == "HIGH":
+        impact = 0.10
+    elif violation.severity == "MEDIUM":
+        impact = 0.05
+    elif violation.severity == "LOW":
+        impact = 0.02
+
+    # Blocked violations have 50% impact (system prevented the attack)
+    if violation.was_blocked:
+        impact *= 0.5
+
+    score -= impact
+
+security_score = max(0.0, score)
 ```
 
-**Example**:
-- Critical alerts: 0
-- High alerts: 0
-- Medium alerts: 0
-- Low alerts: 2
-- **Score**: 1.0 (100%)
+**Example** (4 HIGH blocked + 4 HIGH allowed + 4 MEDIUM allowed):
+- 4 blocked HIGH: 4 × 0.10 × 0.5 = -0.20
+- 4 allowed HIGH: 4 × 0.10 = -0.40
+- 4 allowed MEDIUM: 4 × 0.05 = -0.20
+- **Score**: 1.0 - 0.80 = **0.20 (20%)**
 
-**Common Security Alerts**:
-| Alert Level | Examples | Impact on Score |
-|-------------|----------|-----------------|
-| **Critical** | Compromised key, unauthorized access | Score → 0.0 |
-| **High** | Unusual action patterns, privilege escalation | Score → 0.5 |
-| **Medium** | Rate limit exceeded, suspicious parameters | Score → 0.75 |
-| **Low** | Minor anomalies, warnings | No impact |
+**Violation Impact Table**:
+| Severity | Base Impact | Blocked Impact | Notes |
+|----------|-------------|----------------|-------|
+| **Critical** | -0.25 | -0.125 | Compromised keys, data breach |
+| **High** | -0.10 | -0.05 | Unauthorized actions, capability violations |
+| **Medium** | -0.05 | -0.025 | Rate limits, suspicious parameters |
+| **Low** | -0.02 | -0.01 | Minor anomalies, warnings |
+
+**Key Features**:
+- **Cumulative**: More violations = lower score (unlike threshold-based)
+- **90-day window**: Old violations age out after 90 days
+- **Block credit**: Blocked attacks get 50% reduced penalty (system worked!)
 
 **How to improve**:
 - ✅ Rotate keys regularly (every 90 days)
