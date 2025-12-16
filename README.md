@@ -11,7 +11,7 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
 
-[📚 Documentation](https://opena2a.org/docs) • [🔒 Security Assessment](https://opena2a.org/docs/security-assessment) • [📺 Demo Video](https://youtu.be/jji5XbxRHfk) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
+[📚 Documentation](https://opena2a.org/docs) • [📺 New demo video coming soon](https://youtu.be/jji5XbxRHfk) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
 </div>
 
