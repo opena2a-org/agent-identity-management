@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Agent Identity Management | OpenA2A",
   description:
-    "Identity verification and security platform for AI agents and MCP servers",
+    "AIM for a better security. Identity verification and security platform for AI agents and MCP servers.",
 };
 
 export default function RootLayout({

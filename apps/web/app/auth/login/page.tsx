@@ -121,6 +121,7 @@ function LoginPageContent() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome Back
           </h1>
+          <p className="text-sm text-blue-600 font-medium mb-1">AIM for a better security</p>
           <p className="text-gray-600">
             Sign in to manage your AI agents and MCP servers
           </p>
