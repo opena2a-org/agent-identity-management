@@ -114,6 +114,7 @@ export default function RegisterPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome to AIM
           </h1>
+          <p className="text-sm text-blue-600 font-medium mb-1">AIM for a better security</p>
           <p className="text-gray-600">
             Sign up to manage AI agents and MCP servers
           </p>

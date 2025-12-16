@@ -13,11 +13,11 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
 
-[📚 Documentation](https://opena2a.org/docs) • [📺 New demo video coming soon](https://youtu.be/jji5XbxRHfk) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
+[📚 Documentation](https://opena2a.org/docs) • [📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
 </div>
 
-> **📢 December 2025 Update:** We've shipped significant improvements to the SDK v1.14.0 including enhanced credential management, streamlined agent registration, and improved MCP attestation workflows. Updated demo video coming soon!
+> **📢 December 2025 Update:** We've shipped significant improvements to the SDK v1.14.0 including enhanced credential management, streamlined agent registration, and improved MCP attestation workflows. [Watch the full demo →](https://youtu.be/meD_LW5fc_A)
 
 ---
 
