@@ -189,7 +189,7 @@ Navigate to **Settings → SDK Download** in the dashboard.
 ```python
 from aim_sdk import secure, AgentType
 
-# Note - Agent Registration only requires Agent's Name & Capabilities
+# Note - Registration only requires Agent's Name
 agent = secure(
     "my-ai-assistant",
     agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
