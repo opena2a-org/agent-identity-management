@@ -2,6 +2,8 @@
 
 <div align="center">
 
+***AIM for a better security***
+
 **The open-source platform for securing AI agents in production.**
 
 Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threats in real-time.
@@ -16,6 +18,17 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 </div>
 
 > **📢 December 2025 Update:** We've shipped significant improvements to the SDK v1.14.0 including enhanced credential management, streamlined agent registration, and improved MCP attestation workflows. Updated demo video coming soon!
+
+---
+
+## Get Started
+
+| Option | Best For | Link |
+|--------|----------|------|
+| **☁️ AIM Cloud** | Quick start, no infrastructure | [aim.opena2a.org](https://aim.opena2a.org) |
+| **🏠 Self-Hosted** | Full control, on-premise | [Deploy Guide](#quick-start) |
+
+**AIM Cloud** is free during beta and includes 5 agents, 5 MCP servers, and 3 team members. Pro and Enterprise plans launching 2026.
 
 ---
 
