@@ -28,8 +28,6 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 | **☁️ AIM Cloud** | Quick start, no infrastructure | [aim.opena2a.org](https://aim.opena2a.org) |
 | **🏠 Self-Hosted** | Full control, on-premise | [Deploy Guide](#quick-start) |
 
-**AIM Cloud** is free during beta and includes 5 agents, 5 MCP servers, and 3 team members. Pro and Enterprise plans launching 2026.
-
 ---
 
 ## Challenges with AI Agents
