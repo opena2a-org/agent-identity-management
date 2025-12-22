@@ -41,6 +41,7 @@ import {
   ArrowRight,
   Cpu,
   X,
+  User,
 } from "lucide-react";
 import {
   XAxis,
@@ -259,6 +260,8 @@ interface Agent {
   dataAccess?: string[];
   lastActiveAt?: string;
   createdAt: string;
+  createdByName?: string;
+  createdByEmail?: string;
 }
 
 interface MCPCapability {
@@ -1752,13 +1755,14 @@ function SupplyChainPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Trust Score</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Capabilities</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Access</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Registered By</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {agents.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                         <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p className="text-lg font-medium">No agents registered</p>
                         <p className="text-sm mt-1">Agents will appear here when registered with AIM</p>
@@ -1814,6 +1818,21 @@ function SupplyChainPage() {
                             {(!agent.dataAccess || agent.dataAccess.length === 0) && (
                               <span className="text-xs text-gray-400">None</span>
                             )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <div className="text-sm text-gray-900 dark:text-white">
+                                {agent.createdByName || agent.createdByEmail || "Unknown"}
+                              </div>
+                              {agent.createdByEmail && agent.createdByName && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{agent.createdByEmail}</div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -2113,6 +2132,22 @@ function SupplyChainPage() {
                       <div>
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</p>
                         <p className="text-sm text-gray-900 dark:text-white mt-1">{formatDateTime(selectedAgent.createdAt)}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Registered By</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                            <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-900 dark:text-white">
+                              {selectedAgent.createdByName || selectedAgent.createdByEmail || "Unknown"}
+                            </p>
+                            {selectedAgent.createdByEmail && selectedAgent.createdByName && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{selectedAgent.createdByEmail}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 

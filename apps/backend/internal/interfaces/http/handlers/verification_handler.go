@@ -323,6 +323,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			ResourceID:     agentID,
 			AuditID:        &auditEntry.ID, // Link to the audit log entry
 			AgentName:      agent.Name,
+			SourceIP:       c.IP(), // Capture source IP for security tracking
 			Metadata: map[string]interface{}{
 				"capability":       req.Capability,
 				"resource":         req.Resource,

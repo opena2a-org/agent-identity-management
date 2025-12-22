@@ -42,8 +42,13 @@ func (s *SecurityService) GetThreats(ctx context.Context, orgID uuid.UUID, limit
 		// Map alert type to threat type
 		threatType := mapAlertTypeToThreatType(alert.AlertType)
 
-		// Create target name (short ID for display)
-		targetName := alert.ResourceID.String()[:8] + "..."
+		// Use agent name if available, otherwise use short ID for display
+		var targetName string
+		if alert.AgentName != "" {
+			targetName = alert.AgentName
+		} else {
+			targetName = alert.ResourceID.String()[:8] + "..."
+		}
 
 		// Use source IP if available, otherwise fallback to resource ID
 		source := alert.SourceIP
@@ -62,7 +67,7 @@ func (s *SecurityService) GetThreats(ctx context.Context, orgID uuid.UUID, limit
 			Source:         source,
 			TargetType:     alert.ResourceType,
 			TargetID:       alert.ResourceID,
-			TargetName:     &targetName, // Pointer to short ID for display
+			TargetName:     &targetName, // Agent name or short ID for display
 			IsBlocked:      false,        // Alerts don't have blocked status
 			CreatedAt:      alert.CreatedAt,
 			ResolvedAt:     alert.AcknowledgedAt, // Map acknowledged_at to resolved_at
