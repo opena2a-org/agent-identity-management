@@ -59,6 +59,11 @@ public class AIMClient implements AutoCloseable {
     private String clientSecret;
     private String organizationId;
 
+    // SDK OAuth credentials (refresh token flow)
+    private String refreshToken;
+    private String sdkTokenId;
+    private Map<String, String> credentials;
+
     private AIMClient(Builder builder) {
         this.agentName = builder.agentName;
         this.aimUrl = builder.aimUrl;
@@ -68,6 +73,9 @@ public class AIMClient implements AutoCloseable {
         this.clientId = builder.clientId;
         this.clientSecret = builder.clientSecret;
         this.organizationId = builder.organizationId;
+        this.refreshToken = builder.refreshToken;
+        this.sdkTokenId = builder.sdkTokenId;
+        this.credentials = builder.credentials;
 
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
@@ -109,33 +117,57 @@ public class AIMClient implements AutoCloseable {
      * @return Configured AIMClient ready for use
      */
     public static AIMClient secure(String agentName, List<String> capabilities, AgentType agentType) {
-        // Load credentials from SDK download
+        // Load credentials from SDK download (with intelligent discovery)
         Map<String, String> credentials = CredentialManager.loadSdkCredentials();
 
+        String aimUrl = credentials.getOrDefault("aimUrl", "http://localhost:8080");
+
         if (credentials.isEmpty()) {
+            CredentialManager.printSdkCredentialsNotFoundError(aimUrl);
             throw new CredentialException(
-                    "No SDK credentials found. Download the SDK from your AIM dashboard (Settings -> SDK Download)");
+                    "No SDK credentials found. Download the SDK from your AIM dashboard (Settings -> SDK Downloads)");
         }
 
-        String aimUrl = credentials.getOrDefault("aimUrl", "http://localhost:8080");
+        // Check for SDK OAuth credentials (refresh token flow) - preferred method
+        String refreshToken = credentials.get("refreshToken");
+        String sdkTokenId = credentials.get("sdkTokenId");
+
+        // Fall back to client credentials if no refresh token
         String clientId = credentials.get("clientId");
         String clientSecret = credentials.get("clientSecret");
         String organizationId = credentials.get("organizationId");
 
-        if (clientId == null || clientSecret == null) {
+        // Validate we have at least one valid credential type
+        boolean hasRefreshToken = refreshToken != null && !refreshToken.isEmpty();
+        boolean hasClientCredentials = clientId != null && clientSecret != null;
+
+        if (!hasRefreshToken && !hasClientCredentials) {
+            CredentialManager.CredentialType foundType = CredentialManager.detectCredentialType(credentials);
+            CredentialManager.printWrongCredentialTypeError(foundType, aimUrl);
             throw new CredentialException(
-                    "Invalid SDK credentials. Re-download from AIM dashboard.");
+                    "Invalid SDK credentials. Need either refreshToken or clientId/clientSecret. " +
+                    "Re-download from AIM dashboard (Settings -> SDK Downloads).");
         }
 
-        AIMClient client = new Builder()
+        Builder builder = new Builder()
                 .agentName(agentName)
                 .aimUrl(aimUrl)
-                .clientId(clientId)
-                .clientSecret(clientSecret)
-                .organizationId(organizationId)
                 .agentType(agentType != null ? agentType : AgentType.CUSTOM)
                 .capabilities(capabilities != null ? capabilities : Collections.emptyList())
-                .build();
+                .credentials(credentials);
+
+        if (hasRefreshToken) {
+            builder.refreshToken(refreshToken).sdkTokenId(sdkTokenId);
+            String tokenIdPreview = sdkTokenId != null && sdkTokenId.length() > 8
+                    ? sdkTokenId.substring(0, 8) + "..."
+                    : sdkTokenId;
+            logger.info("Using SDK OAuth authentication (token: {})", tokenIdPreview);
+        } else {
+            builder.clientId(clientId).clientSecret(clientSecret).organizationId(organizationId);
+            logger.info("Using client credentials authentication");
+        }
+
+        AIMClient client = builder.build();
 
         // Register agent
         client.registerAgent();
@@ -182,9 +214,227 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Authenticate with AIM using OAuth client credentials.
+     * Authenticate with AIM using either refresh token or client credentials.
      */
     private void authenticate() {
+        if (refreshToken != null && !refreshToken.isEmpty()) {
+            authenticateWithRefreshToken();
+        } else if (clientId != null && clientSecret != null) {
+            authenticateWithClientCredentials();
+        } else {
+            throw new AuthenticationException("No valid authentication credentials available");
+        }
+    }
+
+    /**
+     * Authenticate using refresh token (SDK OAuth flow).
+     */
+    private void authenticateWithRefreshToken() {
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("refreshToken", refreshToken);
+
+            RequestBody body = RequestBody.create(payload.toString(), JSON);
+
+            Request request = new Request.Builder()
+                    .url(aimUrl + "/api/v1/auth/refresh")
+                    .post(body)
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    logger.warn("Refresh token auth failed: {} - {}", response.code(), errorBody);
+
+                    // Try token recovery if token was revoked
+                    if (errorBody.toLowerCase().contains("revoked") ||
+                        errorBody.toLowerCase().contains("invalid") ||
+                        errorBody.toLowerCase().contains("expired")) {
+
+                        System.out.println("\n🔄 Token was revoked - attempting automatic recovery...");
+                        logger.info("Attempting token recovery...");
+
+                        if (attemptTokenRecovery()) {
+                            System.out.println("✅ Token recovered successfully! SDK credentials updated.");
+                            return; // Recovery successful
+                        }
+
+                        // Recovery failed - show user-friendly error
+                        printTokenExpiredError();
+                    }
+
+                    throw new AuthenticationException(
+                        "SDK authentication failed. Download a fresh SDK from your AIM dashboard.");
+                }
+
+                String responseBody = response.body().string();
+                JsonNode json = objectMapper.readTree(responseBody);
+
+                this.accessToken = json.has("accessToken") ? json.get("accessToken").asText() : json.get("access_token").asText();
+
+                // Handle token rotation - server may return a new refresh token
+                if (json.has("refreshToken")) {
+                    String newRefreshToken = json.get("refreshToken").asText();
+                    if (!newRefreshToken.equals(this.refreshToken)) {
+                        this.refreshToken = newRefreshToken;
+                        updateStoredCredentials(newRefreshToken);
+                        extractAndSaveTokenId(newRefreshToken);
+                        System.out.println("🔄 Token rotated successfully");
+                        logger.debug("Refresh token rotated");
+                    }
+                }
+
+                // Decode token expiry from JWT
+                setTokenExpiryFromJWT(this.accessToken);
+
+                logger.debug("Authenticated successfully via refresh token");
+            }
+        } catch (IOException e) {
+            throw new AuthenticationException("Failed to authenticate with refresh token: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Print user-friendly error when token is expired.
+     */
+    private void printTokenExpiredError() {
+        String border = "=".repeat(72);
+        System.out.println();
+        System.out.println(border);
+        System.out.println("SDK TOKEN EXPIRED");
+        System.out.println(border);
+        System.out.println();
+        System.out.println("Your SDK authentication token has expired or been revoked.");
+        System.out.println();
+        System.out.println("This can happen if:");
+        System.out.println("  - The token expired (90 days since last use)");
+        System.out.println("  - The token was revoked for security reasons");
+        System.out.println("  - Another SDK installation rotated the token");
+        System.out.println();
+        System.out.println("TO FIX:");
+        System.out.println("  1. Visit: " + aimUrl);
+        System.out.println("  2. Go to Settings -> SDK Downloads");
+        System.out.println("  3. Download a fresh Java SDK");
+        System.out.println("  4. Extract and add to your project");
+        System.out.println();
+        System.out.println("Your agents and data are safe! Only SDK credentials need updating.");
+        System.out.println();
+        System.out.println("Tip: You can also manage SDK tokens from the dashboard:");
+        System.out.println("     Settings -> SDK Tokens");
+        System.out.println(border);
+        System.out.println();
+    }
+
+    /**
+     * Extract and save the token ID (JTI) from the refresh token.
+     */
+    private void extractAndSaveTokenId(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length == 3) {
+                String payload = parts[1];
+                // Add padding if needed
+                int padding = 4 - payload.length() % 4;
+                if (padding != 4) {
+                    payload = payload + "=".repeat(padding);
+                }
+                byte[] decoded = Base64.getUrlDecoder().decode(payload);
+                JsonNode claims = objectMapper.readTree(decoded);
+                if (claims.has("jti") && credentials != null) {
+                    credentials.put("sdkTokenId", claims.get("jti").asText());
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not extract token ID: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Set token expiry by decoding the JWT access token.
+     */
+    private void setTokenExpiryFromJWT(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length == 3) {
+                String payload = parts[1];
+                // Add padding if needed
+                int padding = 4 - payload.length() % 4;
+                if (padding != 4) {
+                    payload = payload + "=".repeat(padding);
+                }
+                byte[] decoded = Base64.getUrlDecoder().decode(payload);
+                JsonNode claims = objectMapper.readTree(decoded);
+                if (claims.has("exp")) {
+                    long exp = claims.get("exp").asLong();
+                    this.tokenExpiry = Instant.ofEpochSecond(exp).minusSeconds(60); // Refresh 60s early
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not decode token expiry: {}", e.getMessage());
+        }
+        // Default: 15 minutes minus 60s buffer
+        this.tokenExpiry = Instant.now().plusSeconds(840);
+    }
+
+    /**
+     * Attempt token recovery when refresh token is revoked.
+     */
+    private boolean attemptTokenRecovery() {
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("old_refresh_token", refreshToken);
+
+            RequestBody body = RequestBody.create(payload.toString(), JSON);
+
+            Request request = new Request.Builder()
+                    .url(aimUrl + "/api/v1/auth/sdk/recover")
+                    .post(body)
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    return false;
+                }
+
+                String responseBody = response.body().string();
+                JsonNode json = objectMapper.readTree(responseBody);
+
+                this.accessToken = json.has("accessToken") ? json.get("accessToken").asText() : null;
+                String newRefreshToken = json.has("refreshToken") ? json.get("refreshToken").asText() : null;
+
+                if (accessToken != null && newRefreshToken != null) {
+                    this.refreshToken = newRefreshToken;
+                    updateStoredCredentials(newRefreshToken);
+                    this.tokenExpiry = Instant.now().plusSeconds(840); // 14 minutes
+                    logger.info("Token recovered successfully");
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Token recovery failed: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Update stored credentials with new refresh token.
+     */
+    private void updateStoredCredentials(String newRefreshToken) {
+        if (credentials != null) {
+            credentials.put("refreshToken", newRefreshToken);
+            try {
+                CredentialManager.saveSdkCredentials(credentials, null);
+            } catch (Exception e) {
+                logger.warn("Failed to save updated credentials: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Authenticate using OAuth client credentials flow.
+     */
+    private void authenticateWithClientCredentials() {
         try {
             FormBody formBody = new FormBody.Builder()
                     .add("grant_type", "client_credentials")
@@ -466,6 +716,9 @@ public class AIMClient implements AutoCloseable {
         private String clientId;
         private String clientSecret;
         private String organizationId;
+        private String refreshToken;
+        private String sdkTokenId;
+        private Map<String, String> credentials;
 
         public Builder agentId(String agentId) {
             this.agentId = agentId;
@@ -509,6 +762,21 @@ public class AIMClient implements AutoCloseable {
 
         public Builder organizationId(String organizationId) {
             this.organizationId = organizationId;
+            return this;
+        }
+
+        public Builder refreshToken(String refreshToken) {
+            this.refreshToken = refreshToken;
+            return this;
+        }
+
+        public Builder sdkTokenId(String sdkTokenId) {
+            this.sdkTokenId = sdkTokenId;
+            return this;
+        }
+
+        public Builder credentials(Map<String, String> credentials) {
+            this.credentials = new HashMap<>(credentials);
             return this;
         }
 
