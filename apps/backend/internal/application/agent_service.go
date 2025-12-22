@@ -154,8 +154,9 @@ type CreateAgentRequest struct {
 // CreateAgent creates a new agent
 // sdkTokenID is optional - if provided, it tracks which SDK token was used to create this agent
 // apiKeyID is optional - if provided, it tracks which API key was used to create this agent
+// userEmail is optional - used as fallback for audit trail if user lookup fails
 // This enables admins to easily revoke compromised SDK tokens or API keys
-func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.Agent, error) {
+func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error) {
 	// Validate inputs
 	if req.Name == "" || req.DisplayName == "" {
 		return nil, fmt.Errorf("name and display_name are required")
@@ -217,6 +218,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			createdByName = user.Name
 			createdByEmail = user.Email
 		}
+	}
+	// ✅ Fallback: Use email from JWT claims if user lookup failed
+	if createdByEmail == "" && userEmail != "" {
+		createdByEmail = userEmail
 	}
 
 	agent := &domain.Agent{
