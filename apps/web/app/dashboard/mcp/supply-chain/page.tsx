@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Server,
   Shield,
@@ -26,6 +26,21 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  FileText,
+  Bot,
+  Wrench,
+  Database,
+  Calendar,
+  FileJson,
+  FileCode,
+  Printer,
+  Package,
+  Layers,
+  Lock,
+  Unlock,
+  ArrowRight,
+  Cpu,
+  X,
 } from "lucide-react";
 import {
   XAxis,
@@ -228,8 +243,48 @@ interface CapabilityDriftAlert {
   isAcknowledged: boolean;
 }
 
+// ABOM Types
+interface Agent {
+  id: string;
+  name: string;
+  status: string;
+  trustScore: number;
+  capabilities: string[];
+  dataAccess?: string[];
+  lastActiveAt?: string;
+  createdAt: string;
+}
+
+interface MCPCapability {
+  id: string;
+  mcpServerId: string;
+  capabilityName: string;
+  capabilityType: string;
+  description?: string;
+  inputSchema?: Record<string, any>;
+  createdAt: string;
+}
+
+interface ABOMData {
+  generatedAt: string;
+  version: string;
+  summary: {
+    totalAgents: number;
+    totalMcpServers: number;
+    totalTools: number;
+    totalConnections: number;
+    totalCapabilities: number;
+    dataCategories: string[];
+  };
+  agents: Agent[];
+  mcpServers: MCPServer[];
+  connections: AgentMCPConnection[];
+  capabilities: MCPCapability[];
+}
+
 function SupplyChainPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<SupplyChainStats | null>(null);
@@ -242,6 +297,25 @@ function SupplyChainPage() {
   const [driftAlerts, setDriftAlerts] = useState<CapabilityDriftAlert[]>([]);
   const [driftAlertCount, setDriftAlertCount] = useState(0);
   const [unmappedMcpCount, setUnmappedMcpCount] = useState(0);
+
+  // Tab state - initialize from URL param
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<"analytics" | "abom">(
+    tabParam === "abom" ? "abom" : "analytics"
+  );
+
+  // ABOM state
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [mcpCapabilities, setMcpCapabilities] = useState<MCPCapability[]>([]);
+
+  // ABOM pagination
+  const [abomAgentPage, setAbomAgentPage] = useState(1);
+  const [abomAgentPageSize, setAbomAgentPageSize] = useState(10);
+  const [abomMcpPage, setAbomMcpPage] = useState(1);
+  const [abomMcpPageSize, setAbomMcpPageSize] = useState(10);
+  const [abomConnPage, setAbomConnPage] = useState(1);
+  const [abomConnPageSize, setAbomConnPageSize] = useState(12);
 
   // Filters and pagination
   const [mcpSearchFilter, setMcpSearchFilter] = useState("");
@@ -263,7 +337,7 @@ function SupplyChainPage() {
     try {
       // Fetch MCP servers (for server table and confidence distribution)
       const serversResponse = await api.listMCPServers();
-      const servers = serversResponse.mcpServers || [];
+      const servers: MCPServer[] = serversResponse.mcpServers || [];
       setMcpServers(servers);
 
       // Fetch supply chain analytics from dedicated backend endpoint (REAL data)
@@ -383,6 +457,47 @@ function SupplyChainPage() {
         console.error("Failed to fetch discovered MCPs:", discoveryError);
         setUnmappedMcpCount(0);
       }
+
+      // Fetch agents for ABOM
+      try {
+        const agentsResponse = await api.listAgents();
+        const agentsList = (agentsResponse.agents || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          status: a.status,
+          trustScore: a.trustScore || 0,
+          capabilities: a.capabilities || [],
+          dataAccess: a.dataAccess || [],
+          lastActiveAt: a.lastActiveAt,
+          createdAt: a.createdAt,
+        }));
+        setAgents(agentsList);
+      } catch (agentsError) {
+        console.error("Failed to fetch agents:", agentsError);
+        setAgents([]);
+      }
+
+      // Fetch MCP capabilities for ABOM
+      try {
+        const capabilitiesData: MCPCapability[] = [];
+        for (const server of servers) {
+          if (server.capabilities) {
+            server.capabilities.forEach((cap: string, idx: number) => {
+              capabilitiesData.push({
+                id: `${server.id}-${idx}`,
+                mcpServerId: server.id,
+                capabilityName: cap,
+                capabilityType: "tool",
+                createdAt: server.createdAt,
+              });
+            });
+          }
+        }
+        setMcpCapabilities(capabilitiesData);
+      } catch (capError) {
+        console.error("Failed to process capabilities:", capError);
+        setMcpCapabilities([]);
+      }
     } catch (error) {
       console.error("Failed to fetch supply chain data:", error);
     } finally {
@@ -432,6 +547,51 @@ function SupplyChainPage() {
     driftPage * driftPageSize
   );
 
+  // ABOM pagination calculations
+  const totalAbomAgentPages = Math.ceil(agents.length / abomAgentPageSize);
+  const paginatedAbomAgents = agents.slice(
+    (abomAgentPage - 1) * abomAgentPageSize,
+    abomAgentPage * abomAgentPageSize
+  );
+
+  const totalAbomMcpPages = Math.ceil(mcpServers.length / abomMcpPageSize);
+  const paginatedAbomMcpServers = mcpServers.slice(
+    (abomMcpPage - 1) * abomMcpPageSize,
+    abomMcpPage * abomMcpPageSize
+  );
+
+  const totalAbomConnPages = Math.ceil(connections.length / abomConnPageSize);
+  const paginatedAbomConnections = connections.slice(
+    (abomConnPage - 1) * abomConnPageSize,
+    abomConnPage * abomConnPageSize
+  );
+
+  // Generate ABOM data
+  const abomData = useMemo<ABOMData>(() => {
+    const totalTools = mcpServers.reduce((sum, s) => sum + (s.toolCount || 0), 0);
+    const dataCategories = new Set<string>();
+    agents.forEach((a) => {
+      (a.dataAccess || []).forEach((d) => dataCategories.add(d));
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      version: "1.0.0",
+      summary: {
+        totalAgents: agents.length,
+        totalMcpServers: mcpServers.length,
+        totalTools,
+        totalConnections: connections.length,
+        totalCapabilities: mcpCapabilities.length,
+        dataCategories: Array.from(dataCategories),
+      },
+      agents,
+      mcpServers,
+      connections,
+      capabilities: mcpCapabilities,
+    };
+  }, [agents, mcpServers, connections, mcpCapabilities]);
+
   const handleExport = () => {
     // Generate CSV export
     const csvData = mcpServers.map((server) => ({
@@ -456,6 +616,161 @@ function SupplyChainPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportABOM = (format: "json" | "yaml" | "pdf") => {
+    const filename = `abom-${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "json") {
+      const jsonStr = JSON.stringify(abomData, null, 2);
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === "yaml") {
+      // Simple YAML generation
+      const yamlStr = generateYAML(abomData);
+      const blob = new Blob([yamlStr], { type: "text/yaml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === "pdf") {
+      // For PDF, we'll generate a printable HTML and open print dialog
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(generateABOMPrintHTML(abomData));
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
+  // Simple YAML generator
+  const generateYAML = (data: any, indent = 0): string => {
+    const spaces = "  ".repeat(indent);
+    let yaml = "";
+
+    if (Array.isArray(data)) {
+      data.forEach((item) => {
+        if (typeof item === "object" && item !== null) {
+          yaml += `${spaces}-\n${generateYAML(item, indent + 1)}`;
+        } else {
+          yaml += `${spaces}- ${item}\n`;
+        }
+      });
+    } else if (typeof data === "object" && data !== null) {
+      Object.entries(data).forEach(([key, value]) => {
+        if (typeof value === "object" && value !== null) {
+          yaml += `${spaces}${key}:\n${generateYAML(value, indent + 1)}`;
+        } else {
+          yaml += `${spaces}${key}: ${value}\n`;
+        }
+      });
+    }
+
+    return yaml;
+  };
+
+  // Generate printable HTML for PDF
+  const generateABOMPrintHTML = (data: ABOMData): string => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Agent Bill of Materials (ABOM)</title>
+        <style>
+          body { font-family: system-ui, sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; }
+          h1 { color: #1e40af; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+          h2 { color: #1e3a8a; margin-top: 30px; }
+          h3 { color: #1e40af; margin-top: 20px; }
+          .meta { color: #6b7280; font-size: 14px; margin-bottom: 30px; }
+          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 20px 0; }
+          .summary-card { background: #f3f4f6; padding: 15px; border-radius: 8px; }
+          .summary-card h4 { margin: 0 0 5px 0; color: #374151; font-size: 14px; }
+          .summary-card p { margin: 0; font-size: 24px; font-weight: 600; color: #1e40af; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { background: #e5e7eb; text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; }
+          td { padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin: 2px; }
+          .badge-green { background: #dcfce7; color: #166534; }
+          .badge-blue { background: #dbeafe; color: #1e40af; }
+          .badge-yellow { background: #fef3c7; color: #92400e; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>Agent Bill of Materials (ABOM)</h1>
+        <div class="meta">
+          <p>Generated: ${new Date(data.generatedAt).toLocaleString()}</p>
+          <p>Version: ${data.version}</p>
+        </div>
+
+        <h2>Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-card"><h4>Total Agents</h4><p>${data.summary.totalAgents}</p></div>
+          <div class="summary-card"><h4>MCP Servers</h4><p>${data.summary.totalMcpServers}</p></div>
+          <div class="summary-card"><h4>Total Tools</h4><p>${data.summary.totalTools}</p></div>
+          <div class="summary-card"><h4>Connections</h4><p>${data.summary.totalConnections}</p></div>
+          <div class="summary-card"><h4>Capabilities</h4><p>${data.summary.totalCapabilities}</p></div>
+          <div class="summary-card"><h4>Data Categories</h4><p>${data.summary.dataCategories.length}</p></div>
+        </div>
+
+        <h2>Agents Inventory</h2>
+        <table>
+          <tr><th>Name</th><th>Status</th><th>Trust Score</th><th>Capabilities</th><th>Data Access</th></tr>
+          ${data.agents.map((a) => `
+            <tr>
+              <td>${a.name}</td>
+              <td><span class="badge badge-${a.status === "active" ? "green" : "yellow"}">${a.status}</span></td>
+              <td>${a.trustScore}%</td>
+              <td>${(a.capabilities || []).map((c) => `<span class="badge badge-blue">${c}</span>`).join(" ")}</td>
+              <td>${(a.dataAccess || []).map((d) => `<span class="badge badge-yellow">${d}</span>`).join(" ")}</td>
+            </tr>
+          `).join("")}
+        </table>
+
+        <h2>MCP Servers</h2>
+        <table>
+          <tr><th>Name</th><th>URL</th><th>Status</th><th>Tools</th><th>Attestations</th></tr>
+          ${data.mcpServers.map((s) => `
+            <tr>
+              <td>${s.name}</td>
+              <td style="font-size:12px;color:#6b7280;">${s.url}</td>
+              <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${s.status}</span></td>
+              <td>${s.toolCount || 0}</td>
+              <td>${s.attestationCount || 0}</td>
+            </tr>
+          `).join("")}
+        </table>
+
+        <h2>Agent-MCP Connections</h2>
+        <table>
+          <tr><th>Agent</th><th>MCP Server</th><th>Type</th><th>Attestations</th><th>Status</th></tr>
+          ${data.connections.map((c) => `
+            <tr>
+              <td>${c.agentName}</td>
+              <td>${c.mcpServerName}</td>
+              <td>${c.connectionType}</td>
+              <td>${c.attestationCount}</td>
+              <td><span class="badge badge-${c.isActive ? "green" : "yellow"}">${c.isActive ? "Active" : "Inactive"}</span></td>
+            </tr>
+          `).join("")}
+        </table>
+
+        <div class="footer">
+          <p>This Agent Bill of Materials (ABOM) is automatically generated by AIM (Agent Identity Management).</p>
+          <p>For security compliance and audit purposes. Read-only observational data.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -472,16 +787,15 @@ function SupplyChainPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <GitBranch className="h-8 w-8 text-blue-500" />
-              MCP Supply Chain Analytics
+              Supply Chain & ABOM
             </h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
-              Monitor MCP server dependencies, attestation health, and supply
-              chain security across your organization.
+              Monitor MCP server dependencies, attestation health, and your Agent Bill of Materials.
             </p>
           </div>
           <div className="flex gap-3">
@@ -495,18 +809,107 @@ function SupplyChainPage() {
               />
               Refresh
             </button>
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
-            </button>
+            {activeTab === "analytics" ? (
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export Report
+              </button>
+            ) : (
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    const dropdown = document.getElementById("abom-export-dropdown");
+                    if (dropdown) dropdown.classList.toggle("hidden");
+                  }}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export ABOM
+                </button>
+                <div
+                  id="abom-export-dropdown"
+                  className="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10"
+                >
+                  <button
+                    onClick={() => {
+                      handleExportABOM("json");
+                      document.getElementById("abom-export-dropdown")?.classList.add("hidden");
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <FileJson className="h-4 w-4 mr-2 text-blue-500" />
+                    Export as JSON
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExportABOM("yaml");
+                      document.getElementById("abom-export-dropdown")?.classList.add("hidden");
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <FileCode className="h-4 w-4 mr-2 text-green-500" />
+                    Export as YAML
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExportABOM("pdf");
+                      document.getElementById("abom-export-dropdown")?.classList.add("hidden");
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <Printer className="h-4 w-4 mr-2 text-red-500" />
+                    Print / PDF
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeTab === "analytics"
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                {stats?.totalMCPServers || 0}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab("abom")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeTab === "abom"
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              ABOM
+              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full">
+                Bill of Materials
+              </span>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Analytics Tab Content */}
+      {activeTab === "analytics" && (
+        <>
+          {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={Server}
@@ -1200,6 +1603,579 @@ function SupplyChainPage() {
           )}
         </div>
       )}
+        </>
+      )}
+
+      {/* ABOM Tab Content */}
+      {activeTab === "abom" && (
+        <div className="space-y-6">
+          {/* ABOM Header Banner - Muted style matching Supply Chain */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Package className="h-8 w-8 text-gray-600 dark:text-gray-300" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Agent Bill of Materials</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Complete inventory of all agents, MCP servers, tools, and data access patterns observed by AIM
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Generated</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{new Date(abomData.generatedAt).toLocaleString()}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Version {abomData.version}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ABOM Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Bot className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalAgents}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Agents</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Server className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalMcpServers}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">MCP Servers</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Wrench className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalTools}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Tools</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Link2 className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalConnections}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Connections</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Cpu className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalCapabilities}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Capabilities</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Database className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.dataCategories.length}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Data Categories</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agents Inventory */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Bot className="h-5 w-5 text-gray-500" />
+                Agents Inventory
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                  {agents.length}
+                </span>
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                All registered AI agents with their capabilities and data access permissions
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Agent</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Trust Score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Capabilities</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Access</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {agents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium">No agents registered</p>
+                        <p className="text-sm mt-1">Agents will appear here when registered with AIM</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedAbomAgents.map((agent) => (
+                      <tr
+                        key={agent.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                        onClick={() => setSelectedAgent(agent)}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Bot className="h-5 w-5 text-gray-400 mr-3" />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">{agent.name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{agent.id.slice(0, 8)}...</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <StatusBadge status={agent.status} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <ConfidenceScoreBadge score={agent.trustScore * 100} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(agent.capabilities || []).slice(0, 3).map((cap, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                {cap}
+                              </span>
+                            ))}
+                            {(agent.capabilities || []).length > 3 && (
+                              <span className="text-xs text-gray-500">+{agent.capabilities.length - 3} more</span>
+                            )}
+                            {(!agent.capabilities || agent.capabilities.length === 0) && (
+                              <span className="text-xs text-gray-400">None declared</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(agent.dataAccess || []).slice(0, 2).map((data, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                {data}
+                              </span>
+                            ))}
+                            {(agent.dataAccess || []).length > 2 && (
+                              <span className="text-xs text-gray-500">+{agent.dataAccess!.length - 2} more</span>
+                            )}
+                            {(!agent.dataAccess || agent.dataAccess.length === 0) && (
+                              <span className="text-xs text-gray-400">None</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatDateTime(agent.createdAt)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Agents Pagination */}
+            {agents.length > abomAgentPageSize && (
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {((abomAgentPage - 1) * abomAgentPageSize) + 1} to {Math.min(abomAgentPage * abomAgentPageSize, agents.length)} of {agents.length} agents
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAbomAgentPage(p => Math.max(1, p - 1))}
+                    disabled={abomAgentPage === 1}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    Page {abomAgentPage} of {totalAbomAgentPages}
+                  </span>
+                  <button
+                    onClick={() => setAbomAgentPage(p => Math.min(totalAbomAgentPages, p + 1))}
+                    disabled={abomAgentPage === totalAbomAgentPages}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* MCP Tools & Servers */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Server className="h-5 w-5 text-gray-500" />
+                MCP Servers & Tools
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                  {mcpServers.length} servers
+                </span>
+                <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                  {abomData.summary.totalTools} tools
+                </span>
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                All MCP servers discovered through agent attestations with their exposed tools
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Server</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">URL</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tools</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attestations</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Confidence</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {mcpServers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium">No MCP servers discovered</p>
+                        <p className="text-sm mt-1">MCP servers will appear here when agents attest their usage</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedAbomMcpServers.map((server) => (
+                      <tr key={server.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Server className="h-5 w-5 text-gray-400 mr-3" />
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">{server.name}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{server.url}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <StatusBadge status={server.status} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Wrench className="h-4 w-4 text-gray-400 mr-1" />
+                            <span className="text-sm text-gray-900 dark:text-white">{server.toolCount || 0}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {server.attestationCount || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {server.confidenceScore ? (
+                            <ConfidenceScoreBadge score={server.confidenceScore} />
+                          ) : (
+                            <span className="text-sm text-gray-400">N/A</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* MCP Servers Pagination */}
+            {mcpServers.length > abomMcpPageSize && (
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {((abomMcpPage - 1) * abomMcpPageSize) + 1} to {Math.min(abomMcpPage * abomMcpPageSize, mcpServers.length)} of {mcpServers.length} servers
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAbomMcpPage(p => Math.max(1, p - 1))}
+                    disabled={abomMcpPage === 1}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    Page {abomMcpPage} of {totalAbomMcpPages}
+                  </span>
+                  <button
+                    onClick={() => setAbomMcpPage(p => Math.min(totalAbomMcpPages, p + 1))}
+                    disabled={abomMcpPage === totalAbomMcpPages}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Agent-MCP Connections Map */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-gray-500" />
+                Agent-MCP Connection Map
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                  {connections.length} connections
+                </span>
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Observed connections between agents and MCP servers from attestation data
+              </p>
+            </div>
+            {connections.length === 0 ? (
+              <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium">No connections observed</p>
+                <p className="text-sm mt-1">Connections will appear here when agents attest MCP server usage</p>
+              </div>
+            ) : (
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {connections.slice(0, 12).map((conn) => (
+                  <div
+                    key={conn.id}
+                    className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {conn.agentName}
+                        </span>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {conn.mcpServerName}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {conn.isActive ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-gray-400" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {connections.length > 12 && (
+                  <div className="col-span-full text-center text-sm text-gray-500 dark:text-gray-400 py-2">
+                    + {connections.length - 12} more connections
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Data Categories */}
+          {abomData.summary.dataCategories.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+                <Database className="h-5 w-5 text-gray-500" />
+                Data Access Categories
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                  {abomData.summary.dataCategories.length} categories
+                </span>
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Types of sensitive data that agents in your organization have declared access to
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {abomData.summary.dataCategories.map((cat, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                  >
+                    <Database className="h-4 w-4 mr-2" />
+                    {cat}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ABOM Notice */}
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  This ABOM is Read-Only
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  The Agent Bill of Materials is automatically generated from AIM observations and attestations.
+                  It cannot be manually modified and represents the actual state of your agent ecosystem.
+                  Use the Export button above to download this ABOM for compliance, security audits, or sharing with stakeholders.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent Detail Modal */}
+          {selectedAgent && (
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+                {/* Modal Header */}
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                      <Bot className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedAgent.name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Agent ABOM Details</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedAgent(null)}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-120px)]">
+                  <div className="space-y-6">
+                    {/* Agent Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Agent ID</p>
+                        <p className="text-sm font-mono text-gray-900 dark:text-white mt-1">{selectedAgent.id}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</p>
+                        <div className="mt-1">
+                          <StatusBadge status={selectedAgent.status} />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Trust Score</p>
+                        <div className="mt-1">
+                          <ConfidenceScoreBadge score={selectedAgent.trustScore * 100} />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</p>
+                        <p className="text-sm text-gray-900 dark:text-white mt-1">{formatDateTime(selectedAgent.createdAt)}</p>
+                      </div>
+                    </div>
+
+                    {/* Capabilities */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
+                        Declared Capabilities ({(selectedAgent.capabilities || []).length})
+                      </p>
+                      {(selectedAgent.capabilities || []).length === 0 ? (
+                        <p className="text-sm text-gray-400">No capabilities declared</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedAgent.capabilities || []).map((cap, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                            >
+                              {cap}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Data Access */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
+                        Data Access Permissions ({(selectedAgent.dataAccess || []).length})
+                      </p>
+                      {(selectedAgent.dataAccess || []).length === 0 ? (
+                        <p className="text-sm text-gray-400">No data access permissions declared</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedAgent.dataAccess || []).map((data, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                            >
+                              <Database className="h-4 w-4 mr-1.5" />
+                              {data}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Connected MCP Servers */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
+                        Connected MCP Servers
+                      </p>
+                      {connections.filter(c => c.agentId === selectedAgent.id).length === 0 ? (
+                        <p className="text-sm text-gray-400">No MCP server connections observed</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {connections
+                            .filter(c => c.agentId === selectedAgent.id)
+                            .map((conn) => (
+                              <div
+                                key={conn.id}
+                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Server className="h-4 w-4 text-gray-500" />
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {conn.mcpServerName}
+                                  </span>
+                                </div>
+                                {conn.isActive ? (
+                                  <span className="inline-flex items-center text-xs text-green-600 dark:text-green-400">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-xs text-gray-500">
+                                    <XCircle className="h-3 w-3 mr-1" />
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1207,7 +2183,16 @@ function SupplyChainPage() {
 export default function SupplyChainPageWrapper() {
   return (
     <AuthGuard>
-      <SupplyChainPage />
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">Loading...</p>
+          </div>
+        </div>
+      }>
+        <SupplyChainPage />
+      </Suspense>
     </AuthGuard>
   );
 }

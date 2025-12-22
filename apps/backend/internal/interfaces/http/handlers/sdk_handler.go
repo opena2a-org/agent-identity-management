@@ -61,15 +61,16 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// Get SDK type from query parameter (default to python for backward compatibility)
 	sdkType := c.Query("sdk", "python")
 
-	// Validate SDK type - ONLY Python SDK is production-ready
-	// Go and JavaScript SDKs archived for Q1-Q2 2026 release
+	// Validate SDK type - Python and Java SDKs are production-ready
+	// Go and JavaScript SDKs planned for Q1-Q2 2026 release
 	validSDKs := map[string]bool{
 		"python": true,
+		"java":   true,
 	}
 
 	if !validSDKs[sdkType] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid SDK type '%s'. Only 'python' SDK is currently available. Go and JavaScript SDKs planned for Q1-Q2 2026.", sdkType),
+			"error": fmt.Sprintf("Invalid SDK type '%s'. Available SDKs: 'python', 'java'. Go and JavaScript SDKs planned for Q1-Q2 2026.", sdkType),
 		})
 	}
 
@@ -402,6 +403,8 @@ func getSDKDisplayName(sdkType string) string {
 	switch sdkType {
 	case "python":
 		return "Python"
+	case "java":
+		return "Java"
 	case "go":
 		return "Go"
 	case "javascript":
@@ -416,6 +419,8 @@ func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix string) string
 	switch sdkType {
 	case "python":
 		return h.generatePythonInstructions(zipPrefix)
+	case "java":
+		return h.generateJavaInstructions(zipPrefix)
 	case "go":
 		return h.generateGoInstructions(zipPrefix)
 	case "javascript":
@@ -481,6 +486,108 @@ Agent credentials (after registration) are stored separately in ` + "`~/.aim/age
 - Tokens can be revoked at any time from your dashboard
 
 For more examples, see the included test files.
+`
+}
+
+// generateJavaInstructions creates Java-specific setup instructions
+func (h *SDKHandler) generateJavaInstructions(zipPrefix string) string {
+	return `# AIM Java SDK - Quick Start
+
+This SDK is pre-configured with your credentials!
+
+## Installation
+
+1. Unzip this file:
+   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
+
+2. Install the SDK to your local Maven repository:
+   ` + "```bash\n   mvn install -DskipTests\n   ```" + `
+
+3. Add to your project's pom.xml:
+   ` + "```xml\n   <dependency>\n       <groupId>org.opena2a</groupId>\n       <artifactId>aim-sdk</artifactId>\n       <version>1.0.0</version>\n   </dependency>\n   ```" + `
+
+## Usage
+
+The SDK is already configured with your identity. Just use it!
+
+` + "```java\n" +
+		`import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.client.AgentType;
+
+public class MyAgent {
+    public static void main(String[] args) throws Exception {
+        // Zero configuration needed! Your credentials are embedded.
+        // The SDK automatically:
+        // - Loads credentials from ~/.aim/sdk_credentials.json
+        // - Refreshes tokens before expiry
+        // - Retries on transient failures
+        // - Recovers from token revocation
+
+        AIMClient agent = AIMClient.secure(
+            "my-awesome-agent",
+            List.of("db:read", "db:write"),
+            AgentType.AI_AGENT
+        );
+
+        System.out.println("Agent registered! Name: " + agent.getAgentName());
+
+        // Verify capability before performing action
+        VerificationResult result = agent.verifyCapability("db:read", "users_table");
+        if (result.isVerified()) {
+            // Perform the action
+            String data = agent.performAction("db:read", "users_table",
+                () -> queryDatabase("SELECT * FROM users"));
+            System.out.println("Data: " + data);
+        }
+    }
+}
+` + "```" + `
+
+## Spring Boot Integration
+
+Use the ` + "`@SecureAction`" + ` annotation for declarative security:
+
+` + "```java\n" +
+		`@Service
+public class DataService {
+
+    @SecureAction(capability = "db:read", resourceId = "users")
+    public List<User> getUsers() {
+        return userRepository.findAll();
+    }
+
+    @SecureAction(capability = "db:write", resourceId = "orders", riskLevel = RiskLevel.HIGH)
+    public Order createOrder(OrderRequest request) {
+        return orderRepository.save(new Order(request));
+    }
+}
+` + "```" + `
+
+## Automatic Token Management
+
+Your SDK contains embedded OAuth credentials that automatically:
+- ✅ Authenticate your agent registrations
+- ✅ Link agents to your user account
+- ✅ Refresh tokens 60 seconds before expiry
+- ✅ Retry failed requests with exponential backoff
+- ✅ Recover automatically from token revocation
+- ✅ Work for 90 days without re-authentication
+
+**Bulletproof by design** - developers never need to think about token management.
+
+## Security
+
+Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
+
+Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
+
+⚠️ **Important Security Notes:**
+- Credentials are valid for 90 days
+- Never commit credentials to Git
+- Revoke tokens from dashboard if compromised
+- Tokens can be revoked at any time from your dashboard
+
+For more examples, see the ` + "`examples/`" + ` directory.
 `
 }
 

@@ -93,20 +93,25 @@ class LiveBackendTest {
 
     @Test
     @Order(2)
-    @DisplayName("Should register agent using AIMClient.secure()")
+    @DisplayName("Should register agent with MCP servers using AIMClient.secure()")
     void registerAgent() throws Exception {
         System.out.println("🔍 Starting registerAgent test...");
 
-        List<String> capabilities = Arrays.asList("db:read", "db:write", "api:call");
-        System.out.println("🔍 Calling AIMClient.secure() with capabilities: " + capabilities);
+        List<String> capabilities = Arrays.asList("db:read", "db:write", "api:call", "file:read", "file:write");
+        List<String> mcpServers = Arrays.asList("filesystem", "github");
 
-        testAgent = AIMClient.secure(TEST_AGENT_NAME, capabilities, AgentType.CUSTOM);
+        System.out.println("🔍 Calling AIMClient.secure() with:");
+        System.out.println("   - Capabilities: " + capabilities);
+        System.out.println("   - MCP Servers (talksTo): " + mcpServers);
+
+        testAgent = AIMClient.secure(TEST_AGENT_NAME, capabilities, AgentType.LANGCHAIN, mcpServers);
 
         assertNotNull(testAgent, "Agent should not be null");
         assertEquals(TEST_AGENT_NAME, testAgent.getAgentName());
-        assertEquals(AgentType.CUSTOM, testAgent.getAgentType());
+        assertEquals(AgentType.LANGCHAIN, testAgent.getAgentType());
 
         System.out.println("✅ Agent registered: " + testAgent.getAgentName());
+        System.out.println("   - Type: " + testAgent.getAgentType());
     }
 
     @Test

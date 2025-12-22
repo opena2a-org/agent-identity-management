@@ -247,7 +247,7 @@ class OAuthTokenManager:
                     try:
                         recovery_response = requests.post(
                             recovery_url,
-                            json={"old_refresh_token": refresh_token},
+                            json={"oldRefreshToken": refresh_token},
                             timeout=10
                         )
 

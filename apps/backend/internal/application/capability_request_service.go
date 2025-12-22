@@ -13,17 +13,20 @@ type CapabilityRequestService struct {
 	requestRepo    domain.CapabilityRequestRepository
 	capabilityRepo domain.CapabilityRepository
 	agentRepo      domain.AgentRepository
+	orgRepo        domain.OrganizationRepository
 }
 
 func NewCapabilityRequestService(
 	requestRepo domain.CapabilityRequestRepository,
 	capabilityRepo domain.CapabilityRepository,
 	agentRepo domain.AgentRepository,
+	orgRepo domain.OrganizationRepository,
 ) *CapabilityRequestService {
 	return &CapabilityRequestService{
 		requestRepo:    requestRepo,
 		capabilityRepo: capabilityRepo,
 		agentRepo:      agentRepo,
+		orgRepo:        orgRepo,
 	}
 }
 
@@ -61,6 +64,15 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 		}
 	}
 
+	// Check if organization is in monitoring mode for auto-approval
+	isMonitoringMode := false
+	if s.orgRepo != nil {
+		org, orgErr := s.orgRepo.GetByID(agent.OrganizationID)
+		if orgErr == nil && org != nil {
+			isMonitoringMode = org.EnforcementMode == domain.EnforcementModeMonitoring
+		}
+	}
+
 	// Create the request
 	request := &domain.CapabilityRequest{
 		AgentID:        input.AgentID,
@@ -72,6 +84,30 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 
 	if err := s.requestRepo.Create(request); err != nil {
 		return nil, fmt.Errorf("failed to create capability request: %w", err)
+	}
+
+	// In monitoring mode, auto-approve the request immediately
+	if isMonitoringMode {
+		// Auto-approve: update status and grant capability
+		if err := s.requestRepo.UpdateStatus(request.ID, domain.CapabilityRequestStatusAutoApproved, input.RequestedBy); err != nil {
+			fmt.Printf("⚠️ Failed to auto-approve capability request: %v\n", err)
+		} else {
+			// Grant the capability
+			capability := &domain.AgentCapability{
+				AgentID:        request.AgentID,
+				CapabilityType: request.CapabilityType,
+				GrantedBy:      &input.RequestedBy,
+				GrantedAt:      time.Now(),
+			}
+			if err := s.capabilityRepo.CreateCapability(capability); err != nil {
+				fmt.Printf("⚠️ Failed to grant auto-approved capability: %v\n", err)
+			} else {
+				request.Status = domain.CapabilityRequestStatusAutoApproved
+				fmt.Printf("✅ Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
+					agent.Name, input.CapabilityType)
+				return request, nil
+			}
+		}
 	}
 
 	fmt.Printf("✅ Capability request created: agent=%s, capability=%s, reason=%s\n",
