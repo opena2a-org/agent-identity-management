@@ -73,15 +73,22 @@ import org.opena2a.aim.client.RiskLevel;
 import org.opena2a.aim.annotations.SecureAction;
 
 import java.util.Arrays;
+import java.util.Map;
 
 // ══════════════════════════════════════════════════════════════════════════
-// AGENT REGISTRATION - One Line to Secure Your Agent
+// AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
 // ══════════════════════════════════════════════════════════════════════════
-AIMClient agent = AIMClient.secure(
-    "my-ai-assistant",
-    Arrays.asList("db:read", "api:call", "email:send"),
-    AgentType.LANGCHAIN  // CREWAI, AUTOGEN, OPENAI, ANTHROPIC, CUSTOM
-);
+AIMClient agent = AIMClient.builder("my-ai-assistant")
+    .agentType(AgentType.LANGCHAIN)  // CREWAI, AUTOGEN, OPENAI, ANTHROPIC, CUSTOM
+    .capabilities(Arrays.asList("db:read", "api:call"))
+    .talksTo(Arrays.asList("filesystem"))  // MCP servers
+    .description("Customer support AI agent")
+    .tags(Arrays.asList("production", "customer-facing", "gpt-4", "support-team"))
+    .metadata(Map.of(
+        "model", "gpt-4",
+        "department", "support"
+    ))
+    .build();
 
 // ══════════════════════════════════════════════════════════════════════════
 // TRACK ACTIONS & RISKS - Using performAction for functional style
@@ -349,7 +356,7 @@ export default function SDKDownloadPage() {
                   </code>
                 ) : (
                   <code className="text-sm text-green-400 font-mono">
-                    mvn exec:java -Dexec.mainClass="org.opena2a.aim.examples.DemoAgent"
+                    mvn exec:java -Dexec.mainClass="org.opena2a.aim.demo.DemoAgent"
                   </code>
                 )}
               </div>
