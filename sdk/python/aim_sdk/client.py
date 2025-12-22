@@ -642,8 +642,8 @@ class AIMClient:
             verification_id = result.get("id")
             status = result.get("status")
 
-            # If auto-approved, return immediately
-            if status == "approved":
+            # If approved (or auto-approved in monitoring mode), return immediately
+            if status in ("approved", "auto-approved"):
                 security_logger.log_authorization(
                     AuthzEventType.CAPABILITY_GRANTED,
                     action=capability,
@@ -836,7 +836,7 @@ class AIMClient:
 
                 status = result.get("status")
 
-                if status == "approved":
+                if status in ("approved", "auto-approved"):
                     security_logger.log_authorization(
                         AuthzEventType.JIT_APPROVED,
                         action="capability_verification",

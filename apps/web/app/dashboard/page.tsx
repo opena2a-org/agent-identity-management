@@ -724,7 +724,7 @@ function DashboardContent() {
               <ArrowRight className="h-4 w-4 text-gray-400" />
             </Link>
             <Link
-              href="/dashboard/admin/verifications"
+              href="/dashboard/admin/jit-requests"
               className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <div className="flex items-center gap-3">

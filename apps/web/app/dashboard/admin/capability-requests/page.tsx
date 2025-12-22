@@ -28,6 +28,7 @@ import {
   AlertCircle,
   CheckCircle2,
   XCircle,
+  Eye,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/date-utils";
@@ -117,9 +118,14 @@ export default function CapabilityRequestsPage() {
   const [feedback, setFeedback] = useState<
     { type: "success" | "error"; message: string } | null
   >(null);
+  const [enforcementMode, setEnforcementMode] = useState<"strict" | "monitoring">("monitoring");
 
   useEffect(() => {
     fetchRequests();
+    // Fetch enforcement mode to show warning banner
+    api.getEnforcementSettings()
+      .then((settings) => setEnforcementMode(settings.enforcementMode))
+      .catch(() => setEnforcementMode("monitoring"));
   }, []);
 
   const fetchRequests = async () => {
@@ -292,6 +298,21 @@ export default function CapabilityRequestsPage() {
               {feedback.type === "error" ? "Action Failed" : "Action Complete"}
             </AlertTitle>
             <AlertDescription>{feedback.message}</AlertDescription>
+          </Alert>
+        )}
+
+        {enforcementMode === "monitoring" && (
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20">
+            <Eye className="h-4 w-4 text-blue-600" />
+            <AlertTitle className="text-blue-700 dark:text-blue-300">Monitoring Mode Active</AlertTitle>
+            <AlertDescription className="text-blue-600 dark:text-blue-400">
+              All capability requests are being <strong>auto-approved</strong> because strict mode is disabled.
+              To require manual approval for capability requests, enable{" "}
+              <a href="/dashboard/security/policies" className="underline font-medium hover:text-blue-800">
+                Strict Mode
+              </a>{" "}
+              in Global Enforcement settings.
+            </AlertDescription>
           </Alert>
         )}
 

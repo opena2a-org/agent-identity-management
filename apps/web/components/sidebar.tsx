@@ -104,6 +104,12 @@ const navigationBase: NavSection[] = [
     title: "Monitoring",
     items: [
       {
+        name: "Data Flows",
+        href: "/dashboard/data-flows",
+        icon: Activity,
+        roles: ["admin", "manager"],
+      },
+      {
         name: "Security",
         href: "/dashboard/security",
         icon: AlertTriangle,
@@ -123,7 +129,7 @@ const navigationBase: NavSection[] = [
       },
       {
         name: "JIT Requests",
-        href: "/dashboard/admin/verifications",
+        href: "/dashboard/admin/jit-requests",
         icon: CheckCircle,
         roles: ["admin"], // Admin-only JIT access approvals
       },

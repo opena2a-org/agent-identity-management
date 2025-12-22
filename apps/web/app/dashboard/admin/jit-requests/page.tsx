@@ -41,7 +41,10 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
+  Eye,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface PendingVerification {
   id: string;
@@ -88,8 +91,17 @@ const riskStyles: Record<
 const statusStyles: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-900 border border-yellow-200",
   approved: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+  "auto-approved": "bg-blue-100 text-blue-800 border border-blue-200",
   denied: "bg-red-100 text-red-900 border border-red-200",
   expired: "bg-gray-100 text-gray-700 border border-gray-200",
+};
+
+const statusLabels: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  "auto-approved": "Auto-approved",
+  denied: "Denied",
+  expired: "Expired",
 };
 
 const normalizeRisk = (risk?: string) =>
@@ -110,7 +122,7 @@ export default function PendingVerificationsPage() {
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "denied" | "expired">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "auto-approved" | "denied" | "expired">("all");
   const [riskFilter, setRiskFilter] = useState<"all" | "low" | "medium" | "high" | "critical">("all");
   const [searchField, setSearchField] = useState<"all" | "agent" | "action" | "resource">("all");
   const [searchInput, setSearchInput] = useState("");
@@ -126,6 +138,7 @@ export default function PendingVerificationsPage() {
     expired: 0,
   });
   const [expandedContextId, setExpandedContextId] = useState<string | null>(null);
+  const [enforcementMode, setEnforcementMode] = useState<"strict" | "monitoring">("monitoring");
 
   useEffect(() => {
     try {
@@ -237,6 +250,14 @@ export default function PendingVerificationsPage() {
     const interval = setInterval(() => fetchPending({ skipLoading: true }), 30000);
     return () => clearInterval(interval);
   }, [authChecked, role, fetchPending]);
+
+  // Fetch enforcement mode to show warning banner
+  useEffect(() => {
+    if (!authChecked || role !== "admin") return;
+    api.getEnforcementSettings()
+      .then((settings) => setEnforcementMode(settings.enforcementMode))
+      .catch(() => setEnforcementMode("monitoring")); // Default to monitoring if error
+  }, [authChecked, role]);
 
   const openDialog = (verification: PendingVerification, mode: DialogMode) => {
     setSelected(verification);
@@ -375,6 +396,21 @@ export default function PendingVerificationsPage() {
           </Button>
         </div>
 
+        {enforcementMode === "monitoring" && (
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20">
+            <Eye className="h-4 w-4 text-blue-600" />
+            <AlertTitle className="text-blue-700 dark:text-blue-300">Monitoring Mode Active</AlertTitle>
+            <AlertDescription className="text-blue-600 dark:text-blue-400">
+              All JIT requests are being <strong>auto-approved</strong> because strict mode is disabled.
+              To require manual approval for JIT requests, enable{" "}
+              <a href="/dashboard/security/policies" className="underline font-medium hover:text-blue-800">
+                Strict Mode
+              </a>{" "}
+              in Global Enforcement settings.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
@@ -481,7 +517,7 @@ export default function PendingVerificationsPage() {
                 value={statusFilter}
                 onValueChange={(value) =>
                   setStatusFilter(
-                    value as "all" | "pending" | "approved" | "denied" | "expired"
+                    value as "all" | "pending" | "approved" | "auto-approved" | "denied" | "expired"
                   )
                 }
               >
@@ -492,6 +528,7 @@ export default function PendingVerificationsPage() {
                   <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="auto-approved">Auto-approved</SelectItem>
                   <SelectItem value="denied">Denied</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
@@ -563,7 +600,7 @@ export default function PendingVerificationsPage() {
                             {riskMeta.label} Risk
                           </Badge>
                           <Badge className={statusClass}>
-                            {verification.status}
+                            {statusLabels[verification.status] || verification.status}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
