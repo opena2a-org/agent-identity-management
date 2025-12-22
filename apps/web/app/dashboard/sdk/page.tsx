@@ -284,19 +284,6 @@ export default function SDKDownloadPage() {
         </div>
       </div>
 
-      {/* Future SDKs Notice */}
-      <div className="mb-8 max-w-4xl mx-auto">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-900 mb-2">
-            <strong>🚀 Coming Soon:</strong>
-          </p>
-          <p className="text-sm text-blue-800">
-            Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026. Python and Java SDKs
-            provide complete feature parity and are ready for production use today.
-          </p>
-        </div>
-      </div>
-
       {/* Setup Instructions */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="p-6">

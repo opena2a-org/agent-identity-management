@@ -44,9 +44,10 @@ func (j JSONBMap) Value() (driver.Value, error) {
 type CapabilityRequestStatus string
 
 const (
-	CapabilityRequestStatusPending  CapabilityRequestStatus = "pending"
-	CapabilityRequestStatusApproved CapabilityRequestStatus = "approved"
-	CapabilityRequestStatusRejected CapabilityRequestStatus = "rejected"
+	CapabilityRequestStatusPending      CapabilityRequestStatus = "pending"
+	CapabilityRequestStatusApproved     CapabilityRequestStatus = "approved"
+	CapabilityRequestStatusAutoApproved CapabilityRequestStatus = "auto-approved"
+	CapabilityRequestStatusRejected     CapabilityRequestStatus = "rejected"
 )
 
 // CapabilityRequest represents a request for additional agent capabilities after registration
