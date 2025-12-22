@@ -12,7 +12,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/security': ['admin', 'manager', 'member'],
 };
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes that don't require authentication
@@ -67,8 +67,9 @@ export const config = {
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
+     * - favicon.ico, favicon.svg (favicon files)
+     * - Static assets (images, fonts, etc.)
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|favicon\\.svg|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.webp$|.*\\.ico$|.*\\.woff2?$).*)',
   ],
 }
