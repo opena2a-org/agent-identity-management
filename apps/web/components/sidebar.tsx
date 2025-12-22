@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   Menu,
   X,
-  Activity,
   Download,
   Lock,
   ShieldCheck,
@@ -103,12 +102,6 @@ const navigationBase: NavSection[] = [
   {
     title: "Monitoring",
     items: [
-      {
-        name: "Data Flows",
-        href: "/dashboard/data-flows",
-        icon: Activity,
-        roles: ["admin", "manager"],
-      },
       {
         name: "Security",
         href: "/dashboard/security",

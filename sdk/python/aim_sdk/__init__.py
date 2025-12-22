@@ -80,24 +80,6 @@ from .capability_detection import CapabilityDetector, auto_detect_capabilities, 
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 from .attestation_cache import AttestationCache
 
-# Data Flow Visibility - Track sensitive data flows (PII, PHI, PCI)
-from .data_flow import (
-    DataFlowTracker,
-    DataFlowEvent,
-    QueryContext,
-    HTTPInterceptor,
-    Classification,
-    ClassificationCategory,
-    ClassificationTier,
-    PolicyAction,
-    PolicyResult,
-    sensitive,
-    track_data_flow,
-    create_tracker,
-    classify_by_column_name,
-    classify_by_table_name,
-)
-
 # Credential management utilities
 from .credentials import (
     load_sdk_credentials,
@@ -186,19 +168,4 @@ __all__ = [
     "CredEventType",
     "MCPEventType",
     "SecurityEventType",
-    # Data Flow Visibility (premium feature)
-    "DataFlowTracker",
-    "DataFlowEvent",
-    "QueryContext",
-    "HTTPInterceptor",
-    "Classification",
-    "ClassificationCategory",
-    "ClassificationTier",
-    "PolicyAction",
-    "PolicyResult",
-    "sensitive",
-    "track_data_flow",
-    "create_tracker",
-    "classify_by_column_name",
-    "classify_by_table_name",
 ]
