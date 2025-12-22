@@ -191,18 +191,27 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		})
 	}
 
-	// ✅ AUTO-CREATE API KEY: Streamlined 1-step process
-	// Automatically generate an API key for the new agent so users can start using it immediately
-	// The API key is only shown once in this response - it cannot be retrieved later
-	apiKeyName := fmt.Sprintf("%s-default-key", agent.Name)
-	fullAPIKey, apiKeyRecord, apiKeyErr := h.apiKeyService.GenerateAPIKey(
-		c.Context(),
-		agent.ID,
-		orgID,
-		userID,
-		apiKeyName,
-		365, // Default: 1 year expiration
-	)
+	// ✅ AUTO-CREATE API KEY: Only for non-SDK registrations
+	// SDK-registered agents authenticate via SDK token, so they don't need per-agent API keys
+	// For dashboard/API registrations, auto-generate a key for immediate use
+	var fullAPIKey string
+	var apiKeyRecord *domain.APIKey
+	var apiKeyErr error
+	apiKeyCreated := false
+
+	if sdkTokenID == nil {
+		// Non-SDK registration: auto-create API key for convenience
+		apiKeyName := fmt.Sprintf("%s-default-key", agent.Name)
+		fullAPIKey, apiKeyRecord, apiKeyErr = h.apiKeyService.GenerateAPIKey(
+			c.Context(),
+			agent.ID,
+			orgID,
+			userID,
+			apiKeyName,
+			365, // Default: 1 year expiration
+		)
+		apiKeyCreated = apiKeyErr == nil
+	}
 
 	// Log audit for agent creation
 	h.auditService.LogAction(
@@ -215,30 +224,33 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName":      agent.Name,
-			"agentType":      agent.AgentType,
-			"apiKeyCreated":  apiKeyErr == nil,
+			"agentName":       agent.Name,
+			"agentType":       agent.AgentType,
+			"apiKeyCreated":   apiKeyCreated,
+			"sdkRegistration": sdkTokenID != nil,
 		},
 	)
 
 	// Build response with agent details and API key
 	response := h.enrichAgentResponse(c, agent)
 
-	// ✅ Include API key in response (only shown once!)
-	if apiKeyErr == nil && fullAPIKey != "" {
-		response["apiKey"] = fiber.Map{
-			"key":       fullAPIKey,           // ⚠️ SENSITIVE: Only shown once, never stored in plaintext
-			"id":        apiKeyRecord.ID,
-			"name":      apiKeyRecord.Name,
-			"prefix":    apiKeyRecord.Prefix,
-			"expiresAt": apiKeyRecord.ExpiresAt,
-			"createdAt": apiKeyRecord.CreatedAt,
+	// ✅ Include API key in response (only shown once!) - only for non-SDK registrations
+	if sdkTokenID == nil {
+		if apiKeyErr == nil && fullAPIKey != "" {
+			response["apiKey"] = fiber.Map{
+				"key":       fullAPIKey,           // ⚠️ SENSITIVE: Only shown once, never stored in plaintext
+				"id":        apiKeyRecord.ID,
+				"name":      apiKeyRecord.Name,
+				"prefix":    apiKeyRecord.Prefix,
+				"expiresAt": apiKeyRecord.ExpiresAt,
+				"createdAt": apiKeyRecord.CreatedAt,
+			}
+			response["apiKeyWarning"] = "Store this API key securely. It will never be shown again!"
+		} else if apiKeyErr != nil {
+			// API key creation failed, but agent was created successfully
+			// User can create API key manually from the dashboard
+			response["apiKeyError"] = "API key generation failed. You can create one manually from the API Keys page."
 		}
-		response["apiKeyWarning"] = "Store this API key securely. It will never be shown again!"
-	} else if apiKeyErr != nil {
-		// API key creation failed, but agent was created successfully
-		// User can create API key manually from the dashboard
-		response["apiKeyError"] = "API key generation failed. You can create one manually from the API Keys page."
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(response)
