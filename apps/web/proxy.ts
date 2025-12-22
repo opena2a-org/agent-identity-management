@@ -12,7 +12,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/security': ['admin', 'manager', 'member'],
 };
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes that don't require authentication
