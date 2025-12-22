@@ -12,12 +12,13 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
+[![Java](https://img.shields.io/badge/Java-17+-ED8B00?logo=openjdk)](https://openjdk.org/)
 
 [📚 Documentation](https://opena2a.org/docs) • [📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
 </div>
 
-> **📢 December 2025 Update:** We've shipped significant improvements to the SDK v1.14.0 including enhanced credential management, streamlined agent registration, and improved MCP attestation workflows. [Watch the full demo →](https://youtu.be/meD_LW5fc_A)
+> **📢 December 2025 Update:** Java SDK now available! Both Python and Java SDKs support one-line agent registration with tags, metadata, and MCP attestation. [Watch the full demo →](https://youtu.be/meD_LW5fc_A)
 
 ---
 
@@ -94,6 +95,7 @@ Monitor your entire MCP ecosystem with comprehensive supply chain visibility.
 ![MCP Supply Chain Analytics](docs/images/supply-chain.png)
 
 - **Supply Chain Dashboard** — View all MCP servers, verification status, and attestation health
+- **ABOM (Agent Bill of Materials)** — Complete inventory of all agents, their capabilities, MCP connections, and dependencies
 - **Confidence Score Distribution** — Visual breakdown of server trust levels (High/Good/Medium/Low)
 - **Attestation Activity Trends** — 7-day graph showing attestation patterns across your organization
 - **Capability Drift Alerts** — Automatic detection when MCP server tools change unexpectedly
@@ -186,31 +188,46 @@ Navigate to **Settings → SDK Download** in the dashboard.
 
 ### 4. Secure Your First Agent
 
+**Python:**
+
 ```python
 from aim_sdk import secure, AgentType
 
-# Note - Registration only requires Agent's Name
 agent = secure(
     "my-ai-assistant",
-    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
+    agent_type=AgentType.LANGCHAIN,
     capabilities=["db:read", "api:call"],
-    mcp_servers=["filesystem"],
-    version="1.0.0", # Note: version defaults to "1.0.0" if undeclared
-    description="Customer support AI agent",
-    tags=["production", "customer-facing", "gpt-4", "support-team"],
-    metadata={
-        "model": "gpt-4",
-        "department": "support"
-    }  
+    tags=["production", "customer-facing"],
+    metadata={"model": "gpt-4", "department": "support"}
 )
 
-# All actions are now verified, logged, and monitored
-# Risk level auto-detected from capability name (db:read → low)
 @agent.perform_action(capability="db:read")
 def get_customer(customer_id: str):
     return {"id": customer_id, "name": "Jane Doe"}
 
 result = get_customer("cust-123")
+```
+
+**Java:**
+
+```java
+import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.client.AgentType;
+
+AIMClient agent = AIMClient.secure(
+    "my-ai-assistant",
+    Arrays.asList("db:read", "api:call"),
+    AgentType.LANGCHAIN,
+    null,  // talksTo
+    "Customer support AI agent",
+    Arrays.asList("production", "customer-facing"),
+    Map.of("model", "gpt-4", "department", "support")
+);
+
+// Verify before action
+User user = agent.performAction("db:read", "users", () -> {
+    return userRepository.findById(userId);
+});
 ```
 
 Watch the dashboard update in real-time as your agent registers and performs actions.
@@ -219,28 +236,28 @@ Watch the dashboard update in real-time as your agent registers and performs act
 
 ## SDK Features
 
+### Available SDKs
+
+| SDK | Language | Installation | Features |
+|-----|----------|--------------|----------|
+| **Python SDK** | Python 3.8+ | `pip install aim-sdk` | Decorators, auto-detection, MCP integration |
+| **Java SDK** | Java 17+ | Maven/Gradle | AspectJ annotations, Spring Boot, OkHttp |
+
 ### SDK Parameters Reference
 
-The `secure()` function accepts the following parameters:
+Both SDKs support the same core parameters:
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | str | Yes | Unique agent identifier |
-| `agent_type` | AgentType | No | Agent type (auto-detected from imports) |
-| `capabilities` | list | No | Capabilities to grant (e.g., `["db:read", "api:call"]`) |
-| `mcp_servers` | list | No | MCP servers the agent uses (e.g., `["filesystem"]`) |
-| `tags` | list | No | Tags for categorization (auto-created if they don't exist) |
-| `metadata` | dict | No | Custom metadata (model, department, owner, etc.) |
-| `description` | str | No | Human-readable agent description |
-| `version` | str | No | Agent version (default: `"1.0.0"`) |
-| `force_new` | bool | No | Force new registration even if cached credentials exist (default: `False`) |
+| Parameter | Python | Java | Description |
+|-----------|--------|------|-------------|
+| `name` | `name` | `agentName` | Unique agent identifier (required) |
+| `agent_type` | `agent_type` | `agentType` | Agent type (auto-detected or explicit) |
+| `capabilities` | `capabilities` | `capabilities` | List of capabilities (e.g., `["db:read"]`) |
+| `mcp_servers` | `mcp_servers` | `talksTo` | MCP servers the agent uses |
+| `tags` | `tags` | `tags` | Tags for categorization |
+| `metadata` | `metadata` | `metadata` | Custom key-value metadata |
+| `description` | `description` | `description` | Human-readable description |
 
-**Credential Caching**: The SDK caches agent credentials locally (`~/.aim/agents/`). Use `force_new=True` to force a fresh registration when you need to update tags, metadata, or other settings.
-
-```python
-# Re-register with updated settings
-agent = secure("my-agent", tags=["new-tag"], force_new=True)
-```
+**Credential Caching**: Both SDKs cache credentials in `~/.aim/`. Use `force_new=True` (Python) to force re-registration.
 
 ### What the SDK Does Automatically
 
@@ -326,16 +343,24 @@ Manage hundreds of AI agents across your organization with centralized identity,
 
 Add security controls to your existing AI agent frameworks without rewriting your code.
 
+**Python:**
 ```python
 from aim_sdk import secure
-from langchain.agents import Tool
 
 agent = secure("langchain-agent")
 
 @agent.perform_action(capability="search:web")
 def search_tool(query):
-    # Your existing LangChain tool logic
+    # Your existing tool logic
     pass
+```
+
+**Java (with AspectJ):**
+```java
+@SecureAction(capability = "search:web", resource = "search_api")
+public SearchResult searchWeb(String query) {
+    // Your existing tool logic
+}
 ```
 
 ### Healthcare AI (HIPAA)
@@ -418,10 +443,13 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 - [x] Security dashboard with alerts
 - [x] Complete audit trail
 - [x] Python SDK with auto-registration
+- [x] **Java SDK** with Maven, AspectJ annotations, Spring Boot support
+- [x] Agent tags and metadata support
 - [x] OAuth integration (Google, Microsoft, Okta)
 
 ### Future
 
+- [ ] TypeScript/Node.js SDK
 - [ ] GitHub Copilot integration
 - [ ] GraphQL API
 - [ ] CLI tool for automation

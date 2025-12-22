@@ -1,8 +1,30 @@
 # 🗺️ AIM Development Roadmap
 
-**Last Updated**: October 21, 2025
+**Last Updated**: December 22, 2025
 
 This document tracks future enhancements and features that are deferred from the current development cycle.
+
+---
+
+## ✅ Recently Completed
+
+### Java SDK (December 2025)
+- Full Java SDK with Maven/Gradle support
+- AspectJ `@SecureAction` annotations for declarative security
+- Spring Boot integration
+- OkHttp HTTP client with BouncyCastle Ed25519 cryptography
+- Tags and metadata support
+- Complete feature parity with Python SDK
+
+### Agent Tags & Metadata (December 2025)
+- Tags for categorization (auto-created if they don't exist)
+- Custom metadata as key-value pairs
+- Both Python and Java SDK support
+
+### Supply Chain Analytics Enhancements (December 2025)
+- ABOM (Agent Bill of Materials) tab
+- Capability drift alerts with pagination
+- Enhanced threat detection modal with tabs and smart recommendations
 
 ---
 
@@ -343,6 +365,22 @@ End-to-end UI testing:
 
 ## 🔌 Framework Integrations
 
+### TypeScript/Node.js SDK
+**Priority**: High
+**Status**: Planned (Q1 2026)
+**Estimated Effort**: 2 weeks
+
+TypeScript SDK for Node.js applications:
+- Full TypeScript support with type definitions
+- async/await API design
+- npm package distribution
+- Express/Fastify middleware integration
+- Feature parity with Python and Java SDKs
+
+**Use Case**: Node.js applications, serverless functions, TypeScript projects
+
+---
+
 ### GitHub Copilot Integration
 **Priority**: Medium
 **Status**: Planned (Q1 2026)
@@ -400,6 +438,13 @@ Video guides for common tasks:
 ## 🚀 Deployment History
 
 ### Completed Deployments
+- **December 22, 2025**: Java SDK and documentation update
+  - Java SDK with Maven/Gradle support
+  - Tags and metadata support in both SDKs
+  - Supply Chain Analytics enhancements
+  - Updated README with dual-language examples
+  - Migrated to Next.js 16
+
 - **October 20, 2025**: Auto-initialization feature deployed
   - Complete database schema
   - Default seed data
