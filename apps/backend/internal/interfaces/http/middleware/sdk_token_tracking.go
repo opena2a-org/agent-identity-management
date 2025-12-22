@@ -24,41 +24,44 @@ func NewSDKTokenTrackingMiddleware(sdkTokenRepo domain.SDKTokenRepository) *SDKT
 // Handler returns the middleware handler function
 func (m *SDKTokenTrackingMiddleware) Handler() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Extract Authorization header
-		authHeader := c.Get("Authorization", "")
+		// ✅ Check for X-SDK-Token header (sent by Python and Java SDKs)
+		// This is the reliable way to identify SDK registrations
+		sdkTokenHeader := c.Get("X-SDK-Token", "")
+		userAgent := c.Get("User-Agent", "")
 
-		// Extract token ID (JTI) from JWT if present
+		if sdkTokenHeader != "" {
+			c.Locals("is_sdk_registration", true)
+			c.Locals("sdk_token_id", sdkTokenHeader)
+
+			// Look up SDK token to get the user who created it
+			if sdkToken, err := m.sdkTokenRepo.GetByTokenID(sdkTokenHeader); err == nil && sdkToken != nil {
+				c.Locals("sdk_token_user_id", sdkToken.UserID)
+			}
+
+			// Record usage asynchronously
+			ipAddress := c.IP()
+			go func(tokenID, ip string) {
+				_ = m.sdkTokenRepo.RecordUsage(tokenID, ip)
+			}(sdkTokenHeader, ipAddress)
+		}
+
+		// Also check User-Agent for SDK identification as a fallback
+		if strings.Contains(userAgent, "AIM-Python-SDK") || strings.Contains(userAgent, "AIM-Java-SDK") {
+			c.Locals("is_sdk_registration", true)
+		}
+
+		// Extract Authorization header for additional tracking
+		authHeader := c.Get("Authorization", "")
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Parse JWT without validation (we only need the JTI claim)
-			// Note: We're NOT validating the token here - that's done by AuthMiddleware
-			// We're just extracting the token ID for usage tracking
+			// Parse JWT without validation (we only need the JTI for tracking)
 			token, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
 			if err == nil {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok {
 					if jti, ok := claims["jti"].(string); ok && jti != "" {
-						// Get client IP address
-						ipAddress := c.IP()
-
-						// ✅ Store SDK token ID in context for downstream handlers
-						// This enables tracking which SDK token created each agent
-						c.Locals("sdk_token_id", jti)
-
-						// ✅ Look up SDK token to get the user who created it
-						// This is needed for "Registered By" audit trail
-						if sdkToken, err := m.sdkTokenRepo.GetByTokenID(jti); err == nil && sdkToken != nil {
-							c.Locals("sdk_token_user_id", sdkToken.UserID)
-						}
-
-						// Record usage asynchronously to avoid blocking the request
-						go func(tokenID, ip string) {
-							if err := m.sdkTokenRepo.RecordUsage(tokenID, ip); err != nil {
-								// Log error but don't fail the request
-								// In production, use proper logging
-								// log.Printf("Failed to record SDK token usage: %v", err)
-							}
-						}(jti, ipAddress)
+						// Store access token JTI (useful for logging)
+						c.Locals("access_token_jti", jti)
 					}
 				}
 			}
