@@ -45,6 +45,12 @@ func (m *SDKTokenTrackingMiddleware) Handler() fiber.Handler {
 						// This enables tracking which SDK token created each agent
 						c.Locals("sdk_token_id", jti)
 
+						// ✅ Look up SDK token to get the user who created it
+						// This is needed for "Registered By" audit trail
+						if sdkToken, err := m.sdkTokenRepo.GetByTokenID(jti); err == nil && sdkToken != nil {
+							c.Locals("sdk_token_user_id", sdkToken.UserID)
+						}
+
 						// Record usage asynchronously to avoid blocking the request
 						go func(tokenID, ip string) {
 							if err := m.sdkTokenRepo.RecordUsage(tokenID, ip); err != nil {
