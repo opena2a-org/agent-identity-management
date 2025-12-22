@@ -125,6 +125,9 @@ function StatCard({
   change,
   changeType,
   suffix,
+  iconBg = "bg-gray-100 dark:bg-gray-700",
+  iconColor = "text-gray-500 dark:text-gray-400",
+  valueColor = "text-gray-900 dark:text-gray-100",
 }: {
   icon: any;
   label: string;
@@ -132,20 +135,23 @@ function StatCard({
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   suffix?: string;
+  iconBg?: string;
+  iconColor?: string;
+  valueColor?: string;
 }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="flex items-center">
-        <div className="flex-shrink-0">
-          <Icon className="h-6 w-6 text-gray-400" />
+        <div className={`flex-shrink-0 p-2 rounded-lg ${iconBg}`}>
+          <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
-        <div className="ml-5 w-0 flex-1">
+        <div className="ml-4 w-0 flex-1">
           <dl>
             <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
               {label}
             </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              <div className={`text-2xl font-semibold ${valueColor}`}>
                 {value}
                 {suffix && (
                   <span className="text-lg font-normal text-gray-500 ml-1">
@@ -915,6 +921,9 @@ function SupplyChainPage() {
           icon={Server}
           label="Total MCP Servers"
           value={stats?.totalMCPServers || 0}
+          iconBg="bg-purple-100 dark:bg-purple-900/30"
+          iconColor="text-purple-600 dark:text-purple-400"
+          valueColor="text-purple-600 dark:text-purple-400"
         />
         <StatCard
           icon={Shield}
@@ -926,12 +935,18 @@ function SupplyChainPage() {
               : undefined
           }
           changeType="positive"
+          iconBg="bg-green-100 dark:bg-green-900/30"
+          iconColor="text-green-600 dark:text-green-400"
+          valueColor="text-green-600 dark:text-green-400"
         />
         <StatCard
           icon={Link2}
           label="Active Connections"
           value={stats?.activeConnections || 0}
           suffix={`/ ${stats?.totalConnections || 0}`}
+          iconBg="bg-cyan-100 dark:bg-cyan-900/30"
+          iconColor="text-cyan-600 dark:text-cyan-400"
+          valueColor="text-cyan-600 dark:text-cyan-400"
         />
         <StatCard
           icon={AlertCircle}
@@ -940,6 +955,9 @@ function SupplyChainPage() {
           changeType={
             unmappedMcpCount > 0 ? "negative" : "positive"
           }
+          iconBg="bg-orange-100 dark:bg-orange-900/30"
+          iconColor="text-orange-600 dark:text-orange-400"
+          valueColor="text-orange-600 dark:text-orange-400"
         />
       </div>
 
@@ -952,11 +970,17 @@ function SupplyChainPage() {
           changeType={
             (stats?.pendingServers || 0) > 0 ? "negative" : "positive"
           }
+          iconBg="bg-yellow-100 dark:bg-yellow-900/30"
+          iconColor="text-yellow-600 dark:text-yellow-400"
+          valueColor="text-yellow-600 dark:text-yellow-400"
         />
         <StatCard
           icon={Activity}
           label="Attestations (24h)"
           value={stats?.attestationsLast24h || 0}
+          iconBg="bg-blue-100 dark:bg-blue-900/30"
+          iconColor="text-blue-600 dark:text-blue-400"
+          valueColor="text-blue-600 dark:text-blue-400"
         />
         <StatCard
           icon={AlertTriangle}
@@ -965,6 +989,9 @@ function SupplyChainPage() {
           changeType={
             (stats?.capabilityDriftAlerts || 0) > 0 ? "negative" : "positive"
           }
+          iconBg="bg-red-100 dark:bg-red-900/30"
+          iconColor="text-red-600 dark:text-red-400"
+          valueColor="text-red-600 dark:text-red-400"
         />
         <StatCard
           icon={Box}
@@ -973,6 +1000,9 @@ function SupplyChainPage() {
             (sum, s) => sum + (s.toolCount || 0),
             0
           )}
+          iconBg="bg-indigo-100 dark:bg-indigo-900/30"
+          iconColor="text-indigo-600 dark:text-indigo-400"
+          valueColor="text-indigo-600 dark:text-indigo-400"
         />
       </div>
 
@@ -1613,9 +1643,7 @@ function SupplyChainPage() {
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Package className="h-8 w-8 text-gray-600 dark:text-gray-300" />
-                </div>
+                <Package className="h-8 w-8 text-gray-400" />
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Agent Bill of Materials</h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -1635,66 +1663,66 @@ function SupplyChainPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Bot className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalAgents}</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{abomData.summary.totalAgents}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Agents</p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Server className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Server className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalMcpServers}</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{abomData.summary.totalMcpServers}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">MCP Servers</p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Wrench className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <Wrench className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalTools}</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{abomData.summary.totalTools}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Tools</p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Link2 className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
+                  <Link2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalConnections}</p>
+                  <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{abomData.summary.totalConnections}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Connections</p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Cpu className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                  <Cpu className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.totalCapabilities}</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{abomData.summary.totalCapabilities}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Capabilities</p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Database className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                  <Database className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{abomData.summary.dataCategories.length}</p>
+                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{abomData.summary.dataCategories.length}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Data Categories</p>
                 </div>
               </div>
