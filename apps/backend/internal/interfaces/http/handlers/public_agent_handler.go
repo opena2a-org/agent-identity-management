@@ -140,6 +140,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 	// Use real user and organization from API key
 	userID := validation.User.ID
 	orgID := validation.Organization.ID
+	userEmail := validation.User.Email
 
 	// Create agent (keys generated automatically by AgentService)
 	// Note: Public registration validates API key manually above but doesn't track the key ID
@@ -153,7 +154,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		Version:          req.Version,
 		RepositoryURL:    req.RepositoryURL,
 		DocumentationURL: req.DocumentationURL,
-	}, orgID, userID, nil, nil)
+	}, orgID, userID, nil, nil, userEmail)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to create agent: %v", err),

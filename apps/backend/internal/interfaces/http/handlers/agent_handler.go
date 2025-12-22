@@ -157,6 +157,10 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	// ✅ Extract user email from JWT claims (set by AuthMiddleware)
+	// This is used as a fallback for audit trail if user lookup fails
+	userEmail, _ := c.Locals("email").(string)
+
 	// ✅ Extract SDK token ID if present (set by SDKTokenTrackingMiddleware)
 	// This enables tracking which SDK token was used to create this agent
 	var sdkTokenID *uuid.UUID
@@ -184,7 +188,7 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	}
 
 	// SECURITY: No error logging to prevent information leakage
-	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID)
+	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID, userEmail)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
