@@ -254,6 +254,10 @@ function SupplyChainPage() {
   const [connPageSize, setConnPageSize] = useState(10);
   const [connPage, setConnPage] = useState(1);
 
+  // Drift alerts pagination
+  const [driftPageSize, setDriftPageSize] = useState(10);
+  const [driftPage, setDriftPage] = useState(1);
+
   const fetchData = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
     try {
@@ -419,6 +423,13 @@ function SupplyChainPage() {
   const paginatedConnections = filteredConnections.slice(
     (connPage - 1) * connPageSize,
     connPage * connPageSize
+  );
+
+  // Paginated drift alerts
+  const totalDriftPages = Math.ceil(driftAlerts.length / driftPageSize);
+  const paginatedDriftAlerts = driftAlerts.slice(
+    (driftPage - 1) * driftPageSize,
+    driftPage * driftPageSize
   );
 
   const handleExport = () => {
@@ -1083,7 +1094,7 @@ function SupplyChainPage() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {driftAlerts.map((alert) => (
+                {paginatedDriftAlerts.map((alert) => (
                   <tr
                     key={alert.id}
                     className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
@@ -1146,6 +1157,47 @@ function SupplyChainPage() {
               </tbody>
             </table>
           </div>
+          {/* Drift Alerts Pagination */}
+          {driftAlerts.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <span>Show</span>
+                <select
+                  value={driftPageSize}
+                  onChange={(e) => {
+                    setDriftPageSize(Number(e.target.value));
+                    setDriftPage(1);
+                  }}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <span>of {driftAlerts.length} alerts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDriftPage((p) => Math.max(1, p - 1))}
+                  disabled={driftPage === 1}
+                  className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Page {driftPage} of {totalDriftPages || 1}
+                </span>
+                <button
+                  onClick={() => setDriftPage((p) => Math.min(totalDriftPages, p + 1))}
+                  disabled={driftPage >= totalDriftPages}
+                  className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
