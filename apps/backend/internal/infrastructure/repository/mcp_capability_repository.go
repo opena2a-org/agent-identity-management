@@ -335,7 +335,7 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 	for rows.Next() {
 		var capID, mcpServerID uuid.UUID
 		var mcpServerName, capName, capType string
-		var detectedAt time.Time
+		var detectedAt sql.NullTime
 		var lastVerifiedAt sql.NullTime
 
 		if err := rows.Scan(&capID, &mcpServerID, &mcpServerName, &capName, &capType, &detectedAt, &lastVerifiedAt); err != nil {
@@ -349,6 +349,14 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 			severity = "medium"
 		}
 
+		// Use detected_at if valid, otherwise fall back to last_verified_at
+		alertTime := time.Now()
+		if detectedAt.Valid && !detectedAt.Time.IsZero() {
+			alertTime = detectedAt.Time
+		} else if lastVerifiedAt.Valid {
+			alertTime = lastVerifiedAt.Time
+		}
+
 		alert := CapabilityDriftAlert{
 			ID:             capID.String(),
 			MCPServerID:    mcpServerID.String(),
@@ -358,7 +366,7 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 			DriftType:      "stale",
 			Severity:       severity,
 			Description:    fmt.Sprintf("Capability '%s' on %s has not been verified in %d+ days", capName, mcpServerName, days),
-			DetectedAt:     detectedAt,
+			DetectedAt:     alertTime,
 		}
 		if lastVerifiedAt.Valid {
 			alert.PreviousVerifiedAt = lastVerifiedAt.Time
@@ -397,10 +405,16 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 	for rows2.Next() {
 		var capID, mcpServerID uuid.UUID
 		var mcpServerName, capName, capType string
-		var detectedAt time.Time
+		var detectedAt sql.NullTime
 
 		if err := rows2.Scan(&capID, &mcpServerID, &mcpServerName, &capName, &capType, &detectedAt); err != nil {
 			continue
+		}
+
+		// Use detected_at if valid, otherwise use current time
+		alertTime := time.Now()
+		if detectedAt.Valid && !detectedAt.Time.IsZero() {
+			alertTime = detectedAt.Time
 		}
 
 		alert := CapabilityDriftAlert{
@@ -412,7 +426,7 @@ func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID
 			DriftType:      "added",
 			Severity:       "medium",
 			Description:    fmt.Sprintf("New %s capability '%s' detected on %s but not verified", capType, capName, mcpServerName),
-			DetectedAt:     detectedAt,
+			DetectedAt:     alertTime,
 		}
 		alerts = append(alerts, alert)
 		stats.AddedCapabilities++

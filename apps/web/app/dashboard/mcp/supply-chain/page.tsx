@@ -1131,7 +1131,10 @@ function SupplyChainPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                      <div
+                        className="text-sm text-gray-500 dark:text-gray-400 max-w-md truncate"
+                        title={alert.description}
+                      >
                         {alert.description}
                       </div>
                     </td>
