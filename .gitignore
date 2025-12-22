@@ -79,6 +79,10 @@ sdk-page
 !docs/images/*.png
 !docs/images/*.jpg
 !docs/images/*.gif
+
+# Allow logo files in public folder
+!apps/web/public/opena2a-logo.png
+!apps/web/public/opena2a-logo.svg
 *-page
 *-tab
 *-state
