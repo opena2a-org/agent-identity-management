@@ -37,6 +37,8 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
+  Database,
+  ExternalLink,
 } from "lucide-react";
 import {
   XAxis,

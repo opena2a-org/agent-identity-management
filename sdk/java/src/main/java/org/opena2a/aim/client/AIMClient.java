@@ -312,6 +312,24 @@ public class AIMClient implements AutoCloseable {
      * @return Configured AIMClient ready for use
      */
     public static AIMClient secure(String agentName, List<String> capabilities, AgentType agentType, List<String> talksTo) {
+        return secure(agentName, capabilities, agentType, talksTo, null, null, null);
+    }
+
+    /**
+     * Secure registration with full configuration including description, tags, and metadata.
+     *
+     * @param agentName    Name for your agent
+     * @param capabilities List of capabilities to register
+     * @param agentType    Type of agent (auto-detected if null)
+     * @param talksTo      List of MCP servers this agent communicates with
+     * @param description  Description of the agent
+     * @param tags         List of tags for categorization (e.g., "production", "customer-facing")
+     * @param metadata     Additional metadata as key-value pairs
+     * @return Configured AIMClient ready for use
+     */
+    public static AIMClient secure(String agentName, List<String> capabilities, AgentType agentType,
+                                    List<String> talksTo, String description, List<String> tags,
+                                    Map<String, Object> metadata) {
         // Load credentials from SDK download (with intelligent discovery)
         Map<String, String> credentials = CredentialManager.loadSdkCredentials();
 
@@ -350,6 +368,9 @@ public class AIMClient implements AutoCloseable {
                 .agentType(agentType != null ? agentType : AgentType.CUSTOM)
                 .capabilities(capabilities != null ? capabilities : Collections.emptyList())
                 .talksTo(talksTo != null ? talksTo : Collections.emptyList())
+                .description(description)
+                .tags(tags != null ? tags : Collections.emptyList())
+                .metadata(metadata != null ? metadata : Collections.emptyMap())
                 .credentials(credentials);
 
         if (hasRefreshToken) {

@@ -389,7 +389,6 @@ type Repositories struct {
 	SDKToken           domain.SDKTokenRepository
 	Capability         domain.CapabilityRepository
 	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
-	DataFlow           *repository.DataFlowRepository     // ✅ For data flow visibility (premium feature)
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -420,7 +419,6 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		SDKToken:           repository.NewSDKTokenRepository(db),
 		Capability:         repository.NewCapabilityRepository(dbx),
 		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
-		DataFlow:           repository.NewDataFlowRepository(db),           // ✅ For data flow visibility (premium feature)
 	}, oauthRepo
 }
 
@@ -447,7 +445,6 @@ type Services struct {
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
-	DataFlow          *application.DataFlowService          // ✅ For data flow visibility (premium feature)
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -626,12 +623,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
-	// ✅ Initialize Data Flow Service for data flow visibility (premium feature)
-	dataFlowService := application.NewDataFlowService(
-		repos.DataFlow,
-		nil, // Alert integration handled through violation records
-	)
-
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -655,7 +646,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
-		DataFlow:          dataFlowService,          // ✅ For data flow visibility (premium feature)
 	}, keyVault
 }
 
@@ -687,7 +677,6 @@ type Handlers struct {
 	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
-	DataFlow           *handlers.DataFlowHandler           // ✅ For data flow visibility (premium feature)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -837,9 +826,6 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			repos.Agent,
 			repos.MCPServer,
 			repos.MCPCapability,
-		),
-		DataFlow: handlers.NewDataFlowHandler(
-			services.DataFlow,
 		),
 	}
 }
@@ -1222,13 +1208,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToMCPServer)
 	mcpServers.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromMCPServer)
 	mcpServers.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForMCPServer)
-
-	// ⭐ Data Flow Visibility routes (premium feature)
-	// Tracks sensitive data (PII, PHI, PCI) as it flows through agents to external systems
-	dataFlows := v1.Group("")
-	dataFlows.Use(middleware.AuthMiddleware(jwtService))
-	dataFlows.Use(middleware.RateLimitMiddleware())
-	h.DataFlow.RegisterRoutes(dataFlows)
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {

@@ -258,7 +258,7 @@ export default function SDKDownloadPage() {
                 <h2 className="text-xl font-bold text-gray-900">Java SDK</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                    🆕 New
+                    New
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
                     v1.0.0
@@ -268,7 +268,7 @@ export default function SDKDownloadPage() {
             </div>
 
             <p className="text-sm text-gray-700 mb-4">
-              Enterprise Java client with Maven support, AspectJ annotations, OkHttp,
+              Java client with Maven support, AspectJ annotations, OkHttp,
               BouncyCastle cryptography, and Spring Boot integration.
             </p>
 
@@ -292,39 +292,66 @@ export default function SDKDownloadPage() {
             <h3 className="text-lg font-semibold text-gray-900">Quick Start - See Results in 60 Seconds!</h3>
           </div>
 
+          {/* Language Tabs - Applies to all steps */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setSelectedCodeTab('python')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedCodeTab === 'python'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Python
+            </button>
+            <button
+              onClick={() => setSelectedCodeTab('java')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedCodeTab === 'java'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Java
+            </button>
+          </div>
+
           <div className="space-y-6">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">1. Extract SDK to Your Projects Folder</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
-                <code className="text-sm text-green-400 font-mono">
-                  # Recommended: Extract to your home directory or projects folder<br />
-                  cd ~/projects  # or any folder you prefer<br />
-                  unzip ~/Downloads/aim-sdk-python.zip<br />
-                  cd aim-sdk-python<br />
-                  pip install -e .
-                </code>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
-                <p className="text-sm text-blue-800">
-                  <strong>Where to extract?</strong> Anywhere you keep your projects! Common locations:
-                </p>
-                <ul className="text-sm text-blue-700 mt-1 ml-4 list-disc">
-                  <li><code>~/projects/aim-sdk-python</code></li>
-                  <li><code>~/dev/aim-sdk-python</code></li>
-                  <li><code>~/Desktop/aim-sdk-python</code> (for quick testing)</li>
-                </ul>
+              <h4 className="font-medium text-gray-900 mb-2">1. Extract & Install SDK</h4>
+              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                {selectedCodeTab === 'python' ? (
+                  <code className="text-sm text-green-400 font-mono">
+                    cd ~/projects  # or any folder you prefer<br />
+                    unzip ~/Downloads/aim-sdk-python.zip<br />
+                    cd aim-sdk-python<br />
+                    pip install -e .
+                  </code>
+                ) : (
+                  <code className="text-sm text-green-400 font-mono">
+                    cd ~/projects  # or any folder you prefer<br />
+                    unzip ~/Downloads/aim-sdk-java.zip<br />
+                    cd aim-sdk-java<br />
+                    mvn install
+                  </code>
+                )}
               </div>
             </div>
 
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4">
-              <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
-                <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">NEW</span>
+              <h4 className="font-semibold text-green-900 mb-2">
                 2. Run the Demo Agent - Watch Dashboard Update Live!
               </h4>
               <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
-                <code className="text-sm text-green-400 font-mono">
-                  python demo_agent.py
-                </code>
+                {selectedCodeTab === 'python' ? (
+                  <code className="text-sm text-green-400 font-mono">
+                    python demo_agent.py
+                  </code>
+                ) : (
+                  <code className="text-sm text-green-400 font-mono">
+                    mvn exec:java -Dexec.mainClass="org.opena2a.aim.examples.DemoAgent"
+                  </code>
+                )}
               </div>
               <p className="text-sm text-green-800 mb-2">
                 The demo agent includes interactive actions you can trigger. Open your{' '}
@@ -338,31 +365,6 @@ export default function SDKDownloadPage() {
 
             <div>
               <h4 className="font-medium text-gray-900 mb-2">3. Build Your Own Agent</h4>
-
-              {/* Language Tabs */}
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => setSelectedCodeTab('python')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    selectedCodeTab === 'python'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Python
-                </button>
-                <button
-                  onClick={() => setSelectedCodeTab('java')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    selectedCodeTab === 'java'
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Java
-                </button>
-              </div>
-
               <div className="relative bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <button
                   onClick={handleCopy}
