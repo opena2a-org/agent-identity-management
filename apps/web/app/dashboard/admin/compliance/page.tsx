@@ -311,7 +311,7 @@ function ComplianceSummaryCard({
       description: "Pending verifications should be processed promptly",
       passedText: "Queue is manageable",
       failedText: (n) => `${n} agent${n > 1 ? "s" : ""} awaiting verification`,
-      actionUrl: "/dashboard/admin/verifications",
+      actionUrl: "/dashboard/admin/jit-requests",
     },
     "orphanedResources": {
       label: "Resource Ownership",

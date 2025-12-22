@@ -169,6 +169,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		isJITRequest = true
 	}
 
+	// Get organization's enforcement mode to distinguish auto-approved vs approved
+	isMonitoringMode := false
+	if h.orgRepo != nil {
+		org, orgErr := h.orgRepo.GetByID(agent.OrganizationID)
+		if orgErr == nil && org != nil {
+			isMonitoringMode = org.EnforcementMode == domain.EnforcementModeMonitoring
+		}
+	}
+
 	// SECURITY: Debug logging removed to prevent information leakage
 	var status string
 	if err != nil {
@@ -178,10 +187,20 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			denialReason = fmt.Sprintf("Verification error: %v", err)
 		}
 	} else if allowed {
-		status = "approved"
+		// Distinguish between manual approval and auto-approval in monitoring mode
+		if isMonitoringMode {
+			status = "auto-approved"
+		} else {
+			status = "approved"
+		}
 	} else if isJITRequest {
 		// JIT access request without capability - create pending record for admin approval
-		status = "pending"
+		// In monitoring mode, this also gets auto-approved
+		if isMonitoringMode {
+			status = "auto-approved"
+		} else {
+			status = "pending"
+		}
 	} else {
 		status = "denied"
 	}
@@ -223,7 +242,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		Metadata: map[string]interface{}{
 			"verificationId":   verificationID.String(),
 			"trustScore":       trustScore,
-			"autoApproved":     status == "approved",
+			"autoApproved":     status == "approved" || status == "auto-approved",
 			"actionType":       req.Capability,
 			"resource":         req.Resource,
 			"context":          req.Context,
@@ -336,7 +355,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Map status to verification event status
 	var eventStatus domain.VerificationEventStatus
 	var result *domain.VerificationResult
-	if status == "approved" {
+	if status == "approved" || status == "auto-approved" {
 		eventStatus = domain.VerificationEventStatusSuccess
 		verifiedResult := domain.VerificationResultVerified
 		result = &verifiedResult
@@ -355,7 +374,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		"resource":         req.Resource,
 		"context":          req.Context,
 		"trustScore":       trustScore,
-		"autoApproved":     status == "approved",
+		"autoApproved":     status == "approved" || status == "auto-approved",
+		"displayStatus":    status, // Store actual status for frontend (approved/auto-approved/pending/denied)
+		"monitoringMode":   isMonitoringMode,
 		"riskLevel":        detectedRiskLevel,
 		"riskAutoDetected": riskAutoDetected,
 	}
@@ -437,8 +458,12 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		RiskAutoDetected: riskAutoDetected,
 	}
 
-	if status == "approved" {
-		response.ApprovedBy = "system" // Auto-approved
+	if status == "approved" || status == "auto-approved" {
+		if status == "auto-approved" {
+			response.ApprovedBy = "monitoring-mode" // Auto-approved due to monitoring mode
+		} else {
+			response.ApprovedBy = "system" // Auto-approved by policy
+		}
 		response.ExpiresAt = time.Now().Add(24 * time.Hour)
 	} else if status == "denied" {
 		response.DenialReason = denialReason
@@ -1236,6 +1261,14 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 			agentIDStr = event.AgentID.String()
 		}
 
+		// Get display status from metadata if available, otherwise normalize from domain status
+		displayStatus := normalizeVerificationStatus(event.Status)
+		if event.Metadata != nil {
+			if ds, ok := event.Metadata["displayStatus"].(string); ok && ds != "" {
+				displayStatus = ds
+			}
+		}
+
 		responseItems = append(responseItems, PendingVerificationResponse{
 			ID:          event.ID.String(),
 			AgentID:     agentIDStr,
@@ -1245,7 +1278,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 			Context:     event.Metadata,
 			RiskLevel:   riskLevel,
 			TrustScore:  trustScore, // Use computed trustScore with fallback
-			Status:      normalizeVerificationStatus(event.Status),
+			Status:      displayStatus,
 			RequestedAt: event.CreatedAt,
 			ExpiresAt:   event.CreatedAt.Add(1 * time.Hour), // Default 1 hour expiry
 		})

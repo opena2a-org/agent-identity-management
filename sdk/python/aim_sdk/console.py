@@ -241,14 +241,14 @@ class AIMConsole:
         duration_str = f" [{duration_ms:.0f}ms]" if duration_ms else ""
 
         if RICH_AVAILABLE:
-            if status == "approved":
+            if status in ("approved", "auto-approved"):
                 self.console.print(f"  [green]✓[/] [cyan]{capability}[/] verified{duration_str}")
             elif status == "denied":
                 self.console.print(f"  [red]✗[/] [cyan]{capability}[/] denied{duration_str}")
             else:
                 self.console.print(f"  [yellow]○[/] [cyan]{capability}[/] {status}{duration_str}")
         else:
-            icon = "✓" if status == "approved" else "✗" if status == "denied" else "○"
+            icon = "✓" if status in ("approved", "auto-approved") else "✗" if status == "denied" else "○"
             print(f"  {icon} {capability} {status}{duration_str}")
 
     # ═══════════════════════════════════════════════════════════════════════════
