@@ -203,7 +203,10 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	var apiKeyErr error
 	apiKeyCreated := false
 
-	if sdkTokenID == nil {
+	// Check if this is an SDK registration (set by SDKTokenTrackingMiddleware)
+	isSDKRegistration, _ := c.Locals("is_sdk_registration").(bool)
+
+	if !isSDKRegistration && sdkTokenID == nil {
 		// Non-SDK registration: auto-create API key for convenience
 		apiKeyName := fmt.Sprintf("%s-default-key", agent.Name)
 		fullAPIKey, apiKeyRecord, apiKeyErr = h.apiKeyService.GenerateAPIKey(

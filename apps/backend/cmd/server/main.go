@@ -854,9 +854,9 @@ func initEmailService() (domain.EmailService, error) {
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
-	// SDK Token Tracking Middleware - TEMPORARILY DISABLED for debugging
-	// sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
-	// v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
+	// SDK Token Tracking Middleware - Detects SDK registrations via X-SDK-Token header and User-Agent
+	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
+	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
 
 	// ✅ Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
