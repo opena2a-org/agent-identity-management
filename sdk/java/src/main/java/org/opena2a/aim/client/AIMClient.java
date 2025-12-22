@@ -1031,7 +1031,9 @@ public class AIMClient implements AutoCloseable {
             payload.put("capabilityType", capabilityType);
             payload.put("reason", reason);
 
-            String response = post("/api/v1/capabilities/request", payload.toString());
+            // Use SDK-API endpoint with agent ID
+            String url = "/api/v1/sdk-api/agents/" + agentId + "/capability-requests";
+            String response = post(url, payload.toString());
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to request capability: " + e.getMessage(), e);
