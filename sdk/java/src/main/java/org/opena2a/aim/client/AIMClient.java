@@ -420,6 +420,8 @@ public class AIMClient implements AutoCloseable {
                 // Update the agent with new configuration
                 if (this.agentId != null) {
                     updateExistingAgent();
+                    // Register and attest MCP servers
+                    registerAndAttestMcpServers();
                 }
                 return;
             } catch (AIMException e) {
@@ -433,6 +435,9 @@ public class AIMClient implements AutoCloseable {
             ObjectNode payload = buildAgentPayload();
             String response = post("/api/v1/agents", payload.toString());
             handleRegistrationResponse(response, false);
+
+            // Register and attest MCP servers
+            registerAndAttestMcpServers();
 
         } catch (AIMException e) {
             throw e;
@@ -511,7 +516,7 @@ public class AIMClient implements AutoCloseable {
      * This is called when reconnecting to an existing agent to sync configuration.
      */
     private void updateExistingAgent() {
-        // 1. Update public key via dedicated /keys endpoint (like Python SDK)
+        // 1. Update public key via dedicated /keys endpoint
         try {
             ObjectNode keyPayload = objectMapper.createObjectNode();
             keyPayload.put("publicKey", Base64.getEncoder().encodeToString(publicKey));
@@ -572,6 +577,170 @@ public class AIMClient implements AutoCloseable {
         } catch (Exception e) {
             // Log but don't fail - agent is still usable
             logger.warn("Could not update agent configuration: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Register and attest MCP servers from talksTo list.
+     * MCP servers are registered and cryptographically attested during agent registration.
+     */
+    private void registerAndAttestMcpServers() {
+        if (talksTo == null || talksTo.isEmpty()) {
+            return;
+        }
+
+        System.out.println("  Registering " + talksTo.size() + " MCP server(s)...");
+
+        for (String mcpName : talksTo) {
+            try {
+                // Step 1: Register the MCP server using SDK endpoint
+                String mcpServerId = registerMcpServerViaSdkEndpoint(mcpName);
+                if (mcpServerId == null) {
+                    System.out.println("    ⚠️  Could not register MCP server: " + mcpName);
+                    continue;
+                }
+                System.out.println("    ✓ Registered MCP server: " + mcpName + " (" + mcpServerId + ")");
+
+                // Step 2: Attest to the MCP server
+                try {
+                    attestMcp(
+                        mcpServerId,
+                        "stdio://" + mcpName,  // Default URL for stdio MCP servers
+                        mcpName,
+                        Collections.emptyList(),  // Capabilities will be discovered later
+                        0.0  // No latency measurement yet
+                    );
+                    System.out.println("    ✓ Auto-attested MCP server: " + mcpName);
+                } catch (Exception e) {
+                    System.out.println("    ⚠️  Could not attest MCP server '" + mcpName + "': " + e.getMessage());
+                }
+
+            } catch (Exception e) {
+                // Log but don't fail - agent is still usable without MCP attestation
+                System.out.println("    ⚠️  Error with MCP server '" + mcpName + "': " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Register an MCP server using the SDK endpoint.
+     * Uses Ed25519 signed request for authentication.
+     *
+     * Endpoint: POST /api/v1/sdk-api/agents/{agentId}/mcp-servers
+     *
+     * @param mcpName Name of the MCP server
+     * @return MCP server ID or null if registration fails
+     */
+    private String registerMcpServerViaSdkEndpoint(String mcpName) {
+        try {
+            String mcpUrl = "stdio://" + mcpName;
+
+            // Build MCP server registration data
+            ObjectNode mcpData = objectMapper.createObjectNode();
+            mcpData.put("name", mcpName);
+            mcpData.put("description", "MCP server registered by " + agentName);
+            mcpData.put("url", mcpUrl);
+            mcpData.put("version", "1.0.0");
+            mcpData.putArray("capabilities");  // Empty for now, will be discovered later
+            mcpData.put("registeredByAgent", agentId);
+            mcpData.put("verificationMethod", "agent_attestation");
+
+            // Use SDK endpoint for MCP registration
+            String endpoint = "/api/v1/sdk-api/agents/" + agentId + "/mcp-servers";
+            String response = postWithSignature(endpoint, mcpData.toString());
+
+            JsonNode result = objectMapper.readTree(response);
+            return result.has("id") ? result.get("id").asText() : null;
+
+        } catch (AIMException e) {
+            // 409 Conflict means server already exists - extract ID from response
+            if (e.getMessage() != null && e.getMessage().contains("409")) {
+                try {
+                    // Try to get existing MCP server ID from the error message or list
+                    String listEndpoint = "/api/v1/sdk-api/agents/" + agentId + "/mcp-servers";
+                    String response = getWithSignature(listEndpoint);
+                    JsonNode result = objectMapper.readTree(response);
+                    JsonNode servers = result.has("mcpServers") ? result.get("mcpServers") : result;
+                    if (servers.isArray()) {
+                        for (JsonNode server : servers) {
+                            if (mcpName.equals(server.path("name").asText())) {
+                                return server.get("id").asText();
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    logger.debug("Could not get existing MCP server: {}", ex.getMessage());
+                }
+            }
+            logger.debug("MCP registration failed: {}", e.getMessage());
+            return null;
+        } catch (Exception e) {
+            logger.debug("MCP registration error: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * POST request with Ed25519 signature.
+     */
+    private String postWithSignature(String endpoint, String body) {
+        try {
+            String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+            String message = "POST\n" + endpoint + "\n" + timestamp + "\n" + body;
+            String signature = sign(message);
+
+            Request.Builder builder = new Request.Builder()
+                .url(aimUrl + endpoint)
+                .post(RequestBody.create(body, JSON));
+
+            builder.addHeader("X-Agent-ID", agentId);
+            builder.addHeader("X-Signature", signature);
+            builder.addHeader("X-Timestamp", timestamp);
+            builder.addHeader("X-Public-Key", Base64.getEncoder().encodeToString(publicKey));
+
+            try (Response response = httpClient.newCall(builder.build()).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                if (!response.isSuccessful()) {
+                    throw new AIMException("HTTP " + response.code() + ": " + responseBody);
+                }
+                return responseBody;
+            }
+        } catch (AIMException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AIMException("Request failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * GET request with Ed25519 signature.
+     */
+    private String getWithSignature(String endpoint) {
+        try {
+            String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+            String message = "GET\n" + endpoint + "\n" + timestamp + "\n";
+            String signature = sign(message);
+
+            Request.Builder builder = new Request.Builder()
+                .url(aimUrl + endpoint)
+                .get();
+
+            builder.addHeader("X-Agent-ID", agentId);
+            builder.addHeader("X-Signature", signature);
+            builder.addHeader("X-Timestamp", timestamp);
+            builder.addHeader("X-Public-Key", Base64.getEncoder().encodeToString(publicKey));
+
+            try (Response response = httpClient.newCall(builder.build()).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                if (!response.isSuccessful()) {
+                    throw new AIMException("HTTP " + response.code() + ": " + responseBody);
+                }
+                return responseBody;
+            }
+        } catch (AIMException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AIMException("Request failed: " + e.getMessage(), e);
         }
     }
 
@@ -916,7 +1085,7 @@ public class AIMClient implements AutoCloseable {
             // Create timestamp matching backend expected format
             String timestamp = Instant.now().toString();
 
-            // Build merged context with JIT access info (matching Python SDK behavior)
+            // Build merged context with JIT access info
             Map<String, Object> mergedContext = context != null ? new HashMap<>(context) : new HashMap<>();
             if (jitAccess) {
                 mergedContext.put("jit_access", true);
@@ -924,8 +1093,8 @@ public class AIMClient implements AutoCloseable {
                 logger.info("JIT access requested for capability '{}' - will wait for admin approval", capability);
             }
 
-            // Create signature payload matching Python SDK format exactly
-            // Python uses: json.dumps(payload, sort_keys=True, separators=(', ', ': '))
+            // Create signature payload with sorted keys for deterministic signing
+            // Uses format: json.dumps(payload, sort_keys=True, separators=(', ', ': '))
             // Keys must be sorted: action_type, agent_id, context, resource, timestamp
             Map<String, Object> signaturePayload = new TreeMap<>();  // TreeMap for sorted keys
             signaturePayload.put("action_type", capability);
@@ -1930,7 +2099,7 @@ public class AIMClient implements AutoCloseable {
     }
 
     // ========================================================================
-    // ADDITIONAL SDK FEATURES (Matching Python SDK)
+    // ADDITIONAL SDK FEATURES
     // ========================================================================
 
     /**
