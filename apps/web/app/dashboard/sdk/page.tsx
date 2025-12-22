@@ -5,9 +5,9 @@ import { Download, Code, Terminal, CheckCircle, AlertCircle, Copy, Check } from 
 import { api } from '@/lib/api'
 import { AuthGuard } from "@/components/auth-guard";
 
-type SDKLanguage = 'python' | 'go' | 'javascript'
+type SDKLanguage = 'python' | 'java' | 'go' | 'javascript'
 
-const sampleCode = `from aim_sdk import secure, AgentType
+const pythonSampleCode = `from aim_sdk import secure, AgentType
 
 # ══════════════════════════════════════════════════════════════════════════
 # AGENT REGISTRATION - Only Requires Agent's Name & Capabilities
@@ -67,15 +67,80 @@ print(f"Result: {result}")
 #         "expires": "2025-01-01"}
 # )`
 
+const javaSampleCode = `import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.client.AgentType;
+import org.opena2a.aim.client.RiskLevel;
+import org.opena2a.aim.annotations.SecureAction;
+
+import java.util.Arrays;
+
+// ══════════════════════════════════════════════════════════════════════════
+// AGENT REGISTRATION - One Line to Secure Your Agent
+// ══════════════════════════════════════════════════════════════════════════
+AIMClient agent = AIMClient.secure(
+    "my-ai-assistant",
+    Arrays.asList("db:read", "api:call", "email:send"),
+    AgentType.LANGCHAIN  // CREWAI, AUTOGEN, OPENAI, ANTHROPIC, CUSTOM
+);
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRACK ACTIONS & RISKS - Using performAction for functional style
+// ══════════════════════════════════════════════════════════════════════════
+// AIM verifies agent has db:read and approves or rejects action
+String result = agent.performAction("db:read", "users_table", () -> {
+    return userRepository.findById("cust-123").toString();
+});
+System.out.println("Result: " + result);
+
+// With explicit risk level for sensitive operations
+PaymentResult payment = agent.performAction(
+    "payment:process",
+    "stripe_api",
+    RiskLevel.HIGH,
+    () -> paymentService.process(request)
+);
+
+// ══════════════════════════════════════════════════════════════════════════
+// OR USE @SecureAction ANNOTATION - Declarative security with AspectJ
+// ══════════════════════════════════════════════════════════════════════════
+public class CustomerService {
+
+    @SecureAction(capability = "db:read", resource = "customers")
+    public Customer getCustomer(String id) {
+        return customerRepository.findById(id);
+    }
+
+    @SecureAction(
+        capability = "customer:delete",
+        resource = "customers",
+        riskLevel = RiskLevel.CRITICAL,
+        jitAccess = true  // Requires admin approval!
+    )
+    public void deleteCustomer(String id) {
+        customerRepository.deleteById(id);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CAPABILITY REQUEST - Request New Capabilities
+// ══════════════════════════════════════════════════════════════════════════
+// Map<String, Object> result = agent.requestCapability(
+//     "db:admin",
+//     "Need admin access for migration"
+// );`
+
 export default function SDKDownloadPage() {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [selectedSDK, setSelectedSDK] = useState<SDKLanguage>('python')
+  const [selectedCodeTab, setSelectedCodeTab] = useState<'python' | 'java'>('python')
   const [copied, setCopied] = useState(false)
 
+  const currentSampleCode = selectedCodeTab === 'python' ? pythonSampleCode : javaSampleCode
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(sampleCode)
+    await navigator.clipboard.writeText(currentSampleCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -144,55 +209,91 @@ export default function SDKDownloadPage() {
         </div>
       )}
 
-      {/* SDK Card - Python Only */}
-      <div className="mb-8">
+      {/* SDK Cards - Python and Java */}
+      <div className="mb-8 grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
         {/* Python SDK - Stable */}
-        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg overflow-hidden max-w-2xl mx-auto">
-          <div className="p-8">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="h-16 w-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
-                <Code className="h-8 w-8 text-white" />
+        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-14 w-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+                <Code className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Python SDK</h2>
+                <h2 className="text-xl font-bold text-gray-900">Python SDK</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                    ✅ Stable Release
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    ✅ Stable
                   </span>
-                  <span className="inline-flex items-center px-2 py-1 rounded text-sm font-mono font-medium bg-gray-100 text-gray-700">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
                     v1.14.0
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-base text-gray-700 mb-6">
-              Official Python client for agent identity management with Ed25519 cryptographic
-              verification, OAuth integration, automatic MCP detection, and secure keyring storage.
+            <p className="text-sm text-gray-700 mb-4">
+              Official Python client with Ed25519 cryptographic verification, OAuth integration,
+              automatic MCP detection, and secure keyring storage.
             </p>
 
             <button
               onClick={() => handleDownload('python')}
               disabled={downloading && selectedSDK === 'python'}
-              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-base shadow-md"
+              className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm shadow-md"
             >
-              <Download className="h-5 w-5" />
+              <Download className="h-4 w-4" />
               {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download Python SDK'}
             </button>
           </div>
         </div>
 
-        {/* Future SDKs Notice */}
-        <div className="mt-6 max-w-2xl mx-auto">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-900 mb-2">
-              <strong>🚀 Future SDK Releases:</strong>
+        {/* Java SDK - New! */}
+        <div className="bg-white border-2 border-orange-500 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-14 w-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center shadow-lg">
+                <Code className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Java SDK</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    🆕 New
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
+                    v1.0.0
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-700 mb-4">
+              Enterprise Java client with Maven support, AspectJ annotations, OkHttp,
+              BouncyCastle cryptography, and Spring Boot integration.
             </p>
-            <p className="text-sm text-blue-800">
-              Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026. The Python SDK provides
-              complete feature parity and is ready for all use cases today.
-            </p>
+
+            <button
+              onClick={() => handleDownload('java')}
+              disabled={downloading && selectedSDK === 'java'}
+              className="w-full bg-orange-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm shadow-md"
+            >
+              <Download className="h-4 w-4" />
+              {downloading && selectedSDK === 'java' ? 'Downloading...' : 'Download Java SDK'}
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Future SDKs Notice */}
+      <div className="mb-8 max-w-4xl mx-auto">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-900 mb-2">
+            <strong>🚀 Coming Soon:</strong>
+          </p>
+          <p className="text-sm text-blue-800">
+            Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026. Python and Java SDKs
+            provide complete feature parity and are ready for production use today.
+          </p>
         </div>
       </div>
 
@@ -250,6 +351,31 @@ export default function SDKDownloadPage() {
 
             <div>
               <h4 className="font-medium text-gray-900 mb-2">3. Build Your Own Agent</h4>
+
+              {/* Language Tabs */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setSelectedCodeTab('python')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    selectedCodeTab === 'python'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Python
+                </button>
+                <button
+                  onClick={() => setSelectedCodeTab('java')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    selectedCodeTab === 'java'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Java
+                </button>
+              </div>
+
               <div className="relative bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
                 <button
                   onClick={handleCopy}
@@ -259,12 +385,16 @@ export default function SDKDownloadPage() {
                   {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                 </button>
                 <pre className="text-sm text-green-400 font-mono whitespace-pre overflow-x-auto">
-                  {sampleCode}
+                  {currentSampleCode}
                 </pre>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>Click the copy button above or use the demo_agent.py file as a starting point!</span>
+                <span>
+                  {selectedCodeTab === 'python'
+                    ? 'Click the copy button above or use the demo_agent.py file as a starting point!'
+                    : 'Add the SDK to your Maven pom.xml and use the examples as a starting point!'}
+                </span>
               </p>
             </div>
 
