@@ -297,6 +297,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
+		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		WHERE organization_id = $1
@@ -340,6 +341,8 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CreatedByName,
+			&agent.CreatedByEmail,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
 		)
@@ -464,6 +467,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
+		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
 		FROM agents
 		ORDER BY created_at DESC
@@ -506,6 +510,8 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.CreatedAt,
 			&agent.UpdatedAt,
 			&agent.CreatedBy,
+			&agent.CreatedByName,
+			&agent.CreatedByEmail,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
 		)
