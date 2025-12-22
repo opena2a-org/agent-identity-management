@@ -2135,7 +2135,7 @@ class APIClient {
   // SDK Download with automatic token refresh on 401
   // Returns both blob and filename (extracted from Content-Disposition header)
   async downloadSDK(
-    sdkType: "python" | "go" | "javascript" = "python"
+    sdkType: "python" | "java" | "go" | "javascript" = "python"
   ): Promise<{ blob: Blob; filename: string }> {
     const attemptDownload = async (token: string | null): Promise<Response> => {
       return fetch(`${this.baseURL}/api/v1/sdk/download?sdk=${sdkType}`, {

@@ -28,6 +28,7 @@ export default function AgentSuccessPage() {
   const [loading, setLoading] = useState(true);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [downloadingSDK, setDownloadingSDK] = useState<string | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<'python' | 'java'>('python');
 
   useEffect(() => {
     const fetchAgent = async () => {
@@ -56,7 +57,7 @@ export default function AgentSuccessPage() {
     }
   };
 
-  const downloadSDK = async (language: 'python' | 'nodejs' | 'go') => {
+  const downloadSDK = async (language: 'python' | 'java' | 'nodejs' | 'go') => {
     setDownloadingSDK(language);
     try {
       // Get auth token from API client
@@ -300,13 +301,77 @@ export default function AgentSuccessPage() {
               </div>
             </div>
 
+            {/* Java SDK - Production Ready */}
+            <div className="border-2 border-orange-500 rounded-lg p-6 bg-gradient-to-br from-orange-50 to-white">
+              <div className="flex flex-col h-full">
+                <div className="mb-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Download className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-xl mb-1">Java SDK</h3>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Production Ready
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Enterprise-grade Java SDK with Ed25519 cryptographic signing, OAuth integration,
+                    AspectJ annotations, and seamless Spring Boot support.
+                  </p>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Ed25519 cryptographic signing</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>OAuth client credentials flow</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>@SecureAction AspectJ annotations</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Spring Boot integration</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>MCP server attestation</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-auto">
+                  <Button
+                    className="w-full bg-orange-600 hover:bg-orange-700"
+                    onClick={() => downloadSDK('java')}
+                    disabled={downloadingSDK !== null}
+                  >
+                    {downloadingSDK === 'java' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Java SDK
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {/* Future SDKs Note */}
             <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
               <p className="text-sm text-gray-600 mb-2">
                 <strong>Future Releases:</strong> Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
               </p>
               <p className="text-xs text-gray-500">
-                The Python SDK provides complete feature parity and is production-ready for all use cases.
+                Python and Java SDKs provide complete feature parity and are production-ready for all use cases.
               </p>
             </div>
           </div>
@@ -323,61 +388,81 @@ export default function AgentSuccessPage() {
           <CardDescription>Get up and running in 3 steps</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {/* Step 1 */}
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
-                1
-              </div>
-              <div>
-                <h4 className="font-semibold mb-1">Download and Extract SDK</h4>
-                <p className="text-sm text-gray-600">
-                  Download the Python SDK above and extract the ZIP file to your project directory
-                </p>
-                <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
-                  <code>unzip aim-sdk-{agent.name}-python.zip</code>
-                </pre>
-              </div>
-            </div>
-
-            {/* Step 2 */}
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
-                2
-              </div>
-              <div>
-                <h4 className="font-semibold mb-1">Install SDK</h4>
-                <p className="text-sm text-gray-600">
-                  Install the SDK and its dependencies
-                </p>
-                <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
-                  <code>pip install -e .</code>
-                </pre>
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
-                3
-              </div>
-              <div>
-                <h4 className="font-semibold mb-1">Run Example</h4>
-                <p className="text-sm text-gray-600">
-                  Test the automatic verification with the included example
-                </p>
-                <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
-                  <code>python example.py</code>
-                </pre>
-              </div>
-            </div>
+          {/* Language Tabs */}
+          <div className="flex gap-2 mb-6">
+            <Button
+              variant={selectedLanguage === 'python' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedLanguage('python')}
+              className={selectedLanguage === 'python' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+            >
+              Python
+            </Button>
+            <Button
+              variant={selectedLanguage === 'java' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedLanguage('java')}
+              className={selectedLanguage === 'java' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+            >
+              Java
+            </Button>
           </div>
 
-          {/* Example Code */}
-          <div className="mt-6">
-            <h4 className="font-semibold mb-2">Example Usage</h4>
-            <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
-              <code>{`from aim_sdk import AIMClient
+          {selectedLanguage === 'python' ? (
+            <div className="space-y-4">
+              {/* Python Step 1 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                  1
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Download and Extract SDK</h4>
+                  <p className="text-sm text-gray-600">
+                    Download the Python SDK above and extract the ZIP file to your project directory
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>unzip aim-sdk-{agent.name}-python.zip</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Python Step 2 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                  2
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Install SDK</h4>
+                  <p className="text-sm text-gray-600">
+                    Install the SDK and its dependencies
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>pip install -e .</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Python Step 3 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                  3
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Run Example</h4>
+                  <p className="text-sm text-gray-600">
+                    Test the automatic verification with the included example
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>python example.py</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Python Example Code */}
+              <div className="mt-6">
+                <h4 className="font-semibold mb-2">Example Usage</h4>
+                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
+                  <code>{`from aim_sdk import AIMClient
 from aim_sdk.config import AGENT_ID, PUBLIC_KEY, PRIVATE_KEY, AIM_URL
 
 # Initialize client with embedded credentials
@@ -396,8 +481,97 @@ def get_users():
 
 # Just call the function - verification happens automatically!
 users = get_users()`}</code>
-            </pre>
-          </div>
+                </pre>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Java Step 1 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                  1
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Download and Extract SDK</h4>
+                  <p className="text-sm text-gray-600">
+                    Download the Java SDK above and extract the ZIP file to your project directory
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>unzip aim-sdk-{agent.name}-java.zip</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Java Step 2 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                  2
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Add to Your Project</h4>
+                  <p className="text-sm text-gray-600">
+                    Add the SDK to your Maven or Gradle project
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>{`<!-- Maven -->
+mvn install:install-file -Dfile=aim-sdk.jar \\
+  -DgroupId=org.opena2a -DartifactId=aim-sdk \\
+  -Dversion=1.0.0 -Dpackaging=jar`}</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Java Step 3 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                  3
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Run Example</h4>
+                  <p className="text-sm text-gray-600">
+                    Compile and run the included example
+                  </p>
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                    <code>mvn compile exec:java -Dexec.mainClass="BasicExample"</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Java Example Code */}
+              <div className="mt-6">
+                <h4 className="font-semibold mb-2">Example Usage</h4>
+                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
+                  <code>{`import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.client.AgentType;
+import java.util.Arrays;
+
+public class MyAgent {
+    public static void main(String[] args) {
+        // One-line secure registration
+        AIMClient agent = AIMClient.secure(
+            "my-agent",
+            Arrays.asList("db:read", "api:call"),
+            AgentType.CUSTOM
+        );
+
+        // Execute with automatic verification
+        String result = agent.performAction(
+            "db:read",
+            "users_table",
+            () -> {
+                // Your agent code here
+                return database.query("SELECT * FROM users");
+            }
+        );
+
+        System.out.println("Result: " + result);
+        agent.close();
+    }
+}`}</code>
+                </pre>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
