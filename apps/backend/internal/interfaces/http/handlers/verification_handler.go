@@ -284,17 +284,29 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			severity = h.determineAlertSeverity(req.Capability, req.Context, detectedRiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 
-			// Use correct message based on whether action was denied or allowed
+			// Use correct message based on status and enforcement mode
 			if status == "denied" {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
 						"This action was DENIED. Grant the required capability to allow this action.",
 					agent.Name, req.Capability, req.Resource,
 				)
-			} else {
+			} else if status == "pending" {
+				alertDescription = fmt.Sprintf(
+					"Agent '%s' requested JIT access for action '%s' on resource '%s' without pre-granted capability. "+
+						"This action is PENDING admin approval (strict mode). Approve or deny in the JIT Requests dashboard.",
+					agent.Name, req.Capability, req.Resource,
+				)
+			} else if isMonitoringMode {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' performed action '%s' on resource '%s' without explicit capability grant. "+
 						"This action was ALLOWED (monitoring mode) but logged for review. Consider granting the capability explicitly.",
+					agent.Name, req.Capability, req.Resource,
+				)
+			} else {
+				alertDescription = fmt.Sprintf(
+					"Agent '%s' performed action '%s' on resource '%s'. "+
+						"This action was APPROVED. Enforcement mode: strict.",
 					agent.Name, req.Capability, req.Resource,
 				)
 			}
