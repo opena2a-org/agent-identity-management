@@ -11,7 +11,7 @@
 ## ✅ What's Working (All Core Features)
 
 - [x] Backend API (62+ endpoints)
-- [x] Frontend UI (Next.js 15 + React 19)
+- [x] Frontend UI (Next.js 16 + React 19)
 - [x] Database (PostgreSQL, 16 tables)
 - [x] Authentication (Google OAuth + JWT)
 - [x] Authorization (RBAC - 4 roles)

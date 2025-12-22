@@ -14,27 +14,16 @@ Then open your AIM dashboard and watch the magic happen!
 """
 
 import sys
+import os
 import time
 import random
 from datetime import datetime
 from typing import Optional
 
-# Banner
-print("""
-================================================================================
-                     AIM DEMO AGENT - Interactive Demo
-================================================================================
-
-Watch your AIM dashboard update in real-time as you perform actions!
-
-Dashboard: http://localhost:3000/dashboard/agents
-
-================================================================================
-""")
-
-# Try to import the SDK
+# Try to import the SDK first to get credentials
 try:
     from aim_sdk import secure
+    from aim_sdk.credentials import load_sdk_credentials
     from aim_sdk.integrations.mcp.registration import (
         register_mcp_server,
         list_mcp_servers,
@@ -42,45 +31,113 @@ try:
         use_mcp_tool
     )
 except ImportError:
-    print("ERROR: Could not import aim_sdk")
-    print()
-    print("Make sure you:")
-    print("  1. Downloaded the SDK from AIM dashboard (Settings -> SDK Download)")
-    print("  2. Extracted the ZIP file")
-    print("  3. Are running this script from inside the extracted folder")
-    print()
-    print("Quick fix:")
-    print("  cd aim-sdk-python")
-    print("  pip install -e .")
-    print("  python demo_agent.py")
+    print("""
+================================================================================
+                     ERROR: Could not import aim_sdk
+================================================================================
+
+Make sure you:
+  1. Downloaded the SDK from AIM dashboard (Settings -> SDK Download)
+  2. Extracted the ZIP file
+  3. Are running this script from inside the extracted folder
+
+Quick fix:
+  cd aim-sdk-python
+  pip install -e .
+  python demo_agent.py
+================================================================================
+""")
     sys.exit(1)
+
+# Get AIM URL from credentials for display
+sdk_creds = load_sdk_credentials()
+AIM_URL = sdk_creds.get("aimUrl", "http://localhost:8080") if sdk_creds else "http://localhost:8080"
+# Derive dashboard URL from API URL (replace api. prefix or port 8080 with proper frontend)
+if "api.aim.opena2a.org" in AIM_URL:
+    DASHBOARD_URL = "https://aim.opena2a.org"
+elif "api.community.opena2a.org" in AIM_URL:
+    DASHBOARD_URL = "https://community.opena2a.org"
+elif ":8080" in AIM_URL:
+    DASHBOARD_URL = AIM_URL.replace(":8080", ":3000")
+else:
+    DASHBOARD_URL = AIM_URL.replace("/api", "").rstrip("/")
+
+# Check strict mode
+STRICT_MODE = os.environ.get("AIM_STRICT_MODE", "").lower() in ("true", "1", "yes")
+
+# Banner
+print(f"""
+================================================================================
+                     AIM DEMO AGENT - Interactive Demo
+================================================================================
+
+Watch your AIM dashboard update in real-time as you perform actions!
+
+  Dashboard:   {DASHBOARD_URL}/dashboard
+  API Server:  {AIM_URL}
+  Strict Mode: {"ENABLED - Unauthorized actions will be BLOCKED" if STRICT_MODE else "DISABLED - Actions are logged but not blocked"}
+
+  Tip: Enable strict mode via environment variable (AIM_STRICT_MODE=true) or
+       from the dashboard: {DASHBOARD_URL}/dashboard/admin/security-policies
+
+================================================================================
+""")
 
 # Register the demo agent
 print("Registering demo agent with AIM...")
 print()
 
 try:
-    agent = secure("demo-agent")
-    print(f"Agent registered successfully!")
+    agent = secure(
+        "demo-agent",
+        capabilities=["api:call", "user:read", "db:read"]  # Auto-register default capabilities
+    )
+    print(f"  Agent registered successfully!")
     print(f"  Agent ID: {agent.agent_id}")
-    print(f"  AIM URL: {agent.aim_url}")
+    print(f"  AIM URL:  {agent.aim_url}")
+    print(f"  Capabilities: api:call, user:read, db:read")
     print()
 except Exception as e:
     print(f"ERROR: Could not register agent: {e}")
     print()
     print("Make sure:")
-    print("  1. AIM is running (docker compose up -d)")
+    print("  1. The AIM backend is running and accessible")
     print("  2. You downloaded the SDK from YOUR AIM dashboard")
     print("  3. The SDK has valid OAuth credentials embedded")
     print()
-    print("Try downloading a fresh SDK from: http://localhost:3000/dashboard/sdk")
+    print(f"Try downloading a fresh SDK from: {DASHBOARD_URL}/settings/sdk")
     sys.exit(1)
 
 
-# Define demo actions with different risk levels
-# Note: capability uses the standard namespace:action format (e.g., "api:call", "db:read")
-# See https://docs.aim.dev/capabilities for the full list of capabilities
+# Auto-register filesystem MCP server on startup
+def auto_register_filesystem_mcp():
+    """Auto-register a filesystem MCP server for demo purposes"""
+    try:
+        import base64
+        demo_public_key = base64.b64encode(f"filesystem-mcp-key-{random.randint(1000, 9999)}".encode()).decode()
 
+        result = register_mcp_server(
+            aim_client=agent,
+            server_name="filesystem",
+            server_url="stdio://filesystem",
+            public_key=demo_public_key,
+            capabilities=["file:read", "file:write", "file:list", "file:delete"],
+            description="Local filesystem access MCP server"
+        )
+        print(f"  Filesystem MCP server registered (ID: {result.get('id', 'pending')[:8]}...)")
+        return True
+    except Exception as e:
+        # Silently ignore if already registered or any error
+        pass
+    return False
+
+
+print("Registering default MCP server...")
+auto_register_filesystem_mcp()
+print()
+
+
+# Define demo actions with different risk levels
 @agent.perform_action(capability="api:call", risk_level="low", resource="weather_api")
 def check_weather(city: str) -> dict:
     """Simulate checking weather - LOW risk action"""
@@ -126,7 +183,7 @@ def query_orders(user_id: str) -> dict:
 
 @agent.perform_action(capability="notification:send", risk_level="high", resource="push_notification")
 def send_notification(user_id: str, message: str) -> dict:
-    """Simulate sending notification - HIGH risk action"""
+    """Simulate sending notification - HIGH risk action (NOT in declared capabilities)"""
     return {
         "user_id": user_id,
         "message": message,
@@ -137,7 +194,7 @@ def send_notification(user_id: str, message: str) -> dict:
 
 @agent.perform_action(capability="payment:process", risk_level="high", resource="refund_service")
 def process_refund(order_id: str, amount: float) -> dict:
-    """Simulate processing refund - HIGH risk action"""
+    """Simulate processing refund - HIGH risk action (NOT in declared capabilities)"""
     return {
         "order_id": order_id,
         "amount": amount,
@@ -145,9 +202,6 @@ def process_refund(order_id: str, amount: float) -> dict:
         "refund_id": f"REF-{random.randint(10000, 99999)}"
     }
 
-
-# JIT Access Actions - These require admin approval before execution
-# Add jit_access=True for critical operations that need human oversight
 
 @agent.perform_action(capability="database:delete", risk_level="critical", resource="users_table", jit_access=True, timeout_seconds=30)
 def delete_user_account(user_id: str) -> dict:
@@ -170,81 +224,95 @@ def bulk_refund(order_ids: list, reason: str) -> dict:
     }
 
 
+def print_box(title: str, content: str, width: int = 78):
+    """Print content in a nice box"""
+    print("=" * width)
+    print(f"  {title}")
+    print("=" * width)
+    print(content)
+    print("=" * width)
+
+
+def print_result(success: bool, title: str, details: dict = None, error: str = None):
+    """Print action result in a consistent format"""
+    icon = "OK" if success else "!!"
+    status = "SUCCESS" if success else "BLOCKED" if "blocked" in str(error).lower() else "ERROR"
+
+    print()
+    print(f"  [{icon}] {status}: {title}")
+    if details:
+        for key, value in details.items():
+            print(f"      {key}: {value}")
+    if error:
+        print(f"      Reason: {error}")
+    print()
+
+
 def show_agent_status():
     """Display current agent status and trust score"""
-    print("""
-================================================================================
-                         AGENT STATUS & TRUST SCORE
-================================================================================
-""")
+    print()
+    print_box("AGENT STATUS & TRUST SCORE", "")
+
     try:
         details = agent.get_agent_details()
-        print(f"  Agent ID:     {details.get('id', agent.agent_id)}")
-        print(f"  Name:         {details.get('name', 'demo-agent')}")
-        print(f"  Status:       {details.get('status', 'active')}")
-        print(f"  Trust Score:  {details.get('trustScore', 0) * 100:.1f}%")
-        print(f"  Verified:     {'✓ Yes' if details.get('verified') else '✗ No'}")
-
+        print(f"""
+  Agent ID:     {details.get('id', agent.agent_id)}
+  Name:         {details.get('name', 'demo-agent')}
+  Status:       {details.get('status', 'active')}
+  Trust Score:  {details.get('trustScore', 0) * 100:.1f}%
+  Verified:     {'Yes' if details.get('verified') else 'No'}
+  Strict Mode:  {'ENABLED' if STRICT_MODE else 'DISABLED'}
+""")
         caps = details.get('capabilities', [])
         if caps:
             print(f"  Capabilities: {', '.join(caps[:5])}" + ("..." if len(caps) > 5 else ""))
 
-        print()
-        print(f"  View in dashboard: http://localhost:3000/dashboard/agents/{agent.agent_id}")
+        print(f"""
+  View in dashboard: {DASHBOARD_URL}/dashboard/agents/{agent.agent_id}
+""")
     except Exception as e:
         print(f"  Could not fetch agent details: {e}")
         print(f"  Agent ID: {agent.agent_id}")
 
-    print("""
-================================================================================
-""")
+    input("  Press Enter to continue...")
 
 
 def request_new_capability():
     """Demo requesting a new capability"""
-    print("""
-================================================================================
-                      REQUEST NEW CAPABILITY
-================================================================================
-
+    print()
+    print_box("REQUEST NEW CAPABILITY", """
 Agents can request additional capabilities through the SDK.
 Admins review and approve/deny these requests in the dashboard.
-
 """)
 
-    cap_type = input("Enter capability to request [admin:access]: ").strip() or "admin:access"
-    reason = input("Enter justification [Need admin access for reporting]: ").strip() or "Need admin access for reporting"
+    cap_type = input("  Enter capability to request [admin:access]: ").strip() or "admin:access"
+    reason = input("  Enter justification [Need admin access for reporting]: ").strip() or "Need admin access for reporting"
 
-    print(f"\nRequesting capability: {cap_type}")
-    print(f"Reason: {reason}")
-    print()
+    print(f"\n  Requesting capability: {cap_type}")
+    print(f"  Reason: {reason}")
 
     try:
         result = agent.request_capability(
             capability_type=cap_type,
             reason=reason
         )
-        print("  ✓ Capability request submitted!")
-        print(f"    Request ID: {result.get('id', 'pending')}")
-        print(f"    Status: {result.get('status', 'pending')}")
-        print()
-        print("  → Admin can approve at: http://localhost:3000/dashboard/admin/capability-requests")
+        print_result(True, "Capability request submitted", {
+            "Request ID": result.get('id', 'pending'),
+            "Status": result.get('status', 'pending'),
+            "Approve at": f"{DASHBOARD_URL}/dashboard/admin/capability-requests"
+        })
     except Exception as e:
-        print(f"  Request submitted (or already pending)")
-        print(f"  → Check dashboard: http://localhost:3000/dashboard/admin/capability-requests")
+        print_result(True, "Request submitted (or already pending)", {
+            "Check dashboard": f"{DASHBOARD_URL}/dashboard/admin/capability-requests"
+        })
 
-    print("""
-================================================================================
-""")
+    input("  Press Enter to continue...")
 
 
 def run_jit_access_demo():
     """Demo Just-In-Time access with approval workflow"""
-    print("""
-================================================================================
-                    JUST-IN-TIME (JIT) ACCESS DEMO
-================================================================================
-
+    print()
+    print_box("JUST-IN-TIME (JIT) ACCESS DEMO", f"""
 JIT Access means sensitive operations may require admin approval BEFORE
 they can execute. This is controlled by the @perform_action decorator.
 
@@ -253,70 +321,52 @@ The agent's trust score determines whether approval is needed:
   - Medium trust (50-80%): Most JIT actions need approval
   - Low trust (<50%): All JIT actions need approval
 
-Watch what happens when we try a sensitive operation...
-
-================================================================================
+Current Strict Mode: {'ENABLED' if STRICT_MODE else 'DISABLED'}
 """)
 
     print("\n  Attempting: delete_user_account('test-user-999')")
-    print("  This uses @perform_action('database:delete') decorator")
+    print("  This action requires JIT approval...")
     print()
 
     try:
-        # This will either succeed (high trust) or wait for approval (lower trust)
         result = delete_user_account("test-user-999")
-        print("  ✓ Action APPROVED and executed!")
-        print(f"    Result: {result}")
+        print_result(True, "Action APPROVED and executed", result)
     except TimeoutError:
-        print("  ⏳ Action is WAITING for admin approval")
-        print("     → Approve at: http://localhost:3000/dashboard/admin/capability-requests")
+        print_result(False, "Action is WAITING for admin approval", {
+            "Approve at": f"{DASHBOARD_URL}/dashboard/admin/capability-requests"
+        })
     except Exception as e:
         if "denied" in str(e).lower() or "approval" in str(e).lower():
-            print("  ⏳ Action requires admin approval")
-            print("     → Approve at: http://localhost:3000/dashboard/admin/capability-requests")
+            print_result(False, "Action requires admin approval", {
+                "Approve at": f"{DASHBOARD_URL}/dashboard/admin/capability-requests"
+            })
         else:
-            print(f"  Action blocked or pending: {e}")
+            print_result(False, "Action blocked or pending", error=str(e))
 
     print("""
-================================================================================
-              JIT Access provides an extra layer of security!
-================================================================================
-
-Even if an agent has a capability declared, JIT-protected actions require
-explicit approval. This prevents runaway agents from performing destructive
-operations without human oversight.
-
-Perfect for:
-  - Database deletions
-  - Bulk operations
-  - Financial transactions
-  - User account modifications
-
-================================================================================
+  JIT Access provides an extra layer of security for destructive operations.
+  Perfect for: Database deletions, Bulk operations, Financial transactions
 """)
+    input("  Press Enter to continue...")
 
 
 def run_cbac_demo():
-    """
-    Demonstrate Capability-Based Access Control (CBAC) blocking prompt injection attacks.
-    Shows how AIM prevents unauthorized actions even when an attacker tricks the LLM.
-    """
-    print("""
-================================================================================
-         Capability-Based Access Control (CBAC) - Prompt Injection Defense
-================================================================================
+    """Demonstrate Capability-Based Access Control (CBAC) blocking prompt injection attacks."""
+    print()
+    print_box("CAPABILITY-BASED ACCESS CONTROL (CBAC) - Prompt Injection Defense", f"""
+This demo shows how AIM's CBAC blocks prompt injection attacks.
 
-This demo shows how AIM's Capability-Based Access Control (CBAC) blocks
-prompt injection attacks. The agent only has these capabilities declared:
+The agent has these DECLARED capabilities:
   - api:call (for weather/search APIs)
   - user:read (for reading user profiles)
   - db:read (for querying orders)
-  - notification:send (for alerts - custom capability)
-  - payment:process (for refunds - custom capability)
 
-Watch what happens when an attacker tries to make the agent do something
-it's NOT authorized to do...
-================================================================================
+The agent does NOT have:
+  - file:write, file:read, network:external, user:delete
+
+Strict Mode: {'ENABLED - Unauthorized actions WILL BE BLOCKED' if STRICT_MODE else 'DISABLED - Actions logged but allowed (enable with AIM_STRICT_MODE=true)'}
+
+Watch what happens when an attacker tries unauthorized actions...
 """)
 
     attacks = [
@@ -346,94 +396,84 @@ it's NOT authorized to do...
         },
     ]
 
-    for i, attack in enumerate(attacks, 1):
-        print(f"\n--- Attack {i}/{len(attacks)}: {attack['name']} ---")
-        print(f"Attacker prompt: \"{attack['prompt']}\"")
-        print()
-        print("  [LLM] Attempting to comply with request...")
-        print(f"  [AIM] Intercepting action: {attack['action']}")
-        print(f"        Resource: {attack['resource']}")
-        print()
+    blocked_count = 0
+    allowed_count = 0
 
-        # Try to verify the unauthorized capability
+    for i, attack in enumerate(attacks, 1):
+        print(f"\n  --- Attack {i}/{len(attacks)}: {attack['name']} ---")
+        print(f"  Attacker: \"{attack['prompt'][:60]}...\"")
+        print()
+        print(f"  [LLM] Attempting: {attack['action']} on {attack['resource']}")
+
         try:
             result = agent.verify_capability(
                 capability=attack['action'],
                 resource=attack['resource'],
                 context={"source": "prompt_injection_demo", "prompt": attack['prompt'][:100]}
             )
-            # Check if denied or not verified
-            if result.get("status") == "denied" or not result.get("verified", True):
-                print("  [AIM] ❌ ACTION BLOCKED!")
-                print(f"        Reason: '{attack['action']}' not in agent's declared capabilities")
-                print("        → Security alert created")
-                print("        → Violation logged for audit")
+
+            # Check the verification result
+            is_verified = result.get("verified", False)
+            status = result.get("status", "unknown")
+
+            if not is_verified or status == "denied":
+                print(f"  [AIM] BLOCKED - '{attack['action']}' not in declared capabilities")
+                print(f"        Security alert created, violation logged")
+                blocked_count += 1
             else:
-                # Action was allowed - this happens in MONITORING mode
-                print("  [AIM] ⚠️  ACTION LOGGED (MONITORING mode)")
-                print(f"        Capability '{attack['action']}' was allowed but flagged")
-                print("        → Security alert created for review")
-                print("        → Switch to STRICT mode to block unauthorized actions")
+                print(f"  [AIM] ALLOWED - Action was permitted (strict mode: {'ON' if STRICT_MODE else 'OFF'})")
+                if not STRICT_MODE:
+                    print(f"        Enable strict mode: export AIM_STRICT_MODE=true or via Dashboard > Security Policies")
+                allowed_count += 1
+
         except Exception as e:
-            # ActionDeniedError or other exception = blocked
-            print("  [AIM] ❌ ACTION BLOCKED!")
-            print(f"        Reason: '{attack['action']}' not in agent's declared capabilities")
-            print("        → Security alert created")
-            print("        → Violation logged for audit")
+            error_str = str(e).lower()
+            if "denied" in error_str or "unauthorized" in error_str or "not authorized" in error_str:
+                print(f"  [AIM] BLOCKED - '{attack['action']}' not authorized")
+                print(f"        Security alert created, violation logged")
+                blocked_count += 1
+            else:
+                print(f"  [AIM] BLOCKED - {e}")
+                blocked_count += 1
 
-        time.sleep(1)
+        time.sleep(0.5)
 
-    print("""
-================================================================================
-              Capability-Based Access Control (CBAC) Demo Complete
-================================================================================
-
-All 4 prompt injection attempts were intercepted by AIM's capability enforcement.
-
-• In STRICT mode: Unauthorized actions are BLOCKED
-• In MONITORING mode: Actions are LOGGED for review (not blocked)
-
-To enable blocking, go to Settings → Security Policies → Set mode to STRICT
-
-Key takeaway: Even if an attacker tricks your agent's LLM into wanting to
-perform an unauthorized action, AIM intercepts it because the action isn't
-in the agent's declared capabilities.
-
-Check your dashboard to see the security alerts:
-  → http://localhost:3000/dashboard/alerts
-  → http://localhost:3000/dashboard/agents (click demo-agent → Violations)
-================================================================================
+    print(f"""
+  ============================================================
+  CBAC Demo Complete: {blocked_count} blocked, {allowed_count} allowed
+  ============================================================
 """)
+
+    if allowed_count > 0 and not STRICT_MODE:
+        print(f"""  Actions were ALLOWED because strict mode is DISABLED.
+  Enable blocking via:
+    - Environment: export AIM_STRICT_MODE=true
+    - Dashboard:   {DASHBOARD_URL}/dashboard/admin/security-policies
+""")
+
+    print(f"""  Check your dashboard to see security alerts:
+    {DASHBOARD_URL}/dashboard/alerts
+    {DASHBOARD_URL}/dashboard/agents/{agent.agent_id}
+""")
+    input("  Press Enter to continue...")
 
 
 def register_mcp_server_demo():
     """Demo registering an MCP server with AIM"""
-    print("""
-================================================================================
-                      REGISTER MCP SERVER
-================================================================================
-
-MCP (Model Context Protocol) servers extend agent capabilities. AIM tracks
-and cryptographically verifies all MCP servers your agents connect to.
-
-Let's register a new MCP server...
-
-================================================================================
+    print()
+    print_box("REGISTER MCP SERVER", """
+MCP (Model Context Protocol) servers extend agent capabilities.
+AIM tracks and cryptographically verifies all MCP servers.
 """)
 
-    # Get MCP server details from user
-    name = input("Enter MCP server name [weather-mcp]: ").strip() or "weather-mcp"
-    url = input("Enter MCP server URL [http://localhost:3001]: ").strip() or "http://localhost:3001"
-    description = input("Enter description [Weather data provider]: ").strip() or "Weather data provider"
+    name = input("  Enter MCP server name [weather-mcp]: ").strip() or "weather-mcp"
+    url = input("  Enter MCP server URL [http://localhost:3001]: ").strip() or "http://localhost:3001"
+    description = input("  Enter description [Weather data provider]: ").strip() or "Weather data provider"
 
-    # Generate a demo public key (in real usage, this comes from the MCP server)
     import base64
     demo_public_key = base64.b64encode(f"demo-public-key-{random.randint(1000, 9999)}".encode()).decode()
 
-    print(f"\nRegistering MCP server: {name}")
-    print(f"  URL: {url}")
-    print(f"  Description: {description}")
-    print()
+    print(f"\n  Registering: {name} at {url}")
 
     try:
         result = register_mcp_server(
@@ -444,106 +484,67 @@ Let's register a new MCP server...
             capabilities=["weather:current", "weather:forecast", "weather:alerts"],
             description=description
         )
-        print("  MCP Server registered!")
-        print(f"    Server ID: {result.get('id', 'pending')}")
-        print(f"    Status: {result.get('status', 'pending_attestation')}")
-        print()
-        print("  View in dashboard: http://localhost:3000/dashboard/mcp")
+        print_result(True, "MCP Server registered", {
+            "Server ID": result.get('id', 'pending'),
+            "Status": result.get('status', 'pending_attestation'),
+            "View at": f"{DASHBOARD_URL}/dashboard/mcp"
+        })
     except Exception as e:
-        print(f"  Registration result: {e}")
-        print()
-        print("  This is expected if the MCP server doesn't exist or isn't running.")
-        print("  In production, you would register real MCP servers with valid URLs.")
+        print_result(False, "Registration failed", error=str(e))
+        print("  (This is expected if the MCP server doesn't exist)")
 
-    print("""
-================================================================================
-              MCP Registration enables secure agent-to-server trust!
-================================================================================
-
-Benefits of registering MCP servers:
-  - Cryptographic verification prevents impersonation
-  - Drift detection alerts when agents connect to unregistered servers
-  - Complete audit trail of agent-MCP interactions
-  - Trust scoring for MCP servers based on behavior
-
-================================================================================
-""")
+    input("  Press Enter to continue...")
 
 
 def list_mcp_connections_demo():
     """Demo listing MCP server connections"""
-    print("""
-================================================================================
-                      LIST MCP SERVER CONNECTIONS
-================================================================================
-
-View all MCP servers registered with AIM for your organization.
-
-================================================================================
-""")
+    print()
+    print_box("LIST MCP SERVER CONNECTIONS", "")
 
     try:
         servers = list_mcp_servers(aim_client=agent, limit=20)
 
         if not servers:
             print("  No MCP servers registered yet.")
-            print()
-            print("  Register one using option E or via the dashboard:")
-            print("  → http://localhost:3000/dashboard/mcp")
+            print(f"  Register one using option E or at: {DASHBOARD_URL}/dashboard/mcp")
         else:
             print(f"  Found {len(servers)} MCP server(s):\n")
             for i, server in enumerate(servers, 1):
                 print(f"  {i}. {server.get('name', 'Unknown')}")
-                print(f"     ID: {server.get('id', 'N/A')}")
+                print(f"     ID: {server.get('id', 'N/A')[:16]}...")
                 print(f"     URL: {server.get('url', 'N/A')}")
                 print(f"     Status: {server.get('status', 'unknown')}")
-                print(f"     Trust Score: {server.get('trustScore', server.get('confidence_score', 0))}")
+                print(f"     Trust: {server.get('trustScore', server.get('confidence_score', 0))}")
                 print()
 
     except Exception as e:
         print(f"  Could not list MCP servers: {e}")
-        print()
-        print("  This may happen if no servers are registered or the API is unavailable.")
 
-    print("""
-================================================================================
-              View details: http://localhost:3000/dashboard/mcp
-================================================================================
-""")
+    print(f"  View details: {DASHBOARD_URL}/dashboard/mcp")
+    input("\n  Press Enter to continue...")
 
 
 def attest_mcp_server_demo():
     """Demo attesting (cryptographically verifying) an MCP server"""
-    print("""
-================================================================================
-                      ATTEST MCP SERVER
-================================================================================
-
-Attestation cryptographically verifies an MCP server's identity. This:
-  - Proves the server holds the private key matching its public key
-  - Increases the server's confidence/trust score
-  - Creates a verifiable audit trail
-  - Uses Ed25519 signatures for security
-
-================================================================================
+    print()
+    print_box("ATTEST MCP SERVER", """
+Attestation cryptographically verifies an MCP server's identity using Ed25519.
+This proves the server holds the private key matching its public key.
 """)
 
-    # First, list available servers
     try:
         servers = list_mcp_servers(aim_client=agent, limit=20)
 
         if not servers:
-            print("  No MCP servers to attest. Register one first using option E.")
+            print("  No MCP servers to attest. Register one first (option E).")
+            input("\n  Press Enter to continue...")
             return
 
         print("  Available MCP servers:\n")
         for i, server in enumerate(servers, 1):
             print(f"  {i}. {server.get('name', 'Unknown')} ({server.get('status', 'unknown')})")
-            print(f"     ID: {server.get('id', 'N/A')}")
-            print()
 
-        # Let user choose
-        choice = input(f"Enter server number to attest [1]: ").strip() or "1"
+        choice = input(f"\n  Enter server number to attest [1]: ").strip() or "1"
         try:
             idx = int(choice) - 1
             if idx < 0 or idx >= len(servers):
@@ -558,11 +559,8 @@ Attestation cryptographically verifies an MCP server's identity. This:
         server_name = server.get('name', 'Unknown')
         server_url = server.get('url', 'http://localhost:3001')
 
-        print(f"\n  Attesting MCP server: {server_name}")
-        print(f"  Server ID: {server_id}")
-        print()
+        print(f"\n  Attesting: {server_name}...")
 
-        # Perform attestation
         result = attest_mcp_server(
             aim_client=agent,
             server_id=server_id,
@@ -574,56 +572,34 @@ Attestation cryptographically verifies an MCP server's identity. This:
             connection_latency_ms=45.0
         )
 
-        print()
-        print("  Attestation successful!")
-        print(f"    Attestation ID: {result.get('id', result.get('attestation_id', 'N/A'))}")
-        print(f"    New Confidence Score: {result.get('mcp_confidence_score', result.get('confidence_score', 'N/A'))}")
-        print()
-        print("  View attestation details: http://localhost:3000/dashboard/mcp")
+        print_result(True, "Attestation successful", {
+            "Attestation ID": result.get('id', result.get('attestation_id', 'N/A')),
+            "Confidence Score": result.get('mcp_confidence_score', result.get('confidence_score', 'N/A')),
+            "View at": f"{DASHBOARD_URL}/dashboard/mcp"
+        })
 
     except Exception as e:
-        print(f"  Attestation failed: {e}")
-        print()
-        print("  This may happen if:")
-        print("  - The MCP server isn't running")
-        print("  - The server ID is invalid")
-        print("  - The agent lacks attestation permissions")
+        print_result(False, "Attestation failed", error=str(e))
 
-    print("""
-================================================================================
-              Attestation builds trust through cryptographic proof!
-================================================================================
-""")
+    input("  Press Enter to continue...")
 
 
 def simulate_mcp_drift_demo():
-    """Demo MCP drift detection - connecting to unregistered server"""
-    print("""
-================================================================================
-                    MCP DRIFT DETECTION DEMO
-================================================================================
-
-Drift detection alerts you when an agent connects to an MCP server that
-isn't registered in AIM. This helps detect:
-  - Unauthorized MCP connections
-  - Configuration changes
-  - Potential security threats
-
-Let's simulate connecting to an UNREGISTERED MCP server...
-
-================================================================================
+    """Demo MCP drift detection"""
+    print()
+    print_box("MCP DRIFT DETECTION DEMO", """
+Drift detection alerts when an agent connects to an UNREGISTERED MCP server.
+This helps detect unauthorized MCP connections and potential security threats.
 """)
 
-    # Simulate connecting to an unregistered MCP server
-    fake_server_id = f"unregistered-{random.randint(1000, 9999)}"
     fake_server_url = f"http://suspicious-server-{random.randint(100, 999)}.example.com"
+    fake_server_id = f"unregistered-{random.randint(1000, 9999)}"
 
     print(f"  Attempting connection to unregistered server:")
-    print(f"  Server: {fake_server_url}")
+    print(f"  URL: {fake_server_url}")
     print()
 
     try:
-        # This will likely fail or create an alert
         result = use_mcp_tool(
             aim_client=agent,
             server_id=fake_server_id,
@@ -631,53 +607,43 @@ Let's simulate connecting to an UNREGISTERED MCP server...
             mcp_url=fake_server_url,
             mcp_name="unregistered-server"
         )
-        print(f"  Connection recorded - drift alert may have been created!")
-        print(f"  Result: {result}")
+        print_result(True, "Connection recorded - drift alert created", {
+            "Check alerts": f"{DASHBOARD_URL}/dashboard/admin/alerts"
+        })
     except Exception as e:
-        print(f"  Connection flagged/blocked: {e}")
-        print()
-        print("  This is expected! AIM detected the unregistered server.")
+        print_result(False, "Connection flagged/blocked (expected!)", {
+            "Reason": "AIM detected unregistered server",
+            "Check alerts": f"{DASHBOARD_URL}/dashboard/admin/alerts"
+        })
 
-    print("""
-================================================================================
-              Check for drift alerts: http://localhost:3000/dashboard/admin/alerts
-================================================================================
-
-Drift detection protects against:
-  - Shadow IT (unauthorized MCP servers)
-  - Supply chain attacks via malicious MCPs
-  - Configuration tampering
-  - Compliance violations
-
-================================================================================
-""")
+    input("  Press Enter to continue...")
 
 
 def print_menu():
     """Print the action menu"""
-    print("""
+    print(f"""
 ================================================================================
                            CHOOSE AN ACTION
 ================================================================================
 
-  LOW RISK (logged, minimal monitoring):
-    1. Check Weather        - Simulate checking weather for a city
-    2. Search Products      - Simulate searching for products
+  LOW RISK (api:call - ALLOWED):
+    1. Check Weather        - Simulate weather API call
+    2. Search Products      - Simulate product search
 
-  MEDIUM RISK (logged, monitored for patterns):
-    3. Get User Profile     - Simulate reading user data from database
-    4. Query Orders         - Simulate querying order history
+  MEDIUM RISK (user:read, db:read - ALLOWED):
+    3. Get User Profile     - Read user data from database
+    4. Query Orders         - Query order history
 
-  HIGH RISK (logged, closely monitored, affects trust score):
-    5. Send Notification    - Simulate sending a notification
-    6. Process Refund       - Simulate processing a payment refund
+  HIGH RISK (notification:send, payment:process - NOT DECLARED):
+    5. Send Notification    - Will be logged/blocked based on strict mode
+    6. Process Refund       - Will be logged/blocked based on strict mode
 
   BULK DEMOS:
-    7. Run All Actions      - Run all actions in sequence (great for demo!)
-    8. Run 10 Random Actions- Bulk test with random actions
+    7. Run All Actions      - Run all actions in sequence
+    8. Run 10 Random        - Bulk test with random actions
 
   SECURITY DEMOS:
-    A. CBAC Demo            - Capability-Based Access Control (blocks attacks!)
+    A. CBAC Demo            - See prompt injection attacks get blocked!
     B. JIT Access Demo      - Just-In-Time approval workflow
     C. Request Capability   - Request new capability (admin approves)
     D. Show Agent Status    - View trust score & capabilities
@@ -690,6 +656,7 @@ def print_menu():
 
   0. Exit
 
+  Dashboard: {DASHBOARD_URL}/dashboard | Strict Mode: {'ON' if STRICT_MODE else 'OFF'}
 ================================================================================
 """)
 
@@ -698,129 +665,168 @@ def run_action(choice: str):
     """Execute the selected action"""
     try:
         if choice == "1":
-            city = input("Enter city name [San Francisco]: ").strip() or "San Francisco"
-            print(f"\nChecking weather for {city}...")
+            city = input("  Enter city name [San Francisco]: ").strip() or "San Francisco"
+            print(f"\n  Checking weather for {city}...")
             result = check_weather(city)
-            print(f"  Result: {result['temperature']}F, {result['condition']}")
+            print_result(True, f"Weather for {city}", {
+                "Temperature": f"{result['temperature']}F",
+                "Condition": result['condition'],
+                "Humidity": f"{result['humidity']}%"
+            })
 
         elif choice == "2":
-            query = input("Enter search query [laptop]: ").strip() or "laptop"
-            print(f"\nSearching for '{query}'...")
+            query = input("  Enter search query [laptop]: ").strip() or "laptop"
+            print(f"\n  Searching for '{query}'...")
             result = search_products(query)
-            print(f"  Found {result['results']} results. Top: {result['top_result']}")
+            print_result(True, f"Search: {query}", {
+                "Results found": result['results'],
+                "Top result": result['top_result']
+            })
 
         elif choice == "3":
-            user_id = input("Enter user ID [123]: ").strip() or "123"
-            print(f"\nGetting profile for user {user_id}...")
+            user_id = input("  Enter user ID [123]: ").strip() or "123"
+            print(f"\n  Getting profile for user {user_id}...")
             result = get_user_profile(user_id)
-            print(f"  User: {result['name']} ({result['email']})")
+            print_result(True, f"User Profile: {user_id}", {
+                "Name": result['name'],
+                "Email": result['email'],
+                "Created": result['created']
+            })
 
         elif choice == "4":
-            user_id = input("Enter user ID [123]: ").strip() or "123"
-            print(f"\nQuerying orders for user {user_id}...")
+            user_id = input("  Enter user ID [123]: ").strip() or "123"
+            print(f"\n  Querying orders for user {user_id}...")
             result = query_orders(user_id)
-            print(f"  Orders: {result['total_orders']}, Total: {result['total_spent']}")
+            print_result(True, f"Orders for {user_id}", {
+                "Total orders": result['total_orders'],
+                "Total spent": result['total_spent']
+            })
 
         elif choice == "5":
-            user_id = input("Enter user ID [123]: ").strip() or "123"
-            message = input("Enter message [Hello!]: ").strip() or "Hello!"
-            print(f"\nSending notification to user {user_id}...")
-            result = send_notification(user_id, message)
-            print(f"  Status: {result['status']}")
+            user_id = input("  Enter user ID [123]: ").strip() or "123"
+            message = input("  Enter message [Hello!]: ").strip() or "Hello!"
+            print(f"\n  Sending notification to user {user_id}...")
+            try:
+                result = send_notification(user_id, message)
+                print_result(True, f"Notification sent to {user_id}", {
+                    "Message": message[:30] + "..." if len(message) > 30 else message,
+                    "Status": result['status']
+                })
+            except Exception as e:
+                print_result(False, "Notification blocked", error=str(e))
+                print(f"  (notification:send not in declared capabilities)")
 
         elif choice == "6":
-            order_id = input("Enter order ID [ORD-001]: ").strip() or "ORD-001"
-            amount = input("Enter refund amount [50.00]: ").strip() or "50.00"
-            print(f"\nProcessing refund for order {order_id}...")
-            result = process_refund(order_id, float(amount))
-            print(f"  Refund ID: {result['refund_id']}, Status: {result['status']}")
+            order_id = input("  Enter order ID [ORD-001]: ").strip() or "ORD-001"
+            amount = input("  Enter refund amount [50.00]: ").strip() or "50.00"
+            print(f"\n  Processing refund for order {order_id}...")
+            try:
+                result = process_refund(order_id, float(amount))
+                print_result(True, f"Refund processed", {
+                    "Order": order_id,
+                    "Amount": f"${amount}",
+                    "Refund ID": result['refund_id']
+                })
+            except Exception as e:
+                print_result(False, "Refund blocked", error=str(e))
+                print(f"  (payment:process not in declared capabilities)")
 
         elif choice == "7":
-            print("\nRunning all actions in sequence...\n")
+            print("\n  Running all actions in sequence...\n")
             actions = [
                 ("Check Weather", lambda: check_weather("New York")),
                 ("Search Products", lambda: search_products("headphones")),
                 ("Get User Profile", lambda: get_user_profile("user_456")),
                 ("Query Orders", lambda: query_orders("user_456")),
-                ("Send Notification", lambda: send_notification("user_456", "Your order shipped!")),
-                ("Process Refund", lambda: process_refund("ORD-789", 29.99)),
             ]
             for name, action in actions:
-                print(f"  Running: {name}...")
-                action()
-                time.sleep(0.5)  # Small delay so dashboard updates are visible
-            print("\n  All actions completed!")
+                print(f"    {name}...", end=" ")
+                try:
+                    action()
+                    print("OK")
+                except Exception as e:
+                    print(f"BLOCKED ({e})")
+                time.sleep(0.3)
+            print("\n  Core actions completed!")
+            print(f"  Check dashboard: {DASHBOARD_URL}/dashboard/agents")
 
         elif choice == "8":
-            print("\nRunning 10 random actions...\n")
+            print("\n  Running 10 random actions...\n")
             all_actions = [
-                lambda: check_weather(random.choice(["NYC", "LA", "Chicago", "Miami", "Seattle"])),
-                lambda: search_products(random.choice(["phone", "shoes", "camera", "book", "watch"])),
+                lambda: check_weather(random.choice(["NYC", "LA", "Chicago", "Miami"])),
+                lambda: search_products(random.choice(["phone", "shoes", "camera"])),
                 lambda: get_user_profile(f"user_{random.randint(100, 999)}"),
                 lambda: query_orders(f"user_{random.randint(100, 999)}"),
-                lambda: send_notification(f"user_{random.randint(100, 999)}", "Test notification"),
-                lambda: process_refund(f"ORD-{random.randint(1000, 9999)}", random.uniform(10, 100)),
             ]
             for i in range(10):
                 action = random.choice(all_actions)
-                print(f"  Action {i+1}/10...", end=" ")
-                action()
-                print("Done")
-                time.sleep(0.3)
+                print(f"    Action {i+1}/10...", end=" ")
+                try:
+                    action()
+                    print("OK")
+                except Exception as e:
+                    print(f"BLOCKED")
+                time.sleep(0.2)
             print("\n  All 10 actions completed!")
 
         elif choice.upper() == "A":
             run_cbac_demo()
+            return
 
         elif choice.upper() == "B":
             run_jit_access_demo()
+            return
 
         elif choice.upper() == "C":
             request_new_capability()
+            return
 
         elif choice.upper() == "D":
             show_agent_status()
+            return
 
         elif choice.upper() == "E":
             register_mcp_server_demo()
+            return
 
         elif choice.upper() == "F":
             list_mcp_connections_demo()
+            return
 
         elif choice.upper() == "G":
             attest_mcp_server_demo()
+            return
 
         elif choice.upper() == "H":
             simulate_mcp_drift_demo()
-
-        else:
-            print("Invalid choice. Please try again.")
             return
 
-        print("\n  Check your AIM dashboard to see this action logged!")
-        print(f"  Dashboard: http://localhost:3000/dashboard/agents")
+        else:
+            print("  Invalid choice. Please try again.")
+            return
+
+        print(f"  Check dashboard: {DASHBOARD_URL}/dashboard/agents")
+        input("\n  Press Enter to continue...")
 
     except Exception as e:
-        print(f"\n  ERROR: {e}")
-        print("  Make sure AIM backend is running (docker compose up -d)")
+        print_result(False, "Action failed", error=str(e))
+        input("\n  Press Enter to continue...")
 
 
 def main():
     """Main loop"""
-    print("READY! Open your AIM dashboard to watch actions in real-time.")
-    print(f"Dashboard URL: http://localhost:3000/dashboard/agents")
+    print(f"READY! Open your AIM dashboard to watch actions in real-time.")
+    print(f"Dashboard: {DASHBOARD_URL}/dashboard/agents")
 
     while True:
         print_menu()
-        choice = input("Enter your choice (0-8, A-H): ").strip()
+        choice = input("  Enter your choice (0-8, A-H): ").strip()
 
         if choice == "0":
-            print("\nThanks for trying AIM! Check your dashboard for the full activity log.")
-            print("Dashboard: http://localhost:3000/dashboard/agents")
+            print(f"\nThanks for trying AIM! Check your dashboard: {DASHBOARD_URL}/dashboard/agents")
             break
 
         run_action(choice)
-        print()
 
 
 if __name__ == "__main__":

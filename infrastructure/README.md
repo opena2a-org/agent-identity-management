@@ -59,7 +59,7 @@ docker run -p 8080:8080 \
   aim-backend:latest
 ```
 
-### Frontend (Next.js 15)
+### Frontend (Next.js 16)
 
 ```bash
 # Build
