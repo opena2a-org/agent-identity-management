@@ -393,8 +393,13 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Register this agent with AIM.
+     * Register this agent with AIM, or reconnect to existing agent if already registered.
      * Uses the authenticated /api/v1/agents endpoint (Bearer token).
+     *
+     * Follows the "get or create" pattern:
+     * 1. First check if agent with this name already exists
+     * 2. If exists: reconnect and update configuration (capabilities, tags, metadata)
+     * 3. If not exists: create new agent
      */
     private void registerAgent() {
         try {
@@ -404,63 +409,169 @@ public class AIMClient implements AutoCloseable {
             // Generate Ed25519 key pair for signing
             generateKeyPair();
 
-            // Register with AIM backend using authenticated endpoint
-            // Uses camelCase field names as expected by the API
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("name", agentName);
-            payload.put("displayName", agentName);
-            payload.put("description", description != null ? description : "Agent registered via AIM Java SDK");
-            payload.put("publicKey", Base64.getEncoder().encodeToString(publicKey));
-            payload.put("agentType", agentType.getValue());
-            payload.put("version", "1.0.0"); // Default version (matches Python SDK)
+            // FIRST: Check if agent already exists (get or create pattern)
+            // Use sdk-api endpoint which accepts both ID and name
+            try {
+                String response = get("/api/v1/sdk-api/agents/" + agentName);
+                // Agent exists - reconnect to it
+                logger.info("Agent '{}' already exists, connecting...", agentName);
+                handleRegistrationResponse(response, true);
 
-            // Add metadata if provided
-            if (metadata != null && !metadata.isEmpty()) {
-                payload.set("metadata", objectMapper.valueToTree(metadata));
+                // Update the agent with new configuration
+                if (this.agentId != null) {
+                    updateExistingAgent();
+                }
+                return;
+            } catch (AIMException e) {
+                // 404 means agent doesn't exist - continue to create
+                if (!e.getMessage().contains("404")) {
+                    throw e;
+                }
             }
 
+            // Agent doesn't exist - create it
+            ObjectNode payload = buildAgentPayload();
+            String response = post("/api/v1/agents", payload.toString());
+            handleRegistrationResponse(response, false);
+
+        } catch (AIMException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AIMException("Failed to register agent: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Build the agent registration/update payload.
+     */
+    private ObjectNode buildAgentPayload() {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("name", agentName);
+        payload.put("displayName", agentName);
+        payload.put("description", description != null ? description : "Agent registered via AIM Java SDK");
+        payload.put("publicKey", Base64.getEncoder().encodeToString(publicKey));
+        payload.put("agentType", agentType.getValue());
+        payload.put("version", "1.0.0");
+
+        if (metadata != null && !metadata.isEmpty()) {
+            payload.set("metadata", objectMapper.valueToTree(metadata));
+        }
+
+        if (!capabilities.isEmpty()) {
+            var capArray = payload.putArray("capabilities");
+            for (String cap : capabilities) {
+                capArray.add(cap);
+            }
+        }
+
+        if (talksTo != null && !talksTo.isEmpty()) {
+            var talksToArray = payload.putArray("talksTo");
+            for (String mcp : talksTo) {
+                talksToArray.add(mcp);
+            }
+        }
+
+        if (tags != null && !tags.isEmpty()) {
+            var tagsArray = payload.putArray("tagIds");
+            for (String tag : tags) {
+                tagsArray.add(tag);
+            }
+        }
+
+        return payload;
+    }
+
+    /**
+     * Handle the registration response and extract agent ID.
+     */
+    private void handleRegistrationResponse(String response, boolean isReconnect) throws Exception {
+        JsonNode result = objectMapper.readTree(response);
+
+        // Handle nested response structure from GET /agents/{name}
+        JsonNode agentNode = result.has("agent") ? result.get("agent") : result;
+
+        String agentIdField = agentNode.has("agentId") ? "agentId" : "id";
+        if (agentNode.has(agentIdField)) {
+            this.agentId = agentNode.get(agentIdField).asText();
+            if (isReconnect) {
+                logger.info("Reconnected to existing agent: {} ({})", agentName, this.agentId);
+            } else {
+                logger.info("Agent registered: {} ({})", agentName, this.agentId);
+            }
+
+            if (!isReconnect && result.has("apiKey") && result.get("apiKey").has("key")) {
+                String apiKeyPrefix = result.get("apiKey").get("prefix").asText();
+                logger.info("API key auto-generated: {}...", apiKeyPrefix);
+            }
+        }
+    }
+
+    /**
+     * Update an existing agent with new public key, capabilities, tags, or metadata.
+     * This is called when reconnecting to an existing agent to sync configuration.
+     */
+    private void updateExistingAgent() {
+        // 1. Update public key via dedicated /keys endpoint (like Python SDK)
+        try {
+            ObjectNode keyPayload = objectMapper.createObjectNode();
+            keyPayload.put("publicKey", Base64.getEncoder().encodeToString(publicKey));
+            put("/api/v1/agents/" + agentId + "/keys", keyPayload.toString());
+            logger.debug("Updated public key for agent: {}", agentName);
+        } catch (Exception e) {
+            logger.warn("Could not update agent public key: {}", e.getMessage());
+        }
+
+        // 2. Update agent configuration (capabilities, tags, metadata)
+        try {
+            ObjectNode updatePayload = objectMapper.createObjectNode();
+            boolean hasUpdates = false;
+
+            // Update description if provided
+            if (description != null) {
+                updatePayload.put("description", description);
+                hasUpdates = true;
+            }
+
+            // Update metadata if provided
+            if (metadata != null && !metadata.isEmpty()) {
+                updatePayload.set("metadata", objectMapper.valueToTree(metadata));
+                hasUpdates = true;
+            }
+
+            // Update capabilities if provided
             if (!capabilities.isEmpty()) {
-                var capArray = payload.putArray("capabilities");
+                var capArray = updatePayload.putArray("capabilities");
                 for (String cap : capabilities) {
                     capArray.add(cap);
                 }
+                hasUpdates = true;
             }
 
-            // Add MCP server connections (talksTo)
+            // Update talksTo if provided
             if (talksTo != null && !talksTo.isEmpty()) {
-                var talksToArray = payload.putArray("talksTo");
+                var talksToArray = updatePayload.putArray("talksTo");
                 for (String mcp : talksTo) {
                     talksToArray.add(mcp);
                 }
+                hasUpdates = true;
             }
 
-            // Add tags (as tagIds - backend expects tag names for auto-creation)
+            // Update tags if provided
             if (tags != null && !tags.isEmpty()) {
-                var tagsArray = payload.putArray("tagIds");
+                var tagsArray = updatePayload.putArray("tagIds");
                 for (String tag : tags) {
                     tagsArray.add(tag);
                 }
+                hasUpdates = true;
             }
 
-            // Use authenticated endpoint (Bearer token added by interceptor)
-            String response = post("/api/v1/agents", payload.toString());
-            JsonNode result = objectMapper.readTree(response);
-
-            // Store agent ID if returned (field is 'agentId' or 'id')
-            String agentIdField = result.has("agentId") ? "agentId" : "id";
-            if (result.has(agentIdField)) {
-                this.agentId = result.get(agentIdField).asText();  // Update the instance field
-                logger.info("Agent registered: {} ({})", agentName, this.agentId);
-
-                // Log API key info if auto-generated
-                if (result.has("apiKey") && result.get("apiKey").has("key")) {
-                    String apiKeyPrefix = result.get("apiKey").get("prefix").asText();
-                    logger.info("API key auto-generated: {}...", apiKeyPrefix);
-                }
+            if (hasUpdates) {
+                put("/api/v1/agents/" + agentId, updatePayload.toString());
+                logger.info("Updated agent configuration for: {}", agentName);
             }
-
         } catch (Exception e) {
-            throw new AIMException("Failed to register agent: " + e.getMessage(), e);
+            // Log but don't fail - agent is still usable
+            logger.warn("Could not update agent configuration: {}", e.getMessage());
         }
     }
 
