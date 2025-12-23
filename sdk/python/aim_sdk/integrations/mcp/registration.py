@@ -136,25 +136,10 @@ def list_mcp_servers(
         )
         return response if isinstance(response, list) else response.get("servers", [])
     except AttributeError:
-        # Fallback: Make request manually if _make_request doesn't exist
-        headers = {"Content-Type": "application/json"}
-        params = {"limit": limit, "offset": offset}
-
-        response = requests.get(
-            f"{aim_client.aim_url}/api/v1/mcp-servers",
-            headers=headers,
-            params=params,
-            timeout=10
+        # Fallback: If _make_request doesn't exist, this is an older client version
+        raise NotImplementedError(
+            "AIMClient._make_request not available. Please upgrade to latest SDK version."
         )
-
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            raise PermissionError("Authentication failed. Check your AIM credentials.")
-        else:
-            raise requests.exceptions.RequestException(
-                f"Failed to list MCP servers: {response.status_code} - {response.text}"
-            )
 
 
 def get_mcp_server(
@@ -175,24 +160,15 @@ def get_mcp_server(
         requests.exceptions.RequestException: If request fails
         ValueError: If server not found
     """
-    headers = {"Content-Type": "application/json"}
-
-    response = requests.get(
-        f"{aim_client.aim_url}/api/v1/mcp-servers/{server_id}",
-        headers=headers,
-        timeout=10
-    )
-
-    if response.status_code == 200:
-        return response.json()
-    elif response.status_code == 404:
-        raise ValueError(f"MCP server with ID '{server_id}' not found")
-    elif response.status_code == 401:
-        raise PermissionError("Authentication failed. Check your AIM credentials.")
-    else:
-        raise requests.exceptions.RequestException(
-            f"Failed to get MCP server: {response.status_code} - {response.text}"
+    try:
+        return aim_client._make_request(
+            method="GET",
+            endpoint=f"/api/v1/mcp-servers/{server_id}"
         )
+    except Exception as e:
+        if "404" in str(e):
+            raise ValueError(f"MCP server with ID '{server_id}' not found")
+        raise
 
 
 def delete_mcp_server(
@@ -201,6 +177,8 @@ def delete_mcp_server(
 ) -> bool:
     """
     Delete an MCP server registration from AIM.
+
+    Note: Requires manager-level permissions.
 
     Args:
         aim_client: AIMClient instance for authentication
@@ -211,25 +189,20 @@ def delete_mcp_server(
 
     Raises:
         requests.exceptions.RequestException: If deletion fails
+        PermissionError: If user lacks manager permissions
     """
-    headers = {"Content-Type": "application/json"}
-
-    response = requests.delete(
-        f"{aim_client.aim_url}/api/v1/mcp-servers/{server_id}",
-        headers=headers,
-        timeout=10
-    )
-
-    if response.status_code == 204:
-        return True
-    elif response.status_code == 404:
-        raise ValueError(f"MCP server with ID '{server_id}' not found")
-    elif response.status_code == 401:
-        raise PermissionError("Authentication failed. Check your AIM credentials.")
-    else:
-        raise requests.exceptions.RequestException(
-            f"Failed to delete MCP server: {response.status_code} - {response.text}"
+    try:
+        aim_client._make_request(
+            method="DELETE",
+            endpoint=f"/api/v1/mcp-servers/{server_id}"
         )
+        return True
+    except Exception as e:
+        if "404" in str(e):
+            raise ValueError(f"MCP server with ID '{server_id}' not found")
+        if "403" in str(e):
+            raise PermissionError("Manager-level permissions required to delete MCP servers")
+        raise
 
 
 def use_mcp_tool(
