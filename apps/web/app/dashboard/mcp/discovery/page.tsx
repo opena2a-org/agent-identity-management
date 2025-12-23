@@ -43,6 +43,8 @@ export default function MCPDiscoveryPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unmapped" | "mapped">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const fetchDiscoveryData = useCallback(async () => {
     try {
@@ -79,6 +81,15 @@ export default function MCPDiscoveryPage() {
 
     return true;
   });
+
+  // Paginated results
+  const paginatedMCPs = filteredMCPs.slice(0, currentPage * PAGE_SIZE);
+  const hasMore = currentPage * PAGE_SIZE < filteredMCPs.length;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, searchQuery]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -264,7 +275,7 @@ export default function MCPDiscoveryPage() {
 
       {/* Discovery Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {!filteredMCPs || filteredMCPs.length === 0 ? (
+        {!paginatedMCPs || filteredMCPs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Server className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
             <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
@@ -304,7 +315,7 @@ export default function MCPDiscoveryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredMCPs.map((mcp, index) => (
+                {paginatedMCPs.map((mcp, index) => (
                   <tr
                     key={index}
                     className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
@@ -410,6 +421,33 @@ export default function MCPDiscoveryPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {filteredMCPs.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {Math.min(currentPage * PAGE_SIZE, filteredMCPs.length)} of {filteredMCPs.length} servers
+                </div>
+                <div className="flex items-center gap-2">
+                  {currentPage > 1 && (
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      Show Less
+                    </button>
+                  )}
+                  {hasMore && (
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      Load More ({Math.min(PAGE_SIZE, filteredMCPs.length - currentPage * PAGE_SIZE)} more)
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
