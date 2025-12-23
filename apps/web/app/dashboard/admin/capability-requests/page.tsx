@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -107,6 +108,9 @@ export default function CapabilityRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  // Debounce search input for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
     type: "approve" | "reject";
@@ -191,23 +195,29 @@ export default function CapabilityRequestsPage() {
     }
   };
 
-  const filteredRequests = requests.filter((request) => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch =
-      (request.agentName || "").toLowerCase().includes(query) ||
-      (request.agentDisplayName || "").toLowerCase().includes(query) ||
-      (request.capabilityType || "").toLowerCase().includes(query) ||
-      (request.requestedByEmail || "").toLowerCase().includes(query);
+  // Memoized filtered requests for better performance
+  const filteredRequests = useMemo(() => {
+    const query = debouncedSearchQuery.toLowerCase();
+    return requests.filter((request) => {
+      const matchesSearch =
+        (request.agentName || "").toLowerCase().includes(query) ||
+        (request.agentDisplayName || "").toLowerCase().includes(query) ||
+        (request.capabilityType || "").toLowerCase().includes(query) ||
+        (request.requestedByEmail || "").toLowerCase().includes(query);
 
-    const matchesStatus =
-      filterStatus === "all" || request.status === filterStatus;
+      const matchesStatus =
+        filterStatus === "all" || request.status === filterStatus;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [requests, debouncedSearchQuery, filterStatus]);
 
-  const pendingCount = requests.filter((r) => r.status === "pending").length;
-  const approvedCount = requests.filter((r) => r.status === "approved").length;
-  const rejectedCount = requests.filter((r) => r.status === "rejected").length;
+  // Memoized counts for better performance
+  const { pendingCount, approvedCount, rejectedCount } = useMemo(() => ({
+    pendingCount: requests.filter((r) => r.status === "pending").length,
+    approvedCount: requests.filter((r) => r.status === "approved").length,
+    rejectedCount: requests.filter((r) => r.status === "rejected").length,
+  }), [requests]);
 
   if (loading) {
     return (
@@ -401,7 +411,7 @@ export default function CapabilityRequestsPage() {
           <CardContent>
             <div className="space-y-4">
               {filteredRequests.map((request) => {
-                const StatusIcon = statusIcons[request.status];
+                const StatusIcon = statusIcons[request.status] || Clock;
                 const isPending = request.status === "pending";
 
                 return (

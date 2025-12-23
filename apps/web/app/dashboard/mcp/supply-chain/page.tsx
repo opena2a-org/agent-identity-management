@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Server,
@@ -341,6 +342,10 @@ function SupplyChainPage() {
   const [connPageSize, setConnPageSize] = useState(10);
   const [connPage, setConnPage] = useState(1);
 
+  // Debounce search inputs for better performance
+  const debouncedMcpSearch = useDebounce(mcpSearchFilter, 300);
+  const debouncedConnSearch = useDebounce(connSearchFilter, 300);
+
   // Drift alerts pagination
   const [driftPageSize, setDriftPageSize] = useState(10);
   const [driftPage, setDriftPage] = useState(1);
@@ -527,30 +532,34 @@ function SupplyChainPage() {
     fetchData();
   }, []);
 
-  // Filtered and paginated MCP servers
-  const filteredMcpServers = mcpServers.filter((server) => {
-    const matchesSearch = mcpSearchFilter === "" ||
-      server.name.toLowerCase().includes(mcpSearchFilter.toLowerCase()) ||
-      server.url.toLowerCase().includes(mcpSearchFilter.toLowerCase());
-    const matchesStatus = mcpStatusFilter === "all" || server.status === mcpStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Filtered and paginated MCP servers (memoized for performance)
+  const filteredMcpServers = useMemo(() => {
+    return mcpServers.filter((server) => {
+      const matchesSearch = debouncedMcpSearch === "" ||
+        server.name.toLowerCase().includes(debouncedMcpSearch.toLowerCase()) ||
+        server.url.toLowerCase().includes(debouncedMcpSearch.toLowerCase());
+      const matchesStatus = mcpStatusFilter === "all" || server.status === mcpStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [mcpServers, debouncedMcpSearch, mcpStatusFilter]);
   const totalMcpPages = Math.ceil(filteredMcpServers.length / mcpPageSize);
   const paginatedMcpServers = filteredMcpServers.slice(
     (mcpPage - 1) * mcpPageSize,
     mcpPage * mcpPageSize
   );
 
-  // Filtered and paginated connections
-  const filteredConnections = connections.filter((conn) => {
-    const matchesSearch = connSearchFilter === "" ||
-      conn.agentName.toLowerCase().includes(connSearchFilter.toLowerCase()) ||
-      conn.mcpServerName.toLowerCase().includes(connSearchFilter.toLowerCase());
-    const matchesStatus = connStatusFilter === "all" ||
-      (connStatusFilter === "active" && conn.isActive) ||
-      (connStatusFilter === "inactive" && !conn.isActive);
-    return matchesSearch && matchesStatus;
-  });
+  // Filtered and paginated connections (memoized for performance)
+  const filteredConnections = useMemo(() => {
+    return connections.filter((conn) => {
+      const matchesSearch = debouncedConnSearch === "" ||
+        conn.agentName.toLowerCase().includes(debouncedConnSearch.toLowerCase()) ||
+        conn.mcpServerName.toLowerCase().includes(debouncedConnSearch.toLowerCase());
+      const matchesStatus = connStatusFilter === "all" ||
+        (connStatusFilter === "active" && conn.isActive) ||
+        (connStatusFilter === "inactive" && !conn.isActive);
+      return matchesSearch && matchesStatus;
+    });
+  }, [connections, debouncedConnSearch, connStatusFilter]);
   const totalConnPages = Math.ceil(filteredConnections.length / connPageSize);
   const paginatedConnections = filteredConnections.slice(
     (connPage - 1) * connPageSize,

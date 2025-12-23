@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api";
 import {
   Loader2,
@@ -43,6 +44,9 @@ export default function MCPDiscoveryPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unmapped" | "mapped">("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Debounce search input for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -64,32 +68,35 @@ export default function MCPDiscoveryPage() {
     fetchDiscoveryData();
   }, [fetchDiscoveryData]);
 
-  const filteredMCPs = (data?.discovered || []).filter((mcp) => {
-    // Apply status filter
-    if (filter === "unmapped" && mcp.isRegistered) return false;
-    if (filter === "mapped" && !mcp.isRegistered) return false;
+  // Memoized filtered MCPs for better performance
+  const filteredMCPs = useMemo(() => {
+    return (data?.discovered || []).filter((mcp) => {
+      // Apply status filter
+      if (filter === "unmapped" && mcp.isRegistered) return false;
+      if (filter === "mapped" && !mcp.isRegistered) return false;
 
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        mcp.name.toLowerCase().includes(query) ||
-        mcp.url?.toLowerCase().includes(query) ||
-        mcp.detectedBy.some((agent) => agent.toLowerCase().includes(query))
-      );
-    }
+      // Apply search filter (using debounced value)
+      if (debouncedSearchQuery) {
+        const query = debouncedSearchQuery.toLowerCase();
+        return (
+          mcp.name.toLowerCase().includes(query) ||
+          mcp.url?.toLowerCase().includes(query) ||
+          mcp.detectedBy.some((agent) => agent.toLowerCase().includes(query))
+        );
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [data?.discovered, filter, debouncedSearchQuery]);
 
   // Paginated results
   const paginatedMCPs = filteredMCPs.slice(0, currentPage * PAGE_SIZE);
   const hasMore = currentPage * PAGE_SIZE < filteredMCPs.length;
 
-  // Reset page when filters change
+  // Reset page when filters change (use debounced search to prevent premature reset)
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, searchQuery]);
+  }, [filter, debouncedSearchQuery]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
