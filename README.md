@@ -46,7 +46,7 @@ Your AI agents are autonomous. They call APIs, access databases, and make decisi
 
 ## What You Get
 
-### Security Dashboard
+### Executive Dashboard
 
 Real-time monitoring of all your AI agents with threat detection, trust scoring, and compliance status.
 
@@ -129,6 +129,29 @@ Monitor your entire MCP ecosystem with comprehensive supply chain visibility.
 | User Feedback | 5% | Manual trust adjustments from admins |
 
 ![Agent Trust Score](docs/images/agent-trust-score.png)
+
+### ABOM (Agent Bill of Materials)
+
+Complete inventory of your AI agent ecosystem for supply chain security and compliance.
+
+Unlike traditional SBOM (Software Bill of Materials) for code dependencies, **ABOM** provides visibility into AI-specific components:
+
+| Component | What It Tracks |
+|-----------|----------------|
+| **Agents** | All registered agents, their types, capabilities, and trust scores |
+| **MCP Servers** | Connected Model Context Protocol servers and their tools |
+| **Capabilities** | What each agent can do (db:read, api:call, file:write, etc.) |
+| **Connections** | Agent-to-MCP relationships and attestation history |
+| **Drift Events** | When capabilities change unexpectedly |
+
+**Why ABOM Matters:**
+
+- **Compliance Audits** — Know exactly what AI components your organization uses
+- **Incident Response** — Quickly identify affected agents when an MCP server is compromised
+- **Change Management** — Track capability drift and unauthorized tool additions
+- **Risk Assessment** — Understand the blast radius of any single agent or MCP server
+
+**Export Formats:** CycloneDX-compliant JSON for integration with existing SBOM tooling.
 
 ### Just-In-Time Access
 
@@ -252,7 +275,20 @@ Watch the dashboard update in real-time as your agent registers and performs act
 | SDK | Language | Installation | Features |
 |-----|----------|--------------|----------|
 | **Python SDK** | Python 3.8+ | `pip install aim-sdk` | Decorators, auto-detection, MCP integration |
-| **Java SDK** | Java 17+ | Maven/Gradle | AspectJ annotations, Spring Boot, OkHttp |
+| **Java SDK** | Java 17+ | Maven/Gradle | LangChain4j integration, Spring AI, enterprise security |
+
+### Enterprise Security Features (Java SDK)
+
+The Java SDK includes enterprise-grade security infrastructure:
+
+| Component | Description |
+|-----------|-------------|
+| **SecurityLogger** | SOC/SIEM compatible JSON event logging for Splunk, ELK, Datadog |
+| **RiskDetector** | Pattern-based risk analysis (LOW → CRITICAL) |
+| **AttestationCache** | Caches MCP attestations with 24h TTL and drift detection |
+| **SupplyChainReporter** | ABOM (Agent Bill of Materials) generation for compliance |
+| **LangChain4j Integration** | `AIMToolExecutor` wraps tools with capability verification |
+| **Spring AI Integration** | `AIMFunctionCallingAdvisor` for Spring Boot applications |
 
 ### SDK Parameters Reference
 
@@ -436,6 +472,7 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 | [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) | Secure your first agent (2 min) |
 | [API Quickstart](https://opena2a.org/docs/tutorials/api-quickstart) | REST API examples with curl (3 min) |
 | [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) | Connect and verify MCP servers (3 min) |
+| [SDK Test Plan](docs/SDK_TEST_PLAN.md) | Comprehensive SDK validation and test coverage |
 | [Security Assessment](https://opena2a.org/docs/security-assessment) | Threat model and security controls |
 | [Full Documentation](https://opena2a.org/docs) | Complete guides and API reference |
 
@@ -451,10 +488,12 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 - [x] MCP Supply Chain Analytics dashboard
 - [x] Smart auto-attestation with capability drift detection
 - [x] 8-factor trust scoring
-- [x] Security dashboard with alerts
-- [x] Complete audit trail
-- [x] Python SDK with auto-registration
-- [x] **Java SDK** with Maven, AspectJ annotations, Spring Boot support
+- [x] Security Command Center with smart security scoring
+- [x] Complete audit trail with pagination
+- [x] Python SDK with auto-registration and MCP integration
+- [x] **Java SDK** with LangChain4j, Spring AI, enterprise security features
+- [x] Enterprise security infrastructure (SecurityLogger, RiskDetector, AttestationCache)
+- [x] ABOM (Agent Bill of Materials) generation for supply chain compliance
 - [x] Agent tags and metadata support
 - [x] OAuth integration (Google, Microsoft, Okta)
 

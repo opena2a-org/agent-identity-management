@@ -169,8 +169,10 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 
 		// Reconstruct the signed message
 		// Format: METHOD\nENDPOINT\nTIMESTAMP\n[BODY]
+		// CRITICAL: Use OriginalURL() to include query parameters in signature verification
+		// Python SDK signs endpoint with query params, so we must include them here
 		method := strings.ToUpper(c.Method())
-		path := c.Path()
+		path := c.OriginalURL() // Use full URL with query params, not c.Path() which strips them
 
 		messageParts := []string{method, path, timestampStr}
 

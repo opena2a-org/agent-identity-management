@@ -87,20 +87,36 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
    - Copy-paste examples
    - Error handling
 
-2. **[Authentication Guide](./sdk/authentication.md)** ✅ **Complete**
+### Java SDK (Stable)
+
+2. **[Java SDK Guide](./sdk/java.md)** ✅ **Complete**
+   - Complete SDK reference with Maven/Gradle
+   - LangChain4j and Spring AI integration
+   - Enterprise security features (SecurityLogger, RiskDetector, AttestationCache)
+   - ABOM (Agent Bill of Materials) generation for compliance
+
+### Common Guides
+
+3. **[Authentication Guide](./sdk/authentication.md)** ✅ **Complete**
    - Ed25519 cryptography explained
    - Key management best practices
    - Challenge-response flow
 
-3. **[Auto-Detection Guide](./sdk/auto-detection.md)** ✅ **Complete**
+4. **[Auto-Detection Guide](./sdk/auto-detection.md)** ✅ **Complete**
    - MCP server discovery
    - Claude Desktop config parsing
    - Automatic registration
 
-4. **[Trust Scoring Guide](./sdk/trust-scoring.md)** ✅ **Complete**
+5. **[Trust Scoring Guide](./sdk/trust-scoring.md)** ✅ **Complete**
    - 8-factor algorithm explained
    - How to improve trust score
    - Real-time monitoring
+
+6. **[SDK Test Plan](./SDK_TEST_PLAN.md)** ✅ **Complete**
+   - Comprehensive test coverage
+   - Python SDK: 94.7% pass rate
+   - Java SDK: 100% pass rate
+   - Enterprise deployment validation
 
 ---
 
@@ -229,7 +245,7 @@ agent = secure("my-agent")
 | **Getting Started** | 2 | ✅ Complete |
 | **Examples** | 3 | ✅ Complete |
 | **Integrations** | 4 | ✅ Complete |
-| **SDK Docs** | 4 | ✅ Complete |
+| **SDK Docs** | 6 | ✅ Complete |
 | **Deployment** | 0 of 4 | 📝 Planned |
 | **Security** | 0 of 4 | 📝 Planned |
 | **API Reference** | 0 of 4 | 📝 Planned |
@@ -254,9 +270,11 @@ agent = secure("my-agent")
 
 **SDK Documentation**:
 10. `/docs/sdk/python.md` - Complete Python SDK reference
-11. `/docs/sdk/authentication.md` - Ed25519 cryptography & key management
-12. `/docs/sdk/auto-detection.md` - Automatic MCP server discovery
-13. `/docs/sdk/trust-scoring.md` - 8-factor trust algorithm
+11. `/docs/sdk/java.md` - Complete Java SDK reference with enterprise features
+12. `/docs/sdk/authentication.md` - Ed25519 cryptography & key management
+13. `/docs/sdk/auto-detection.md` - Automatic MCP server discovery
+14. `/docs/sdk/trust-scoring.md` - 8-factor trust algorithm
+15. `/docs/SDK_TEST_PLAN.md` - Comprehensive SDK test plan and validation
 
 **Navigation**:
 14. `/docs/DOCUMENTATION_INDEX.md` - This file (master index)
