@@ -24,14 +24,14 @@ Add to your `pom.xml`:
 <dependency>
     <groupId>org.opena2a</groupId>
     <artifactId>aim-sdk</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
 Or for Gradle (`build.gradle`):
 
 ```groovy
-implementation 'org.opena2a:aim-sdk:1.0.0'
+implementation 'org.opena2a:aim-sdk:1.1.0'
 ```
 
 ### Requirements
@@ -509,6 +509,257 @@ public class WeatherAgent {
         // Check trust score
         Map<String, Object> details = weatherAgent.agent.getAgentDetails();
         System.out.println("Trust Score: " + details.get("trustScore"));
+    }
+}
+```
+
+---
+
+## Enterprise Security Features
+
+The Java SDK includes enterprise-grade security infrastructure for SOC/SIEM integration, risk analysis, and supply chain compliance.
+
+### SecurityLogger - SOC/SIEM Integration
+
+JSON event logging compatible with Splunk, ELK, Datadog, and other SIEM platforms.
+
+```java
+import org.opena2a.aim.security.SecurityLogger;
+import org.opena2a.aim.security.EventTypes;
+
+SecurityLogger logger = SecurityLogger.getInstance();
+String sessionId = logger.startSession();
+
+// Set agent context for all subsequent logs
+logger.setAgentContext(
+    agent.getAgentId().toString(),
+    agent.getAgentName(),
+    "user-123",
+    "org-456"
+);
+
+// Log authentication events
+logger.logAuthentication(
+    EventTypes.Authn.TOKEN_REFRESH,
+    true,
+    "Token refreshed successfully",
+    Map.of("tokenId", "abc123")
+);
+
+// Log authorization events
+logger.logAuthorizationEvent(
+    EventTypes.Authz.CAPABILITY_GRANTED,
+    "db:read",
+    "users_table",
+    true,
+    Map.of("riskLevel", "LOW")
+);
+
+// Log agent lifecycle events
+logger.logAgentEvent(
+    EventTypes.Agent.AGENT_REGISTERED,
+    agent.getAgentName(),
+    "Agent registered successfully",
+    Map.of("agentType", "LANGCHAIN"),
+    true
+);
+
+// Log MCP events
+logger.logMcpEvent(
+    EventTypes.Mcp.MCP_SERVER_CONNECTED,
+    "filesystem-mcp",
+    "MCP server connected",
+    Map.of("tools", 5),
+    true
+);
+
+logger.clearAgentContext();
+```
+
+### RiskDetector - Pattern-Based Risk Analysis
+
+Automatic risk level detection based on capability patterns.
+
+```java
+import org.opena2a.aim.security.RiskDetector;
+import org.opena2a.aim.security.RiskLevel;
+
+RiskDetector detector = RiskDetector.getInstance();
+
+// Detect risk for a single capability
+RiskLevel level = detector.detectRisk("admin:delete");
+// Returns: CRITICAL
+
+// Risk patterns:
+// api:*, file:read          → LOW
+// db:read, db:write         → MEDIUM
+// db:delete, payment:*      → HIGH
+// admin:*, system:*         → CRITICAL
+
+// Detect aggregate risk for multiple capabilities
+List<String> capabilities = Arrays.asList("api:call", "db:read", "payment:process");
+RiskLevel aggregate = detector.detectAggregateRisk(capabilities);
+// Returns: HIGH (highest of all)
+
+// Check if approval is required
+if (level.requiresApproval()) {
+    // Trigger JIT access workflow
+}
+```
+
+### AttestationCache - MCP Drift Detection
+
+Cache MCP attestations and detect capability drift (supply chain changes).
+
+```java
+import org.opena2a.aim.mcp.AttestationCache;
+import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
+import org.opena2a.aim.integrations.mcp.discovery.MCPTool;
+
+AttestationCache cache = AttestationCache.getInstance();
+
+// Store initial attestation
+List<MCPTool> tools = Arrays.asList(
+    new MCPTool("read_file", "Read file contents", null),
+    new MCPTool("write_file", "Write to file", null)
+);
+
+MCPDiscoveryResult discovery = MCPDiscoveryResult.builder()
+    .serverName("filesystem-mcp")
+    .tools(tools)
+    .connectionLatencyMs(50)
+    .build();
+
+cache.store("filesystem-mcp", discovery, "attestation-123");
+
+// Later, check for drift
+List<MCPTool> currentTools = Arrays.asList(
+    new MCPTool("read_file", "Read file contents", null),
+    new MCPTool("write_file", "Write to file", null),
+    new MCPTool("delete_file", "DELETE FILES!", null)  // New suspicious tool!
+);
+
+MCPDiscoveryResult currentDiscovery = MCPDiscoveryResult.builder()
+    .serverName("filesystem-mcp")
+    .tools(currentTools)
+    .build();
+
+AttestationCache.DriftReport drift = cache.detectDrift("filesystem-mcp", currentDiscovery);
+
+if (drift.hasDrift()) {
+    System.out.println("ALERT: MCP capability drift detected!");
+    // New tool added - possible supply chain attack
+}
+```
+
+### SupplyChainReporter - ABOM Generation
+
+Generate Agent Bill of Materials (ABOM) for compliance audits.
+
+```java
+import org.opena2a.aim.security.SupplyChainReporter;
+
+SupplyChainReporter reporter = SupplyChainReporter.getInstance();
+
+// Record MCP servers
+reporter.recordMcpServer("filesystem-mcp", "npx @mcp/filesystem", discovery);
+reporter.recordMcpServer("github-mcp", "npx @mcp/github", githubDiscovery);
+
+// Generate SBOM
+SupplyChainReporter.SBOM sbom = reporter.generateSBOM(agent.getAgentName());
+
+System.out.println("SBOM Format: " + sbom.format);           // CycloneDX
+System.out.println("Components: " + sbom.componentCount);    // MCP servers
+System.out.println("Generated: " + sbom.generatedAt);
+
+// Export for compliance
+for (SupplyChainReporter.SBOMComponent component : sbom.components) {
+    System.out.println("- " + component.name + " v" + component.version);
+    System.out.println("  PURL: " + component.purl);
+}
+```
+
+### LangChain4j Integration
+
+Wrap LangChain4j tools with AIM security verification.
+
+```java
+import org.opena2a.aim.integration.langchain4j.AIMToolExecutor;
+import org.opena2a.aim.integration.langchain4j.AIMAgentCallback;
+
+// Create tool executor with security wrapper
+AIMToolExecutor executor = new AIMToolExecutor(agent);
+
+// Register tools with required capabilities
+executor.register("search_web", "Search the web",
+    input -> webSearch(input), "api:call");
+
+executor.register("read_database", "Query database",
+    input -> queryDatabase(input), "db:read");
+
+executor.register("admin_override", "Admin operations",
+    input -> adminOp(input), "admin:override");
+
+// Configure risk-based blocking
+executor.setBlockHighRisk(true);
+executor.setApprovalThreshold(org.opena2a.aim.security.RiskLevel.HIGH);
+
+// Execute with automatic verification
+try {
+    Object result = executor.execute("search_web", "AI safety");
+    // Success - capability verified
+} catch (AIMToolExecutor.ToolBlockedException e) {
+    System.out.println("Tool blocked: " + e.getRiskLevel() + " exceeds threshold");
+}
+
+// Get execution metrics
+Map<String, Map<String, Object>> metrics = executor.getAllMetrics();
+// {"search_web": {"successCount": 5, "blockedCount": 0, ...}}
+
+// Agent callback for ReAct pattern
+AIMAgentCallback callback = new AIMAgentCallback(agent);
+String executionId = callback.onAgentStart("my-agent", "User query");
+callback.onAgentThought(executionId, "I need to search for information");
+callback.onAgentAction(executionId, "search_web", "AI safety");
+callback.onAgentObservation(executionId, "Found 10 results");
+callback.onAgentFinish(executionId, "Here are the results...");
+```
+
+### Spring AI Integration
+
+Use AIM with Spring AI applications.
+
+```java
+import org.opena2a.aim.integration.spring.AIMFunctionCallingAdvisor;
+import org.opena2a.aim.integration.spring.AIMSpringAIConfig;
+
+@Configuration
+public class SpringAIConfig {
+
+    @Bean
+    public AIMClient aimClient() {
+        return AIMClient.secure("spring-ai-agent");
+    }
+
+    @Bean
+    public AIMFunctionCallingAdvisor aimAdvisor(AIMClient client) {
+        return new AIMFunctionCallingAdvisor(client);
+    }
+}
+
+// Use in your service
+@Service
+public class AIService {
+
+    @Autowired
+    private AIMFunctionCallingAdvisor advisor;
+
+    public String processWithSecurity(String input) {
+        // Advisor automatically verifies capabilities before function calls
+        return chatClient.prompt(input)
+            .advisors(advisor)
+            .call()
+            .content();
     }
 }
 ```
