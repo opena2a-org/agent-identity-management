@@ -741,6 +741,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.Alert,
 			services.Agent,
+			services.Capability,
 		),
 		SecurityPolicy: handlers.NewSecurityPolicyHandler(
 			services.SecurityPolicy,
@@ -1123,6 +1124,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	security.Get("/threats", h.Security.GetThreats)
 	security.Get("/anomalies", h.Security.GetAnomalies)
 	security.Get("/metrics", h.Security.GetSecurityMetrics)
+	security.Get("/violations", h.Security.GetViolations)
 
 	// Analytics routes (authentication required)
 	analytics := v1.Group("/analytics")

@@ -1507,10 +1507,57 @@ class APIClient {
   }
 
   async getSecurityMetrics(): Promise<{
+    // Primary metrics (hero section)
+    securityScore: number;
+    securityGrade: string;
+    securityStatus: string;
+    lastIncidentAt: string;
+
+    // Stat cards
+    actionsBlocked: number;
+    actionsBlockedToday: number;
+    agentsMonitored: number;
+    agentsTrusted: number;
+    trustPercentage: number;
+    actionsToday: number;
+    requiresAttention: number;
+    averageTrustScore: number;
+
+    // MCP Server metrics
+    mcpServersTotal: number;
+    mcpServersVerified: number;
+    mcpTrustPercentage: number;
+
+    // Legacy fields (backward compatibility)
     totalThreats: number;
     activeThreats: number;
+    blockedThreats: number;
     totalAnomalies: number;
-    totalIncidents: number;
+    highSeverityCount: number;
+    openIncidents: number;
+
+    // Chart data
+    protectionTimeline: Array<{
+      date: string;
+      actions: number;
+      blocked: number;
+    }>;
+    riskByCategory: Array<{
+      category: string;
+      blocked: number;
+      riskLevel: string;
+    }>;
+    recentBlockedActions: Array<{
+      id: string;
+      agentId: string;
+      agentName: string;
+      attemptedCapability: string;
+      details: string;
+      trustImpact: number;
+      createdAt: string;
+    }>;
+
+    // Legacy chart data
     threatTrend: Array<{ date: string; count: number }>;
     severityDistribution: Array<{ severity: string; count: number }>;
   }> {
@@ -2072,6 +2119,32 @@ class APIClient {
   ): Promise<{ violations: any[]; total: number }> {
     return this.request(
       `/api/v1/agents/${agentId}/violations?limit=${limit}&offset=${offset}`
+    );
+  }
+
+  async getSecurityViolations(
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{
+    violations: Array<{
+      id: string;
+      agentId: string;
+      attemptedCapability: string;
+      registeredCapabilities: string[];
+      severity: string;
+      trustScoreImpact: number;
+      isBlocked: boolean;
+      sourceIp: string;
+      requestMetadata: Record<string, any>;
+      createdAt: string;
+      agentName?: string;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    return this.request(
+      `/api/v1/security/violations?limit=${limit}&offset=${offset}`
     );
   }
 

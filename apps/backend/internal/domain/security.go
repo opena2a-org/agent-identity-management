@@ -94,22 +94,74 @@ type ThreatTrendData struct {
 	Count int    `json:"count"`
 }
 
+// ProtectionTimelineData represents actions and blocked counts by date
+type ProtectionTimelineData struct {
+	Date    string `json:"date"`
+	Actions int    `json:"actions"`
+	Blocked int    `json:"blocked"`
+}
+
+// RiskByCategoryData represents blocked actions by capability category
+type RiskByCategoryData struct {
+	Category  string `json:"category"`
+	Blocked   int    `json:"blocked"`
+	RiskLevel string `json:"riskLevel"` // high, medium, low, secure
+}
+
+// BlockedActionData represents a single blocked action for display
+type BlockedActionData struct {
+	ID                  string  `json:"id"`
+	AgentID             string  `json:"agentId"`
+	AgentName           string  `json:"agentName"`
+	AttemptedCapability string  `json:"attemptedCapability"`
+	Details             string  `json:"details"`
+	TrustImpact         float64 `json:"trustImpact"`
+	CreatedAt           string  `json:"createdAt"`
+}
+
 // SeverityDistribution represents threat count by severity
 type SeverityDistribution struct {
 	Severity string `json:"severity"`
 	Count    int    `json:"count"`
 }
 
-// SecurityMetrics represents overall security metrics
+// SecurityMetrics represents overall security metrics for the Security Command Center
 type SecurityMetrics struct {
-	TotalThreats         int                    `json:"totalThreats"`
-	ActiveThreats        int                    `json:"activeThreats"`
-	BlockedThreats       int                    `json:"blockedThreats"`
-	TotalAnomalies       int                    `json:"totalAnomalies"`
-	HighSeverityCount    int                    `json:"highSeverityCount"`
-	OpenIncidents        int                    `json:"openIncidents"`
-	AverageTrustScore    float64                `json:"averageTrustScore"`
-	SecurityScore        float64                `json:"securityScore"` // 0-100
+	// Primary metrics (hero section)
+	SecurityScore   int    `json:"securityScore"`   // 0-100 calculated score
+	SecurityGrade   string `json:"securityGrade"`   // A, B, C, D, F
+	SecurityStatus  string `json:"securityStatus"`  // Secure, Good, Needs Attention, At Risk, Critical
+	LastIncidentAt  string `json:"lastIncidentAt"`  // Most recent blocked action timestamp
+
+	// Stat cards
+	ActionsBlocked      int     `json:"actionsBlocked"`      // From capability_violations WHERE is_blocked
+	ActionsBlockedToday int     `json:"actionsBlockedToday"` // Blocked today
+	AgentsMonitored     int     `json:"agentsMonitored"`     // Active/verified agents
+	AgentsTrusted       int     `json:"agentsTrusted"`       // Agents with trust > 80%
+	TrustPercentage     int     `json:"trustPercentage"`     // % of agents trusted
+	ActionsToday        int     `json:"actionsToday"`        // Total actions processed today
+	RequiresAttention   int     `json:"requiresAttention"`   // Pending items needing review
+	AverageTrustScore   float64 `json:"averageTrustScore"`   // Average trust score
+
+	// MCP Server metrics
+	MCPServersTotal    int `json:"mcpServersTotal"`    // Total MCP servers
+	MCPServersVerified int `json:"mcpServersVerified"` // Verified MCP servers
+	MCPTrustPercentage int `json:"mcpTrustPercentage"` // % of MCP servers verified
+
+	// Legacy fields (for backward compatibility)
+	TotalThreats      int `json:"totalThreats"`
+	ActiveThreats     int `json:"activeThreats"`
+	BlockedThreats    int `json:"blockedThreats"`
+	TotalAnomalies    int `json:"totalAnomalies"`
+	HighSeverityCount int `json:"highSeverityCount"`
+	OpenIncidents     int `json:"openIncidents"`
+
+	// Chart data
+	ProtectionTimeline   []ProtectionTimelineData `json:"protectionTimeline"`
+	RiskByCategory       []RiskByCategoryData     `json:"riskByCategory"`
+	RecentBlockedActions []BlockedActionData      `json:"recentBlockedActions"`
+
+	// Legacy chart data
 	ThreatTrend          []ThreatTrendData      `json:"threatTrend"`
 	SeverityDistribution []SeverityDistribution `json:"severityDistribution"`
 }
