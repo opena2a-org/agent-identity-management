@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Server,
@@ -19,6 +19,7 @@ import {
   Filter,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useDebounce } from "@/hooks/use-debounce";
 import { RegisterMCPModal } from "@/components/modals/register-mcp-modal";
 import { MCPDetailModal } from "@/components/modals/mcp-detail-modal";
 import { formatDateTime } from "@/lib/date-utils";
@@ -288,6 +289,9 @@ export default function MCPServersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
+  // Debounce search term for better performance
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   const fetchMCPServers = async () => {
     try {
       setLoading(true);
@@ -313,7 +317,7 @@ export default function MCPServersPage() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [debouncedSearchTerm, statusFilter]);
 
   // Get most recent activity timestamp for an MCP server
   // Considers: registrations (createdAt), verifications (lastVerifiedAt), capability updates
@@ -419,19 +423,21 @@ export default function MCPServersPage() {
     return `${diffDays}d ago`;
   }
 
-  // Filter MCP servers based on search and status
-  const filteredServers = mcpServers.filter((server) => {
-    const matchesSearch =
-      searchTerm === "" ||
-      server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      server.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      server.id.toLowerCase().includes(searchTerm.toLowerCase());
+  // Filter MCP servers with useMemo for performance (using debounced search term)
+  const filteredServers = useMemo(() => {
+    return mcpServers.filter((server) => {
+      const matchesSearch =
+        debouncedSearchTerm === "" ||
+        server.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        server.url.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        server.id.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
 
-    const matchesStatus =
-      statusFilter === "all" || server.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" || server.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [mcpServers, debouncedSearchTerm, statusFilter]);
 
   // Pagination
   const paginatedServers = filteredServers.slice(0, currentPage * PAGE_SIZE);

@@ -175,67 +175,69 @@ function DashboardContent() {
     }
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.getDashboardStats();
-      setDashboardData(data);
-    } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
-      const errorMessage = getErrorMessage(err, { resource: "dashboard data", action: "load" });
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchVerificationActivity = async () => {
-    try {
-      setActivityLoading(true);
-      const data = await api.getVerificationActivity(6);
-      if (data && data.activity && data.activity.length > 0) {
-        setVerificationActivity(data);
-      } else {
-        setVerificationActivity(null);
-      }
-    } catch (err) {
-      console.error("Failed to fetch verification activity:", err);
-      setVerificationActivity(null);
-    } finally {
-      setActivityLoading(false);
-    }
-  };
-
-  const fetchMcpServers = async () => {
-    try {
-      setMcpLoading(true);
-      const data = await api.listMCPServers(100, 0);
-      setMcpServers(data.mcpServers || []);
-    } catch (err) {
-      console.error("Failed to fetch MCP servers:", err);
-    } finally {
-      setMcpLoading(false);
-    }
-  };
-
-  useEffect(() => {
+  // Fetch all dashboard data in parallel for better performance
+  const fetchAllDashboardData = useCallback(async () => {
     const token = searchParams.get("token");
     if (token) {
       api.setToken(token);
       window.history.replaceState({}, "", "/dashboard");
     }
-    fetchDashboardData();
-    fetchVerificationActivity();
-    fetchMcpServers();
+
+    setLoading(true);
+    setActivityLoading(true);
+    setMcpLoading(true);
+    setError(null);
+
+    // Run all API calls in parallel
+    const [dashboardResult, activityResult, mcpResult] = await Promise.allSettled([
+      api.getDashboardStats(),
+      api.getVerificationActivity(6),
+      api.listMCPServers(100, 0),
+    ]);
+
+    // Process dashboard stats
+    if (dashboardResult.status === "fulfilled") {
+      setDashboardData(dashboardResult.value);
+    } else {
+      console.error("Failed to fetch dashboard data:", dashboardResult.reason);
+      const errorMessage = getErrorMessage(dashboardResult.reason, { resource: "dashboard data", action: "load" });
+      setError(errorMessage);
+    }
+    setLoading(false);
+
+    // Process verification activity
+    if (activityResult.status === "fulfilled") {
+      const data = activityResult.value;
+      if (data && data.activity && data.activity.length > 0) {
+        setVerificationActivity(data);
+      } else {
+        setVerificationActivity(null);
+      }
+    } else {
+      console.error("Failed to fetch verification activity:", activityResult.reason);
+      setVerificationActivity(null);
+    }
+    setActivityLoading(false);
+
+    // Process MCP servers
+    if (mcpResult.status === "fulfilled") {
+      setMcpServers(mcpResult.value.mcpServers || []);
+    } else {
+      console.error("Failed to fetch MCP servers:", mcpResult.reason);
+    }
+    setMcpLoading(false);
   }, [searchParams]);
+
+  useEffect(() => {
+    fetchAllDashboardData();
+  }, [fetchAllDashboardData]);
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
   if (error && !dashboardData) {
-    return <ErrorDisplay message={error} onRetry={fetchDashboardData} />;
+    return <ErrorDisplay message={error} onRetry={fetchAllDashboardData} />;
   }
 
   const data = dashboardData!;

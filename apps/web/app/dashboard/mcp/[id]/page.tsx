@@ -165,109 +165,102 @@ export default function MCPServerDetailsPage({
     } catch {}
   }, []);
 
-  // Fetch server data
+  // Fetch server data - parallelized for performance
   useEffect(() => {
     if (!serverId) return;
 
     async function fetchData() {
       setIsLoading(true);
       setError(null);
+      setAgentsError(null);
 
       try {
-        // Fetch MCP server details
+        // Fetch MCP server details first (required for page to render)
         const serverData = await api.getMCPServer(serverId!);
         setServer(serverData);
 
-        // Fetch detailed capabilities from the dedicated endpoint
-        try {
-          const capabilitiesData = await api.getMCPServerCapabilities(serverId!);
-          setCapabilities(capabilitiesData.capabilities || []);
-        } catch (err) {
-          console.error("Failed to fetch capabilities:", err);
+        // Run all secondary API calls in parallel for faster loading
+        const [
+          capabilitiesResult,
+          agentsResult,
+          attestationsResult,
+          auditResult,
+          allAgentsResult, // For fallback matching
+        ] = await Promise.allSettled([
+          api.getMCPServerCapabilities(serverId!),
+          api.getMCPServerAgents(serverId!),
+          api.getMCPAttestations(serverId!),
+          api.getMCPServerAuditLogs(serverId!, 50, 0),
+          api.listAgents(), // Pre-fetch for fallback
+        ]);
+
+        // Process capabilities
+        if (capabilitiesResult.status === "fulfilled") {
+          setCapabilities(capabilitiesResult.value.capabilities || []);
+        } else {
+          console.error("Failed to fetch capabilities:", capabilitiesResult.reason);
           setCapabilities([]);
         }
 
-        // Fetch connected agents
-        try {
-          setAgentsError(null);
-          const agentsData = await api.getMCPServerAgents(serverId!);
-          let agents = agentsData.agents || [];
-          // Robust client fallback: also match by talks_to entries containing id/name/url
-          if (
-            (!agents || agents.length === 0) &&
-            (serverData?.name || serverData?.url)
-          ) {
-            try {
-              const allAgentsResp = await api.listAgents();
-              const allAgents = allAgentsResp.agents || [];
-              const candidates = new Set<string>([
-                String(serverId),
-                String(serverData?.name || ""),
-                String(serverData?.url || ""),
-              ]);
-              const lc = new Set<string>(
-                Array.from(candidates).map((s) => s.toLowerCase())
-              );
-              const matches = (talks: any): boolean => {
-                if (!Array.isArray(talks)) return false;
-                return talks.some((entry) => {
-                  if (typeof entry === "string") {
-                    const v = entry.toLowerCase();
-                    return (
-                      lc.has(v) || Array.from(lc).some((c) => v.includes(c))
-                    );
-                  }
-                  if (entry && typeof entry === "object") {
-                    const idStr = (entry.id || entry.server_id || "")
-                      .toString()
-                      .toLowerCase();
-                    const nameStr = (entry.name || entry.server_name || "")
-                      .toString()
-                      .toLowerCase();
-                    const urlStr = (entry.url || entry.endpoint || "")
-                      .toString()
-                      .toLowerCase();
-                    if (idStr && lc.has(idStr)) return true;
-                    if (
-                      nameStr &&
-                      (lc.has(nameStr) ||
-                        Array.from(lc).some((c) => nameStr.includes(c)))
-                    )
-                      return true;
-                    if (
-                      urlStr &&
-                      Array.from(lc).some((c) => urlStr.includes(c))
-                    )
-                      return true;
-                  }
-                  return false;
-                });
-              };
-              agents = allAgents.filter((a: any) => matches(a.talks_to));
-            } catch (e) {
-              console.error("Fallback agent listing failed:", e);
-            }
-          }
-          setConnectedAgents(agents);
-        } catch (err: any) {
-          console.error("Failed to fetch connected agents:", err);
-          setAgentsError(err?.message || "Failed to load connected agents");
+        // Process connected agents with fallback
+        let agents: Agent[] = [];
+        if (agentsResult.status === "fulfilled") {
+          agents = agentsResult.value.agents || [];
         }
 
-        // Fetch attestations
-        try {
-          const data = await api.getMCPAttestations(serverId!);
-          setAttestations(data.attestations || []);
-        } catch (err) {
-          console.error("Failed to fetch attestations:", err);
+        // Robust client fallback: match by talks_to entries containing id/name/url
+        if (
+          agents.length === 0 &&
+          (serverData?.name || serverData?.url) &&
+          allAgentsResult.status === "fulfilled"
+        ) {
+          const allAgents = allAgentsResult.value.agents || [];
+          const candidates = new Set<string>([
+            String(serverId),
+            String(serverData?.name || ""),
+            String(serverData?.url || ""),
+          ]);
+          const lc = new Set<string>(
+            Array.from(candidates).map((s) => s.toLowerCase())
+          );
+          const matches = (talks: any): boolean => {
+            if (!Array.isArray(talks)) return false;
+            return talks.some((entry) => {
+              if (typeof entry === "string") {
+                const v = entry.toLowerCase();
+                return lc.has(v) || Array.from(lc).some((c) => v.includes(c));
+              }
+              if (entry && typeof entry === "object") {
+                const idStr = (entry.id || entry.server_id || "").toString().toLowerCase();
+                const nameStr = (entry.name || entry.server_name || "").toString().toLowerCase();
+                const urlStr = (entry.url || entry.endpoint || "").toString().toLowerCase();
+                if (idStr && lc.has(idStr)) return true;
+                if (nameStr && (lc.has(nameStr) || Array.from(lc).some((c) => nameStr.includes(c)))) return true;
+                if (urlStr && Array.from(lc).some((c) => urlStr.includes(c))) return true;
+              }
+              return false;
+            });
+          };
+          agents = allAgents.filter((a: any) => matches(a.talks_to));
+        }
+        setConnectedAgents(agents);
+
+        if (agentsResult.status === "rejected" && agents.length === 0) {
+          setAgentsError(agentsResult.reason?.message || "Failed to load connected agents");
         }
 
-        // Fetch audit logs
-        try {
-          const auditData = await api.getMCPServerAuditLogs(serverId!, 50, 0);
-          setAuditLogs(auditData.logs || []);
-        } catch (err) {
-          console.error("Failed to fetch audit logs:", err);
+        // Process attestations
+        if (attestationsResult.status === "fulfilled") {
+          setAttestations(attestationsResult.value.attestations || []);
+        } else {
+          console.error("Failed to fetch attestations:", attestationsResult.reason);
+        }
+
+        // Process audit logs
+        if (auditResult.status === "fulfilled") {
+          setAuditLogs(auditResult.value.logs || []);
+        } else {
+          console.error("Failed to fetch audit logs:", auditResult.reason);
         }
       } catch (err: any) {
         console.error("Failed to fetch MCP server data:", err);

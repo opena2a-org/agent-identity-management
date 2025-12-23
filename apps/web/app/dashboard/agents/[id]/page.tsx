@@ -112,7 +112,7 @@ export default function AgentDetailsPage({
     params.then(({ id }) => setAgentId(id));
   }, [params]);
 
-  // Fetch agent data
+  // Fetch agent data - parallelized for performance
   useEffect(() => {
     if (!agentId) return;
 
@@ -121,98 +121,99 @@ export default function AgentDetailsPage({
       setError(null);
 
       try {
-        // Fetch current agent
+        // First, fetch the main agent data (required for page to render)
         const agentData = await api.getAgent(agentId!);
 
-        // Fetch fresh trust score and update agent data for consistency
-        try {
-          const trustBreakdown = await api.getTrustScoreBreakdown(agentId!);
-          if (trustBreakdown?.overall !== undefined) {
-            agentData.trustScore = trustBreakdown.overall;
-          }
-        } catch (e) {
-          // non-fatal - use stored trust score
+        // Run all secondary API calls in parallel for faster loading
+        const [
+          trustBreakdownResult,
+          agentsResult,
+          mcpServersResult,
+          eventsResult,
+          activityResult,
+          detectionResult,
+          alertsResult,
+          historyResult,
+          agentMCPsResult,
+        ] = await Promise.allSettled([
+          api.getTrustScoreBreakdown(agentId!),
+          api.listAgents(),
+          api.listMCPServers(100, 0),
+          api.getRecentVerificationEvents(60),
+          api.getSingleAgentActivity(agentId!),
+          api.getDetectionStatus(agentId!),
+          api.getAgentAlerts(agentId!, 50, 0),
+          api.getAgentTrustScoreHistory(agentId!),
+          api.getAgentMCPServers(agentId!),
+        ]);
+
+        // Process trust score breakdown
+        if (trustBreakdownResult.status === "fulfilled" && trustBreakdownResult.value?.overall !== undefined) {
+          agentData.trustScore = trustBreakdownResult.value.overall;
         }
 
         setAgent(agentData);
 
-        // Fetch all agents (for graph visualization)
-        const agentsResponse = await api.listAgents();
-        setAllAgents(agentsResponse.agents || []);
-
-        // Fetch all MCP servers (for graph visualization)
-        const mcpServersResponse = await api.listMCPServers(100, 0);
-        setAllMCPServers(mcpServersResponse.mcpServers || []);
-
-        // Fetch verification events (for trust score chart)
-        try {
-          const ev = await api.getRecentVerificationEvents(60);
-          setEvents(ev.events?.filter((e: any) => e.agentId === agentId) || []);
-        } catch (e) {
-          // non-fatal
+        // Process agents list
+        if (agentsResult.status === "fulfilled") {
+          setAllAgents(agentsResult.value.agents || []);
         }
 
-        // Fetch agent activity (actions the agent has performed)
-        try {
-          const activityResponse = await api.getSingleAgentActivity(agentId!);
-          setAgentActivity(activityResponse.activities || []);
-        } catch (e) {
-          // Activity fetch is non-fatal - agent page still works without it
+        // Process MCP servers
+        let mcpServers: MCPServer[] = [];
+        if (mcpServersResult.status === "fulfilled") {
+          mcpServers = mcpServersResult.value.mcpServers || [];
+          setAllMCPServers(mcpServers);
         }
 
-        // Fetch detection status (for detected MCP servers)
-        try {
-          const detectionStatus = await api.getDetectionStatus(agentId!);
-          setDetectedMCPs(detectionStatus.detectedMCPs || []);
-        } catch (e) {
-          // non-fatal
+        // Process verification events
+        if (eventsResult.status === "fulfilled") {
+          setEvents(eventsResult.value.events?.filter((e: any) => e.agentId === agentId) || []);
         }
 
-        // Fetch agent-specific alerts (security events, trust score drops, etc.)
-        try {
-          const alertsResponse = await api.getAgentAlerts(agentId!, 50, 0);
-          setAgentAlerts(alertsResponse.alerts || []);
-        } catch (e) {
-          // non-fatal - alerts are supplementary
+        // Process agent activity
+        if (activityResult.status === "fulfilled") {
+          setAgentActivity(activityResult.value.activities || []);
         }
 
-        // Fetch trust score history (for timeline)
-        try {
-          const historyResponse = await api.getAgentTrustScoreHistory(agentId!);
-          setTrustScoreHistory(historyResponse.history || []);
-        } catch (e) {
-          // non-fatal
+        // Process detection status
+        if (detectionResult.status === "fulfilled") {
+          setDetectedMCPs(detectionResult.value.detectedMCPs || []);
         }
 
-        // Fetch agent's connected MCP servers (via attestation)
-        // This gets the actual MCP servers the agent is connected to from agent_mcp_connections table
-        try {
-          const agentMCPsResponse = await api.getAgentMCPServers(agentId!);
+        // Process agent alerts
+        if (alertsResult.status === "fulfilled") {
+          setAgentAlerts(alertsResult.value.alerts || []);
+        }
+
+        // Process trust score history
+        if (historyResult.status === "fulfilled") {
+          setTrustScoreHistory(historyResult.value.history || []);
+        }
+
+        // Process agent's connected MCP servers
+        if (agentMCPsResult.status === "fulfilled") {
+          const agentMCPsResponse = agentMCPsResult.value;
           if (agentMCPsResponse.mcpServers && agentMCPsResponse.mcpServers.length > 0) {
-            // Merge these servers into allMCPServers (they may not be in the org-wide list yet)
-            const mcpServerIds = agentMCPsResponse.mcpServers.map(s => s.id);
-            setAllMCPServers(prev => {
-              const existingIds = new Set(prev.map(s => s.id));
-              // Convert ConnectedMCPServer to MCPServer format
-              const newServers = agentMCPsResponse.mcpServers!
-                .filter(s => !existingIds.has(s.id))
-                .map(s => ({
-                  ...s,
-                  created_at: s.createdAt || new Date().toISOString(), // Add created_at if missing
-                } as MCPServer));
-              return [...prev, ...newServers];
-            });
+            const mcpServerIds = agentMCPsResponse.mcpServers.map((s: any) => s.id);
 
-            // Update agent's talks_to to include these server IDs
-            // This fixes the data consistency issue where talks_to is out of sync
-            if (agentData) {
-              agentData.talksTo = mcpServerIds;
-              setAgent({ ...agentData });
+            // Merge new servers into allMCPServers
+            const existingIds = new Set(mcpServers.map(s => s.id));
+            const newServers = agentMCPsResponse.mcpServers
+              .filter((s: any) => !existingIds.has(s.id))
+              .map((s: any) => ({
+                ...s,
+                created_at: s.createdAt || new Date().toISOString(),
+              } as MCPServer));
+
+            if (newServers.length > 0) {
+              setAllMCPServers(prev => [...prev, ...newServers]);
             }
+
+            // Update agent's talks_to for consistency
+            agentData.talksTo = mcpServerIds;
+            setAgent({ ...agentData });
           }
-        } catch (e) {
-          console.error("Failed to fetch agent MCP servers:", e);
-          // non-fatal
         }
       } catch (err: any) {
         console.error("Failed to fetch agent data:", err);

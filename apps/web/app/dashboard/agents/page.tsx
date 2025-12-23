@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { api, Agent } from "@/lib/api";
+import { useDebounce } from "@/hooks/use-debounce";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { AgentDetailModal } from "@/components/modals/agent-detail-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
@@ -218,6 +219,9 @@ function AgentsPageContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
+  // Debounce search term for better performance
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   // Get filter parameter from URL (e.g., ?filter=low_trust)
   const urlFilter = searchParams.get("filter");
 
@@ -271,7 +275,7 @@ function AgentsPageContent() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, urlFilter]);
+  }, [debouncedSearchTerm, statusFilter, urlFilter]);
 
   // Calculate stats (with null check)
   const stats: AgentStats = {
@@ -312,12 +316,12 @@ function AgentsPageContent() {
     },
   ];
 
-  // Filter agents (with null check)
-  const filteredAgents =
-    agents?.filter((agent) => {
+  // Filter agents with useMemo for performance (using debounced search term)
+  const filteredAgents = useMemo(() => {
+    return agents?.filter((agent) => {
       const matchesSearch =
-        agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        agent.displayName.toLowerCase().includes(searchTerm.toLowerCase());
+        agent.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        agent.displayName.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
       const matchesStatus =
         statusFilter === "all" || agent.status === statusFilter;
 
@@ -332,6 +336,7 @@ function AgentsPageContent() {
 
       return matchesSearch && matchesStatus && matchesUrlFilter;
     }) || [];
+  }, [agents, debouncedSearchTerm, statusFilter, urlFilter]);
 
   // Pagination
   const paginatedAgents = filteredAgents.slice(0, currentPage * PAGE_SIZE);
