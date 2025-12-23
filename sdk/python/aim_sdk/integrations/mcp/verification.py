@@ -5,7 +5,6 @@ Functions for verifying MCP tool/resource/prompt usage through AIM.
 """
 
 from typing import Any, Dict, Optional
-import requests
 
 from aim_sdk.client import AIMClient
 
@@ -45,7 +44,8 @@ def verify_mcp_action(
 
     Raises:
         PermissionError: If verification fails or action is denied
-        requests.exceptions.RequestException: If request fails
+        ValueError: If MCP server not found
+        Exception: If request fails
 
     Example:
         from aim_sdk.integrations.mcp import verify_mcp_action
@@ -77,34 +77,24 @@ def verify_mcp_action(
         "mcp_server_id": mcp_server_id
     }
 
-    # Make API request
-    headers = {"Content-Type": "application/json"}
-
+    # Make API request with proper authentication
     try:
-        response = requests.post(
-            f"{aim_client.aim_url}/api/v1/mcp-servers/{mcp_server_id}/verify",
-            json=payload,
-            headers=headers,
-            timeout=timeout_seconds
+        return aim_client._make_request(
+            method="POST",
+            endpoint=f"/api/v1/mcp-servers/{mcp_server_id}/verify-capability",
+            data=payload
         )
-    except requests.exceptions.Timeout:
+    except TimeoutError:
         raise TimeoutError(f"MCP action verification timed out after {timeout_seconds}s")
-    except requests.exceptions.RequestException as e:
-        raise requests.exceptions.RequestException(f"MCP verification request failed: {e}")
-
-    if response.status_code == 200:
-        return response.json()
-    elif response.status_code == 403:
-        error_msg = response.json().get("error", "Action denied")
-        raise PermissionError(f"MCP action verification denied: {error_msg}")
-    elif response.status_code == 404:
-        raise ValueError(f"MCP server with ID '{mcp_server_id}' not found")
-    elif response.status_code == 401:
-        raise PermissionError("Authentication failed. Check your AIM credentials.")
-    else:
-        raise requests.exceptions.RequestException(
-            f"MCP verification failed: {response.status_code} - {response.text}"
-        )
+    except Exception as e:
+        error_str = str(e)
+        if "403" in error_str:
+            raise PermissionError(f"MCP action verification denied: {error_str}")
+        elif "404" in error_str:
+            raise ValueError(f"MCP server with ID '{mcp_server_id}' not found")
+        elif "401" in error_str:
+            raise PermissionError("Authentication failed. Check your AIM credentials.")
+        raise
 
 
 def log_mcp_action_result(
@@ -142,23 +132,14 @@ def log_mcp_action_result(
         "error_message": error_message if not success else ""
     }
 
-    headers = {"Content-Type": "application/json"}
-
     try:
-        response = requests.post(
-            f"{aim_client.aim_url}/api/v1/verifications/{verification_id}/result",
-            json=payload,
-            headers=headers,
-            timeout=5
+        # Use SDK API endpoint with proper authentication
+        aim_client._make_request(
+            method="POST",
+            endpoint=f"/api/v1/sdk-api/verifications/{verification_id}/result",
+            data=payload
         )
-
-        if response.status_code in [200, 201, 204]:
-            return True
-        else:
-            # Don't fail if result logging fails
-            print(f"⚠️  Warning: Failed to log MCP action result: {response.status_code}")
-            return False
-
+        return True
     except Exception as e:
         # Don't fail if result logging fails
         print(f"⚠️  Warning: MCP action result logging error: {e}")
