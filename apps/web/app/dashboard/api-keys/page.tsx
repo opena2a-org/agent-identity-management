@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import {
   Key,
   Clock,
@@ -135,6 +136,9 @@ export default function APIKeysPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Debounce search input for better performance
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole>("viewer");
 
@@ -243,32 +247,34 @@ export default function APIKeysPage() {
     },
   ];
 
-  // Filter keys
-  const filteredKeys = apiKeys.filter((key) => {
-    const matchesSearch =
-      key.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      key.prefix.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      key.agentName?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Filter keys (memoized for performance)
+  const filteredKeys = useMemo(() => {
+    return apiKeys.filter((key) => {
+      const matchesSearch =
+        key.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        key.prefix.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        key.agentName?.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
 
-    let matchesStatus: boolean = true;
-    if (statusFilter === "active") {
-      matchesStatus =
-        key.isActive &&
-        (!key.expiresAt || new Date(key.expiresAt) > new Date());
-    } else if (statusFilter === "disabled") {
-      matchesStatus =
-        !key.isActive &&
-        (!key.expiresAt || new Date(key.expiresAt) > new Date());
-    } else if (statusFilter === "expired") {
-      matchesStatus = key.expiresAt
-        ? new Date(key.expiresAt) < new Date()
-        : false;
-    } else if (statusFilter === "never-used") {
-      matchesStatus = !key.lastUsedAt;
-    }
+      let matchesStatus: boolean = true;
+      if (statusFilter === "active") {
+        matchesStatus =
+          key.isActive &&
+          (!key.expiresAt || new Date(key.expiresAt) > new Date());
+      } else if (statusFilter === "disabled") {
+        matchesStatus =
+          !key.isActive &&
+          (!key.expiresAt || new Date(key.expiresAt) > new Date());
+      } else if (statusFilter === "expired") {
+        matchesStatus = key.expiresAt
+          ? new Date(key.expiresAt) < new Date()
+          : false;
+      } else if (statusFilter === "never-used") {
+        matchesStatus = !key.lastUsedAt;
+      }
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [apiKeys, debouncedSearchTerm, statusFilter]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Never";

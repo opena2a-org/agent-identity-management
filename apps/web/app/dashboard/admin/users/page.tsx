@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -106,6 +107,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [filterOrg, setFilterOrg] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [apiKeysCount, setApiKeysCount] = useState(0);
@@ -215,11 +217,12 @@ export default function UsersPage() {
     }
   };
 
-  const filteredUsers =
-    users?.filter((user) => {
+  // Memoize filtered users for performance
+  const filteredUsers = useMemo(() => {
+    return users?.filter((user) => {
       const matchesSearch =
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        user.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        user.name?.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
 
       const matchesOrg =
         filterOrg === "all" || user.organizationId === filterOrg;
@@ -228,29 +231,36 @@ export default function UsersPage() {
 
       return matchesSearch && matchesOrg && matchesStatus;
     }) || [];
+  }, [users, debouncedSearchQuery, filterOrg, filterStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const pageData = filteredUsers.slice((page - 1) * pageSize, page * pageSize);
 
-  const organizations = Array.from(
-    new Set(
-      users
-        ?.filter((u) => u.organizationId)
-        .map((u) => ({
-          id: u.organizationId!,
-          name: u.organizationName || "Unknown",
-        })) || []
-    )
-  );
+  // Memoize organizations for performance
+  const organizations = useMemo(() => {
+    return Array.from(
+      new Set(
+        users
+          ?.filter((u) => u.organizationId)
+          .map((u) => ({
+            id: u.organizationId!,
+            name: u.organizationName || "Unknown",
+          })) || []
+      )
+    );
+  }, [users]);
 
-  const pendingCount =
-    users?.filter(
+  // Memoize stats for performance
+  const { pendingCount, activeCount } = useMemo(() => {
+    const pending = users?.filter(
       (u) =>
         u.status === "pending" ||
         u.status === "pending_approval" ||
         u.isRegistrationRequest
     ).length || 0;
-  const activeCount = users?.filter((u) => u.status === "active").length || 0;
+    const active = users?.filter((u) => u.status === "active").length || 0;
+    return { pendingCount: pending, activeCount: active };
+  }, [users]);
 
   if (loading) {
     return (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter } from "next/navigation";
 import {
   Shield,
@@ -758,6 +759,9 @@ export default function CompliancePage() {
     eventType: "all",
     search: "",
   });
+
+  // Debounce search input for better performance
+  const debouncedAuditSearch = useDebounce(auditLogFilter.search, 300);
   const [auditTrailExpanded, setAuditTrailExpanded] = useState(true);
   const [exportingAuditLogs, setExportingAuditLogs] = useState(false);
   const [auditTrailPage, setAuditTrailPage] = useState(1);
@@ -873,8 +877,8 @@ export default function CompliancePage() {
     metadata?: Record<string, any>;
   }
 
-  // Build unified compliance timeline from multiple sources
-  const getUnifiedTimeline = (): ComplianceEvent[] => {
+  // Build unified compliance timeline from multiple sources (memoized for performance)
+  const unifiedTimeline = useMemo((): ComplianceEvent[] => {
     const events: ComplianceEvent[] = [];
 
     // 1. Add violations from alerts
@@ -954,13 +958,13 @@ export default function CompliancePage() {
     // Sort by timestamp descending (newest first)
     events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    // Apply filters
+    // Apply filters (using debounced search for better performance)
     return events.filter(event => {
       if (auditLogFilter.eventType !== "all" && event.type !== auditLogFilter.eventType) {
         return false;
       }
-      if (auditLogFilter.search) {
-        const searchLower = auditLogFilter.search.toLowerCase();
+      if (debouncedAuditSearch) {
+        const searchLower = debouncedAuditSearch.toLowerCase();
         const matchesTitle = event.title.toLowerCase().includes(searchLower);
         const matchesDescription = event.description.toLowerCase().includes(searchLower);
         const matchesAgent = event.agentName?.toLowerCase().includes(searchLower);
@@ -971,13 +975,13 @@ export default function CompliancePage() {
       }
       return true;
     });
-  };
+  }, [alerts, verificationEvents, agents, mcpServers, auditLogFilter.eventType, debouncedAuditSearch]);
 
   // Export compliance timeline
   const handleExportAuditLogs = async (format: "csv" | "json") => {
     try {
       setExportingAuditLogs(true);
-      const timeline = getUnifiedTimeline();
+      const timeline = unifiedTimeline;
 
       if (format === "csv") {
         const headers = ["ID", "Timestamp", "Type", "Severity", "Title", "Description", "Resource Type", "Agent/Resource Name"];
@@ -1460,7 +1464,7 @@ export default function CompliancePage() {
 
                   {/* Results count */}
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {getUnifiedTimeline().length} events
+                    {unifiedTimeline.length} events
                   </span>
 
                   {/* Reset page on filter change */}
@@ -1477,13 +1481,13 @@ export default function CompliancePage() {
 
               {/* Compliance Timeline */}
               <div className="p-6">
-                {getUnifiedTimeline().length > 0 ? (
+                {unifiedTimeline.length > 0 ? (
                   <div className="relative">
                     {/* Vertical line */}
                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
 
                     <div className="space-y-4">
-                      {getUnifiedTimeline().slice(0, auditTrailPage * AUDIT_TRAIL_PAGE_SIZE).map((event) => {
+                      {unifiedTimeline.slice(0, auditTrailPage * AUDIT_TRAIL_PAGE_SIZE).map((event) => {
                         const { icon: Icon, color, bg, badge } = getEventStyle(event);
                         return (
                           <div key={event.id} className="relative flex items-start gap-4 pl-10">
@@ -1559,10 +1563,10 @@ export default function CompliancePage() {
                     </div>
 
                     {/* Pagination Controls */}
-                    {getUnifiedTimeline().length > 0 && (
+                    {unifiedTimeline.length > 0 && (
                       <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Showing {Math.min(auditTrailPage * AUDIT_TRAIL_PAGE_SIZE, getUnifiedTimeline().length)} of {getUnifiedTimeline().length} events
+                          Showing {Math.min(auditTrailPage * AUDIT_TRAIL_PAGE_SIZE, unifiedTimeline.length)} of {unifiedTimeline.length} events
                         </p>
                         <div className="flex items-center gap-2">
                           {auditTrailPage > 1 && (
@@ -1573,12 +1577,12 @@ export default function CompliancePage() {
                               Show Less
                             </button>
                           )}
-                          {auditTrailPage * AUDIT_TRAIL_PAGE_SIZE < getUnifiedTimeline().length && (
+                          {auditTrailPage * AUDIT_TRAIL_PAGE_SIZE < unifiedTimeline.length && (
                             <button
                               onClick={() => setAuditTrailPage(auditTrailPage + 1)}
                               className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
                             >
-                              Load More ({Math.min(AUDIT_TRAIL_PAGE_SIZE, getUnifiedTimeline().length - auditTrailPage * AUDIT_TRAIL_PAGE_SIZE)} more)
+                              Load More ({Math.min(AUDIT_TRAIL_PAGE_SIZE, unifiedTimeline.length - auditTrailPage * AUDIT_TRAIL_PAGE_SIZE)} more)
                             </button>
                           )}
                         </div>

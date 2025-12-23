@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useState, Suspense, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -143,6 +144,9 @@ function AlertsPageContent() {
   const [pageSize, setPageSize] = useState<number | "all">(10);
   const [searchField, setSearchField] = useState<string>("title");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Debounce search for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Open panel from URL query param (deep linking)
   useEffect(() => {
@@ -302,26 +306,29 @@ function AlertsPageContent() {
     }
   };
 
-  const filteredAlerts = alerts.filter((alert) => {
-    const matchesSeverity =
-      severityFilter === "all" || alert.severity === severityFilter;
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "acknowledged" && alert.isAcknowledged) ||
-      (statusFilter === "unacknowledged" && !alert.isAcknowledged);
-    let matchesSearch = true;
-    if (searchQuery.trim() !== "") {
-      const searchFields: { [key: string]: string } = {
-        title: alert.title,
-        description: alert.description,
-        resource_id: alert.resourceId,
-        alert_type: alert.alertType,
-      };
-      const value = (searchFields[searchField] ?? "").toLowerCase();
-      matchesSearch = value.includes(searchQuery.toLowerCase());
-    }
-    return matchesSeverity && matchesStatus && matchesSearch;
-  });
+  // Memoize filtered alerts for performance
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((alert) => {
+      const matchesSeverity =
+        severityFilter === "all" || alert.severity === severityFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "acknowledged" && alert.isAcknowledged) ||
+        (statusFilter === "unacknowledged" && !alert.isAcknowledged);
+      let matchesSearch = true;
+      if (debouncedSearchQuery.trim() !== "") {
+        const searchFields: { [key: string]: string } = {
+          title: alert.title,
+          description: alert.description,
+          resource_id: alert.resourceId,
+          alert_type: alert.alertType,
+        };
+        const value = (searchFields[searchField] ?? "").toLowerCase();
+        matchesSearch = value.includes(debouncedSearchQuery.toLowerCase());
+      }
+      return matchesSeverity && matchesStatus && matchesSearch;
+    });
+  }, [alerts, severityFilter, statusFilter, debouncedSearchQuery, searchField]);
 
   // Get the total count based on current status filter
   const getTotalCountForFilter = () => {
