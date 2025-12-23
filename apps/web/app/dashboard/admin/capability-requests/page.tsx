@@ -86,7 +86,7 @@ export default function CapabilityRequestsPage() {
   // Admin-only guard
   useEffect(() => {
     try {
-      const token = (require("@/lib/api") as any).api.getToken?.();
+      const token = api.getToken?.();
       if (!token) {
         router.replace("/auth/login");
         return;
@@ -98,11 +98,9 @@ export default function CapabilityRequestsPage() {
         router.replace("/dashboard");
         return;
       }
+      setAuthChecked(true);
     } catch {
       router.replace("/auth/login");
-      return;
-    } finally {
-      setAuthChecked(true);
     }
   }, [router]);
   const [requests, setRequests] = useState<CapabilityRequest[]>([]);

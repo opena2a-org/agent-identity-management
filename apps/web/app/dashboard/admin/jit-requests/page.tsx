@@ -142,7 +142,7 @@ export default function PendingVerificationsPage() {
 
   useEffect(() => {
     try {
-      const token = (require("@/lib/api") as any).api.getToken?.();
+      const token = api.getToken?.();
       if (!token) {
         router.replace("/auth/login");
         return;
@@ -154,11 +154,9 @@ export default function PendingVerificationsPage() {
         router.replace("/dashboard");
         return;
       }
+      setAuthChecked(true);
     } catch {
       router.replace("/auth/login");
-      return;
-    } finally {
-      setAuthChecked(true);
     }
   }, [router]);
 
