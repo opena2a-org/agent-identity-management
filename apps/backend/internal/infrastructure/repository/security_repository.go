@@ -465,69 +465,345 @@ func (r *SecurityRepository) UpdateIncidentStatus(id uuid.UUID, status domain.In
 func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.SecurityMetrics, error) {
 	metrics := &domain.SecurityMetrics{}
 
-	// Count threats from alerts table (acknowledged alerts are considered "blocked/resolved")
+	// ============================================
+	// PRIMARY METRICS - Actions Blocked (from capability_violations)
+	// ============================================
+	var totalViolations, blockedViolations, blockedToday int
+	var lastBlockedAt *string
 	r.db.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_acknowledged THEN 1 ELSE 0 END), 0)
-		FROM alerts
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN is_blocked THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN is_blocked AND created_at >= CURRENT_DATE THEN 1 ELSE 0 END), 0),
+			(SELECT TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+			 FROM capability_violations
+			 WHERE is_blocked = true
+			 ORDER BY created_at DESC
+			 LIMIT 1)
+		FROM capability_violations
+		WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
+	`, orgID).Scan(&totalViolations, &blockedViolations, &blockedToday, &lastBlockedAt)
+
+	metrics.ActionsBlocked = blockedViolations
+	metrics.ActionsBlockedToday = blockedToday
+	if lastBlockedAt != nil {
+		metrics.LastIncidentAt = *lastBlockedAt
+	}
+
+	// Legacy: map to old fields for backward compatibility
+	metrics.BlockedThreats = blockedViolations
+	metrics.TotalThreats = totalViolations
+	metrics.ActiveThreats = totalViolations - blockedViolations
+
+	// ============================================
+	// AGENTS METRICS
+	// ============================================
+	var agentsTotal, agentsActive, agentsTrusted int
+	var avgTrustScore float64
+	r.db.QueryRow(`
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN status IN ('active', 'verified') THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN trust_score >= 0.8 THEN 1 ELSE 0 END), 0),
+			COALESCE(AVG(trust_score), 0)
+		FROM agents
 		WHERE organization_id = $1
-	`, orgID).Scan(&metrics.TotalThreats, &metrics.BlockedThreats)
+	`, orgID).Scan(&agentsTotal, &agentsActive, &agentsTrusted, &avgTrustScore)
 
-	metrics.ActiveThreats = metrics.TotalThreats - metrics.BlockedThreats
+	metrics.AgentsMonitored = agentsActive
+	metrics.AgentsTrusted = agentsTrusted
+	metrics.AverageTrustScore = avgTrustScore
+	if agentsActive > 0 {
+		metrics.TrustPercentage = int(float64(agentsTrusted) / float64(agentsActive) * 100)
+	}
 
-	// Count anomalies
+	// ============================================
+	// MCP SERVER METRICS
+	// ============================================
+	var mcpTotal, mcpVerified int
+	r.db.QueryRow(`
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN is_verified THEN 1 ELSE 0 END), 0)
+		FROM mcp_servers
+		WHERE organization_id = $1
+	`, orgID).Scan(&mcpTotal, &mcpVerified)
+
+	metrics.MCPServersTotal = mcpTotal
+	metrics.MCPServersVerified = mcpVerified
+	if mcpTotal > 0 {
+		metrics.MCPTrustPercentage = int(float64(mcpVerified) / float64(mcpTotal) * 100)
+	}
+
+	// ============================================
+	// ACTIONS TODAY (from verification_events - actual agent operations)
+	// ============================================
+	r.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM verification_events
+		WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
+			AND created_at >= CURRENT_DATE
+	`, orgID).Scan(&metrics.ActionsToday)
+
+	// ============================================
+	// REQUIRES ATTENTION (pending requests + unacknowledged alerts)
+	// ============================================
+	var pendingRequests, unacknowledgedAlerts int
+	r.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM capability_requests
+		WHERE organization_id = $1 AND status = 'pending'
+	`, orgID).Scan(&pendingRequests)
+
+	r.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM alerts
+		WHERE organization_id = $1 AND is_acknowledged = false
+	`, orgID).Scan(&unacknowledgedAlerts)
+
+	metrics.RequiresAttention = pendingRequests + unacknowledgedAlerts
+
+	// ============================================
+	// ANOMALIES AND HIGH SEVERITY
+	// ============================================
 	r.db.QueryRow(`
 		SELECT COUNT(*)
 		FROM security_anomalies
 		WHERE organization_id = $1
 	`, orgID).Scan(&metrics.TotalAnomalies)
 
-	// Count high severity items from alerts table
 	r.db.QueryRow(`
 		SELECT COUNT(*) FROM (
-			SELECT 1 FROM alerts WHERE organization_id = $1 AND severity = 'high'
+			SELECT 1 FROM alerts WHERE organization_id = $1 AND severity IN ('high', 'critical')
 			UNION ALL
 			SELECT 1 FROM security_anomalies WHERE organization_id = $1 AND severity = 'critical'
+			UNION ALL
+			SELECT 1 FROM capability_violations WHERE severity IN ('high', 'critical')
+				AND agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
 		) as high_severity
 	`, orgID).Scan(&metrics.HighSeverityCount)
 
-	// Count open incidents
-	r.db.QueryRow(`
-		SELECT COUNT(*)
-		FROM security_incidents
-		WHERE organization_id = $1 AND status IN ('open', 'investigating')
-	`, orgID).Scan(&metrics.OpenIncidents)
+	// ============================================
+	// SECURITY SCORE CALCULATION
+	// ============================================
+	// Smart scoring that reflects actual security posture:
+	//
+	// 1. Trust Health (40 points): Average trust score of all agents
+	//    - High trust = agents behaving well
+	//
+	// 2. Fleet Coverage (25 points): % of agents verified/active with good trust
+	//    - More trusted agents = better security posture
+	//
+	// 3. Threat Response (25 points): How well we block unauthorized actions
+	//    - More blocked violations = AIM is protecting the organization
+	//    - Zero violations = full points (nothing bad attempted)
+	//
+	// 4. Operational Health (10 points): Pending attention items managed
+	//    - Fewer pending items relative to fleet size = better
+	//    - Normalized to fleet size (large orgs have more alerts)
 
-	// Get average trust score
-	r.db.QueryRow(`
-		SELECT COALESCE(AVG(trust_score), 0)
-		FROM agents
-		WHERE organization_id = $1
-	`, orgID).Scan(&metrics.AverageTrustScore)
+	// 1. Trust Health (40 points)
+	trustComponent := metrics.AverageTrustScore * 40
 
-	// Calculate security score (simple formula)
-	metrics.SecurityScore = 100.0
-	if metrics.TotalThreats > 0 {
-		metrics.SecurityScore -= float64(metrics.ActiveThreats) / float64(metrics.TotalThreats) * 30
-	}
-	if metrics.HighSeverityCount > 0 {
-		metrics.SecurityScore -= float64(metrics.HighSeverityCount) * 10
-	}
-	if metrics.OpenIncidents > 0 {
-		metrics.SecurityScore -= float64(metrics.OpenIncidents) * 5
+	// 2. Fleet Coverage (25 points)
+	var fleetComponent float64 = 25
+	if agentsTotal > 0 {
+		// % of agents that are trusted (trust > 80%)
+		trustedRatio := float64(agentsTrusted) / float64(agentsTotal)
+		fleetComponent = trustedRatio * 25
 	}
 
-	if metrics.SecurityScore < 0 {
-		metrics.SecurityScore = 0
+	// 3. Threat Response (25 points)
+	var threatComponent float64 = 25 // Full points if no violations (nothing bad attempted)
+	if totalViolations > 0 {
+		// Blocking violations is GOOD - we want high block rate
+		// 100% blocked = full points, 0% blocked = 0 points
+		blockRate := float64(blockedViolations) / float64(totalViolations)
+		threatComponent = blockRate * 25
 	}
 
-	// Get threat trend (last 7 days) from alerts table
+	// 4. Operational Health (10 points)
+	// Scale penalty based on fleet size - large orgs naturally have more alerts
+	var opsComponent float64 = 10
+	if agentsTotal > 0 {
+		// Normalize pending items to fleet size
+		// If pending items < 10% of agent count, full points
+		// If pending items > 100% of agent count, 0 points
+		pendingRatio := float64(metrics.RequiresAttention) / float64(agentsTotal)
+		if pendingRatio > 1.0 {
+			pendingRatio = 1.0
+		}
+		// Invert: fewer pending = higher score
+		opsComponent = (1.0 - pendingRatio) * 10
+	}
+
+	// Calculate final score
+	score := int(trustComponent + fleetComponent + threatComponent + opsComponent)
+	if score > 100 {
+		score = 100
+	}
+	if score < 0 {
+		score = 0
+	}
+	metrics.SecurityScore = score
+
+	// Determine grade and status
+	switch {
+	case score >= 90:
+		metrics.SecurityGrade = "A"
+		metrics.SecurityStatus = "Secure"
+	case score >= 80:
+		metrics.SecurityGrade = "B"
+		metrics.SecurityStatus = "Good"
+	case score >= 70:
+		metrics.SecurityGrade = "C"
+		metrics.SecurityStatus = "Needs Attention"
+	case score >= 60:
+		metrics.SecurityGrade = "D"
+		metrics.SecurityStatus = "At Risk"
+	default:
+		metrics.SecurityGrade = "F"
+		metrics.SecurityStatus = "Critical"
+	}
+
+	// ============================================
+	// PROTECTION TIMELINE (last 30 days)
+	// ============================================
+	timelineRows, err := r.db.Query(`
+		WITH dates AS (
+			SELECT generate_series(
+				CURRENT_DATE - INTERVAL '29 days',
+				CURRENT_DATE,
+				'1 day'::interval
+			)::date as date
+		),
+		actions_by_date AS (
+			SELECT DATE(created_at) as date, COUNT(*) as count
+			FROM verification_events
+			WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
+				AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+			GROUP BY DATE(created_at)
+		),
+		blocked_by_date AS (
+			SELECT DATE(created_at) as date, COUNT(*) as count
+			FROM capability_violations
+			WHERE is_blocked = true
+				AND agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
+				AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+			GROUP BY DATE(created_at)
+		)
+		SELECT
+			TO_CHAR(d.date, 'Mon DD') as date,
+			COALESCE(a.count, 0) as actions,
+			COALESCE(b.count, 0) as blocked
+		FROM dates d
+		LEFT JOIN actions_by_date a ON d.date = a.date
+		LEFT JOIN blocked_by_date b ON d.date = b.date
+		ORDER BY d.date ASC
+	`, orgID)
+	if err == nil {
+		defer timelineRows.Close()
+		for timelineRows.Next() {
+			var timeline domain.ProtectionTimelineData
+			if err := timelineRows.Scan(&timeline.Date, &timeline.Actions, &timeline.Blocked); err == nil {
+				metrics.ProtectionTimeline = append(metrics.ProtectionTimeline, timeline)
+			}
+		}
+	}
+
+	// ============================================
+	// RISK BY CATEGORY (group violations by capability namespace)
+	// ============================================
+	categoryRows, err := r.db.Query(`
+		SELECT
+			COALESCE(
+				CASE
+					WHEN attempted_capability LIKE 'admin:%' THEN 'Admin'
+					WHEN attempted_capability LIKE 'file:%' THEN 'File System'
+					WHEN attempted_capability LIKE 'db:%' OR attempted_capability LIKE 'database:%' THEN 'Database'
+					WHEN attempted_capability LIKE 'network:%' THEN 'Network'
+					WHEN attempted_capability LIKE 'secret:%' OR attempted_capability LIKE 'credential:%' THEN 'Secrets'
+					WHEN attempted_capability LIKE 'payment:%' OR attempted_capability LIKE 'financial:%' THEN 'Financial'
+					WHEN attempted_capability LIKE 'notification:%' OR attempted_capability LIKE 'email:%' THEN 'Notifications'
+					WHEN attempted_capability LIKE 'user:%' THEN 'User Management'
+					WHEN attempted_capability LIKE 'api:%' OR attempted_capability LIKE 'http:%' THEN 'External API'
+					WHEN attempted_capability LIKE 'data:%' OR attempted_capability LIKE 'export:%' THEN 'Data Export'
+					WHEN attempted_capability LIKE 'critical:%' THEN 'Critical Operations'
+					ELSE INITCAP(SPLIT_PART(attempted_capability, ':', 1))
+				END,
+				'Other'
+			) as category,
+			COUNT(*) as blocked
+		FROM capability_violations
+		WHERE is_blocked = true
+			AND agent_id IN (SELECT id FROM agents WHERE organization_id = $1)
+		GROUP BY category
+		ORDER BY blocked DESC
+		LIMIT 8
+	`, orgID)
+	if err == nil {
+		defer categoryRows.Close()
+		for categoryRows.Next() {
+			var cat domain.RiskByCategoryData
+			if err := categoryRows.Scan(&cat.Category, &cat.Blocked); err == nil {
+				// Determine risk level based on count
+				switch {
+				case cat.Blocked >= 10:
+					cat.RiskLevel = "high"
+				case cat.Blocked >= 5:
+					cat.RiskLevel = "medium"
+				case cat.Blocked >= 1:
+					cat.RiskLevel = "low"
+				default:
+					cat.RiskLevel = "secure"
+				}
+				metrics.RiskByCategory = append(metrics.RiskByCategory, cat)
+			}
+		}
+	}
+
+	// ============================================
+	// RECENT BLOCKED ACTIONS
+	// ============================================
+	blockedRows, err := r.db.Query(`
+		SELECT
+			cv.id::text,
+			cv.agent_id::text,
+			COALESCE(a.name, a.display_name, 'Unknown Agent') as agent_name,
+			cv.attempted_capability,
+			COALESCE(cv.request_metadata::text, '{}'),
+			cv.trust_score_impact,
+			TO_CHAR(cv.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM capability_violations cv
+		LEFT JOIN agents a ON cv.agent_id = a.id
+		WHERE cv.is_blocked = true
+			AND a.organization_id = $1
+		ORDER BY cv.created_at DESC
+		LIMIT 10
+	`, orgID)
+	if err == nil {
+		defer blockedRows.Close()
+		for blockedRows.Next() {
+			var action domain.BlockedActionData
+			var metadata string
+			if err := blockedRows.Scan(&action.ID, &action.AgentID, &action.AgentName,
+				&action.AttemptedCapability, &metadata, &action.TrustImpact, &action.CreatedAt); err == nil {
+				action.Details = metadata
+				metrics.RecentBlockedActions = append(metrics.RecentBlockedActions, action)
+			}
+		}
+	}
+
+	// ============================================
+	// LEGACY: Threat trend from alerts (for backward compatibility)
+	// ============================================
 	trendRows, err := r.db.Query(`
 		SELECT
 			TO_CHAR(DATE(created_at), 'Mon DD') as date,
 			COUNT(*) as count
 		FROM alerts
 		WHERE organization_id = $1
-			AND created_at >= NOW() - INTERVAL '7 days'
+			AND created_at >= NOW() - INTERVAL '30 days'
 		GROUP BY DATE(created_at)
 		ORDER BY DATE(created_at) ASC
 	`, orgID)
@@ -541,7 +817,9 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 		}
 	}
 
-	// Get severity distribution from alerts table
+	// ============================================
+	// LEGACY: Severity distribution from alerts
+	// ============================================
 	sevRows, err := r.db.Query(`
 		SELECT
 			INITCAP(severity::TEXT) as severity,
@@ -555,6 +833,8 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 				WHEN 'high' THEN 2
 				WHEN 'medium' THEN 3
 				WHEN 'low' THEN 4
+				WHEN 'warning' THEN 5
+				WHEN 'info' THEN 6
 			END
 	`, orgID)
 	if err == nil {

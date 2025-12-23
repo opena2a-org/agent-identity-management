@@ -10,10 +10,11 @@ import (
 )
 
 type SecurityHandler struct {
-	securityService *application.SecurityService
-	auditService    *application.AuditService
-	alertService    *application.AlertService
-	agentService    *application.AgentService
+	securityService   *application.SecurityService
+	auditService      *application.AuditService
+	alertService      *application.AlertService
+	agentService      *application.AgentService
+	capabilityService *application.CapabilityService
 }
 
 func NewSecurityHandler(
@@ -21,12 +22,14 @@ func NewSecurityHandler(
 	auditService *application.AuditService,
 	alertService *application.AlertService,
 	agentService *application.AgentService,
+	capabilityService *application.CapabilityService,
 ) *SecurityHandler {
 	return &SecurityHandler{
-		securityService: securityService,
-		auditService:    auditService,
-		alertService:    alertService,
-		agentService:    agentService,
+		securityService:   securityService,
+		auditService:      auditService,
+		alertService:      alertService,
+		agentService:      agentService,
+		capabilityService: capabilityService,
 	}
 }
 
@@ -250,5 +253,42 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 		"unacknowledgedCount": unacknowledgedCount,
 		"limit":               limit,
 		"offset":              offset,
+	})
+}
+
+// GetViolations retrieves capability violations (blocked actions)
+// @Summary List capability violations
+// @Description Get all capability violations (blocked actions) for the organization
+// @Tags security
+// @Produce json
+// @Param limit query int false "Limit" default(50)
+// @Param offset query int false "Offset" default(0)
+// @Param blocked query bool false "Filter by blocked status"
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/security/violations [get]
+func (h *SecurityHandler) GetViolations(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	violations, total, err := h.capabilityService.GetViolationsByOrganization(
+		c.Context(),
+		orgID,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch violations",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"violations": violations,
+		"total":      total,
+		"limit":      limit,
+		"offset":     offset,
 	})
 }
