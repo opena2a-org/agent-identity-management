@@ -57,7 +57,18 @@ Real-time monitoring of all your AI agents with threat detection, trust scoring,
 - **Security Alerts** — Severity-based alerts with acknowledgment workflow
 - **Compliance Checks** — 10 automated checks for security and operational compliance
 
-![Security Dashboard](docs/images/dashboard-security.png)
+### Security Command Center
+
+Centralized security operations with smart scoring and real-time threat visibility.
+
+![Security Command Center](docs/images/dashboard-security.png)
+
+- **Smart Security Score** — 4-component algorithm measuring trust health, fleet coverage, threat response, and operational health
+- **Actions Today** — Real-time count of all agent verifications and actions
+- **Blocked Actions** — Capability violations blocked by policy enforcement
+- **MCP Server Monitoring** — Track verified MCP servers and their trust status
+- **Risk By Category** — Violations categorized by type (admin, file, database, API, etc.)
+- **Protection Timeline** — 7-day trend of security events and blocked actions
 
 ### Agent Identity & Verification
 
