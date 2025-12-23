@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LiveBackendTest {
 
     private static final String AIM_URL = "http://localhost:8080";
-    private static final String TEST_AGENT_NAME = "java-live-test-" + System.currentTimeMillis();
+    private static final String TEST_AGENT_NAME = "demo-agent-java-sdk";
 
     private static boolean backendAvailable = false;
     private static boolean credentialsAvailable = false;

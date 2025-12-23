@@ -48,6 +48,7 @@ import java.util.function.Function;
  * }
  * }</pre>
  */
+@SuppressWarnings("unchecked")
 public class AIMFunctionCallingAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(AIMFunctionCallingAdvisor.class);
@@ -67,6 +68,11 @@ public class AIMFunctionCallingAdvisor {
     private boolean blockWithoutApproval = false;
     private Set<String> approvedExecutions = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Creates a new function calling advisor.
+     *
+     * @param client the AIM client for security logging
+     */
     public AIMFunctionCallingAdvisor(AIMClient client) {
         this.client = client;
         this.riskDetector = RiskDetector.getInstance();
@@ -99,6 +105,7 @@ public class AIMFunctionCallingAdvisor {
     /**
      * Execute a registered function with security checks.
      *
+     * @param <O> the output type of the function
      * @param functionName The function name
      * @param input The input to the function
      * @return The function result
@@ -225,6 +232,8 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Configure the risk level that requires approval.
+     *
+     * @param threshold the minimum risk level that requires approval
      */
     public void requireApprovalFor(RiskLevel threshold) {
         this.approvalThreshold = threshold;
@@ -232,6 +241,8 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Enable/disable blocking without approval.
+     *
+     * @param block true to block executions without approval
      */
     public void setBlockWithoutApproval(boolean block) {
         this.blockWithoutApproval = block;
@@ -239,6 +250,8 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Get all registered function names.
+     *
+     * @return an unmodifiable set of function names
      */
     public Set<String> getRegisteredFunctions() {
         return Collections.unmodifiableSet(functions.keySet());
@@ -246,6 +259,9 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Get risk level for a function.
+     *
+     * @param functionName the function name
+     * @return the risk level for the function
      */
     public RiskLevel getRiskLevel(String functionName) {
         FunctionRegistration<?> reg = functions.get(functionName);
@@ -254,6 +270,8 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Get metrics for all functions.
+     *
+     * @return a map of function names to their metrics
      */
     public Map<String, Map<String, Object>> getAllMetrics() {
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
@@ -265,6 +283,9 @@ public class AIMFunctionCallingAdvisor {
 
     /**
      * Get metrics for a specific function.
+     *
+     * @param functionName the function name
+     * @return the metrics map for the function
      */
     public Map<String, Object> getMetrics(String functionName) {
         FunctionMetrics m = metrics.get(functionName);
@@ -305,6 +326,11 @@ public class AIMFunctionCallingAdvisor {
      * Exception thrown when a function is not registered.
      */
     public static class FunctionNotRegisteredException extends RuntimeException {
+        /**
+         * Creates a new exception for an unregistered function.
+         *
+         * @param functionName the name of the function that was not found
+         */
         public FunctionNotRegisteredException(String functionName) {
             super("Function not registered: " + functionName);
         }
@@ -317,6 +343,12 @@ public class AIMFunctionCallingAdvisor {
         private final String functionName;
         private final RiskLevel riskLevel;
 
+        /**
+         * Creates a new exception for requiring approval.
+         *
+         * @param functionName the name of the function requiring approval
+         * @param riskLevel the risk level of the function
+         */
         public ApprovalRequiredException(String functionName, RiskLevel riskLevel) {
             super(String.format("Approval required for function '%s' (risk level: %s)",
                     functionName, riskLevel.getName()));
@@ -324,7 +356,18 @@ public class AIMFunctionCallingAdvisor {
             this.riskLevel = riskLevel;
         }
 
+        /**
+         * Gets the function name.
+         *
+         * @return the function name
+         */
         public String getFunctionName() { return functionName; }
+
+        /**
+         * Gets the risk level.
+         *
+         * @return the risk level
+         */
         public RiskLevel getRiskLevel() { return riskLevel; }
     }
 }

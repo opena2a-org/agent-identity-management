@@ -64,6 +64,11 @@ public class AIMToolExecutor {
     private RiskLevel approvalThreshold = RiskLevel.CRITICAL;
     private boolean blockHighRisk = false;
 
+    /**
+     * Creates a new tool executor with the specified AIM client.
+     *
+     * @param client the AIM client for security logging
+     */
     public AIMToolExecutor(AIMClient client) {
         this.client = client;
         this.riskDetector = RiskDetector.getInstance();
@@ -93,6 +98,11 @@ public class AIMToolExecutor {
 
     /**
      * Register a tool with description.
+     *
+     * @param name Tool name
+     * @param description Tool description
+     * @param tool Tool function
+     * @param capability Capability string for risk assessment
      */
     public void register(String name, String description, Function<Object, Object> tool, String capability) {
         ToolRegistration reg = new ToolRegistration();
@@ -128,6 +138,7 @@ public class AIMToolExecutor {
     /**
      * Execute with inline tool function (for @Tool annotation integration).
      *
+     * @param <T> the return type of the tool action
      * @param toolName Tool name (for logging)
      * @param input Input value
      * @param action The actual tool action
@@ -271,6 +282,8 @@ public class AIMToolExecutor {
 
     /**
      * Get all registered tool names.
+     *
+     * @return unmodifiable set of tool names
      */
     public Set<String> getRegisteredTools() {
         return Collections.unmodifiableSet(tools.keySet());
@@ -278,6 +291,9 @@ public class AIMToolExecutor {
 
     /**
      * Get tool info including risk level.
+     *
+     * @param toolName the tool name
+     * @return map of tool information
      */
     public Map<String, Object> getToolInfo(String toolName) {
         ToolRegistration reg = tools.get(toolName);
@@ -295,6 +311,8 @@ public class AIMToolExecutor {
 
     /**
      * Get metrics for all tools.
+     *
+     * @return map of tool names to their metrics
      */
     public Map<String, Map<String, Object>> getAllMetrics() {
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
@@ -306,6 +324,8 @@ public class AIMToolExecutor {
 
     /**
      * Configure approval threshold.
+     *
+     * @param threshold the risk level threshold for approval
      */
     public void setApprovalThreshold(RiskLevel threshold) {
         this.approvalThreshold = threshold;
@@ -313,6 +333,8 @@ public class AIMToolExecutor {
 
     /**
      * Enable/disable blocking high-risk tools.
+     *
+     * @param block true to block high-risk tools
      */
     public void setBlockHighRisk(boolean block) {
         this.blockHighRisk = block;
@@ -351,9 +373,17 @@ public class AIMToolExecutor {
 
     /**
      * Functional interface for tool actions.
+     *
+     * @param <T> the return type of the action
      */
     @FunctionalInterface
     public interface ToolAction<T> {
+        /**
+         * Executes the tool action.
+         *
+         * @return the result of the action
+         * @throws Exception if an error occurs
+         */
         T execute() throws Exception;
     }
 
@@ -361,6 +391,11 @@ public class AIMToolExecutor {
      * Exception for unregistered tools.
      */
     public static class ToolNotRegisteredException extends RuntimeException {
+        /**
+         * Creates a new exception for an unregistered tool.
+         *
+         * @param toolName the tool name that was not found
+         */
         public ToolNotRegisteredException(String toolName) {
             super("Tool not registered: " + toolName);
         }
@@ -373,13 +408,30 @@ public class AIMToolExecutor {
         private final String toolName;
         private final RiskLevel riskLevel;
 
+        /**
+         * Creates a new exception for a blocked tool.
+         *
+         * @param toolName the blocked tool name
+         * @param riskLevel the risk level that caused the block
+         */
         public ToolBlockedException(String toolName, RiskLevel riskLevel) {
             super(String.format("Tool '%s' blocked due to high risk (%s)", toolName, riskLevel.getName()));
             this.toolName = toolName;
             this.riskLevel = riskLevel;
         }
 
+        /**
+         * Gets the tool name.
+         *
+         * @return the tool name
+         */
         public String getToolName() { return toolName; }
+
+        /**
+         * Gets the risk level.
+         *
+         * @return the risk level
+         */
         public RiskLevel getRiskLevel() { return riskLevel; }
     }
 }

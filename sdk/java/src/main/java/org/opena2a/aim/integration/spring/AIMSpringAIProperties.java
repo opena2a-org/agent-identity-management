@@ -38,205 +38,241 @@ import java.util.Map;
  */
 public class AIMSpringAIProperties {
 
-    /**
-     * Agent name for registration with AIM server.
-     */
     private String agentName = "spring-ai-agent";
-
-    /**
-     * List of capabilities this agent has.
-     */
     private List<String> capabilities = new ArrayList<>();
-
-    /**
-     * Type of agent (CUSTOM, LANGCHAIN, etc.).
-     */
     private AgentType agentType = AgentType.CUSTOM;
-
-    /**
-     * List of other agents this agent can communicate with.
-     */
     private List<String> talksTo = new ArrayList<>();
-
-    /**
-     * Human-readable description of the agent.
-     */
     private String description;
-
-    /**
-     * Tags for categorization and search.
-     */
     private List<String> tags = new ArrayList<>();
-
-    /**
-     * Additional metadata for the agent.
-     */
     private Map<String, Object> metadata = new HashMap<>();
-
-    /**
-     * MCP server commands (server name -> command).
-     */
     private Map<String, String> mcpCommands = new HashMap<>();
-
-    /**
-     * Whether to automatically register with AIM server on startup.
-     */
     private boolean autoRegister = true;
-
-    /**
-     * Security-specific configuration.
-     */
     private SecurityConfig securityConfig = new SecurityConfig();
 
-    // Getters and setters
+    /** Creates default properties. */
+    public AIMSpringAIProperties() {}
 
-    public String getAgentName() {
-        return agentName;
-    }
+    /**
+     * Gets the agent name.
+     *
+     * @return the agent name
+     */
+    public String getAgentName() { return agentName; }
 
-    public void setAgentName(String agentName) {
-        this.agentName = agentName;
-    }
+    /**
+     * Sets the agent name.
+     *
+     * @param agentName the agent name
+     */
+    public void setAgentName(String agentName) { this.agentName = agentName; }
 
-    public List<String> getCapabilities() {
-        return capabilities;
-    }
+    /**
+     * Gets the capabilities.
+     *
+     * @return the capability list
+     */
+    public List<String> getCapabilities() { return capabilities; }
 
-    public void setCapabilities(List<String> capabilities) {
-        this.capabilities = capabilities;
-    }
+    /**
+     * Sets the capabilities.
+     *
+     * @param capabilities the capability list
+     */
+    public void setCapabilities(List<String> capabilities) { this.capabilities = capabilities; }
 
-    public AgentType getAgentType() {
-        return agentType;
-    }
+    /**
+     * Gets the agent type.
+     *
+     * @return the agent type
+     */
+    public AgentType getAgentType() { return agentType; }
 
-    public void setAgentType(AgentType agentType) {
-        this.agentType = agentType;
-    }
+    /**
+     * Sets the agent type.
+     *
+     * @param agentType the agent type
+     */
+    public void setAgentType(AgentType agentType) { this.agentType = agentType; }
 
-    public List<String> getTalksTo() {
-        return talksTo;
-    }
+    /**
+     * Gets the MCP servers.
+     *
+     * @return the MCP server list
+     */
+    public List<String> getTalksTo() { return talksTo; }
 
-    public void setTalksTo(List<String> talksTo) {
-        this.talksTo = talksTo;
-    }
+    /**
+     * Sets the MCP servers.
+     *
+     * @param talksTo the MCP server list
+     */
+    public void setTalksTo(List<String> talksTo) { this.talksTo = talksTo; }
 
-    public String getDescription() {
-        return description;
-    }
+    /**
+     * Gets the description.
+     *
+     * @return the description
+     */
+    public String getDescription() { return description; }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
+    /**
+     * Sets the description.
+     *
+     * @param description the description
+     */
+    public void setDescription(String description) { this.description = description; }
 
-    public List<String> getTags() {
-        return tags;
-    }
+    /**
+     * Gets the tags.
+     *
+     * @return the tag list
+     */
+    public List<String> getTags() { return tags; }
 
-    public void setTags(List<String> tags) {
-        this.tags = tags;
-    }
+    /**
+     * Sets the tags.
+     *
+     * @param tags the tag list
+     */
+    public void setTags(List<String> tags) { this.tags = tags; }
 
-    public Map<String, Object> getMetadata() {
-        return metadata;
-    }
+    /**
+     * Gets the metadata.
+     *
+     * @return the metadata map
+     */
+    public Map<String, Object> getMetadata() { return metadata; }
 
-    public void setMetadata(Map<String, Object> metadata) {
-        this.metadata = metadata;
-    }
+    /**
+     * Sets the metadata.
+     *
+     * @param metadata the metadata map
+     */
+    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
 
-    public Map<String, String> getMcpCommands() {
-        return mcpCommands;
-    }
+    /**
+     * Gets the MCP commands.
+     *
+     * @return the MCP command map
+     */
+    public Map<String, String> getMcpCommands() { return mcpCommands; }
 
-    public void setMcpCommands(Map<String, String> mcpCommands) {
-        this.mcpCommands = mcpCommands;
-    }
+    /**
+     * Sets the MCP commands.
+     *
+     * @param mcpCommands the MCP command map
+     */
+    public void setMcpCommands(Map<String, String> mcpCommands) { this.mcpCommands = mcpCommands; }
 
-    public boolean isAutoRegister() {
-        return autoRegister;
-    }
+    /**
+     * Checks if auto-register is enabled.
+     *
+     * @return true if enabled
+     */
+    public boolean isAutoRegister() { return autoRegister; }
 
-    public void setAutoRegister(boolean autoRegister) {
-        this.autoRegister = autoRegister;
-    }
+    /**
+     * Sets auto-register.
+     *
+     * @param autoRegister true to enable
+     */
+    public void setAutoRegister(boolean autoRegister) { this.autoRegister = autoRegister; }
 
-    public SecurityConfig getSecurityConfig() {
-        return securityConfig;
-    }
+    /**
+     * Gets the security config.
+     *
+     * @return the security config
+     */
+    public SecurityConfig getSecurityConfig() { return securityConfig; }
 
-    public void setSecurityConfig(SecurityConfig securityConfig) {
-        this.securityConfig = securityConfig;
-    }
+    /**
+     * Sets the security config.
+     *
+     * @param securityConfig the security config
+     */
+    public void setSecurityConfig(SecurityConfig securityConfig) { this.securityConfig = securityConfig; }
 
     /**
      * Security-specific configuration options.
      */
     public static class SecurityConfig {
-        /**
-         * Whether to log prompts (may contain PII).
-         */
         private boolean logPrompts = false;
-
-        /**
-         * Whether to log model responses (may contain PII).
-         */
         private boolean logResponses = false;
-
-        /**
-         * Whether to perform risk checks on function calls.
-         */
         private boolean riskCheckEnabled = true;
-
-        /**
-         * Minimum risk level that requires approval.
-         */
         private String approvalThreshold = "HIGH";
-
-        /**
-         * Whether to block high-risk actions without approval.
-         */
         private boolean blockWithoutApproval = false;
 
-        public boolean isLogPrompts() {
-            return logPrompts;
-        }
+        /** Creates default security config. */
+        public SecurityConfig() {}
 
-        public void setLogPrompts(boolean logPrompts) {
-            this.logPrompts = logPrompts;
-        }
+        /**
+         * Checks if prompts are logged.
+         *
+         * @return true if enabled
+         */
+        public boolean isLogPrompts() { return logPrompts; }
 
-        public boolean isLogResponses() {
-            return logResponses;
-        }
+        /**
+         * Sets prompt logging.
+         *
+         * @param logPrompts true to enable
+         */
+        public void setLogPrompts(boolean logPrompts) { this.logPrompts = logPrompts; }
 
-        public void setLogResponses(boolean logResponses) {
-            this.logResponses = logResponses;
-        }
+        /**
+         * Checks if responses are logged.
+         *
+         * @return true if enabled
+         */
+        public boolean isLogResponses() { return logResponses; }
 
-        public boolean isRiskCheckEnabled() {
-            return riskCheckEnabled;
-        }
+        /**
+         * Sets response logging.
+         *
+         * @param logResponses true to enable
+         */
+        public void setLogResponses(boolean logResponses) { this.logResponses = logResponses; }
 
-        public void setRiskCheckEnabled(boolean riskCheckEnabled) {
-            this.riskCheckEnabled = riskCheckEnabled;
-        }
+        /**
+         * Checks if risk checking is enabled.
+         *
+         * @return true if enabled
+         */
+        public boolean isRiskCheckEnabled() { return riskCheckEnabled; }
 
-        public String getApprovalThreshold() {
-            return approvalThreshold;
-        }
+        /**
+         * Sets risk checking.
+         *
+         * @param riskCheckEnabled true to enable
+         */
+        public void setRiskCheckEnabled(boolean riskCheckEnabled) { this.riskCheckEnabled = riskCheckEnabled; }
 
-        public void setApprovalThreshold(String approvalThreshold) {
-            this.approvalThreshold = approvalThreshold;
-        }
+        /**
+         * Gets the approval threshold.
+         *
+         * @return the threshold
+         */
+        public String getApprovalThreshold() { return approvalThreshold; }
 
-        public boolean isBlockWithoutApproval() {
-            return blockWithoutApproval;
-        }
+        /**
+         * Sets the approval threshold.
+         *
+         * @param approvalThreshold the threshold
+         */
+        public void setApprovalThreshold(String approvalThreshold) { this.approvalThreshold = approvalThreshold; }
 
-        public void setBlockWithoutApproval(boolean blockWithoutApproval) {
-            this.blockWithoutApproval = blockWithoutApproval;
-        }
+        /**
+         * Checks if blocking without approval is enabled.
+         *
+         * @return true if enabled
+         */
+        public boolean isBlockWithoutApproval() { return blockWithoutApproval; }
+
+        /**
+         * Sets blocking without approval.
+         *
+         * @param blockWithoutApproval true to enable
+         */
+        public void setBlockWithoutApproval(boolean blockWithoutApproval) { this.blockWithoutApproval = blockWithoutApproval; }
     }
 }

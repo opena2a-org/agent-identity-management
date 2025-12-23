@@ -7,17 +7,21 @@ import java.util.stream.Collectors;
 /**
  * Production-grade MCP discovery service with parallel execution and caching.
  *
- * Features:
- * - Parallel discovery of multiple MCP servers using CompletableFuture
- * - File-based caching with configurable TTL (default 1 hour)
- * - Graceful timeout handling per server
- * - Automatic retry on transient failures
- * - Thread-safe singleton pattern
+ * <p>Features:</p>
+ * <ul>
+ *   <li>Parallel discovery of multiple MCP servers using CompletableFuture</li>
+ *   <li>File-based caching with configurable TTL (default 1 hour)</li>
+ *   <li>Graceful timeout handling per server</li>
+ *   <li>Automatic retry on transient failures</li>
+ *   <li>Thread-safe singleton pattern</li>
+ * </ul>
  *
- * Usage:
- *   Map<String, String> mcpCommands = Map.of("github", "npx -y @modelcontextprotocol/server-github");
- *   Map<String, MCPDiscoveryResult> results = MCPDiscoveryService.getInstance()
- *       .discoverAll(mcpCommands);
+ * <p>Usage:</p>
+ * <pre>{@code
+ * Map<String, String> mcpCommands = Map.of("github", "npx -y @modelcontextprotocol/server-github");
+ * Map<String, MCPDiscoveryResult> results = MCPDiscoveryService.getInstance()
+ *     .discoverAll(mcpCommands);
+ * }</pre>
  */
 public class MCPDiscoveryService {
 

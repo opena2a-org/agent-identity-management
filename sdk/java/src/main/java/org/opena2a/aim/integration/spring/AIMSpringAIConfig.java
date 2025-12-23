@@ -124,77 +124,166 @@ public class AIMSpringAIConfig {
 
     /**
      * Builder for Spring AI configuration.
+     *
+     * @return a new Builder instance
      */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Builder for Spring AI integration configuration.
+     */
     public static class Builder {
         private final AIMSpringAIProperties properties = new AIMSpringAIProperties();
 
+        /** Creates a new Builder with default settings. */
+        public Builder() {}
+
+        /**
+         * Sets the agent name.
+         *
+         * @param agentName the agent name
+         * @return this builder
+         */
         public Builder agentName(String agentName) {
             properties.setAgentName(agentName);
             return this;
         }
 
+        /**
+         * Sets the capabilities.
+         *
+         * @param capabilities the capability list
+         * @return this builder
+         */
         public Builder capabilities(List<String> capabilities) {
             properties.setCapabilities(capabilities);
             return this;
         }
 
+        /**
+         * Sets the agent type.
+         *
+         * @param agentType the agent type
+         * @return this builder
+         */
         public Builder agentType(AgentType agentType) {
             properties.setAgentType(agentType);
             return this;
         }
 
+        /**
+         * Sets the MCP servers.
+         *
+         * @param talksTo the MCP server list
+         * @return this builder
+         */
         public Builder talksTo(List<String> talksTo) {
             properties.setTalksTo(talksTo);
             return this;
         }
 
+        /**
+         * Sets the description.
+         *
+         * @param description the agent description
+         * @return this builder
+         */
         public Builder description(String description) {
             properties.setDescription(description);
             return this;
         }
 
+        /**
+         * Sets the tags.
+         *
+         * @param tags the tag list
+         * @return this builder
+         */
         public Builder tags(List<String> tags) {
             properties.setTags(tags);
             return this;
         }
 
+        /**
+         * Sets the metadata.
+         *
+         * @param metadata the metadata map
+         * @return this builder
+         */
         public Builder metadata(Map<String, Object> metadata) {
             properties.setMetadata(metadata);
             return this;
         }
 
+        /**
+         * Sets the MCP commands.
+         *
+         * @param mcpCommands the MCP command map
+         * @return this builder
+         */
         public Builder mcpCommands(Map<String, String> mcpCommands) {
             properties.setMcpCommands(mcpCommands);
             return this;
         }
 
+        /**
+         * Sets auto registration.
+         *
+         * @param autoRegister true to auto-register
+         * @return this builder
+         */
         public Builder autoRegister(boolean autoRegister) {
             properties.setAutoRegister(autoRegister);
             return this;
         }
 
+        /**
+         * Sets prompt logging.
+         *
+         * @param logPrompts true to log prompts
+         * @return this builder
+         */
         public Builder logPrompts(boolean logPrompts) {
             properties.getSecurityConfig().setLogPrompts(logPrompts);
             return this;
         }
 
+        /**
+         * Sets response logging.
+         *
+         * @param logResponses true to log responses
+         * @return this builder
+         */
         public Builder logResponses(boolean logResponses) {
             properties.getSecurityConfig().setLogResponses(logResponses);
             return this;
         }
 
+        /**
+         * Builds the properties.
+         *
+         * @return the configured properties
+         */
         public AIMSpringAIProperties buildProperties() {
             return properties;
         }
 
+        /**
+         * Builds the AIM client.
+         *
+         * @return the configured AIMClient
+         */
         public AIMClient buildClient() {
             return createClient(properties);
         }
 
+        /**
+         * Builds the complete integration.
+         *
+         * @return the Spring AI integration bundle
+         */
         public SpringAIIntegration build() {
             AIMClient client = buildClient();
             return new SpringAIIntegration(client, properties);
@@ -210,6 +299,12 @@ public class AIMSpringAIConfig {
         private final AIMChatClientInterceptor interceptor;
         private final AIMFunctionCallingAdvisor functionAdvisor;
 
+        /**
+         * Creates a new integration bundle.
+         *
+         * @param client the AIM client
+         * @param properties the configuration properties
+         */
         public SpringAIIntegration(AIMClient client, AIMSpringAIProperties properties) {
             this.client = client;
             this.properties = properties;
@@ -221,9 +316,32 @@ public class AIMSpringAIConfig {
             this.functionAdvisor = new AIMFunctionCallingAdvisor(client);
         }
 
+        /**
+         * Gets the AIM client.
+         *
+         * @return the client
+         */
         public AIMClient getClient() { return client; }
+
+        /**
+         * Gets the properties.
+         *
+         * @return the properties
+         */
         public AIMSpringAIProperties getProperties() { return properties; }
+
+        /**
+         * Gets the chat interceptor.
+         *
+         * @return the interceptor
+         */
         public AIMChatClientInterceptor getInterceptor() { return interceptor; }
+
+        /**
+         * Gets the function advisor.
+         *
+         * @return the function advisor
+         */
         public AIMFunctionCallingAdvisor getFunctionAdvisor() { return functionAdvisor; }
     }
 }

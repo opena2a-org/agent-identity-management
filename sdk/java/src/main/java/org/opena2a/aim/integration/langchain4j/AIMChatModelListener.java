@@ -61,10 +61,21 @@ public class AIMChatModelListener {
     // Metrics per model
     private final Map<String, ModelMetrics> modelMetrics = new ConcurrentHashMap<>();
 
+    /**
+     * Creates a new listener with default configuration.
+     *
+     * @param client the AIM client for security logging
+     */
     public AIMChatModelListener(AIMClient client) {
         this(client, new Config());
     }
 
+    /**
+     * Creates a new listener with custom configuration.
+     *
+     * @param client the AIM client for security logging
+     * @param config the configuration for logging and metrics
+     */
     public AIMChatModelListener(AIMClient client, Config config) {
         this.client = client;
         this.config = config;
@@ -197,6 +208,10 @@ public class AIMChatModelListener {
 
     /**
      * Called when a streaming response starts.
+     *
+     * @param messages the messages being sent
+     * @param modelName the model name
+     * @return request ID for tracking the stream
      */
     public String onStreamStart(String messages, String modelName) {
         return onRequest(messages, modelName);
@@ -204,6 +219,9 @@ public class AIMChatModelListener {
 
     /**
      * Called for each streaming chunk (optional tracking).
+     *
+     * @param requestId the request ID from onStreamStart
+     * @param chunk the chunk content
      */
     public void onStreamChunk(String requestId, String chunk) {
         RequestContext ctx = activeRequests.get(requestId);
@@ -215,6 +233,10 @@ public class AIMChatModelListener {
 
     /**
      * Called when streaming completes.
+     *
+     * @param requestId the request ID from onStreamStart
+     * @param fullResponse the complete response content
+     * @param totalTokens the total tokens used
      */
     public void onStreamComplete(String requestId, String fullResponse, int totalTokens) {
         RequestContext ctx = activeRequests.get(requestId);
@@ -226,6 +248,7 @@ public class AIMChatModelListener {
     /**
      * Wrap a chat model call with automatic logging.
      *
+     * @param <T> the return type of the chat action
      * @param modelName The model name
      * @param messages The input messages
      * @param action The actual model call
@@ -257,6 +280,8 @@ public class AIMChatModelListener {
 
     /**
      * Get metrics for all models.
+     *
+     * @return a map of model names to their metrics
      */
     public Map<String, Map<String, Object>> getAllMetrics() {
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
@@ -268,6 +293,9 @@ public class AIMChatModelListener {
 
     /**
      * Get metrics for a specific model.
+     *
+     * @param modelName the model name to get metrics for
+     * @return a map containing the model's metrics
      */
     public Map<String, Object> getMetrics(String modelName) {
         ModelMetrics m = modelMetrics.get(modelName);
@@ -319,9 +347,17 @@ public class AIMChatModelListener {
 
     /**
      * Functional interface for chat actions.
+     *
+     * @param <T> the return type of the action
      */
     @FunctionalInterface
     public interface ChatAction<T> {
+        /**
+         * Executes the chat action.
+         *
+         * @return the result of the action
+         * @throws Exception if the action fails
+         */
         T execute() throws Exception;
     }
 
@@ -334,23 +370,50 @@ public class AIMChatModelListener {
         int maxPromptLength = 500;
         int maxResponseLength = 500;
 
+        /**
+         * Creates a default configuration.
+         */
         public Config() {}
 
+        /**
+         * Sets whether to log prompts.
+         *
+         * @param logPrompts true to log prompts
+         * @return this config for chaining
+         */
         public Config logPrompts(boolean logPrompts) {
             this.logPrompts = logPrompts;
             return this;
         }
 
+        /**
+         * Sets whether to log responses.
+         *
+         * @param logResponses true to log responses
+         * @return this config for chaining
+         */
         public Config logResponses(boolean logResponses) {
             this.logResponses = logResponses;
             return this;
         }
 
+        /**
+         * Sets the maximum prompt log length.
+         *
+         * @param length the maximum length in characters
+         * @return this config for chaining
+         */
         public Config maxPromptLength(int length) {
             this.maxPromptLength = length;
             return this;
         }
 
+        /**
+         * Sets the maximum response log length.
+         *
+         * @param length the maximum length in characters
+         * @return this config for chaining
+         */
         public Config maxResponseLength(int length) {
             this.maxResponseLength = length;
             return this;
