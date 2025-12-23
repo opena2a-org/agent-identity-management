@@ -104,6 +104,8 @@ export default function AgentDetailsPage({
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
   const [agentAlerts, setAgentAlerts] = useState<any[]>([]);
   const [trustScoreHistory, setTrustScoreHistory] = useState<any[]>([]);
+  const [activityPage, setActivityPage] = useState(1);
+  const ACTIVITY_PAGE_SIZE = 20;
 
   // Extract agent ID from params Promise
   useEffect(() => {
@@ -959,7 +961,7 @@ export default function AgentDetailsPage({
                     <div className="relative">
                       <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
                       <div className="space-y-4">
-                        {timelineEvents.slice(0, 20).map((event) => (
+                        {timelineEvents.slice(0, activityPage * ACTIVITY_PAGE_SIZE).map((event) => (
                           <div key={event.id} className="relative pl-10">
                             {/* Timeline dot */}
                             <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
@@ -1013,9 +1015,31 @@ export default function AgentDetailsPage({
                       </div>
                     </div>
 
-                    {timelineEvents.length > 20 && (
-                      <div className="text-center text-sm text-muted-foreground pt-4">
-                        Showing 20 of {timelineEvents.length} events
+                    {timelineEvents.length > 0 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Showing {Math.min(activityPage * ACTIVITY_PAGE_SIZE, timelineEvents.length)} of {timelineEvents.length} events
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {activityPage > 1 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setActivityPage(1)}
+                            >
+                              Show Less
+                            </Button>
+                          )}
+                          {activityPage * ACTIVITY_PAGE_SIZE < timelineEvents.length && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setActivityPage(activityPage + 1)}
+                            >
+                              Load More ({Math.min(ACTIVITY_PAGE_SIZE, timelineEvents.length - activityPage * ACTIVITY_PAGE_SIZE)} more)
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

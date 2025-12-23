@@ -145,6 +145,10 @@ export default function MCPServerDetailsPage({
   const [revokeReason, setRevokeReason] = useState<string>("");
   const [revoking, setRevoking] = useState(false);
 
+  // Pagination state
+  const [auditPage, setAuditPage] = useState(1);
+  const AUDIT_PAGE_SIZE = 20;
+
   // Extract server ID from params Promise
   useEffect(() => {
     params.then(({ id }) => setServerId(id));
@@ -1153,7 +1157,7 @@ export default function MCPServerDetailsPage({
                       <div className="relative">
                         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
                         <div className="space-y-4">
-                          {auditLogs.map((log, index) => {
+                          {auditLogs.slice(0, auditPage * AUDIT_PAGE_SIZE).map((log, index) => {
                             const eventType = log.eventType || 'audit';
                             const metadata = log.metadata || {};
 
@@ -1273,7 +1277,34 @@ export default function MCPServerDetailsPage({
                         </div>
                       </div>
 
-{/* All events shown */}
+                      {/* Pagination Controls */}
+                      {auditLogs.length > 0 && (
+                        <div className="flex items-center justify-between pt-4 border-t mt-4">
+                          <div className="text-sm text-muted-foreground">
+                            Showing {Math.min(auditPage * AUDIT_PAGE_SIZE, auditLogs.length)} of {auditLogs.length} events
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {auditPage > 1 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setAuditPage(1)}
+                              >
+                                Show Less
+                              </Button>
+                            )}
+                            {auditPage * AUDIT_PAGE_SIZE < auditLogs.length && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setAuditPage(auditPage + 1)}
+                              >
+                                Load More ({Math.min(AUDIT_PAGE_SIZE, auditLogs.length - auditPage * AUDIT_PAGE_SIZE)} more)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
