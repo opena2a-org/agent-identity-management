@@ -465,10 +465,10 @@ func (r *SecurityRepository) UpdateIncidentStatus(id uuid.UUID, status domain.In
 func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.SecurityMetrics, error) {
 	metrics := &domain.SecurityMetrics{}
 
-	// Count threats from security_threats table
+	// Count threats from alerts table (acknowledged alerts are considered "blocked/resolved")
 	r.db.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_blocked THEN 1 ELSE 0 END), 0)
-		FROM security_threats
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_acknowledged THEN 1 ELSE 0 END), 0)
+		FROM alerts
 		WHERE organization_id = $1
 	`, orgID).Scan(&metrics.TotalThreats, &metrics.BlockedThreats)
 
