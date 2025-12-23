@@ -52,10 +52,12 @@ class AIMClientIntegrationTest {
             backendAvailable = false;
         }
 
-        // Check if credentials are available
+        // Check if credentials are available (supports both OAuth and legacy formats)
         try {
             Map<String, String> creds = CredentialManager.loadSdkCredentials();
-            credentialsAvailable = creds.containsKey("clientId") && creds.containsKey("clientSecret");
+            // OAuth format uses refreshToken, legacy uses clientId/clientSecret
+            credentialsAvailable = creds.containsKey("refreshToken") ||
+                    (creds.containsKey("clientId") && creds.containsKey("clientSecret"));
         } catch (Exception e) {
             credentialsAvailable = false;
         }
@@ -76,10 +78,19 @@ class AIMClientIntegrationTest {
 
         Map<String, String> creds = CredentialManager.loadSdkCredentials();
 
-        assertNotNull(creds.get("clientId"), "clientId should be present");
-        assertNotNull(creds.get("clientSecret"), "clientSecret should be present");
+        // Check for either OAuth format (refreshToken) or legacy format (clientId/clientSecret)
+        boolean hasOAuth = creds.containsKey("refreshToken");
+        boolean hasLegacy = creds.containsKey("clientId") && creds.containsKey("clientSecret");
+        assertTrue(hasOAuth || hasLegacy, "Should have OAuth or legacy credentials");
 
-        System.out.println("✅ Loaded credentials with clientId: " + creds.get("clientId").substring(0, 8) + "...");
+        if (hasOAuth) {
+            String tokenId = creds.get("sdkTokenId");
+            System.out.println("✅ Loaded OAuth credentials with tokenId: " +
+                    (tokenId != null ? tokenId.substring(0, 8) + "..." : "n/a"));
+        } else {
+            System.out.println("✅ Loaded legacy credentials with clientId: " +
+                    creds.get("clientId").substring(0, 8) + "...");
+        }
     }
 
     @Test

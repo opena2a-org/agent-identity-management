@@ -42,6 +42,8 @@ import {
   Cpu,
   X,
   User,
+  Code,
+  Key,
 } from "lucide-react";
 import {
   XAxis,
@@ -262,6 +264,8 @@ interface Agent {
   createdAt: string;
   createdByName?: string;
   createdByEmail?: string;
+  createdBySdkTokenId?: string;
+  createdByApiKeyId?: string;
 }
 
 interface MCPCapability {
@@ -479,6 +483,10 @@ function SupplyChainPage() {
           dataAccess: a.dataAccess || [],
           lastActiveAt: a.lastActiveAt,
           createdAt: a.createdAt,
+          createdByName: a.createdByName,
+          createdByEmail: a.createdByEmail,
+          createdBySdkTokenId: a.createdBySdkTokenId,
+          createdByApiKeyId: a.createdByApiKeyId,
         }));
         setAgents(agentsList);
       } catch (agentsError) {
@@ -1822,15 +1830,30 @@ function SupplyChainPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                              agent.createdBySdkTokenId
+                                ? "bg-purple-100 dark:bg-purple-900/30"
+                                : agent.createdByApiKeyId
+                                  ? "bg-amber-100 dark:bg-amber-900/30"
+                                  : "bg-blue-100 dark:bg-blue-900/30"
+                            }`}>
+                              {agent.createdBySdkTokenId ? (
+                                <Code className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              ) : agent.createdByApiKeyId ? (
+                                <Key className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                              ) : (
+                                <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                              )}
                             </div>
                             <div>
                               <div className="text-sm text-gray-900 dark:text-white">
-                                {agent.createdByName || agent.createdByEmail || "Unknown"}
+                                {agent.createdByName || agent.createdByEmail || (agent.createdBySdkTokenId ? "SDK" : agent.createdByApiKeyId ? "API Key" : "Unknown")}
                               </div>
                               {agent.createdByEmail && agent.createdByName && (
                                 <div className="text-xs text-gray-500 dark:text-gray-400">{agent.createdByEmail}</div>
+                              )}
+                              {!agent.createdByName && !agent.createdByEmail && agent.createdBySdkTokenId && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">via SDK Token</div>
                               )}
                             </div>
                           </div>
@@ -2136,15 +2159,30 @@ function SupplyChainPage() {
                       <div className="col-span-2">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Registered By</p>
                         <div className="mt-1 flex items-center gap-2">
-                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                            <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                            selectedAgent.createdBySdkTokenId
+                              ? "bg-purple-100 dark:bg-purple-900/30"
+                              : selectedAgent.createdByApiKeyId
+                                ? "bg-amber-100 dark:bg-amber-900/30"
+                                : "bg-blue-100 dark:bg-blue-900/30"
+                          }`}>
+                            {selectedAgent.createdBySdkTokenId ? (
+                              <Code className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                            ) : selectedAgent.createdByApiKeyId ? (
+                              <Key className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            ) : (
+                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            )}
                           </div>
                           <div>
                             <p className="text-sm text-gray-900 dark:text-white">
-                              {selectedAgent.createdByName || selectedAgent.createdByEmail || "Unknown"}
+                              {selectedAgent.createdByName || selectedAgent.createdByEmail || (selectedAgent.createdBySdkTokenId ? "SDK" : selectedAgent.createdByApiKeyId ? "API Key" : "Unknown")}
                             </p>
                             {selectedAgent.createdByEmail && selectedAgent.createdByName && (
                               <p className="text-xs text-gray-500 dark:text-gray-400">{selectedAgent.createdByEmail}</p>
+                            )}
+                            {!selectedAgent.createdByName && !selectedAgent.createdByEmail && selectedAgent.createdBySdkTokenId && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">via SDK Token</p>
                             )}
                           </div>
                         </div>
