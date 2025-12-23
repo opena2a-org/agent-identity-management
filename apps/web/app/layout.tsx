@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: "Agent Identity Management | OpenA2A",
   description:
     "AIM for a better security. Identity verification and security platform for AI agents and MCP servers.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
