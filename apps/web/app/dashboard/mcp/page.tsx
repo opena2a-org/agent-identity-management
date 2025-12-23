@@ -284,6 +284,10 @@ export default function MCPServersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   const fetchMCPServers = async () => {
     try {
       setLoading(true);
@@ -305,6 +309,11 @@ export default function MCPServersPage() {
   useEffect(() => {
     fetchMCPServers();
   }, []);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   // Get most recent activity timestamp for an MCP server
   // Considers: registrations (createdAt), verifications (lastVerifiedAt), capability updates
@@ -423,6 +432,10 @@ export default function MCPServersPage() {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Pagination
+  const paginatedServers = filteredServers.slice(0, currentPage * PAGE_SIZE);
+  const hasMore = currentPage * PAGE_SIZE < filteredServers.length;
 
   // Handlers
   const handleServerCreated = (newServer: any) => {
@@ -566,7 +579,7 @@ export default function MCPServersPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredServers?.map((server) => (
+              {paginatedServers.map((server) => (
                 <tr
                   key={server?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
@@ -732,6 +745,32 @@ export default function MCPServersPage() {
             >
               Clear filters
             </button>
+          </div>
+        )}
+        {/* Pagination Controls */}
+        {filteredServers.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Showing {paginatedServers.length} of {filteredServers.length} servers
+            </div>
+            <div className="flex gap-2">
+              {currentPage > 1 && (
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Show Less
+                </button>
+              )}
+              {hasMore && (
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Load More
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
