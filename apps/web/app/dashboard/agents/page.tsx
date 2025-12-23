@@ -215,6 +215,8 @@ function AgentsPageContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [userRole, setUserRole] = useState<UserRole>("viewer");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   // Get filter parameter from URL (e.g., ?filter=low_trust)
   const urlFilter = searchParams.get("filter");
@@ -265,6 +267,11 @@ function AgentsPageContent() {
   useEffect(() => {
     fetchAgents();
   }, []);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, urlFilter]);
 
   // Calculate stats (with null check)
   const stats: AgentStats = {
@@ -325,6 +332,10 @@ function AgentsPageContent() {
 
       return matchesSearch && matchesStatus && matchesUrlFilter;
     }) || [];
+
+  // Pagination
+  const paginatedAgents = filteredAgents.slice(0, currentPage * PAGE_SIZE);
+  const hasMore = currentPage * PAGE_SIZE < filteredAgents.length;
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -482,7 +493,7 @@ function AgentsPageContent() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredAgents?.map((agent) => (
+              {paginatedAgents.map((agent) => (
                 <tr
                   key={agent?.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
@@ -580,6 +591,32 @@ function AgentsPageContent() {
                 ? "Try adjusting your search or filters."
                 : "Get started by registering your first agent."}
             </p>
+          </div>
+        )}
+        {/* Pagination Controls */}
+        {filteredAgents.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Showing {paginatedAgents.length} of {filteredAgents.length} agents
+            </div>
+            <div className="flex gap-2">
+              {currentPage > 1 && (
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Show Less
+                </button>
+              )}
+              {hasMore && (
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Load More
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
