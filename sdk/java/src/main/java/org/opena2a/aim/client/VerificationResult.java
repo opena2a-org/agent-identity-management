@@ -13,17 +13,19 @@ public class VerificationResult {
     private final String verificationId;
     private final String capability;
     private final String resource;
+    private final String enforcementMode;
     private final Instant timestamp;
     private final Map<String, Object> metadata;
 
     public VerificationResult(boolean verified, String status, String verificationId,
-                              String capability, String resource, Instant timestamp,
-                              Map<String, Object> metadata) {
+                              String capability, String resource, String enforcementMode,
+                              Instant timestamp, Map<String, Object> metadata) {
         this.verified = verified;
         this.status = status;
         this.verificationId = verificationId;
         this.capability = capability;
         this.resource = resource;
+        this.enforcementMode = enforcementMode;
         this.timestamp = timestamp;
         this.metadata = metadata;
     }
@@ -48,6 +50,10 @@ public class VerificationResult {
         return resource;
     }
 
+    public String getEnforcementMode() {
+        return enforcementMode;
+    }
+
     public Instant getTimestamp() {
         return timestamp;
     }
@@ -66,6 +72,7 @@ public class VerificationResult {
         private String verificationId;
         private String capability;
         private String resource;
+        private String enforcementMode;
         private Instant timestamp;
         private Map<String, Object> metadata;
 
@@ -94,6 +101,11 @@ public class VerificationResult {
             return this;
         }
 
+        public Builder enforcementMode(String enforcementMode) {
+            this.enforcementMode = enforcementMode;
+            return this;
+        }
+
         public Builder timestamp(Instant timestamp) {
             this.timestamp = timestamp;
             return this;
@@ -106,7 +118,7 @@ public class VerificationResult {
 
         public VerificationResult build() {
             return new VerificationResult(verified, status, verificationId,
-                    capability, resource, timestamp, metadata);
+                    capability, resource, enforcementMode, timestamp, metadata);
         }
     }
 }

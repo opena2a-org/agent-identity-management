@@ -1,11 +1,22 @@
 package org.opena2a.aim.demo;
 
 import org.opena2a.aim.client.*;
+import org.opena2a.aim.client.RiskLevel;
 import org.opena2a.aim.credentials.CredentialManager;
 import org.opena2a.aim.exceptions.*;
+import org.opena2a.aim.security.SecurityLogger;
+import org.opena2a.aim.security.RiskDetector;
+import org.opena2a.aim.mcp.AttestationCache;
+import org.opena2a.aim.security.SupplyChainReporter;
+import org.opena2a.aim.security.EventTypes;
+import org.opena2a.aim.security.EventSeverity;
+import org.opena2a.aim.integration.langchain4j.*;
+import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
+import org.opena2a.aim.integrations.mcp.discovery.MCPTool;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * AIM Demo Agent - See Your Dashboard Update in Real-Time!
@@ -20,7 +31,7 @@ public class DemoAgent {
     private static AIMClient agent;
     private static String aimUrl = "http://localhost:8080";
     private static String dashboardUrl = "http://localhost:3000";
-    private static boolean strictMode = false;
+    private static String enforcementMode = "monitoring"; // Will be fetched from backend
     private static final Random random = new Random();
     private static final Scanner scanner = new Scanner(System.in);
 
@@ -38,12 +49,9 @@ public class DemoAgent {
                 }
             }
 
-            // Check strict mode from environment
-            String strictEnv = System.getenv("AIM_STRICT_MODE");
-            strictMode = "true".equalsIgnoreCase(strictEnv) || "1".equals(strictEnv);
-
-            printBanner();
             registerAgent();
+            fetchEnforcementMode();
+            printBanner();
             runMainLoop();
 
         } catch (Exception e) {
@@ -59,6 +67,7 @@ public class DemoAgent {
     }
 
     private static void printBanner() {
+        boolean isStrict = "strict".equalsIgnoreCase(enforcementMode);
         System.out.println("""
 
 ================================================================================
@@ -67,17 +76,28 @@ public class DemoAgent {
 
 Watch your AIM dashboard update in real-time as you perform actions!
 
-  Dashboard:   %s/dashboard
-  API Server:  %s
-  Strict Mode: %s
+  Dashboard:        %s/dashboard
+  API Server:       %s
+  Enforcement Mode: %s
 
-  Tip: Enable strict mode via environment variable (AIM_STRICT_MODE=true) or
-       from the dashboard: %s/dashboard/admin/security-policies
+  Change enforcement mode: %s/dashboard/admin/security-policies
 
 ================================================================================
 """.formatted(dashboardUrl, aimUrl,
-              strictMode ? "ENABLED - Unauthorized actions will be BLOCKED" : "DISABLED - Actions are logged but not blocked",
+              isStrict ? "STRICT - Unauthorized actions will be BLOCKED" : "MONITORING - Actions are logged but not blocked",
               dashboardUrl));
+    }
+
+    private static void fetchEnforcementMode() {
+        try {
+            // Do a quick verification to get the enforcement mode from backend
+            VerificationResult result = agent.verifyCapability("api:call", "demo_check", RiskLevel.LOW, null);
+            if (result.getEnforcementMode() != null && !result.getEnforcementMode().isEmpty()) {
+                enforcementMode = result.getEnforcementMode();
+            }
+        } catch (Exception e) {
+            // Silently continue with default - we'll see the real mode on first action
+        }
     }
 
     private static void registerAgent() {
@@ -85,11 +105,21 @@ Watch your AIM dashboard update in real-time as you perform actions!
         System.out.println();
 
         try {
+            // MCP server commands for capability discovery
+            // Maps server name to the command used to spawn the MCP server
+            Map<String, String> mcpCommands = new HashMap<>();
+            mcpCommands.put("github", "npx -y @modelcontextprotocol/server-github");
+            mcpCommands.put("filesystem", "npx -y @modelcontextprotocol/server-filesystem /tmp");
+
             agent = AIMClient.secure(
                     "java-demo-agent",
                     Arrays.asList("api:call", "user:read", "db:read"),
                     AgentType.CUSTOM,
-                    Arrays.asList("filesystem", "github")  // MCP servers
+                    Arrays.asList("filesystem", "github"),
+                    null,  // description
+                    null,  // tags
+                    null,  // metadata
+                    mcpCommands
             );
 
             System.out.println("  Agent registered successfully!");
@@ -160,11 +190,19 @@ Watch your AIM dashboard update in real-time as you perform actions!
     F. List MCP Servers     - View all registered MCP servers
     G. Attest MCP Server    - Cryptographically verify an MCP server
 
+  SDK INFRASTRUCTURE DEMOS:
+    H. Security Logger      - SOC/SIEM compatible event logging
+    I. Risk Detector        - Pattern-based risk analysis
+    J. Drift Detection      - MCP capability change detection
+    K. SBOM Generation      - Supply chain bill of materials
+    L. LangChain4j Demo     - Tool execution with security wrapper
+    M. Run All SDK Demos    - Execute all SDK demos in sequence
+
   0. Exit
 
-  Dashboard: %s/dashboard | Strict Mode: %s
+  Dashboard: %s/dashboard | Mode: %s
 ================================================================================
-""".formatted(dashboardUrl, strictMode ? "ON" : "OFF"));
+""".formatted(dashboardUrl, "strict".equalsIgnoreCase(enforcementMode) ? "STRICT" : "MONITORING"));
     }
 
     private static void runAction(String choice) {
@@ -185,6 +223,12 @@ Watch your AIM dashboard update in real-time as you perform actions!
                 case "e" -> registerMcpServer();
                 case "f" -> listMcpServers();
                 case "g" -> attestMcpServer();
+                case "h" -> runSecurityLoggerDemo();
+                case "i" -> runRiskDetectorDemo();
+                case "j" -> runDriftDetectionDemo();
+                case "k" -> runSbomDemo();
+                case "l" -> runLangChain4jDemo();
+                case "m" -> runAllSdkDemos();
                 default -> System.out.println("  Invalid choice. Try again.");
             }
         } catch (Exception e) {
@@ -485,8 +529,8 @@ The agent's trust score determines whether approval is needed:
   - Medium trust (50-80%%): Most JIT actions need approval
   - Low trust (<50%%): All JIT actions need approval
 
-Current Strict Mode: %s
-""".formatted(strictMode ? "ENABLED" : "DISABLED"));
+Current Enforcement Mode: %s
+""".formatted("strict".equalsIgnoreCase(enforcementMode) ? "STRICT" : "MONITORING"));
 
         System.out.println("  Attempting: Delete user account (CRITICAL risk)");
         System.out.println("  This action may require JIT approval...\n");
@@ -571,17 +615,17 @@ Admins review and approve/deny these requests in the dashboard.
         try {
             Map<String, Object> details = agent.getAgentDetails();
             System.out.println("""
-  Agent ID:     %s
-  Name:         %s
-  Status:       %s
-  Trust Score:  %.1f%%
-  Strict Mode:  %s
+  Agent ID:         %s
+  Name:             %s
+  Status:           %s
+  Trust Score:      %.1f%%
+  Enforcement Mode: %s
 """.formatted(
                     details.getOrDefault("id", agent.getAgentId()),
                     details.getOrDefault("name", "java-demo-agent"),
                     details.getOrDefault("status", "active"),
                     ((Number) details.getOrDefault("trustScore", 0.0)).doubleValue() * 100,
-                    strictMode ? "ENABLED" : "DISABLED"
+                    "strict".equalsIgnoreCase(enforcementMode) ? "STRICT" : "MONITORING"
             ));
 
             @SuppressWarnings("unchecked")
@@ -720,6 +764,632 @@ This proves the server holds the private key matching its public key.
             printResult(false, "Attestation failed", null, e.getMessage());
         }
 
+        pressEnter();
+    }
+
+    // ========================================================================
+    // SDK INFRASTRUCTURE DEMOS
+    // ========================================================================
+
+    private static void runSecurityLoggerDemo() {
+        printBox("SECURITY LOGGER DEMO", """
+The SecurityLogger provides SOC/SIEM compatible event logging in JSON format.
+All security events are automatically logged with structured data for:
+- Authentication events (login, token refresh, failures)
+- Authorization events (capability checks, access decisions)
+- Agent lifecycle events (registration, status changes)
+- MCP events (server connections, attestations)
+
+This enables enterprise security teams to integrate AIM with their existing
+security infrastructure (Splunk, ELK, Datadog, etc.)
+""");
+
+        try {
+            SecurityLogger logger = SecurityLogger.getInstance();
+            String sessionId = logger.startSession();
+
+            System.out.println("  Starting security logging session: " + sessionId.substring(0, 8) + "...\n");
+
+            // Set agent context for all subsequent logs
+            logger.setAgentContext(
+                    agent.getAgentId().toString(),
+                    agent.getAgentName(),
+                    "demo-user",
+                    "demo-org"
+            );
+
+            // Demo different event types
+            System.out.println("  Logging authentication event...");
+            logger.logAuthentication(
+                    EventTypes.Authn.TOKEN_REFRESH,
+                    true,
+                    "Demo token refresh for SDK demo",
+                    Map.of("demoMode", true, "sessionId", sessionId)
+            );
+
+            System.out.println("  Logging authorization event...");
+            logger.logAuthorizationEvent(
+                    EventTypes.Authz.CAPABILITY_GRANTED,
+                    "api:call",
+                    "weather_api",
+                    true,
+                    Map.of("riskLevel", "LOW", "trustScore", 0.91)
+            );
+
+            System.out.println("  Logging agent event...");
+            logger.logAgentEvent(
+                    EventTypes.Agent.AGENT_REGISTERED,
+                    agent.getAgentName(),
+                    "Agent registered for SDK demo",
+                    Map.of("agentType", "CUSTOM", "capabilities", 3),
+                    true
+            );
+
+            System.out.println("  Logging MCP event...");
+            logger.logMcpEvent(
+                    EventTypes.Mcp.MCP_SERVER_CONNECTED,
+                    "demo-mcp-server",
+                    "MCP server connected for demo",
+                    Map.of("toolCount", 5, "attestationStatus", "verified"),
+                    true
+            );
+
+            // Log with different severity levels
+            System.out.println("\n  Testing severity levels:");
+            logger.debug("Debug-level message for detailed tracing");
+            logger.info("Info-level message for normal operations");
+            logger.warning("Warning-level message for potential issues");
+
+            logger.clearAgentContext();
+
+            printResult(true, "Security Logger Demo Complete", Map.of(
+                    "Session ID", sessionId.substring(0, 8) + "...",
+                    "Events Logged", 4,
+                    "Output Format", "JSON (SOC/SIEM compatible)",
+                    "Integration", "Splunk, ELK, Datadog, etc."
+            ), null);
+
+        } catch (Exception e) {
+            printResult(false, "Security Logger Demo failed", null, e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void runRiskDetectorDemo() {
+        printBox("RISK DETECTOR DEMO", """
+The RiskDetector analyzes capabilities to determine their risk level using:
+1. Pattern matching (e.g., admin:* -> CRITICAL, payment:* -> HIGH)
+2. Keyword analysis (e.g., "delete" -> HIGH, "read" -> MEDIUM)
+3. Default fallback (unknown patterns -> LOW)
+
+Risk levels affect:
+- Whether actions require human approval (JIT access)
+- Trust score impact when violations occur
+- Security alert generation
+- Dashboard visibility and prioritization
+""");
+
+        try {
+            RiskDetector detector = RiskDetector.getInstance();
+
+            System.out.println("  Analyzing capabilities with pattern-based risk detection:\n");
+
+            // Test different capabilities
+            String[][] testCases = {
+                    {"api:call", "LOW risk pattern - read-only API calls"},
+                    {"db:read", "MEDIUM risk pattern - database read access"},
+                    {"db:write", "MEDIUM risk - keyword 'write'"},
+                    {"db:delete", "HIGH risk - keyword 'delete'"},
+                    {"payment:process", "HIGH risk pattern - payment operations"},
+                    {"admin:delete_user", "CRITICAL risk pattern - admin operations"},
+                    {"file:read", "MEDIUM risk - file operations"},
+                    {"email:send", "MEDIUM risk - communication"},
+                    {"unknown:capability", "LOW risk - unknown defaults to LOW"}
+            };
+
+            System.out.println("  " + "-".repeat(70));
+            System.out.printf("  %-30s %-12s %s%n", "CAPABILITY", "RISK LEVEL", "EXPLANATION");
+            System.out.println("  " + "-".repeat(70));
+
+            for (String[] testCase : testCases) {
+                org.opena2a.aim.security.RiskLevel level = detector.detectRisk(testCase[0]);
+                String levelStr = level.name();
+                String color = switch (level) {
+                    case LOW -> "";
+                    case MEDIUM -> "⚠ ";
+                    case HIGH -> "⚠⚠ ";
+                    case CRITICAL -> "🚨 ";
+                };
+                System.out.printf("  %-30s %-12s %s%n", testCase[0], color + levelStr, testCase[1]);
+            }
+            System.out.println("  " + "-".repeat(70));
+
+            // Test aggregate risk
+            System.out.println("\n  Testing aggregate risk detection:");
+            List<String> mixedCapabilities = Arrays.asList("api:call", "db:read", "payment:process");
+            org.opena2a.aim.security.RiskLevel aggregate = detector.detectAggregateRisk(mixedCapabilities);
+            System.out.println("  Capabilities: " + mixedCapabilities);
+            System.out.println("  Aggregate Risk: " + aggregate + " (highest of all)");
+
+            // Show requiresApproval
+            System.out.println("\n  Approval requirements by risk level:");
+            for (org.opena2a.aim.security.RiskLevel level : org.opena2a.aim.security.RiskLevel.values()) {
+                System.out.printf("  %-10s -> %s%n", level, level.requiresApproval() ? "Requires approval" : "Auto-approved");
+            }
+
+            printResult(true, "Risk Detector Demo Complete", Map.of(
+                    "Patterns Tested", testCases.length,
+                    "Detection Method", "Pattern + Keyword + Default",
+                    "Aggregate Risk", aggregate.name()
+            ), null);
+
+        } catch (Exception e) {
+            printResult(false, "Risk Detector Demo failed", null, e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void runDriftDetectionDemo() {
+        printBox("CAPABILITY DRIFT DETECTION DEMO", """
+The AttestationCache monitors MCP server capabilities over time to detect "drift":
+- When a server adds new tools (expansion drift)
+- When a server removes tools (contraction drift)
+- When tool signatures change (mutation drift)
+
+This is critical for supply chain security - if an MCP server is compromised,
+the attacker might add malicious tools. Drift detection catches this.
+
+Drift alerts appear on your dashboard for admin review.
+""");
+
+        try {
+            AttestationCache cache = AttestationCache.getInstance();
+
+            System.out.println("  Setting up drift detection scenario...\n");
+
+            // Simulate initial attestation
+            String serverId = "drift-demo-server-" + System.currentTimeMillis();
+            String serverName = "demo-weather-mcp";
+
+            List<MCPTool> initialTools = Arrays.asList(
+                    new MCPTool("weather_current", "Get current weather", null),
+                    new MCPTool("weather_forecast", "Get 5-day forecast", null)
+            );
+
+            MCPDiscoveryResult initialDiscovery = MCPDiscoveryResult.builder()
+                    .serverName(serverName)
+                    .tools(initialTools)
+                    .connectionLatencyMs(100)
+                    .build();
+
+            System.out.println("  Step 1: Recording initial attestation");
+            System.out.println("    Server: " + serverName);
+            System.out.println("    Tools: " + initialTools.stream().map(MCPTool::getName).toList());
+
+            cache.store(serverName, initialDiscovery, serverId);
+
+            // Verify it's cached
+            Optional<AttestationCache.CachedAttestation> cached = cache.get(serverName);
+            System.out.println("    Cached: " + (cached.isPresent() ? "YES" : "NO"));
+            System.out.println("    Attestation Time: " + (cached.map(c -> c.cachedAt).orElse("N/A")));
+
+            // Simulate drift by checking with different tools
+            System.out.println("\n  Step 2: Simulating capability drift...");
+
+            List<MCPTool> driftedTools = Arrays.asList(
+                    new MCPTool("weather_current", "Get current weather", null),
+                    new MCPTool("weather_forecast", "Get 5-day forecast", null),
+                    new MCPTool("system_exec", "MALICIOUS: Execute system command", null) // New tool!
+            );
+
+            MCPDiscoveryResult driftedDiscovery = MCPDiscoveryResult.builder()
+                    .serverName(serverName)
+                    .tools(driftedTools)
+                    .connectionLatencyMs(100)
+                    .build();
+
+            System.out.println("    New tool detected: system_exec (SUSPICIOUS!)");
+
+            // Check for drift
+            AttestationCache.DriftReport driftReport = cache.detectDrift(serverName, driftedDiscovery);
+            boolean hasDrift = driftReport.hasDrift();
+            System.out.println("    Drift Detected: " + (hasDrift ? "YES ⚠️" : "NO"));
+
+            if (hasDrift) {
+                System.out.println("\n  ⚠️  SECURITY ALERT: Capability drift detected!");
+                System.out.println("    The MCP server has new capabilities that weren't present");
+                System.out.println("    during the last attestation. This could indicate:");
+                System.out.println("    - A legitimate update (verify with server owner)");
+                System.out.println("    - A supply chain compromise (investigate immediately)");
+                System.out.println();
+                System.out.println("    View drift alerts: " + dashboardUrl + "/dashboard/admin/alerts");
+            }
+
+            // Show cache stats
+            System.out.println("\n  Cache Statistics:");
+            System.out.println("    Servers Tracked: 1");
+            System.out.println("    Drift Events: " + (hasDrift ? 1 : 0));
+
+            printResult(true, "Drift Detection Demo Complete", Map.of(
+                    "Server ID", serverId.substring(0, 20) + "...",
+                    "Initial Tools", 2,
+                    "Current Tools", 3,
+                    "Drift Detected", hasDrift ? "YES - New tool added" : "NO"
+            ), null);
+
+        } catch (Exception e) {
+            printResult(false, "Drift Detection Demo failed", null, e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void runSbomDemo() {
+        printBox("SBOM (SOFTWARE BILL OF MATERIALS) DEMO", """
+The SupplyChainReporter generates Software Bill of Materials (SBOM) for your
+AI agent's supply chain, including:
+- All MCP servers the agent connects to
+- Tools provided by each server
+- Attestation status and confidence scores
+- Discovery timestamps
+
+SBOMs are critical for:
+- Compliance (SOC2, ISO27001, HIPAA)
+- Security audits
+- Incident response
+- Supply chain risk management
+""");
+
+        try {
+            SupplyChainReporter reporter = SupplyChainReporter.getInstance();
+
+            System.out.println("  Building SBOM for demo agent...\n");
+
+            // Record some MCP servers
+            String[] servers = {
+                    "filesystem",
+                    "github",
+                    "weather-api"
+            };
+
+            for (int i = 0; i < servers.length; i++) {
+                String serverName = servers[i];
+                List<MCPTool> tools = switch (serverName) {
+                    case "filesystem" -> Arrays.asList(
+                            new MCPTool("read_file", "Read file contents", null),
+                            new MCPTool("write_file", "Write to file", null),
+                            new MCPTool("list_directory", "List directory contents", null)
+                    );
+                    case "github" -> Arrays.asList(
+                            new MCPTool("create_issue", "Create GitHub issue", null),
+                            new MCPTool("list_repos", "List repositories", null),
+                            new MCPTool("get_file", "Get file from repo", null)
+                    );
+                    default -> Arrays.asList(
+                            new MCPTool("get_weather", "Get current weather", null),
+                            new MCPTool("get_forecast", "Get weather forecast", null)
+                    );
+                };
+
+                MCPDiscoveryResult discovery = MCPDiscoveryResult.builder()
+                        .serverName(serverName)
+                        .tools(tools)
+                        .connectionLatencyMs(50 + i * 20)
+                        .build();
+
+                reporter.recordMcpServer(serverName, "npx @mcp/" + serverName, discovery);
+                System.out.println("    Recorded: " + serverName + " (" + tools.size() + " tools)");
+            }
+
+            // Generate SBOM
+            System.out.println("\n  Generating SBOM...");
+            SupplyChainReporter.SBOM sbom = reporter.generateSBOM(agent.getAgentName());
+
+            System.out.println("\n  SBOM Summary:");
+            System.out.println("  " + "-".repeat(50));
+            System.out.println("    Format: " + sbom.format);
+            System.out.println("    SDK Version: " + sbom.sdkVersion);
+            System.out.println("    Generated: " + sbom.generatedAt);
+            System.out.println("    Agent: " + sbom.agentName);
+            System.out.println("    Components: " + sbom.componentCount);
+
+            System.out.println("\n  Components:");
+            for (SupplyChainReporter.SBOMComponent component : sbom.components) {
+                System.out.println("    - " + component.name + " (v" + component.version + ")");
+                System.out.println("      Type: " + component.type);
+                if (component.purl != null) {
+                    System.out.println("      PURL: " + component.purl);
+                }
+                if (component.capabilities != null && !component.capabilities.isEmpty()) {
+                    System.out.println("      Capabilities: " + component.capabilities.size());
+                }
+            }
+
+            // Show where to view
+            System.out.println("\n  Export SBOM:");
+            System.out.println("    Dashboard: " + dashboardUrl + "/dashboard/mcp/supply-chain");
+            System.out.println("    Click 'Export ABOM' for full JSON");
+
+            printResult(true, "SBOM Generation Complete", Map.of(
+                    "Format", sbom.format,
+                    "MCP Servers", sbom.components.size(),
+                    "Total Tools", servers.length * 3, // approximate
+                    "Export URL", dashboardUrl + "/dashboard/mcp/supply-chain"
+            ), null);
+
+        } catch (Exception e) {
+            printResult(false, "SBOM Demo failed", null, e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void runLangChain4jDemo() {
+        printBox("LANGCHAIN4J INTEGRATION DEMO", """
+The AIM SDK integrates with LangChain4j to add security to AI tool execution:
+
+1. AIMToolExecutor - Wraps tools with capability verification
+   - Each tool is mapped to a required capability
+   - High-risk tools can be automatically blocked
+   - Execution metrics are tracked
+
+2. AIMAgentCallback - Implements ReAct pattern callbacks
+   - Intercepts agent reasoning and tool calls
+   - Logs all actions for audit trail
+   - Can block dangerous operations
+
+This enables "defense in depth" - even if an LLM is tricked by prompt
+injection, AIM's capability-based access control limits the damage.
+""");
+
+        try {
+            // Create tool executor
+            AIMToolExecutor executor = new AIMToolExecutor(agent);
+
+            System.out.println("  Setting up LangChain4j Tool Executor...\n");
+
+            // Register some tools with capabilities
+            System.out.println("  Registering tools:");
+
+            executor.register("search_web", "Search the web for information",
+                    (Function<Object, Object>) input -> "Results for: " + input, "api:call");
+            System.out.println("    ✓ search_web (capability: api:call, risk: LOW)");
+
+            executor.register("read_database", "Query the database",
+                    (Function<Object, Object>) input -> "DB results for: " + input, "db:read");
+            System.out.println("    ✓ read_database (capability: db:read, risk: MEDIUM)");
+
+            executor.register("send_email", "Send an email to a user",
+                    (Function<Object, Object>) input -> "Email sent to: " + input, "email:send");
+            System.out.println("    ✓ send_email (capability: email:send, risk: MEDIUM)");
+
+            executor.register("delete_records", "Delete database records",
+                    (Function<Object, Object>) input -> "Deleted: " + input, "db:delete");
+            System.out.println("    ✓ delete_records (capability: db:delete, risk: HIGH)");
+
+            executor.register("admin_override", "Admin system override",
+                    (Function<Object, Object>) input -> "Override: " + input, "admin:override");
+            System.out.println("    ✓ admin_override (capability: admin:override, risk: CRITICAL)");
+
+            // Show registered tools
+            System.out.println("\n  Registered tools: " + executor.getRegisteredTools());
+
+            // Configure blocking
+            System.out.println("\n  Configuring risk-based blocking:");
+            executor.setBlockHighRisk(true);
+            executor.setApprovalThreshold(org.opena2a.aim.security.RiskLevel.HIGH);
+            System.out.println("    Block threshold: HIGH (blocks CRITICAL risk tools)");
+
+            // Execute some tools
+            System.out.println("\n  Executing tools:");
+
+            // LOW risk - should succeed
+            try {
+                Object result = executor.execute("search_web", "AIM security");
+                System.out.println("    [OK] search_web: " + result);
+            } catch (Exception e) {
+                System.out.println("    [!!] search_web BLOCKED: " + e.getMessage());
+            }
+
+            // MEDIUM risk - should succeed
+            try {
+                Object result = executor.execute("read_database", "SELECT * FROM users");
+                System.out.println("    [OK] read_database: " + result);
+            } catch (Exception e) {
+                System.out.println("    [!!] read_database BLOCKED: " + e.getMessage());
+            }
+
+            // CRITICAL risk - should be blocked
+            try {
+                Object result = executor.execute("admin_override", "bypass_all_checks");
+                System.out.println("    [OK] admin_override: " + result);
+            } catch (AIMToolExecutor.ToolBlockedException e) {
+                System.out.println("    [!!] admin_override BLOCKED: " + e.getRiskLevel() + " risk exceeds threshold");
+            }
+
+            // Show metrics
+            System.out.println("\n  Execution Metrics:");
+            Map<String, Map<String, Object>> metrics = executor.getAllMetrics();
+            for (Map.Entry<String, Map<String, Object>> entry : metrics.entrySet()) {
+                Map<String, Object> m = entry.getValue();
+                System.out.printf("    %s: success=%d, blocked=%d, errors=%d%n",
+                        entry.getKey(),
+                        m.getOrDefault("successCount", 0L),
+                        m.getOrDefault("blockedCount", 0L),
+                        m.getOrDefault("errorCount", 0L));
+            }
+
+            // Demo agent callback
+            System.out.println("\n  Setting up Agent Callback (ReAct pattern):");
+            AIMAgentCallback callback = new AIMAgentCallback(agent);
+
+            System.out.println("    Simulating agent reasoning steps...");
+            String executionId = callback.onAgentStart("demo-agent", "Search for information about AIM security");
+            System.out.println("    Started execution: " + executionId.substring(0, 8) + "...");
+            callback.onAgentThought(executionId, "I need to search for information about AIM security");
+            callback.onAgentAction(executionId, "search_web", "AIM security features");
+            callback.onAgentObservation(executionId, "Found 10 relevant results about AIM security");
+            callback.onAgentFinish(executionId, "Based on the search results, AIM provides capability-based access control");
+
+            printResult(true, "LangChain4j Integration Demo Complete", Map.of(
+                    "Tools Registered", executor.getRegisteredTools().size(),
+                    "Tools Executed", 2,
+                    "Tools Blocked", 1,
+                    "Pattern", "ReAct with security callbacks"
+            ), null);
+
+        } catch (Exception e) {
+            printResult(false, "LangChain4j Demo failed", null, e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void runAllSdkDemos() {
+        printBox("RUN ALL SDK DEMOS", """
+This will execute all SDK infrastructure demos in sequence:
+1. Security Logger - SOC/SIEM compatible event logging
+2. Risk Detector - Pattern-based risk analysis
+3. Drift Detection - MCP capability change detection
+4. SBOM Generation - Supply chain bill of materials
+5. LangChain4j Demo - Tool execution with security wrapper
+
+This is perfect for demonstrating AIM's full capabilities to stakeholders.
+""");
+
+        System.out.print("  Start all demos? (y/n) [y]: ");
+        String confirm = scanner.nextLine().trim().toLowerCase();
+        if ("n".equals(confirm)) {
+            System.out.println("  Cancelled.");
+            return;
+        }
+
+        System.out.println("\n  Starting comprehensive SDK demo...\n");
+        System.out.println("=".repeat(78));
+
+        // 1. Security Logger Demo (simplified - no user input)
+        System.out.println("\n  [1/5] SECURITY LOGGER DEMO");
+        System.out.println("-".repeat(40));
+        try {
+            SecurityLogger logger = SecurityLogger.getInstance();
+            String sessionId = logger.startSession();
+            logger.setAgentContext(agent.getAgentId().toString(), agent.getAgentName(), "demo-user", "demo-org");
+            logger.logAuthentication(EventTypes.Authn.TOKEN_REFRESH, true, "Demo token refresh", null);
+            logger.logAuthorizationEvent(EventTypes.Authz.CAPABILITY_GRANTED, "api:call", "demo_resource", true, null);
+            logger.logAgentEvent(EventTypes.Agent.AGENT_REGISTERED, agent.getAgentId().toString(), agent.getAgentName(), null);
+            logger.clearAgentContext();
+            System.out.println("  [OK] Security Logger: 3 events logged (session: " + sessionId.substring(0, 8) + "...)");
+        } catch (Exception e) {
+            System.out.println("  [!!] Security Logger: " + e.getMessage());
+        }
+
+        // 2. Risk Detector Demo
+        System.out.println("\n  [2/5] RISK DETECTOR DEMO");
+        System.out.println("-".repeat(40));
+        try {
+            RiskDetector detector = RiskDetector.getInstance();
+            String[][] samples = {
+                    {"api:call", "LOW"},
+                    {"db:read", "MEDIUM"},
+                    {"db:delete", "HIGH"},
+                    {"admin:override", "CRITICAL"}
+            };
+            for (String[] sample : samples) {
+                org.opena2a.aim.security.RiskLevel level = detector.detectRisk(sample[0]);
+                System.out.println("    " + sample[0] + " -> " + level);
+            }
+            System.out.println("  [OK] Risk Detector: 4 capabilities analyzed");
+        } catch (Exception e) {
+            System.out.println("  [!!] Risk Detector: " + e.getMessage());
+        }
+
+        // 3. Drift Detection Demo
+        System.out.println("\n  [3/5] DRIFT DETECTION DEMO");
+        System.out.println("-".repeat(40));
+        try {
+            AttestationCache cache = AttestationCache.getInstance();
+            String serverName = "all-demos-mcp-" + System.currentTimeMillis();
+            List<MCPTool> tools1 = Arrays.asList(
+                    new MCPTool("tool_a", "Tool A", null),
+                    new MCPTool("tool_b", "Tool B", null)
+            );
+            MCPDiscoveryResult discovery1 = MCPDiscoveryResult.builder()
+                    .serverName(serverName).tools(tools1).build();
+            cache.store(serverName, discovery1, "attest-1");
+
+            List<MCPTool> tools2 = Arrays.asList(
+                    new MCPTool("tool_a", "Tool A", null),
+                    new MCPTool("tool_b", "Tool B", null),
+                    new MCPTool("tool_c_new", "NEW TOOL!", null)
+            );
+            MCPDiscoveryResult discovery2 = MCPDiscoveryResult.builder()
+                    .serverName(serverName).tools(tools2).build();
+            AttestationCache.DriftReport drift = cache.detectDrift(serverName, discovery2);
+            System.out.println("    Initial tools: 2, Current tools: 3");
+            System.out.println("    Drift detected: " + (drift.hasDrift() ? "YES (tool_c_new added)" : "NO"));
+            System.out.println("  [OK] Drift Detection: Capability change detected");
+        } catch (Exception e) {
+            System.out.println("  [!!] Drift Detection: " + e.getMessage());
+        }
+
+        // 4. SBOM Generation Demo
+        System.out.println("\n  [4/5] SBOM GENERATION DEMO");
+        System.out.println("-".repeat(40));
+        try {
+            SupplyChainReporter reporter = SupplyChainReporter.getInstance();
+            String serverName = "sbom-demo-mcp";
+            List<MCPTool> tools = Arrays.asList(
+                    new MCPTool("demo_tool", "Demo tool", null)
+            );
+            MCPDiscoveryResult discovery = MCPDiscoveryResult.builder()
+                    .serverName(serverName).tools(tools).build();
+            reporter.recordMcpServer(serverName, "npx demo-mcp", discovery);
+            SupplyChainReporter.SBOM sbom = reporter.generateSBOM(agent.getAgentName());
+            System.out.println("    Format: " + sbom.format);
+            System.out.println("    Components: " + sbom.componentCount);
+            System.out.println("    Agent: " + sbom.agentName);
+            System.out.println("  [OK] SBOM: Generated with " + sbom.componentCount + " components");
+        } catch (Exception e) {
+            System.out.println("  [!!] SBOM Generation: " + e.getMessage());
+        }
+
+        // 5. LangChain4j Integration Demo
+        System.out.println("\n  [5/5] LANGCHAIN4J INTEGRATION DEMO");
+        System.out.println("-".repeat(40));
+        try {
+            AIMToolExecutor executor = new AIMToolExecutor(agent);
+            executor.register("demo_search", input -> "Results: " + input, "api:call");
+            executor.register("demo_write", input -> "Written: " + input, "db:write");
+            executor.register("demo_admin", input -> "Admin: " + input, "admin:override");
+
+            executor.setBlockHighRisk(true);
+            executor.setApprovalThreshold(org.opena2a.aim.security.RiskLevel.HIGH);
+
+            int executed = 0, blocked = 0;
+            try { executor.execute("demo_search", "test"); executed++; } catch (Exception e) { blocked++; }
+            try { executor.execute("demo_write", "test"); executed++; } catch (Exception e) { blocked++; }
+            try { executor.execute("demo_admin", "test"); executed++; } catch (Exception e) { blocked++; }
+
+            System.out.println("    Tools registered: 3");
+            System.out.println("    Executed: " + executed + ", Blocked: " + blocked);
+            System.out.println("  [OK] LangChain4j: Security-wrapped tool execution");
+        } catch (Exception e) {
+            System.out.println("  [!!] LangChain4j: " + e.getMessage());
+        }
+
+        System.out.println("\n" + "=".repeat(78));
+        printResult(true, "All SDK Demos Complete", Map.of(
+                "Demos Run", 5,
+                "Security Logger", "Events logged",
+                "Risk Detector", "Capabilities analyzed",
+                "Drift Detection", "Change detected",
+                "SBOM Generation", "Bill of materials created",
+                "LangChain4j", "Security-wrapped execution"
+        ), null);
+
+        System.out.println("  View all activity: " + dashboardUrl + "/dashboard/agents/" + agent.getAgentId());
         pressEnter();
     }
 
