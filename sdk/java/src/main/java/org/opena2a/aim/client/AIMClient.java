@@ -1417,7 +1417,8 @@ public class AIMClient implements AutoCloseable {
             if (id == null || id.isEmpty()) {
                 throw new AIMException("No agent ID available");
             }
-            String response = get("/api/v1/agents/" + id);
+            // Use SDK API endpoint for agent details
+            String response = get("/api/v1/sdk-api/agents/" + id);
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to get agent details: " + e.getMessage(), e);
@@ -1516,7 +1517,9 @@ public class AIMClient implements AutoCloseable {
             payload.put("capability", capability);
             payload.put("description", description);
 
-            String response = post("/api/v1/agents/me/capabilities", payload.toString());
+            // Use SDK API endpoint for capability registration
+            String id = getAgentId();
+            String response = post("/api/v1/sdk-api/agents/" + id + "/capabilities/register", payload.toString());
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to register capability: " + e.getMessage(), e);
@@ -1729,7 +1732,8 @@ public class AIMClient implements AutoCloseable {
     public List<Map<String, Object>> listMcpServers(int limit) {
         try {
             String agentId = getAgentId();
-            String response = get("/api/v1/agents/" + agentId + "/mcp-servers?limit=" + limit);
+            // Use SDK API endpoint (Ed25519 auth) instead of dashboard API (JWT auth)
+            String response = get("/api/v1/sdk-api/agents/" + agentId + "/mcp-servers?limit=" + limit);
             Map<String, Object> result = objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
             return (List<Map<String, Object>>) result.getOrDefault("servers", Collections.emptyList());
         } catch (Exception e) {
