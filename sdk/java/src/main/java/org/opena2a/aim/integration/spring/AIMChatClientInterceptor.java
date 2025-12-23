@@ -65,10 +65,21 @@ public class AIMChatClientInterceptor {
     private final AtomicLong totalLatencyMs = new AtomicLong(0);
     private final AtomicLong errorCount = new AtomicLong(0);
 
+    /**
+     * Creates a new interceptor with default configuration.
+     *
+     * @param client the AIM client for security logging
+     */
     public AIMChatClientInterceptor(AIMClient client) {
         this(client, new Config());
     }
 
+    /**
+     * Creates a new interceptor with custom configuration.
+     *
+     * @param client the AIM client for security logging
+     * @param config the configuration for logging and metrics
+     */
     public AIMChatClientInterceptor(AIMClient client, Config config) {
         this.client = client;
         this.config = config;
@@ -177,6 +188,7 @@ public class AIMChatClientInterceptor {
     /**
      * Wrap a chat call with automatic timing and logging.
      *
+     * @param <T> the return type of the chat action
      * @param prompt The prompt
      * @param model The model
      * @param action The actual chat call
@@ -212,6 +224,8 @@ public class AIMChatClientInterceptor {
 
     /**
      * Get metrics for this interceptor.
+     *
+     * @return a map containing interceptor metrics
      */
     public Map<String, Object> getMetrics() {
         Map<String, Object> metrics = new LinkedHashMap<>();
@@ -242,9 +256,17 @@ public class AIMChatClientInterceptor {
 
     /**
      * Functional interface for chat actions.
+     *
+     * @param <T> the return type of the action
      */
     @FunctionalInterface
     public interface ChatAction<T> {
+        /**
+         * Executes the chat action.
+         *
+         * @return the result of the action
+         * @throws Exception if the action fails
+         */
         T execute() throws Exception;
     }
 
@@ -258,33 +280,72 @@ public class AIMChatClientInterceptor {
         int maxResponseLogLength = 500;
         boolean enableMetrics = true;
 
+        /**
+         * Creates a default configuration.
+         */
         public Config() {}
 
+        /**
+         * Creates a configuration with prompt and response logging settings.
+         *
+         * @param logPrompts whether to log prompts
+         * @param logResponses whether to log responses
+         */
         public Config(boolean logPrompts, boolean logResponses) {
             this.logPrompts = logPrompts;
             this.logResponses = logResponses;
         }
 
+        /**
+         * Sets whether to log prompts.
+         *
+         * @param logPrompts true to log prompts
+         * @return this config for chaining
+         */
         public Config logPrompts(boolean logPrompts) {
             this.logPrompts = logPrompts;
             return this;
         }
 
+        /**
+         * Sets whether to log responses.
+         *
+         * @param logResponses true to log responses
+         * @return this config for chaining
+         */
         public Config logResponses(boolean logResponses) {
             this.logResponses = logResponses;
             return this;
         }
 
+        /**
+         * Sets the maximum prompt log length.
+         *
+         * @param length the maximum length in characters
+         * @return this config for chaining
+         */
         public Config maxPromptLogLength(int length) {
             this.maxPromptLogLength = length;
             return this;
         }
 
+        /**
+         * Sets the maximum response log length.
+         *
+         * @param length the maximum length in characters
+         * @return this config for chaining
+         */
         public Config maxResponseLogLength(int length) {
             this.maxResponseLogLength = length;
             return this;
         }
 
+        /**
+         * Sets whether to enable metrics collection.
+         *
+         * @param enable true to enable metrics
+         * @return this config for chaining
+         */
         public Config enableMetrics(boolean enable) {
             this.enableMetrics = enable;
             return this;

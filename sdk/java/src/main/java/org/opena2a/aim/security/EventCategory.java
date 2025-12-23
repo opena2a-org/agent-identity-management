@@ -27,6 +27,11 @@ public enum EventCategory {
         this.value = value;
     }
 
+    /**
+     * Get the string value of this category.
+     *
+     * @return the category string
+     */
     public String getValue() {
         return value;
     }

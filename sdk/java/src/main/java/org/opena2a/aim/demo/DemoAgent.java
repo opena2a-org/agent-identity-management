@@ -21,10 +21,10 @@ import java.util.function.Function;
 /**
  * AIM Demo Agent - See Your Dashboard Update in Real-Time!
  *
- * This interactive demo lets you perform actions and watch your AIM dashboard
- * update instantly.
+ * <p>This interactive demo lets you perform actions and watch your AIM dashboard
+ * update instantly.</p>
  *
- * Run with: mvn exec:java -Dexec.mainClass=org.opena2a.aim.demo.DemoAgent
+ * <p>Run with: {@code mvn exec:java -Dexec.mainClass=org.opena2a.aim.demo.DemoAgent}</p>
  */
 public class DemoAgent {
 
@@ -35,6 +35,18 @@ public class DemoAgent {
     private static final Random random = new Random();
     private static final Scanner scanner = new Scanner(System.in);
 
+    /**
+     * Private constructor to prevent instantiation.
+     */
+    private DemoAgent() {
+        // Demo application class
+    }
+
+    /**
+     * Main entry point for the demo agent.
+     *
+     * @param args command line arguments (not used)
+     */
     public static void main(String[] args) {
         try {
             // Load credentials to get AIM URL
@@ -112,7 +124,7 @@ Watch your AIM dashboard update in real-time as you perform actions!
             mcpCommands.put("filesystem", "npx -y @modelcontextprotocol/server-filesystem /tmp");
 
             agent = AIMClient.secure(
-                    "java-demo-agent",
+                    "demo-agent-java-sdk",
                     Arrays.asList("api:call", "user:read", "db:read"),
                     AgentType.CUSTOM,
                     Arrays.asList("filesystem", "github"),

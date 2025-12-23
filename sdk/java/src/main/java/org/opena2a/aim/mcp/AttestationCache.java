@@ -94,6 +94,8 @@ public class AttestationCache {
 
     /**
      * Get the singleton instance.
+     *
+     * @return the singleton AttestationCache instance
      */
     public static AttestationCache getInstance() {
         if (instance == null) {
@@ -144,6 +146,12 @@ public class AttestationCache {
 
     /**
      * Store an attestation with custom TTL.
+     *
+     * @param serverName MCP server name
+     * @param discoveryResult Discovery result to cache
+     * @param attestationId Attestation ID from AIM server
+     * @param ttlMs Time-to-live in milliseconds
+     * @return Drift report if previous attestation existed
      */
     public Optional<DriftReport> store(String serverName, MCPDiscoveryResult discoveryResult,
                                         String attestationId, long ttlMs) {
@@ -185,6 +193,9 @@ public class AttestationCache {
 
     /**
      * Get a cached attestation.
+     *
+     * @param serverName the MCP server name
+     * @return the cached attestation if present and not expired
      */
     public Optional<CachedAttestation> get(String serverName) {
         CachedAttestation cached = memoryCache.get(serverName);
@@ -196,6 +207,9 @@ public class AttestationCache {
 
     /**
      * Check if a valid attestation exists for a server.
+     *
+     * @param serverName the MCP server name
+     * @return true if a valid (non-expired) attestation exists
      */
     public boolean hasValidAttestation(String serverName) {
         return get(serverName).isPresent();
@@ -203,6 +217,10 @@ public class AttestationCache {
 
     /**
      * Detect drift between cached attestation and new discovery result.
+     *
+     * @param serverName the MCP server name
+     * @param newResult the new discovery result to compare
+     * @return drift report detailing any changes
      */
     public DriftReport detectDrift(String serverName, MCPDiscoveryResult newResult) {
         CachedAttestation cached = memoryCache.get(serverName);
@@ -460,6 +478,9 @@ public class AttestationCache {
 
     /**
      * Get attestation history for a server.
+     *
+     * @param serverName the MCP server name
+     * @return list of history entries
      */
     public List<HistoryEntry> getHistory(String serverName) {
         try {
@@ -477,6 +498,8 @@ public class AttestationCache {
 
     /**
      * Invalidate cache for a server.
+     *
+     * @param serverName the MCP server name to invalidate
      */
     public void invalidate(String serverName) {
         memoryCache.remove(serverName);
@@ -505,6 +528,8 @@ public class AttestationCache {
 
     /**
      * Get all cached server names.
+     *
+     * @return set of cached server names
      */
     public Set<String> getCachedServers() {
         return new HashSet<>(memoryCache.keySet());
@@ -512,6 +537,8 @@ public class AttestationCache {
 
     /**
      * Get cache statistics.
+     *
+     * @return map of statistics
      */
     public Map<String, Object> getStatistics() {
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -531,11 +558,20 @@ public class AttestationCache {
         return stats;
     }
 
-    // Configuration setters
+    /**
+     * Set whether to automatically log drift events.
+     *
+     * @param autoLogDrift true to enable automatic drift logging
+     */
     public void setAutoLogDrift(boolean autoLogDrift) {
         this.autoLogDrift = autoLogDrift;
     }
 
+    /**
+     * Set maximum history entries to retain.
+     *
+     * @param maxHistoryEntries maximum number of history entries
+     */
     public void setMaxHistoryEntries(int maxHistoryEntries) {
         this.maxHistoryEntries = maxHistoryEntries;
     }
@@ -545,18 +581,37 @@ public class AttestationCache {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class CachedAttestation {
+        /** The MCP server name. */
         public String serverName;
+        /** The attestation ID from AIM server. */
         public String attestationId;
+        /** Timestamp when cached. */
         public String cachedAt;
+        /** Timestamp when cache expires. */
         public String expiresAt;
+        /** Number of tools discovered. */
         public int toolCount;
+        /** Number of resources discovered. */
         public int resourceCount;
+        /** Number of prompts discovered. */
         public int promptCount;
+        /** Content hash for quick comparison. */
         public String contentHash;
+        /** Signatures for each tool. */
         public Map<String, String> toolSignatures;
+        /** Signatures for each resource. */
         public Map<String, String> resourceSignatures;
+        /** Signatures for each prompt. */
         public Map<String, String> promptSignatures;
 
+        /** Creates a new empty cached attestation. */
+        public CachedAttestation() {}
+
+        /**
+         * Check if this attestation has expired.
+         *
+         * @return true if expired
+         */
         public boolean isExpired() {
             try {
                 Instant expires = Instant.parse(expiresAt);
@@ -572,14 +627,25 @@ public class AttestationCache {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class HistoryEntry {
+        /** Timestamp of this history entry. */
         public String timestamp;
+        /** The attestation ID. */
         public String attestationId;
+        /** Content hash at this point. */
         public String contentHash;
+        /** Number of tools. */
         public int toolCount;
+        /** Number of resources. */
         public int resourceCount;
+        /** Number of prompts. */
         public int promptCount;
+        /** Whether drift was detected. */
         public boolean driftDetected;
+        /** List of change descriptions. */
         public List<String> changes;
+
+        /** Creates a new empty history entry. */
+        public HistoryEntry() {}
     }
 
     /**
@@ -590,6 +656,11 @@ public class AttestationCache {
         private final List<DriftChange> changes = new ArrayList<>();
         private final boolean hasPreviousAttestation;
 
+        /**
+         * Creates a new drift report.
+         *
+         * @param serverName the MCP server name
+         */
         public DriftReport(String serverName) {
             this.serverName = serverName;
             this.hasPreviousAttestation = true;
@@ -600,36 +671,79 @@ public class AttestationCache {
             this.hasPreviousAttestation = hasPrevious;
         }
 
+        /**
+         * Create a report indicating no previous attestation exists.
+         *
+         * @param serverName the MCP server name
+         * @return a drift report with no previous attestation
+         */
         public static DriftReport noPreviousAttestation(String serverName) {
             return new DriftReport(serverName, false);
         }
 
+        /**
+         * Add a change to this report.
+         *
+         * @param change the drift change to add
+         */
         public void addChange(DriftChange change) {
             changes.add(change);
         }
 
+        /**
+         * Check if any drift was detected.
+         *
+         * @return true if changes were detected
+         */
         public boolean hasDrift() {
             return !changes.isEmpty();
         }
 
+        /**
+         * Check if a previous attestation existed.
+         *
+         * @return true if previous attestation existed
+         */
         public boolean hasPreviousAttestation() {
             return hasPreviousAttestation;
         }
 
+        /**
+         * Get the server name.
+         *
+         * @return the MCP server name
+         */
         public String getServerName() {
             return serverName;
         }
 
+        /**
+         * Get all changes.
+         *
+         * @return unmodifiable list of changes
+         */
         public List<DriftChange> getChanges() {
             return Collections.unmodifiableList(changes);
         }
 
+        /**
+         * Count changes by item type and change type.
+         *
+         * @param itemType the item type (tool, resource, prompt)
+         * @param changeType the change type (ADDED, REMOVED, MODIFIED)
+         * @return count of matching changes
+         */
         public int countByType(String itemType, DriftChange.ChangeType changeType) {
             return (int) changes.stream()
                     .filter(c -> c.getItemType().equals(itemType) && c.getChangeType() == changeType)
                     .count();
         }
 
+        /**
+         * Convert to map representation.
+         *
+         * @return map representation
+         */
         public Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("serverName", serverName);
@@ -645,7 +759,17 @@ public class AttestationCache {
      * Single drift change.
      */
     public static class DriftChange {
-        public enum ChangeType { ADDED, REMOVED, MODIFIED }
+        /**
+         * Type of change detected.
+         */
+        public enum ChangeType {
+            /** Item was added. */
+            ADDED,
+            /** Item was removed. */
+            REMOVED,
+            /** Item was modified. */
+            MODIFIED
+        }
 
         private final ChangeType changeType;
         private final String itemType;
@@ -657,22 +781,65 @@ public class AttestationCache {
             this.itemName = itemName;
         }
 
+        /**
+         * Create an ADDED change.
+         *
+         * @param itemType the item type
+         * @param itemName the item name
+         * @return the drift change
+         */
         public static DriftChange added(String itemType, String itemName) {
             return new DriftChange(ChangeType.ADDED, itemType, itemName);
         }
 
+        /**
+         * Create a REMOVED change.
+         *
+         * @param itemType the item type
+         * @param itemName the item name
+         * @return the drift change
+         */
         public static DriftChange removed(String itemType, String itemName) {
             return new DriftChange(ChangeType.REMOVED, itemType, itemName);
         }
 
+        /**
+         * Create a MODIFIED change.
+         *
+         * @param itemType the item type
+         * @param itemName the item name
+         * @return the drift change
+         */
         public static DriftChange modified(String itemType, String itemName) {
             return new DriftChange(ChangeType.MODIFIED, itemType, itemName);
         }
 
+        /**
+         * Get the change type.
+         *
+         * @return the change type
+         */
         public ChangeType getChangeType() { return changeType; }
+
+        /**
+         * Get the item type.
+         *
+         * @return the item type
+         */
         public String getItemType() { return itemType; }
+
+        /**
+         * Get the item name.
+         *
+         * @return the item name
+         */
         public String getItemName() { return itemName; }
 
+        /**
+         * Convert to map representation.
+         *
+         * @return map representation
+         */
         public Map<String, String> toMap() {
             Map<String, String> map = new LinkedHashMap<>();
             map.put("changeType", changeType.name());

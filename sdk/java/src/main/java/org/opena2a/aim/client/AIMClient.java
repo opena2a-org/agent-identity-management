@@ -3,6 +3,7 @@ package org.opena2a.aim.client;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import okhttp3.*;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
@@ -41,6 +43,7 @@ import java.util.function.Supplier;
  * }
  * }</pre>
  */
+@SuppressWarnings("unchecked")
 public class AIMClient implements AutoCloseable {
 
     private static final Logger logger = LoggerFactory.getLogger(AIMClient.class);
@@ -435,8 +438,9 @@ public class AIMClient implements AutoCloseable {
 
             // FIRST: Check if agent already exists (get or create pattern)
             // Use sdk-api endpoint which accepts both ID and name
+            String encodedName = URLEncoder.encode(agentName, StandardCharsets.UTF_8).replace("+", "%20");
             try {
-                String response = get("/api/v1/sdk-api/agents/" + agentName);
+                String response = get("/api/v1/sdk-api/agents/" + encodedName);
                 // Agent exists - reconnect to it
                 logger.info("Agent '{}' already exists, connecting...", agentName);
                 handleRegistrationResponse(response, true);
@@ -457,8 +461,22 @@ public class AIMClient implements AutoCloseable {
 
             // Agent doesn't exist - create it
             ObjectNode payload = buildAgentPayload();
-            String response = post("/api/v1/agents", payload.toString());
-            handleRegistrationResponse(response, false);
+            try {
+                String response = post("/api/v1/agents", payload.toString());
+                handleRegistrationResponse(response, false);
+            } catch (AIMException e) {
+                // Handle race condition: agent was created between our check and create
+                if (e.getMessage().contains("duplicate key") || e.getMessage().contains("already exists")) {
+                    logger.info("Agent '{}' was created concurrently, connecting...", agentName);
+                    String response = get("/api/v1/sdk-api/agents/" + encodedName);
+                    handleRegistrationResponse(response, true);
+                    if (this.agentId != null) {
+                        updateExistingAgent();
+                    }
+                } else {
+                    throw e;
+                }
+            }
 
             // Register and attest MCP servers
             registerAndAttestMcpServers();
@@ -656,13 +674,6 @@ public class AIMClient implements AutoCloseable {
         // Step 3: Register and attest each server
         for (String mcpName : talksTo) {
             try {
-                // Register the MCP server
-                String mcpServerId = registerMcpServerViaSdkEndpoint(mcpName);
-                if (mcpServerId == null) {
-                    System.out.println("    ⚠️  Could not register MCP server: " + mcpName);
-                    continue;
-                }
-
                 // Get discovery result for this server (from parallel discovery)
                 MCPDiscoveryResult discovery = discoveryResults.get(mcpName);
                 List<String> discoveredCapabilities = Collections.emptyList();
@@ -680,6 +691,13 @@ public class AIMClient implements AutoCloseable {
                     System.out.println("    ⚠️  " + mcpName + ": discovery failed - " + discovery.getError());
                 } else {
                     System.out.println("    ✓ " + mcpName + ": registered (no discovery command)");
+                }
+
+                // Register the MCP server with discovered capabilities
+                String mcpServerId = registerMcpServerViaSdkEndpoint(mcpName, discoveredCapabilities);
+                if (mcpServerId == null) {
+                    System.out.println("    ⚠️  Could not register MCP server: " + mcpName);
+                    continue;
                 }
 
                 // Attest to the MCP server
@@ -702,9 +720,10 @@ public class AIMClient implements AutoCloseable {
      * Endpoint: POST /api/v1/sdk-api/agents/{agentId}/mcp-servers
      *
      * @param mcpName Name of the MCP server
+     * @param capabilities List of discovered capability names (tools, resources, prompts)
      * @return MCP server ID or null if registration fails
      */
-    private String registerMcpServerViaSdkEndpoint(String mcpName) {
+    private String registerMcpServerViaSdkEndpoint(String mcpName, List<String> capabilities) {
         try {
             String mcpUrl = "stdio://" + mcpName;
 
@@ -714,7 +733,15 @@ public class AIMClient implements AutoCloseable {
             mcpData.put("description", "MCP server registered by " + agentName);
             mcpData.put("url", mcpUrl);
             mcpData.put("version", "1.0.0");
-            mcpData.putArray("capabilities");  // Empty for now, will be discovered later
+
+            // Add discovered capabilities
+            ArrayNode capabilitiesArray = mcpData.putArray("capabilities");
+            if (capabilities != null) {
+                for (String capability : capabilities) {
+                    capabilitiesArray.add(capability);
+                }
+            }
+
             mcpData.put("registeredByAgent", agentId);
             mcpData.put("verificationMethod", "agent_attestation");
 
@@ -1711,7 +1738,10 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Get the agent ID (fetches if not cached).
+     * Gets the agent ID.
+     * If not cached, fetches it from the backend.
+     *
+     * @return the agent ID
      */
     public String getAgentId() {
         if (agentId != null && !agentId.isEmpty()) {
@@ -1856,14 +1886,29 @@ public class AIMClient implements AutoCloseable {
         }
     }
 
+    /**
+     * Gets the agent name.
+     *
+     * @return the agent name
+     */
     public String getAgentName() {
         return agentName;
     }
 
+    /**
+     * Gets the AIM server URL.
+     *
+     * @return the AIM server URL
+     */
     public String getAimUrl() {
         return aimUrl;
     }
 
+    /**
+     * Gets the agent type.
+     *
+     * @return the agent type
+     */
     public AgentType getAgentType() {
         return agentType;
     }
@@ -2113,7 +2158,9 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * List agents with default parameters.
+     * Lists agents with default parameters.
+     *
+     * @return a map containing the list of agents
      */
     public Map<String, Object> listAgents() {
         return listAgents(50, 0, null, null);
@@ -2422,7 +2469,8 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Builder for AIMClient.
+     * Builder for creating AIMClient instances.
+     * Provides a fluent API for configuring agent identity and authentication settings.
      */
     public static class Builder {
         private String agentId;
@@ -2430,9 +2478,9 @@ public class AIMClient implements AutoCloseable {
         private String aimUrl = "http://localhost:8080";
         private AgentType agentType = AgentType.CUSTOM;
         private List<String> capabilities = new ArrayList<>();
-        private List<String> talksTo = new ArrayList<>(); // MCP servers
-        private Map<String, String> mcpCommands = new HashMap<>(); // MCP server name to command
-        private List<String> tags = new ArrayList<>(); // Tags for categorization
+        private List<String> talksTo = new ArrayList<>();
+        private Map<String, String> mcpCommands = new HashMap<>();
+        private List<String> tags = new ArrayList<>();
         private String description;
         private Map<String, Object> metadata = new HashMap<>();
         private String clientId;
@@ -2442,111 +2490,249 @@ public class AIMClient implements AutoCloseable {
         private String sdkTokenId;
         private Map<String, String> credentials;
 
+        /**
+         * Creates a new Builder with default settings.
+         */
+        public Builder() {}
+
+        /**
+         * Sets the agent ID.
+         *
+         * @param agentId the unique identifier for the agent
+         * @return this builder for chaining
+         */
         public Builder agentId(String agentId) {
             this.agentId = agentId;
             return this;
         }
 
+        /**
+         * Sets the agent name.
+         *
+         * @param agentName the human-readable name for the agent
+         * @return this builder for chaining
+         */
         public Builder agentName(String agentName) {
             this.agentName = agentName;
             return this;
         }
 
+        /**
+         * Sets the AIM server URL.
+         *
+         * @param aimUrl the base URL of the AIM server (default: http://localhost:8080)
+         * @return this builder for chaining
+         */
         public Builder aimUrl(String aimUrl) {
             this.aimUrl = aimUrl;
             return this;
         }
 
+        /**
+         * Sets the agent type.
+         *
+         * @param agentType the type of agent framework being used
+         * @return this builder for chaining
+         */
         public Builder agentType(AgentType agentType) {
             this.agentType = agentType;
             return this;
         }
 
+        /**
+         * Sets the list of agent capabilities.
+         *
+         * @param capabilities the list of capability strings the agent supports
+         * @return this builder for chaining
+         */
         public Builder capabilities(List<String> capabilities) {
             this.capabilities = capabilities;
             return this;
         }
 
+        /**
+         * Adds a single capability to the agent.
+         *
+         * @param capability the capability string to add
+         * @return this builder for chaining
+         */
         public Builder addCapability(String capability) {
             this.capabilities.add(capability);
             return this;
         }
 
+        /**
+         * Sets the list of MCP servers the agent communicates with.
+         *
+         * @param talksTo the list of MCP server names
+         * @return this builder for chaining
+         */
         public Builder talksTo(List<String> talksTo) {
             this.talksTo = talksTo;
             return this;
         }
 
+        /**
+         * Adds an MCP server that the agent communicates with.
+         *
+         * @param mcpServer the name of the MCP server
+         * @return this builder for chaining
+         */
         public Builder addTalksTo(String mcpServer) {
             this.talksTo.add(mcpServer);
             return this;
         }
 
+        /**
+         * Sets the MCP server commands mapping.
+         *
+         * @param mcpCommands map of MCP server names to their startup commands
+         * @return this builder for chaining
+         */
         public Builder mcpCommands(Map<String, String> mcpCommands) {
             this.mcpCommands = new HashMap<>(mcpCommands);
             return this;
         }
 
+        /**
+         * Adds an MCP server command mapping.
+         *
+         * @param serverName the name of the MCP server
+         * @param command the startup command for the server
+         * @return this builder for chaining
+         */
         public Builder addMcpCommand(String serverName, String command) {
             this.mcpCommands.put(serverName, command);
             return this;
         }
 
+        /**
+         * Sets the list of tags for agent categorization.
+         *
+         * @param tags the list of tag strings
+         * @return this builder for chaining
+         */
         public Builder tags(List<String> tags) {
             this.tags = tags;
             return this;
         }
 
+        /**
+         * Adds a single tag for agent categorization.
+         *
+         * @param tag the tag string to add
+         * @return this builder for chaining
+         */
         public Builder addTag(String tag) {
             this.tags.add(tag);
             return this;
         }
 
+        /**
+         * Sets the agent description.
+         *
+         * @param description a human-readable description of the agent
+         * @return this builder for chaining
+         */
         public Builder description(String description) {
             this.description = description;
             return this;
         }
 
+        /**
+         * Sets the agent metadata.
+         *
+         * @param metadata map of additional metadata key-value pairs
+         * @return this builder for chaining
+         */
         public Builder metadata(Map<String, Object> metadata) {
             this.metadata = metadata;
             return this;
         }
 
+        /**
+         * Adds a single metadata entry.
+         *
+         * @param key the metadata key
+         * @param value the metadata value
+         * @return this builder for chaining
+         */
         public Builder addMetadata(String key, Object value) {
             this.metadata.put(key, value);
             return this;
         }
 
+        /**
+         * Sets the OAuth client ID for authentication.
+         *
+         * @param clientId the OAuth client ID
+         * @return this builder for chaining
+         */
         public Builder clientId(String clientId) {
             this.clientId = clientId;
             return this;
         }
 
+        /**
+         * Sets the OAuth client secret for authentication.
+         *
+         * @param clientSecret the OAuth client secret
+         * @return this builder for chaining
+         */
         public Builder clientSecret(String clientSecret) {
             this.clientSecret = clientSecret;
             return this;
         }
 
+        /**
+         * Sets the organization ID.
+         *
+         * @param organizationId the organization identifier
+         * @return this builder for chaining
+         */
         public Builder organizationId(String organizationId) {
             this.organizationId = organizationId;
             return this;
         }
 
+        /**
+         * Sets the OAuth refresh token for token renewal.
+         *
+         * @param refreshToken the OAuth refresh token
+         * @return this builder for chaining
+         */
         public Builder refreshToken(String refreshToken) {
             this.refreshToken = refreshToken;
             return this;
         }
 
+        /**
+         * Sets the SDK token ID.
+         *
+         * @param sdkTokenId the SDK token identifier
+         * @return this builder for chaining
+         */
         public Builder sdkTokenId(String sdkTokenId) {
             this.sdkTokenId = sdkTokenId;
             return this;
         }
 
+        /**
+         * Sets the credentials map for secure storage.
+         *
+         * @param credentials map of credential key-value pairs
+         * @return this builder for chaining
+         */
         public Builder credentials(Map<String, String> credentials) {
             this.credentials = new HashMap<>(credentials);
             return this;
         }
 
+        /**
+         * Builds the AIMClient instance with the configured settings.
+         *
+         * @return a new AIMClient instance
+         */
         public AIMClient build() {
             return new AIMClient(this);
         }

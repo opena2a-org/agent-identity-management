@@ -54,6 +54,14 @@ import java.util.concurrent.TimeUnit;
 public class MCPIntegration {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPIntegration.class);
+
+    /**
+     * Private constructor to prevent instantiation.
+     * This is a utility class with only static methods.
+     */
+    private MCPIntegration() {
+        // Utility class
+    }
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ObjectMapper objectMapper = new ObjectMapper();
 

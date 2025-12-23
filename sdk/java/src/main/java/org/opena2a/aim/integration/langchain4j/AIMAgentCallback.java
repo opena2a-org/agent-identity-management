@@ -71,6 +71,11 @@ public class AIMAgentCallback {
     private int maxIterations = 10;
     private long maxDurationMs = 60000; // 1 minute
 
+    /**
+     * Creates a new AIMAgentCallback with the specified AIM client.
+     *
+     * @param client the AIM client for security logging and agent tracking
+     */
     public AIMAgentCallback(AIMClient client) {
         this.client = client;
         this.securityLogger = SecurityLogger.getInstance();
@@ -114,6 +119,9 @@ public class AIMAgentCallback {
 
     /**
      * Called when the agent produces a thought.
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param thought the agent's thought content
      */
     public void onAgentThought(String executionId, String thought) {
         AgentExecution execution = executions.get(executionId);
@@ -134,6 +142,10 @@ public class AIMAgentCallback {
 
     /**
      * Called when the agent takes an action (calls a tool).
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param action the name of the action or tool being called
+     * @param input the input to the action or tool
      */
     public void onAgentAction(String executionId, String action, Object input) {
         AgentExecution execution = executions.get(executionId);
@@ -167,6 +179,9 @@ public class AIMAgentCallback {
 
     /**
      * Called when the agent receives an observation (tool result).
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param observation the observation or tool result content
      */
     public void onAgentObservation(String executionId, String observation) {
         AgentExecution execution = executions.get(executionId);
@@ -184,6 +199,11 @@ public class AIMAgentCallback {
 
     /**
      * Combined thought-action-observation for ReAct pattern.
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param thought the agent's thought content
+     * @param action the name of the action being taken
+     * @param observation the observation or result from the action
      */
     public void onThoughtActionObservation(String executionId, String thought,
                                             String action, String observation) {
@@ -194,6 +214,9 @@ public class AIMAgentCallback {
 
     /**
      * Called when the agent finishes successfully.
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param output the final output from the agent
      */
     public void onAgentFinish(String executionId, String output) {
         AgentExecution execution = executions.remove(executionId);
@@ -228,6 +251,9 @@ public class AIMAgentCallback {
 
     /**
      * Called when the agent fails.
+     *
+     * @param executionId the execution ID returned from onAgentStart
+     * @param error the error that caused the agent to fail
      */
     public void onAgentError(String executionId, Throwable error) {
         AgentExecution execution = executions.remove(executionId);
@@ -261,6 +287,9 @@ public class AIMAgentCallback {
 
     /**
      * Check if execution should continue (iteration/time limits).
+     *
+     * @param executionId the execution ID to check
+     * @return true if the execution should continue, false if limits reached
      */
     public boolean shouldContinue(String executionId) {
         AgentExecution execution = executions.get(executionId);
@@ -286,6 +315,9 @@ public class AIMAgentCallback {
 
     /**
      * Get execution status.
+     *
+     * @param executionId the execution ID to get status for
+     * @return a map containing execution status information
      */
     public Map<String, Object> getExecutionStatus(String executionId) {
         AgentExecution execution = executions.get(executionId);
@@ -305,6 +337,8 @@ public class AIMAgentCallback {
 
     /**
      * Get global metrics.
+     *
+     * @return a map containing global execution metrics
      */
     public Map<String, Object> getMetrics() {
         Map<String, Object> metrics = new LinkedHashMap<>();
@@ -329,6 +363,8 @@ public class AIMAgentCallback {
 
     /**
      * Configure max iterations.
+     *
+     * @param maxIterations the maximum number of iterations allowed
      */
     public void setMaxIterations(int maxIterations) {
         this.maxIterations = maxIterations;
@@ -336,6 +372,8 @@ public class AIMAgentCallback {
 
     /**
      * Configure max duration.
+     *
+     * @param maxDurationMs the maximum duration in milliseconds
      */
     public void setMaxDurationMs(long maxDurationMs) {
         this.maxDurationMs = maxDurationMs;

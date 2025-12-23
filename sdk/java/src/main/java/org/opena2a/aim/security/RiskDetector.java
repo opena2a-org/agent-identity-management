@@ -44,6 +44,7 @@ import java.util.regex.Pattern;
  *
  * <h2>Built-in Patterns:</h2>
  * <table>
+ *   <caption>Risk Levels and Their Associated Patterns</caption>
  *   <tr><th>Risk Level</th><th>Patterns</th></tr>
  *   <tr><td>CRITICAL</td><td>admin:*, system:delete, database:drop, credential:*, root:*</td></tr>
  *   <tr><td>HIGH</td><td>payment:*, user:delete, data:export, pii:*, phi:*, pci:*</td></tr>

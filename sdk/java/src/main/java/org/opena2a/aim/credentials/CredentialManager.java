@@ -38,7 +38,10 @@ import java.util.Map;
  *   <li>SDK package .aim/sdk_credentials.json (fresh download - auto-installs)</li>
  *   <li>Current directory .aim/sdk_credentials.json</li>
  * </ol>
+ *
+ * @see CredentialType
  */
+@SuppressWarnings("javadoc")
 public class CredentialManager {
 
     private static final Logger logger = LoggerFactory.getLogger(CredentialManager.class);
@@ -54,9 +57,12 @@ public class CredentialManager {
      * Credential types in the AIM ecosystem.
      */
     public enum CredentialType {
-        SDK_OAUTH("sdk_oauth"),      // SDK authentication (refreshToken, sdkTokenId)
-        AGENT("agent"),              // Agent keys (agentId, privateKey)
-        UNKNOWN("unknown");          // Unrecognized format
+        /** SDK authentication using OAuth refresh tokens */
+        SDK_OAUTH("sdk_oauth"),
+        /** Agent authentication using Ed25519 keys */
+        AGENT("agent"),
+        /** Unrecognized credential format */
+        UNKNOWN("unknown");
 
         private final String value;
 
@@ -64,6 +70,11 @@ public class CredentialManager {
             this.value = value;
         }
 
+        /**
+         * Gets the string value of this credential type.
+         *
+         * @return the credential type value
+         */
         public String getValue() {
             return value;
         }

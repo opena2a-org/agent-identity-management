@@ -12,13 +12,21 @@ public final class EventTypes {
      * Authentication event types.
      */
     public enum Authn {
+        /** Token was refreshed successfully. */
         TOKEN_REFRESH,
+        /** Token refresh failed. */
         TOKEN_REFRESH_FAILED,
+        /** Token has expired. */
         TOKEN_EXPIRED,
+        /** Token was revoked. */
         TOKEN_REVOKED,
+        /** Token was recovered from storage. */
         TOKEN_RECOVERED,
+        /** Credentials were loaded. */
         CREDENTIAL_LOAD,
+        /** Credential load failed. */
         CREDENTIAL_LOAD_FAILED,
+        /** SDK was initialized. */
         SDK_INITIALIZED
     }
 
@@ -26,15 +34,25 @@ public final class EventTypes {
      * Authorization event types.
      */
     public enum Authz {
+        /** Capability was checked. */
         CAPABILITY_CHECK,
+        /** Capability was granted. */
         CAPABILITY_GRANTED,
+        /** Capability was denied. */
         CAPABILITY_DENIED,
+        /** Capability escalation attempted. */
         CAPABILITY_ESCALATION,
+        /** Action was executed. */
         ACTION_EXECUTED,
+        /** Action was denied. */
         ACTION_DENIED,
+        /** JIT access request initiated. */
         JIT_REQUEST,
+        /** JIT access was approved. */
         JIT_APPROVED,
+        /** JIT access was denied. */
         JIT_DENIED,
+        /** JIT request timed out. */
         JIT_TIMEOUT
     }
 
@@ -42,14 +60,23 @@ public final class EventTypes {
      * Agent lifecycle event types.
      */
     public enum Agent {
+        /** Agent was registered. */
         AGENT_REGISTERED,
+        /** Agent registration failed. */
         AGENT_REGISTRATION_FAILED,
+        /** Agent was loaded from cache. */
         AGENT_LOADED,
+        /** Agent was updated. */
         AGENT_UPDATED,
+        /** Agent was deleted. */
         AGENT_DELETED,
+        /** Agent was suspended. */
         AGENT_SUSPENDED,
+        /** Agent was reactivated. */
         AGENT_REACTIVATED,
+        /** Agent has stale credentials. */
         AGENT_STALE_CREDENTIALS,
+        /** Agent trust score changed. */
         TRUST_SCORE_CHANGED
     }
 

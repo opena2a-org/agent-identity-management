@@ -101,11 +101,16 @@ public class AIMLangChain4jConfig {
 
     /**
      * Builder for LangChain4j configuration.
+     *
+     * @return a new Builder instance
      */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Builder for LangChain4j integration configuration.
+     */
     public static class Builder {
         private String agentName = "langchain4j-agent";
         private List<String> capabilities;
@@ -121,61 +126,135 @@ public class AIMLangChain4jConfig {
         private boolean logResponses = false;
         private boolean logToolCalls = true;
 
+        /** Creates a new Builder with default settings. */
+        public Builder() {}
+
+        /**
+         * Sets the agent name.
+         *
+         * @param agentName the agent name
+         * @return this builder
+         */
         public Builder agentName(String agentName) {
             this.agentName = agentName;
             return this;
         }
 
+        /**
+         * Sets the capabilities.
+         *
+         * @param capabilities the capability list
+         * @return this builder
+         */
         public Builder capabilities(List<String> capabilities) {
             this.capabilities = capabilities;
             return this;
         }
 
+        /**
+         * Sets the agent type.
+         *
+         * @param agentType the agent type
+         * @return this builder
+         */
         public Builder agentType(AgentType agentType) {
             this.agentType = agentType;
             return this;
         }
 
+        /**
+         * Sets the MCP servers.
+         *
+         * @param talksTo the MCP server list
+         * @return this builder
+         */
         public Builder talksTo(List<String> talksTo) {
             this.talksTo = talksTo;
             return this;
         }
 
+        /**
+         * Sets the description.
+         *
+         * @param description the agent description
+         * @return this builder
+         */
         public Builder description(String description) {
             this.description = description;
             return this;
         }
 
+        /**
+         * Sets the tags.
+         *
+         * @param tags the tag list
+         * @return this builder
+         */
         public Builder tags(List<String> tags) {
             this.tags = tags;
             return this;
         }
 
+        /**
+         * Sets the metadata.
+         *
+         * @param metadata the metadata map
+         * @return this builder
+         */
         public Builder metadata(Map<String, Object> metadata) {
             this.metadata = metadata;
             return this;
         }
 
+        /**
+         * Sets the MCP commands.
+         *
+         * @param mcpCommands the MCP command map
+         * @return this builder
+         */
         public Builder mcpCommands(Map<String, String> mcpCommands) {
             this.mcpCommands = mcpCommands;
             return this;
         }
 
+        /**
+         * Sets whether to log prompts.
+         *
+         * @param logPrompts true to log prompts
+         * @return this builder
+         */
         public Builder logPrompts(boolean logPrompts) {
             this.logPrompts = logPrompts;
             return this;
         }
 
+        /**
+         * Sets whether to log responses.
+         *
+         * @param logResponses true to log responses
+         * @return this builder
+         */
         public Builder logResponses(boolean logResponses) {
             this.logResponses = logResponses;
             return this;
         }
 
+        /**
+         * Sets whether to log tool calls.
+         *
+         * @param logToolCalls true to log tool calls
+         * @return this builder
+         */
         public Builder logToolCalls(boolean logToolCalls) {
             this.logToolCalls = logToolCalls;
             return this;
         }
 
+        /**
+         * Builds only the AIM client.
+         *
+         * @return the configured AIMClient
+         */
         public AIMClient buildClient() {
             log.info("Creating AIMClient for LangChain4j: {}", agentName);
             return AIMClient.secure(
@@ -190,6 +269,11 @@ public class AIMLangChain4jConfig {
             );
         }
 
+        /**
+         * Builds the complete integration.
+         *
+         * @return the LangChain4j integration bundle
+         */
         public LangChain4jIntegration build() {
             AIMClient client = buildClient();
             AIMChatModelListener.Config listenerConfig = new AIMChatModelListener.Config()
@@ -209,6 +293,12 @@ public class AIMLangChain4jConfig {
         private final AIMToolExecutor toolExecutor;
         private final AIMAgentCallback agentCallback;
 
+        /**
+         * Creates a new integration bundle.
+         *
+         * @param client the AIM client
+         * @param config the listener configuration
+         */
         public LangChain4jIntegration(AIMClient client, AIMChatModelListener.Config config) {
             this.client = client;
             this.listener = new AIMChatModelListener(client, config);
@@ -216,9 +306,32 @@ public class AIMLangChain4jConfig {
             this.agentCallback = new AIMAgentCallback(client);
         }
 
+        /**
+         * Gets the AIM client.
+         *
+         * @return the client
+         */
         public AIMClient getClient() { return client; }
+
+        /**
+         * Gets the chat model listener.
+         *
+         * @return the listener
+         */
         public AIMChatModelListener getListener() { return listener; }
+
+        /**
+         * Gets the tool executor.
+         *
+         * @return the tool executor
+         */
         public AIMToolExecutor getToolExecutor() { return toolExecutor; }
+
+        /**
+         * Gets the agent callback.
+         *
+         * @return the agent callback
+         */
         public AIMAgentCallback getAgentCallback() { return agentCallback; }
     }
 }
