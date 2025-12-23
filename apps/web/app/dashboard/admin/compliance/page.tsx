@@ -760,6 +760,8 @@ export default function CompliancePage() {
   });
   const [auditTrailExpanded, setAuditTrailExpanded] = useState(true);
   const [exportingAuditLogs, setExportingAuditLogs] = useState(false);
+  const [auditTrailPage, setAuditTrailPage] = useState(1);
+  const AUDIT_TRAIL_PAGE_SIZE = 25;
 
   const fetchComplianceData = async () => {
     try {
@@ -1460,6 +1462,16 @@ export default function CompliancePage() {
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     {getUnifiedTimeline().length} events
                   </span>
+
+                  {/* Reset page on filter change */}
+                  {(auditLogFilter.search || auditLogFilter.eventType !== "all") && auditTrailPage > 1 && (
+                    <button
+                      onClick={() => setAuditTrailPage(1)}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Reset page
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1471,7 +1483,7 @@ export default function CompliancePage() {
                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
 
                     <div className="space-y-4">
-                      {getUnifiedTimeline().slice(0, 50).map((event) => {
+                      {getUnifiedTimeline().slice(0, auditTrailPage * AUDIT_TRAIL_PAGE_SIZE).map((event) => {
                         const { icon: Icon, color, bg, badge } = getEventStyle(event);
                         return (
                           <div key={event.id} className="relative flex items-start gap-4 pl-10">
@@ -1546,11 +1558,30 @@ export default function CompliancePage() {
                       })}
                     </div>
 
-                    {getUnifiedTimeline().length > 50 && (
-                      <div className="mt-4 text-center">
+                    {/* Pagination Controls */}
+                    {getUnifiedTimeline().length > 0 && (
+                      <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Showing 50 of {getUnifiedTimeline().length} events. Export to see all.
+                          Showing {Math.min(auditTrailPage * AUDIT_TRAIL_PAGE_SIZE, getUnifiedTimeline().length)} of {getUnifiedTimeline().length} events
                         </p>
+                        <div className="flex items-center gap-2">
+                          {auditTrailPage > 1 && (
+                            <button
+                              onClick={() => setAuditTrailPage(1)}
+                              className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            >
+                              Show Less
+                            </button>
+                          )}
+                          {auditTrailPage * AUDIT_TRAIL_PAGE_SIZE < getUnifiedTimeline().length && (
+                            <button
+                              onClick={() => setAuditTrailPage(auditTrailPage + 1)}
+                              className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              Load More ({Math.min(AUDIT_TRAIL_PAGE_SIZE, getUnifiedTimeline().length - auditTrailPage * AUDIT_TRAIL_PAGE_SIZE)} more)
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
