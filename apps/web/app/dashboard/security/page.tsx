@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Shield,
   AlertTriangle,
@@ -363,21 +363,23 @@ export default function SecurityPage() {
     }
   };
 
-  // Filter threats based on selected filters
-  const filteredThreats = threats.filter((threat) => {
-    if (severityFilter !== "all" && threat.severity !== severityFilter) return false;
-    if (statusFilter !== "all") {
-      const isResolved = threat.isBlocked || !!threat.resolvedAt;
-      if (statusFilter === "active" && isResolved) return false;
-      if (statusFilter === "resolved" && !isResolved) return false;
-    }
-    if (targetTypeFilter !== "all") {
-      const targetType = threat.targetType?.toLowerCase() || "agent";
-      if (targetTypeFilter === "agent" && (targetType === "mcp_server" || targetType === "mcp")) return false;
-      if (targetTypeFilter === "mcp" && targetType !== "mcp_server" && targetType !== "mcp") return false;
-    }
-    return true;
-  });
+  // Filter threats based on selected filters (memoized for performance)
+  const filteredThreats = useMemo(() => {
+    return threats.filter((threat) => {
+      if (severityFilter !== "all" && threat.severity !== severityFilter) return false;
+      if (statusFilter !== "all") {
+        const isResolved = threat.isBlocked || !!threat.resolvedAt;
+        if (statusFilter === "active" && isResolved) return false;
+        if (statusFilter === "resolved" && !isResolved) return false;
+      }
+      if (targetTypeFilter !== "all") {
+        const targetType = threat.targetType?.toLowerCase() || "agent";
+        if (targetTypeFilter === "agent" && (targetType === "mcp_server" || targetType === "mcp")) return false;
+        if (targetTypeFilter === "mcp" && targetType !== "mcp_server" && targetType !== "mcp") return false;
+      }
+      return true;
+    });
+  }, [threats, severityFilter, statusFilter, targetTypeFilter]);
 
   const activeFiltersCount = [severityFilter, statusFilter, targetTypeFilter].filter(f => f !== "all").length;
 
@@ -391,8 +393,8 @@ export default function SecurityPage() {
     fetchSecurityData();
   }, []);
 
-  // Create unified security activities from multiple data sources
-  const getUnifiedSecurityActivities = (): SecurityActivity[] => {
+  // Create unified security activities from multiple data sources (memoized for performance)
+  const securityActivities = useMemo((): SecurityActivity[] => {
     const activities: SecurityActivity[] = [];
 
     // Add agent activities (recent creations/updates)
@@ -570,9 +572,7 @@ export default function SecurityPage() {
       }
       return true;
     });
-  };
-
-  const securityActivities = getUnifiedSecurityActivities();
+  }, [agents, mcpServers, verificationEvents, auditLogs]);
 
   // Handler for viewing threat details
   const handleViewThreat = (threat: SecurityThreat) => {
