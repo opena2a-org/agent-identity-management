@@ -466,7 +466,7 @@ export default function SecurityPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Your AI Fleet is {metrics?.securityStatus || "Loading"}
+                    Your AI Fleet
                   </h1>
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${statusIndicator.color} animate-pulse`}></span>
