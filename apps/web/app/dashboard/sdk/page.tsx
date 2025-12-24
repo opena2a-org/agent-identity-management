@@ -232,7 +232,7 @@ export default function SDKDownloadPage() {
                     ✅ Stable
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
-                    v1.14.0
+                    v1.15.0
                   </span>
                 </div>
               </div>
