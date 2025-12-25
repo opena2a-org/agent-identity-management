@@ -316,7 +316,7 @@ export default function CapabilityRequestsPage() {
             <AlertDescription className="text-blue-600 dark:text-blue-400">
               All capability requests are being <strong>auto-approved</strong> because strict mode is disabled.
               To require manual approval for capability requests, enable{" "}
-              <a href="/dashboard/security/policies" className="underline font-medium hover:text-blue-800">
+              <a href="/dashboard/admin/security-policies" className="underline font-medium hover:text-blue-800">
                 Strict Mode
               </a>{" "}
               in Global Enforcement settings.

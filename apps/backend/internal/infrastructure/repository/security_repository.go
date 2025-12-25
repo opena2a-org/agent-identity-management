@@ -928,3 +928,30 @@ func (r *SecurityRepository) GetSecurityScan(scanID uuid.UUID) (*domain.Security
 
 	return scan, nil
 }
+
+// UpdateSecurityScan updates a security scan with results
+func (r *SecurityRepository) UpdateSecurityScan(scanID uuid.UUID, threatsFound, anomaliesFound, vulnerabilitiesFound int, securityScore float64, status string, completedAt *time.Time) error {
+	query := `
+		UPDATE security_scans
+		SET threats_found = $1, anomalies_found = $2, vulnerabilities_found = $3,
+			security_score = $4, status = $5, completed_at = $6
+		WHERE id = $7
+	`
+
+	_, err := r.db.Exec(
+		query,
+		threatsFound,
+		anomaliesFound,
+		vulnerabilitiesFound,
+		securityScore,
+		status,
+		completedAt,
+		scanID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update security scan: %w", err)
+	}
+
+	return nil
+}

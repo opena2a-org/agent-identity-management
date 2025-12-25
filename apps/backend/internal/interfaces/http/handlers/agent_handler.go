@@ -133,7 +133,10 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 
 // ListAgents returns all agents for the organization
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	agents, err := h.agentService.ListAgents(c.Context(), orgID)
 	if err != nil {
@@ -154,8 +157,10 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 // CreateAgent creates a new agent and automatically generates an API key for it
 // This is a streamlined 1-step process: create agent + create API key in one operation
 func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
 
 	// ✅ Extract user email from JWT claims (set by AuthMiddleware)
 	// This is used as a fallback for audit trail if user lookup fails
@@ -265,7 +270,11 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 
 // GetAgent returns a single agent
 func (h *AgentHandler) GetAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -292,8 +301,11 @@ func (h *AgentHandler) GetAgent(c fiber.Ctx) error {
 
 // UpdateAgent updates an agent
 func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -349,8 +361,11 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 
 // DeleteAgent deletes an agent
 func (h *AgentHandler) DeleteAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -395,8 +410,11 @@ func (h *AgentHandler) DeleteAgent(c fiber.Ctx) error {
 
 // VerifyAgent verifies an agent (admin/manager only)
 func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -735,7 +753,11 @@ func (h *AgentHandler) LogCapabilityResult(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /agents/{id}/sdk [get]
 func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -816,8 +838,8 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Set("Content-Length", fmt.Sprintf("%d", len(sdkBytes)))
 
-	// Log audit
-	userID := c.Locals("user_id").(uuid.UUID)
+	// Log audit (userID is optional for SDK download - could be API key auth)
+	userID, _ := GetUserID(c)
 	h.auditService.LogAction(
 		c.Context(),
 		orgID,
@@ -848,8 +870,11 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/credentials [get]
 func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -931,14 +956,14 @@ func getAIMBaseURL(c fiber.Ctx) string {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /api/v1/agents/{id}/mcp-servers [put]
 func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// Support both JWT auth (user_id) and API key auth (no user_id)
-	var userID uuid.UUID
-	if userIDLocal := c.Locals("user_id"); userIDLocal != nil {
-		userID = userIDLocal.(uuid.UUID)
-	}
-	// If no user_id (API key auth), we'll fetch it from the agent later
+	// userID is optional - GetUserID returns uuid.Nil if not present
+	userID, _ := GetUserID(c)
 
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1032,8 +1057,11 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /api/v1/agents/{id}/mcp-servers/{mcp_id} [delete]
 func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1118,7 +1146,11 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /api/v1/agents/{id}/mcp-servers [get]
 func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1271,8 +1303,11 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /api/v1/agents/{id}/mcp-servers/detect [post]
 func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1495,7 +1530,11 @@ func (h *AgentHandler) GetAgentTrustScoreHistory(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /agents/{id}/alerts [get]
 func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1561,8 +1600,11 @@ func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /agents/{id}/trust-score [put]
 func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1673,8 +1715,11 @@ func (h *AgentHandler) RecalculateAgentTrustScore(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/suspend [post]
 func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1744,8 +1789,11 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/reactivate [post]
 func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1816,8 +1864,11 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/rotate-credentials [post]
 func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1895,8 +1946,11 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/keys [put]
 func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1991,7 +2045,11 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Router /agents/{id}/activity [get]
 func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
