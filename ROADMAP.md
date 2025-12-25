@@ -395,16 +395,30 @@ Add MFA support for enhanced security:
 
 ---
 
-### API Rate Limiting
+### ~~API Rate Limiting~~ ✅ IMPLEMENTED
 **Priority**: Medium
-**Status**: Planned
+**Status**: Implemented (December 2025)
 
-Implement rate limiting for API endpoints:
-- Per-user rate limits
-- Per-organization rate limits
-- Configurable limits in settings
-- Rate limit headers in responses
-- Redis-based distributed rate limiting
+**Features Implemented**:
+- ✅ Per-user rate limits (authenticated users)
+- ✅ Per-organization rate limits (via callback)
+- ✅ Configurable via environment variables:
+  - `RATE_LIMIT_DEFAULT_MAX` (default: 100)
+  - `RATE_LIMIT_DEFAULT_WINDOW_SEC` (default: 60)
+  - `RATE_LIMIT_STRICT_MAX` (default: 10)
+  - `RATE_LIMIT_STRICT_WINDOW_SEC` (default: 60)
+- ✅ Rate limit headers in responses:
+  - `X-RateLimit-Limit`
+  - `X-RateLimit-Remaining`
+  - `X-RateLimit-Reset`
+  - `Retry-After`
+- ✅ Redis-based distributed rate limiting
+- ✅ Graceful fallback to in-memory when Redis unavailable
+- ✅ Strict rate limiting for sensitive endpoints (login, registration)
+
+**Files**:
+- `apps/backend/internal/interfaces/http/middleware/redis_rate_limit.go`
+- `apps/backend/internal/infrastructure/cache/redis.go`
 
 **Use Case**: Prevent abuse and ensure fair usage
 
