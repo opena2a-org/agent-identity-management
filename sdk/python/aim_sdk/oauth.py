@@ -35,8 +35,14 @@ from .security_logging import security_logger, AuthnEventType, CredEventType
 try:
     from .secure_storage import SecureCredentialStorage
     SECURE_STORAGE_AVAILABLE = True
-except ImportError:
+    SECURE_STORAGE_WARNING = None
+except ImportError as e:
     SECURE_STORAGE_AVAILABLE = False
+    SECURE_STORAGE_WARNING = (
+        "⚠️  SECURITY WARNING: Secure storage packages not installed.\n"
+        "   Credentials will be stored in PLAINTEXT without encryption.\n"
+        "   For encrypted storage, install: pip install cryptography keyring\n"
+    )
 
 
 class OAuthTokenManager:
@@ -50,13 +56,20 @@ class OAuthTokenManager:
     - Automatic credential updates when tokens rotate
     """
 
-    def __init__(self, credentials_path: Optional[str] = None, use_secure_storage: bool = True):
+    def __init__(
+        self,
+        credentials_path: Optional[str] = None,
+        use_secure_storage: bool = True,
+        allow_plaintext_fallback: bool = True,
+    ):
         """
         Initialize OAuth token manager with intelligent credential discovery.
 
         Args:
             credentials_path: Path to credentials.json file (default: auto-discover via credentials module)
             use_secure_storage: Use encrypted storage if available (default: True)
+            allow_plaintext_fallback: If True (default), fall back to plaintext with warning when
+                                     secure storage is unavailable. If False, raise an error instead.
         """
         # Use the centralized credentials module for path discovery
         if credentials_path:
@@ -74,6 +87,18 @@ class OAuthTokenManager:
             self.secure_storage = SecureCredentialStorage(str(self.credentials_path))
         else:
             self.secure_storage = None
+            # Handle plaintext fallback based on configuration
+            if use_secure_storage and not SECURE_STORAGE_AVAILABLE:
+                if not allow_plaintext_fallback:
+                    raise RuntimeError(
+                        "❌ SECURITY ERROR: Secure storage is required but not available.\n"
+                        "   Install required packages: pip install cryptography keyring\n"
+                        "   Or set allow_plaintext_fallback=True to use plaintext storage (not recommended)."
+                    )
+                elif SECURE_STORAGE_WARNING:
+                    # Warn user about plaintext storage
+                    import warnings
+                    warnings.warn(SECURE_STORAGE_WARNING, UserWarning, stacklevel=2)
 
         # Load credentials if they exist
         if self._credentials_exist():
