@@ -68,8 +68,8 @@ export function RegisterMCPModal({
         description: initialData.description || "",
         url: initialData.url || "",
         version: initialData.version || "1.0.0",
-        public_key: initialData.public_key || "",
-        verification_url: initialData.verification_url || "",
+        public_key: initialData.publicKey || "",
+        verification_url: initialData.verificationUrl || "",
       };
       setFormData(mapped);
       setInitialFormData(mapped);
