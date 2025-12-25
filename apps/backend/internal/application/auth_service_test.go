@@ -1290,3 +1290,257 @@ func TestAuthService_ValidateAPIKey_UpdateLastUsedFails(t *testing.T) {
 	mockUserRepo.AssertExpectations(t)
 	mockOrgRepo.AssertExpectations(t)
 }
+
+// ====================
+// CountActiveUsers Tests
+// ====================
+
+func TestAuthService_CountActiveUsers_Success(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	orgID := uuid.New()
+	mockUserRepo.On("CountActiveUsers", orgID, 60).Return(5, nil)
+
+	// Act
+	ctx := context.Background()
+	count, err := service.CountActiveUsers(ctx, orgID, 60)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, 5, count)
+
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestAuthService_CountActiveUsers_Error(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	orgID := uuid.New()
+	mockUserRepo.On("CountActiveUsers", orgID, 60).Return(0, errors.New("database error"))
+
+	// Act
+	ctx := context.Background()
+	count, err := service.CountActiveUsers(ctx, orgID, 60)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Equal(t, 0, count)
+
+	mockUserRepo.AssertExpectations(t)
+}
+
+// ====================
+// UpdateLastLogin Tests
+// ====================
+
+func TestAuthService_UpdateLastLogin_Success(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	user := createTestUser("test@example.com")
+	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(nil)
+
+	// Act
+	ctx := context.Background()
+	err := service.UpdateLastLogin(ctx, user)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, user.LastLoginAt)
+
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestAuthService_UpdateLastLogin_Failure(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	user := createTestUser("test@example.com")
+	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(errors.New("database error"))
+
+	// Act
+	ctx := context.Background()
+	err := service.UpdateLastLogin(ctx, user)
+
+	// Assert
+	assert.Error(t, err)
+
+	mockUserRepo.AssertExpectations(t)
+}
+
+// ====================
+// ValidateAPIKey Edge Case Tests
+// ====================
+
+func TestAuthService_ValidateAPIKey_NilUser(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	user := createTestUser("test@example.com")
+	org := createTestOrganization()
+	apiKey := createTestAPIKey(org.ID, user.ID)
+
+	rawKey := "aim_test_niluser"
+	hash := sha256.Sum256([]byte(rawKey))
+	hashedKey := base64.StdEncoding.EncodeToString(hash[:])
+	apiKey.KeyHash = hashedKey
+
+	mockAPIKeyRepo.On("GetByHash", hashedKey).Return(apiKey, nil)
+	mockUserRepo.On("GetByID", user.ID).Return(nil, nil) // User returns nil, nil
+
+	// Act
+	ctx := context.Background()
+	result, err := service.ValidateAPIKey(ctx, rawKey)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "user not found")
+
+	mockAPIKeyRepo.AssertExpectations(t)
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestAuthService_ValidateAPIKey_NilOrganization(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	user := createTestUser("test@example.com")
+	org := createTestOrganization()
+	apiKey := createTestAPIKey(org.ID, user.ID)
+
+	rawKey := "aim_test_nilorg"
+	hash := sha256.Sum256([]byte(rawKey))
+	hashedKey := base64.StdEncoding.EncodeToString(hash[:])
+	apiKey.KeyHash = hashedKey
+
+	mockAPIKeyRepo.On("GetByHash", hashedKey).Return(apiKey, nil)
+	mockUserRepo.On("GetByID", user.ID).Return(user, nil)
+	mockOrgRepo.On("GetByID", org.ID).Return(nil, nil) // Org returns nil, nil
+
+	// Act
+	ctx := context.Background()
+	result, err := service.ValidateAPIKey(ctx, rawKey)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "organization not found")
+
+	mockAPIKeyRepo.AssertExpectations(t)
+	mockUserRepo.AssertExpectations(t)
+	mockOrgRepo.AssertExpectations(t)
+}
+
+// ====================
+// Struct Tests
+// ====================
+
+func TestLoginResponse_Structure(t *testing.T) {
+	user := createTestUser("test@example.com")
+	resp := LoginResponse{
+		User:         user,
+		AccessToken:  "access-token-123",
+		RefreshToken: "refresh-token-456",
+	}
+
+	assert.NotNil(t, resp.User)
+	assert.Equal(t, "access-token-123", resp.AccessToken)
+	assert.Equal(t, "refresh-token-456", resp.RefreshToken)
+}
+
+func TestValidateAPIKeyResponse_Structure(t *testing.T) {
+	user := createTestUser("test@example.com")
+	org := createTestOrganization()
+	apiKey := createTestAPIKey(org.ID, user.ID)
+
+	resp := ValidateAPIKeyResponse{
+		User:         user,
+		Organization: org,
+		APIKey:       apiKey,
+	}
+
+	assert.NotNil(t, resp.User)
+	assert.NotNil(t, resp.Organization)
+	assert.NotNil(t, resp.APIKey)
+	assert.Equal(t, user.Email, resp.User.Email)
+	assert.Equal(t, org.Name, resp.Organization.Name)
+}
+
+func TestNewAuthService_Constructor(t *testing.T) {
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	assert.NotNil(t, service)
+	assert.Equal(t, mockUserRepo, service.userRepo)
+	assert.Equal(t, mockOrgRepo, service.orgRepo)
+	assert.Equal(t, mockAPIKeyRepo, service.apiKeyRepo)
+	assert.Nil(t, service.authFailureRepo)
+	assert.Nil(t, service.policyService)
+	assert.Equal(t, mockEmailService, service.emailService)
+	// Check default config is applied
+	assert.NotEqual(t, 0, service.failureConfig.MaxAttempts)
+}
+
+func TestAuthService_LoginWithPassword_EmptyPasswordHash(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	mockOrgRepo := new(MockOrganizationRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockEmailService := new(MockEmailService)
+
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
+
+	user := createTestUser("test@example.com")
+	emptyHash := ""
+	user.PasswordHash = &emptyHash
+
+	mockUserRepo.On("GetByEmail", "test@example.com").Return(user, nil)
+
+	// Act
+	ctx := context.Background()
+	result, err := service.LoginWithPassword(ctx, "test@example.com", "SecurePass123!")
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "local authentication not configured")
+
+	mockUserRepo.AssertExpectations(t)
+}

@@ -920,3 +920,302 @@ func TestAlertService_SetWebhookService(t *testing.T) {
 	service.SetWebhookService(nil)
 	assert.Nil(t, service.webhookService)
 }
+
+// ====================
+// ResolveAlert Tests
+// ====================
+
+func TestAlertService_ResolveAlert_Success(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	alertID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	mockAlertRepo.On("Acknowledge", alertID, userID).Return(nil)
+
+	// Act
+	ctx := context.Background()
+	err := service.ResolveAlert(ctx, alertID, orgID, userID, "Issue resolved")
+
+	// Assert
+	assert.NoError(t, err)
+
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestAlertService_ResolveAlert_Error(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	alertID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	mockAlertRepo.On("Acknowledge", alertID, userID).Return(errors.New("database error"))
+
+	// Act
+	ctx := context.Background()
+	err := service.ResolveAlert(ctx, alertID, orgID, userID, "Issue resolved")
+
+	// Assert
+	assert.Error(t, err)
+
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// ====================
+// CheckAPIKeyExpiry Tests
+// ====================
+
+func TestAlertService_CheckAPIKeyExpiry_Success(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+
+	// Act - Currently a no-op, should succeed
+	ctx := context.Background()
+	err := service.CheckAPIKeyExpiry(ctx, orgID)
+
+	// Assert
+	assert.NoError(t, err)
+}
+
+// ====================
+// DetectUnusualAccessPatterns Tests
+// ====================
+
+func TestAlertService_DetectUnusualAccessPatterns_NoDBConfigured(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil) // nil DB
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	// Act
+	ctx := context.Background()
+	alerts, err := service.DetectUnusualAccessPatterns(ctx, orgID, agentID)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Nil(t, alerts) // No alerts when DB not configured
+}
+
+// ====================
+// Struct Tests
+// ====================
+
+func TestUnusualAccessPatternConfig_Structure(t *testing.T) {
+	config := UnusualAccessPatternConfig{
+		HighVolumeThreshold:   200,
+		TimeWindowMinutes:     10,
+		OffHoursStart:         22, // 10 PM
+		OffHoursEnd:           6,  // 6 AM
+		NewResourceAlertDelay: 48 * time.Hour,
+	}
+
+	assert.Equal(t, 200, config.HighVolumeThreshold)
+	assert.Equal(t, 10, config.TimeWindowMinutes)
+	assert.Equal(t, 22, config.OffHoursStart)
+	assert.Equal(t, 6, config.OffHoursEnd)
+	assert.Equal(t, 48*time.Hour, config.NewResourceAlertDelay)
+}
+
+func TestTrustScoreDropConfig_Structure(t *testing.T) {
+	config := TrustScoreDropConfig{
+		SignificantDropThreshold: 0.15,
+		CriticalDropThreshold:    0.25,
+		LowScoreThreshold:        0.4,
+	}
+
+	assert.Equal(t, 0.15, config.SignificantDropThreshold)
+	assert.Equal(t, 0.25, config.CriticalDropThreshold)
+	assert.Equal(t, 0.4, config.LowScoreThreshold)
+}
+
+func TestApproveDriftRequest_Structure(t *testing.T) {
+	alertID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	req := ApproveDriftRequest{
+		AlertID:            alertID,
+		OrganizationID:     orgID,
+		UserID:             userID,
+		ApprovedMCPServers: []string{"memory", "filesystem", "github"},
+	}
+
+	assert.Equal(t, alertID, req.AlertID)
+	assert.Equal(t, orgID, req.OrganizationID)
+	assert.Equal(t, userID, req.UserID)
+	assert.Len(t, req.ApprovedMCPServers, 3)
+	assert.Contains(t, req.ApprovedMCPServers, "memory")
+}
+
+// ====================
+// NewAlertService Tests
+// ====================
+
+func TestNewAlertService_Constructor(t *testing.T) {
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	assert.NotNil(t, service)
+	assert.Equal(t, mockAlertRepo, service.alertRepo)
+	assert.Equal(t, mockAgentRepo, service.agentRepo)
+	assert.Nil(t, service.db)
+	assert.Nil(t, service.webhookService)
+}
+
+// ====================
+// CheckTrustScoreDrop Edge Cases
+// ====================
+
+func TestAlertService_CheckTrustScoreDrop_DropBelowLowScoreThreshold(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	mockAlertRepo.On("GetUnacknowledged", orgID).Return([]*domain.Alert{}, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+
+	// Act - Small drop but ending below 50% threshold
+	ctx := context.Background()
+	err := service.CheckTrustScoreDrop(ctx, orgID, agentID, "Test Agent", 0.55, 0.45)
+
+	// Assert
+	assert.NoError(t, err)
+
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestAlertService_CheckTrustScoreDrop_DuplicateAlert(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	existingAlert := &domain.Alert{
+		ID:         uuid.New(),
+		ResourceID: agentID,
+		AlertType:  domain.AlertTrustScoreDrop,
+	}
+
+	mockAlertRepo.On("GetUnacknowledged", orgID).Return([]*domain.Alert{existingAlert}, nil)
+
+	// Act - Alert already exists, should not create duplicate
+	ctx := context.Background()
+	err := service.CheckTrustScoreDrop(ctx, orgID, agentID, "Test Agent", 0.90, 0.60)
+
+	// Assert
+	assert.NoError(t, err)
+
+	mockAlertRepo.AssertExpectations(t)
+	// Create should NOT have been called
+}
+
+// ====================
+// CountUnacknowledged Error Cases
+// ====================
+
+func TestAlertService_CountUnacknowledged_UnackError(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+
+	mockAlertRepo.On("CountByOrganization", orgID).Return(10, nil)
+	mockAlertRepo.On("GetUnacknowledged", orgID).Return(nil, errors.New("database error"))
+
+	// Act
+	ctx := context.Background()
+	allCount, ackCount, unackCount, err := service.CountUnacknowledged(ctx, orgID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Equal(t, 0, allCount)
+	assert.Equal(t, 0, ackCount)
+	assert.Equal(t, 0, unackCount)
+
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// ====================
+// GetAlerts Error Cases
+// ====================
+
+func TestAlertService_GetAlerts_FilteredError(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+
+	mockAlertRepo.On("GetByOrganizationFiltered", orgID, "", 10, 0).Return(nil, errors.New("database error"))
+
+	// Act
+	ctx := context.Background()
+	result, total, err := service.GetAlerts(ctx, orgID, "", "", 10, 0)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, 0, total)
+
+	mockAlertRepo.AssertExpectations(t)
+}
+
+func TestAlertService_GetAlerts_CountError(t *testing.T) {
+	// Arrange
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	orgID := uuid.New()
+	alerts := []*domain.Alert{createTestAlertForAlerts(orgID)}
+
+	mockAlertRepo.On("GetByOrganizationFiltered", orgID, "", 10, 0).Return(alerts, nil)
+	mockAlertRepo.On("CountByOrganizationFiltered", orgID, "").Return(0, errors.New("count error"))
+
+	// Act
+	ctx := context.Background()
+	result, total, err := service.GetAlerts(ctx, orgID, "", "", 10, 0)
+
+	// Assert - Returns partial result with error
+	assert.Error(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, 0, total)
+
+	mockAlertRepo.AssertExpectations(t)
+}

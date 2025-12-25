@@ -15,6 +15,7 @@ import (
 )
 
 func TestAuthMiddleware_NoToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	app := fiber.New()
@@ -37,6 +38,7 @@ func TestAuthMiddleware_NoToken(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidHeaderFormat(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	app := fiber.New()
@@ -61,6 +63,7 @@ func TestAuthMiddleware_InvalidHeaderFormat(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	app := fiber.New()
@@ -85,6 +88,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 }
 
 func TestAuthMiddleware_ValidToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	userID := uuid.New()
@@ -126,6 +130,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 }
 
 func TestAuthMiddleware_TokenFromCookie(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	userID := uuid.New()
@@ -160,6 +165,7 @@ func TestAuthMiddleware_TokenFromCookie(t *testing.T) {
 }
 
 func TestAuthMiddleware_SkipsIfEd25519Authenticated(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	app := fiber.New()
@@ -185,6 +191,7 @@ func TestAuthMiddleware_SkipsIfEd25519Authenticated(t *testing.T) {
 }
 
 func TestAuthMiddleware_SkipsIfAPIKeyAuthenticated(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	app := fiber.New()
@@ -209,6 +216,7 @@ func TestAuthMiddleware_SkipsIfAPIKeyAuthenticated(t *testing.T) {
 }
 
 func TestOptionalAuthMiddleware_NoToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	var hasUserID bool
@@ -230,6 +238,7 @@ func TestOptionalAuthMiddleware_NoToken(t *testing.T) {
 }
 
 func TestOptionalAuthMiddleware_InvalidToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	var hasUserID bool
@@ -254,6 +263,7 @@ func TestOptionalAuthMiddleware_InvalidToken(t *testing.T) {
 }
 
 func TestOptionalAuthMiddleware_ValidToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
 	userID := uuid.New()

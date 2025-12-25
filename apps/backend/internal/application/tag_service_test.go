@@ -1106,3 +1106,1067 @@ func TestTagService_suggestTagsForCapabilities(t *testing.T) {
 	assert.True(t, hasNetwork, "Should suggest network tag for network capability")
 	assert.True(t, hasCodeExecution, "Should suggest code-execution tag for code capability")
 }
+
+// ====================
+// RemoveTagFromAgent Tests
+// ====================
+
+func TestTagService_RemoveTagFromAgent_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	agentID := uuid.New()
+	tagID := uuid.New()
+
+	mockTagRepo.On("RemoveTagFromAgent", mock.Anything, agentID, tagID).Return(nil)
+
+	ctx := context.Background()
+	err := service.RemoveTagFromAgent(ctx, agentID, tagID)
+
+	assert.NoError(t, err)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_RemoveTagFromAgent_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	agentID := uuid.New()
+	tagID := uuid.New()
+
+	mockTagRepo.On("RemoveTagFromAgent", mock.Anything, agentID, tagID).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	err := service.RemoveTagFromAgent(ctx, agentID, tagID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to remove tag from agent")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// GetAgentTags Tests
+// ====================
+
+func TestTagService_GetAgentTags_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+	tags := []*domain.Tag{
+		{ID: uuid.New(), Key: "env", Value: "prod", OrganizationID: orgID},
+		{ID: uuid.New(), Key: "team", Value: "backend", OrganizationID: orgID},
+	}
+
+	mockTagRepo.On("GetAgentTags", mock.Anything, agentID).Return(tags, nil)
+
+	ctx := context.Background()
+	result, err := service.GetAgentTags(ctx, agentID)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 2)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_GetAgentTags_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	agentID := uuid.New()
+
+	mockTagRepo.On("GetAgentTags", mock.Anything, agentID).Return(nil, errors.New("database error"))
+
+	ctx := context.Background()
+	result, err := service.GetAgentTags(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get agent tags")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// AddTagsToMCPServer Tests
+// ====================
+
+func TestTagService_AddTagsToMCPServer_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	mcpServerID := uuid.New()
+	tagID1 := uuid.New()
+	tagID2 := uuid.New()
+	userID := uuid.New()
+
+	mcpServer := &domain.MCPServer{
+		ID:             mcpServerID,
+		OrganizationID: orgID,
+		Name:           "test-mcp-server",
+	}
+	tag1 := &domain.Tag{ID: tagID1, OrganizationID: orgID, Key: "env", Value: "prod"}
+	tag2 := &domain.Tag{ID: tagID2, OrganizationID: orgID, Key: "type", Value: "database"}
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(mcpServer, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID1).Return(tag1, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID2).Return(tag2, nil)
+	mockTagRepo.On("AddTagsToMCPServer", mock.Anything, mcpServerID, []uuid.UUID{tagID1, tagID2}).Return(nil)
+
+	ctx := context.Background()
+	err := service.AddTagsToMCPServer(ctx, mcpServerID, []uuid.UUID{tagID1, tagID2}, userID)
+
+	assert.NoError(t, err)
+	mockMCPRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_AddTagsToMCPServer_MCPServerNotFound(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(nil, errors.New("not found"))
+
+	ctx := context.Background()
+	err := service.AddTagsToMCPServer(ctx, mcpServerID, []uuid.UUID{uuid.New()}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "mcp server not found")
+	mockMCPRepo.AssertExpectations(t)
+}
+
+func TestTagService_AddTagsToMCPServer_TagWrongOrganization(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	differentOrgID := uuid.New()
+	mcpServerID := uuid.New()
+	tagID := uuid.New()
+
+	mcpServer := &domain.MCPServer{
+		ID:             mcpServerID,
+		OrganizationID: orgID,
+	}
+	tag := &domain.Tag{ID: tagID, OrganizationID: differentOrgID}
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(mcpServer, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(tag, nil)
+
+	ctx := context.Background()
+	err := service.AddTagsToMCPServer(ctx, mcpServerID, []uuid.UUID{tagID}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not belong to mcp server's organization")
+	mockMCPRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_AddTagsToMCPServer_TagNotFound(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	mcpServerID := uuid.New()
+	tagID := uuid.New()
+
+	mcpServer := &domain.MCPServer{
+		ID:             mcpServerID,
+		OrganizationID: orgID,
+	}
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(mcpServer, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(nil, errors.New("tag not found"))
+
+	ctx := context.Background()
+	err := service.AddTagsToMCPServer(ctx, mcpServerID, []uuid.UUID{tagID}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	mockMCPRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// RemoveTagFromMCPServer Tests
+// ====================
+
+func TestTagService_RemoveTagFromMCPServer_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+	tagID := uuid.New()
+
+	mockTagRepo.On("RemoveTagFromMCPServer", mock.Anything, mcpServerID, tagID).Return(nil)
+
+	ctx := context.Background()
+	err := service.RemoveTagFromMCPServer(ctx, mcpServerID, tagID)
+
+	assert.NoError(t, err)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_RemoveTagFromMCPServer_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+	tagID := uuid.New()
+
+	mockTagRepo.On("RemoveTagFromMCPServer", mock.Anything, mcpServerID, tagID).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	err := service.RemoveTagFromMCPServer(ctx, mcpServerID, tagID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to remove tag from mcp server")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// GetMCPServerTags Tests
+// ====================
+
+func TestTagService_GetMCPServerTags_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+	orgID := uuid.New()
+	tags := []*domain.Tag{
+		{ID: uuid.New(), Key: "type", Value: "database", OrganizationID: orgID},
+		{ID: uuid.New(), Key: "env", Value: "production", OrganizationID: orgID},
+	}
+
+	mockTagRepo.On("GetMCPServerTags", mock.Anything, mcpServerID).Return(tags, nil)
+
+	ctx := context.Background()
+	result, err := service.GetMCPServerTags(ctx, mcpServerID)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 2)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_GetMCPServerTags_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+
+	mockTagRepo.On("GetMCPServerTags", mock.Anything, mcpServerID).Return(nil, errors.New("database error"))
+
+	ctx := context.Background()
+	result, err := service.GetMCPServerTags(ctx, mcpServerID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get mcp server tags")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// SuggestTagsForAgent Tests
+// ====================
+
+func TestTagService_SuggestTagsForAgent_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		AgentType:      domain.AgentTypeClaude,
+		TrustScore:     9.0,
+		Status:         domain.AgentStatusVerified,
+		Capabilities:   []string{"file:read"},
+		TalksTo:        []string{"github-mcp"},
+	}
+
+	// Organization tags that match suggestions
+	orgTags := []*domain.Tag{
+		{ID: uuid.New(), Key: "type", Value: "llm-provider", OrganizationID: orgID, Category: domain.TagCategoryAgentType},
+		{ID: uuid.New(), Key: "trust-level", Value: "high", OrganizationID: orgID, Category: domain.TagCategoryDataClassification},
+		{ID: uuid.New(), Key: "environment", Value: "production", OrganizationID: orgID, Category: domain.TagCategoryEnvironment},
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockTagRepo.On("GetAgentTags", mock.Anything, agentID).Return([]*domain.Tag{}, nil)
+	mockTagRepo.On("List", mock.Anything, orgID, (*domain.TagCategory)(nil)).Return(orgTags, nil)
+
+	ctx := context.Background()
+	result, err := service.SuggestTagsForAgent(ctx, agentID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Should suggest tags that exist in org and match agent metadata
+	mockAgentRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_SuggestTagsForAgent_AgentNotFound(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	agentID := uuid.New()
+
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("not found"))
+
+	ctx := context.Background()
+	result, err := service.SuggestTagsForAgent(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "agent not found")
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestTagService_SuggestTagsForAgent_ExistingTagsFilteredOut(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		AgentType:      domain.AgentTypeClaude,
+		TrustScore:     9.0,
+		Status:         domain.AgentStatusVerified,
+	}
+
+	// Already applied tag
+	existingTags := []*domain.Tag{
+		{ID: uuid.New(), Key: "type", Value: "llm-provider", OrganizationID: orgID},
+	}
+
+	orgTags := []*domain.Tag{
+		{ID: uuid.New(), Key: "type", Value: "llm-provider", OrganizationID: orgID},
+		{ID: uuid.New(), Key: "trust-level", Value: "high", OrganizationID: orgID},
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockTagRepo.On("GetAgentTags", mock.Anything, agentID).Return(existingTags, nil)
+	mockTagRepo.On("List", mock.Anything, orgID, (*domain.TagCategory)(nil)).Return(orgTags, nil)
+
+	ctx := context.Background()
+	result, err := service.SuggestTagsForAgent(ctx, agentID)
+
+	assert.NoError(t, err)
+	// "type:llm-provider" should be filtered out because it's already applied
+	for _, tag := range result {
+		if tag.Key == "type" && tag.Value == "llm-provider" {
+			t.Error("Already applied tag should be filtered out")
+		}
+	}
+	mockAgentRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// SuggestTagsForMCPServer Tests
+// ====================
+
+func TestTagService_SuggestTagsForMCPServer_Success(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	mcpServerID := uuid.New()
+
+	mcpServer := &domain.MCPServer{
+		ID:             mcpServerID,
+		OrganizationID: orgID,
+		Name:           "postgres-mcp",
+		TrustScore:     8.5,
+		Status:         domain.MCPServerStatusVerified,
+		IsVerified:     true,
+		Capabilities:   []string{"tools", "resources"},
+	}
+
+	orgTags := []*domain.Tag{
+		{ID: uuid.New(), Key: "type", Value: "database", OrganizationID: orgID},
+		{ID: uuid.New(), Key: "status", Value: "verified", OrganizationID: orgID},
+		{ID: uuid.New(), Key: "capability", Value: "tools", OrganizationID: orgID},
+	}
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(mcpServer, nil)
+	mockTagRepo.On("GetMCPServerTags", mock.Anything, mcpServerID).Return([]*domain.Tag{}, nil)
+	mockTagRepo.On("List", mock.Anything, orgID, (*domain.TagCategory)(nil)).Return(orgTags, nil)
+
+	ctx := context.Background()
+	result, err := service.SuggestTagsForMCPServer(ctx, mcpServerID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	mockMCPRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_SuggestTagsForMCPServer_MCPServerNotFound(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	mcpServerID := uuid.New()
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(nil, errors.New("not found"))
+
+	ctx := context.Background()
+	result, err := service.SuggestTagsForMCPServer(ctx, mcpServerID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "mcp server not found")
+	mockMCPRepo.AssertExpectations(t)
+}
+
+// ====================
+// Helper Method Tests - MCP Connections
+// ====================
+
+func TestTagService_suggestTagsForMCPConnections(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	tests := []struct {
+		name          string
+		talksTo       []string
+		expectedKeys  []string
+		expectedVals  []string
+	}{
+		{
+			name:         "github connection",
+			talksTo:      []string{"github-mcp"},
+			expectedKeys: []string{"mcp", "integration"},
+			expectedVals: []string{"github", "source-control"},
+		},
+		{
+			name:         "slack connection",
+			talksTo:      []string{"slack-mcp"},
+			expectedKeys: []string{"mcp", "integration"},
+			expectedVals: []string{"slack", "messaging"},
+		},
+		{
+			name:         "aws connection",
+			talksTo:      []string{"aws-bedrock"},
+			expectedKeys: []string{"mcp", "cloud"},
+			expectedVals: []string{"aws", "aws"},
+		},
+		{
+			name:         "postgres connection",
+			talksTo:      []string{"postgres-db"},
+			expectedKeys: []string{"mcp"},
+			expectedVals: []string{"database"},
+		},
+		{
+			name:         "filesystem connection",
+			talksTo:      []string{"filesystem-mcp"},
+			expectedKeys: []string{"mcp"},
+			expectedVals: []string{"filesystem"},
+		},
+		{
+			name:         "browser connection",
+			talksTo:      []string{"puppeteer-mcp"},
+			expectedKeys: []string{"mcp", "automation"},
+			expectedVals: []string{"browser", "web"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestions := service.suggestTagsForMCPConnections(tt.talksTo)
+			assert.NotEmpty(t, suggestions)
+
+			for i, expectedKey := range tt.expectedKeys {
+				found := false
+				for _, s := range suggestions {
+					if s.Key == expectedKey && s.Value == tt.expectedVals[i] {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected key=%s value=%s not found", expectedKey, tt.expectedVals[i])
+			}
+		})
+	}
+}
+
+// ====================
+// Helper Method Tests - Agent Status
+// ====================
+
+func TestTagService_suggestTagsForAgentStatus(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	tests := []struct {
+		status        domain.AgentStatus
+		expectedValue string
+		hasAlert      bool
+	}{
+		{domain.AgentStatusVerified, "verified", false},
+		{domain.AgentStatusPending, "pending-review", false},
+		{domain.AgentStatusSuspended, "suspended", true},
+		{domain.AgentStatusRevoked, "revoked", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			suggestions := service.suggestTagsForAgentStatus(tt.status)
+			assert.NotEmpty(t, suggestions)
+
+			hasStatus := false
+			hasAlertTag := false
+			for _, s := range suggestions {
+				if s.Key == "status" && s.Value == tt.expectedValue {
+					hasStatus = true
+				}
+				if s.Key == "alert" && s.Value == "requires-attention" {
+					hasAlertTag = true
+				}
+			}
+			assert.True(t, hasStatus, "Expected status=%s for agent status %s", tt.expectedValue, tt.status)
+			if tt.hasAlert {
+				assert.True(t, hasAlertTag, "Expected alert tag for suspended status")
+			}
+		})
+	}
+}
+
+// ====================
+// Helper Method Tests - MCP Name
+// ====================
+
+func TestTagService_suggestTagsForMCPName(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	tests := []struct {
+		name          string
+		mcpName       string
+		expectedKey   string
+		expectedValue string
+	}{
+		{"filesystem", "filesystem-server", "type", "filesystem"},
+		{"postgres", "postgres-mcp", "type", "database"},
+		{"mysql", "mysql-connector", "type", "database"},
+		{"github", "github-mcp", "type", "source-control"},
+		{"slack", "slack-integration", "type", "messaging"},
+		{"aws", "aws-bedrock-mcp", "cloud", "aws"},
+		{"gcp", "gcp-storage", "cloud", "gcp"},
+		{"azure", "azure-services", "cloud", "azure"},
+		{"memory", "memory-store", "type", "memory"},
+		{"browser", "browser-automation", "type", "browser-automation"},
+		{"search", "brave-search", "type", "search"},
+		{"email", "gmail-mcp", "type", "email"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestions := service.suggestTagsForMCPName(tt.mcpName)
+			assert.NotEmpty(t, suggestions)
+
+			found := false
+			for _, s := range suggestions {
+				if s.Key == tt.expectedKey && s.Value == tt.expectedValue {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Expected key=%s value=%s for MCP name %s", tt.expectedKey, tt.expectedValue, tt.mcpName)
+		})
+	}
+}
+
+// ====================
+// Helper Method Tests - MCP Capabilities
+// ====================
+
+func TestTagService_suggestTagsForMCPCapabilities(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	tests := []struct {
+		name         string
+		capabilities []string
+		expected     map[string]string
+	}{
+		{
+			name:         "tools capability",
+			capabilities: []string{"tools"},
+			expected:     map[string]string{"capability": "tools"},
+		},
+		{
+			name:         "prompts capability",
+			capabilities: []string{"prompts"},
+			expected:     map[string]string{"capability": "prompts"},
+		},
+		{
+			name:         "resources capability",
+			capabilities: []string{"resources"},
+			expected:     map[string]string{"capability": "resources"},
+		},
+		{
+			name:         "sampling capability",
+			capabilities: []string{"sampling"},
+			expected:     map[string]string{"capability": "sampling", "classification": "advanced"},
+		},
+		{
+			name:         "multiple capabilities",
+			capabilities: []string{"tools", "prompts", "resources"},
+			expected:     map[string]string{"capability": "tools"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestions := service.suggestTagsForMCPCapabilities(tt.capabilities)
+			assert.NotEmpty(t, suggestions)
+
+			for key, value := range tt.expected {
+				found := false
+				for _, s := range suggestions {
+					if s.Key == key && s.Value == value {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected key=%s value=%s for capabilities %v", key, value, tt.capabilities)
+			}
+		})
+	}
+}
+
+// ====================
+// Helper Method Tests - MCP Status
+// ====================
+
+func TestTagService_suggestTagsForMCPStatus(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	tests := []struct {
+		name            string
+		status          domain.MCPServerStatus
+		isVerified      bool
+		expectedStatus  string
+		expectedAvail   string
+		hasAlert        bool
+	}{
+		{
+			name:           "verified and active",
+			status:         domain.MCPServerStatusVerified,
+			isVerified:     true,
+			expectedStatus: "verified",
+			expectedAvail:  "active",
+			hasAlert:       false,
+		},
+		{
+			name:           "suspended",
+			status:         domain.MCPServerStatusSuspended,
+			isVerified:     false,
+			expectedStatus: "unverified",
+			expectedAvail:  "suspended",
+			hasAlert:       true,
+		},
+		{
+			name:           "revoked",
+			status:         domain.MCPServerStatusRevoked,
+			isVerified:     false,
+			expectedStatus: "unverified",
+			expectedAvail:  "revoked",
+			hasAlert:       false,
+		},
+		{
+			name:           "pending",
+			status:         domain.MCPServerStatusPending,
+			isVerified:     false,
+			expectedStatus: "unverified",
+			expectedAvail:  "",
+			hasAlert:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestions := service.suggestTagsForMCPStatus(tt.status, tt.isVerified)
+			assert.NotEmpty(t, suggestions)
+
+			hasStatusTag := false
+			hasAvailTag := false
+			hasAlertTag := false
+
+			for _, s := range suggestions {
+				if s.Key == "status" && s.Value == tt.expectedStatus {
+					hasStatusTag = true
+				}
+				if s.Key == "availability" && s.Value == tt.expectedAvail {
+					hasAvailTag = true
+				}
+				if s.Key == "alert" && s.Value == "requires-attention" {
+					hasAlertTag = true
+				}
+			}
+
+			assert.True(t, hasStatusTag, "Expected status=%s", tt.expectedStatus)
+			if tt.expectedAvail != "" {
+				assert.True(t, hasAvailTag, "Expected availability=%s", tt.expectedAvail)
+			}
+			if tt.hasAlert {
+				assert.True(t, hasAlertTag, "Expected alert tag for suspended status")
+			}
+		})
+	}
+}
+
+// ====================
+// GetPopularTags Error Test
+// ====================
+
+func TestTagService_GetPopularTags_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+
+	mockTagRepo.On("GetPopularTags", mock.Anything, orgID, 10).Return(nil, errors.New("database error"))
+
+	ctx := context.Background()
+	result, err := service.GetPopularTags(ctx, orgID, 10)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get popular tags")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// SearchTags Error Test
+// ====================
+
+func TestTagService_SearchTags_Error(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+
+	mockTagRepo.On("SearchTags", mock.Anything, orgID, "query", (*domain.TagCategory)(nil)).Return(nil, errors.New("database error"))
+
+	ctx := context.Background()
+	result, err := service.SearchTags(ctx, orgID, "query", "")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to search tags")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// AddTagsToAgent Error Tests
+// ====================
+
+func TestTagService_AddTagsToAgent_TagNotFound(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+	tagID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(nil, errors.New("tag not found"))
+
+	ctx := context.Background()
+	err := service.AddTagsToAgent(ctx, agentID, []uuid.UUID{tagID}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	mockAgentRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_AddTagsToAgent_RepoError(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	agentID := uuid.New()
+	tagID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+	}
+	tag := &domain.Tag{ID: tagID, OrganizationID: orgID}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(tag, nil)
+	mockTagRepo.On("AddTagsToAgent", mock.Anything, agentID, []uuid.UUID{tagID}).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	err := service.AddTagsToAgent(ctx, agentID, []uuid.UUID{tagID}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add tags to agent")
+	mockAgentRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// AddTagsToMCPServer Error Test
+// ====================
+
+func TestTagService_AddTagsToMCPServer_RepoError(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	mcpServerID := uuid.New()
+	tagID := uuid.New()
+
+	mcpServer := &domain.MCPServer{
+		ID:             mcpServerID,
+		OrganizationID: orgID,
+	}
+	tag := &domain.Tag{ID: tagID, OrganizationID: orgID}
+
+	mockMCPRepo.On("GetByID", mcpServerID).Return(mcpServer, nil)
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(tag, nil)
+	mockTagRepo.On("AddTagsToMCPServer", mock.Anything, mcpServerID, []uuid.UUID{tagID}).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	err := service.AddTagsToMCPServer(ctx, mcpServerID, []uuid.UUID{tagID}, uuid.New())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add tags to mcp server")
+	mockMCPRepo.AssertExpectations(t)
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// UpdateTag Error Tests
+// ====================
+
+func TestTagService_UpdateTag_KeyTooLong(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	tagID := uuid.New()
+	existingTag := &domain.Tag{
+		ID:             tagID,
+		OrganizationID: orgID,
+		Key:            "key",
+		Category:       domain.TagCategoryCustom,
+	}
+
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(existingTag, nil)
+
+	longKey := ""
+	for i := 0; i < 101; i++ {
+		longKey += "a"
+	}
+
+	input := UpdateTagInput{Key: longKey}
+
+	ctx := context.Background()
+	result, err := service.UpdateTag(ctx, tagID, orgID, input)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "tag key must be 100 characters or less")
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_UpdateTag_ValueTooLong(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	tagID := uuid.New()
+	existingTag := &domain.Tag{
+		ID:             tagID,
+		OrganizationID: orgID,
+		Key:            "key",
+		Category:       domain.TagCategoryCustom,
+	}
+
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(existingTag, nil)
+
+	longValue := ""
+	for i := 0; i < 256; i++ {
+		longValue += "a"
+	}
+
+	input := UpdateTagInput{Value: longValue}
+
+	ctx := context.Background()
+	result, err := service.UpdateTag(ctx, tagID, orgID, input)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "tag value must be 255 characters or less")
+	mockTagRepo.AssertExpectations(t)
+}
+
+func TestTagService_UpdateTag_RepoError(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	orgID := uuid.New()
+	tagID := uuid.New()
+	existingTag := &domain.Tag{
+		ID:             tagID,
+		OrganizationID: orgID,
+		Key:            "key",
+		Category:       domain.TagCategoryCustom,
+	}
+
+	mockTagRepo.On("GetByID", mock.Anything, tagID).Return(existingTag, nil)
+	mockTagRepo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Tag")).Return(errors.New("database error"))
+
+	input := UpdateTagInput{Key: "new-key"}
+
+	ctx := context.Background()
+	result, err := service.UpdateTag(ctx, tagID, orgID, input)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to update tag")
+	mockTagRepo.AssertExpectations(t)
+}
+
+// ====================
+// CreateTag Repo Error Test
+// ====================
+
+func TestTagService_CreateTag_RepoError(t *testing.T) {
+	mockTagRepo := new(MockTagRepoForTags)
+	mockAgentRepo := new(MockAgentRepoForTags)
+	mockMCPRepo := new(MockMCPServerRepoForTags)
+
+	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
+
+	input := CreateTagInput{
+		OrganizationID: uuid.New(),
+		Key:            "test",
+		Value:          "value",
+		Category:       domain.TagCategoryCustom,
+		Color:          "#FFFFFF",
+		CreatedBy:      uuid.New(),
+	}
+
+	mockTagRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Tag")).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	result, err := service.CreateTag(ctx, input)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to create tag")
+	mockTagRepo.AssertExpectations(t)
+}
