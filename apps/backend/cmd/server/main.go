@@ -390,6 +390,7 @@ type Repositories struct {
 	Capability         domain.CapabilityRepository
 	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 	AuthFailure        *repository.AuthFailureRepository  // ✅ For failed authentication monitoring
+	DataTransfer       *repository.DataTransferRepository // ✅ For data exfiltration detection
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -421,6 +422,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		Capability:         repository.NewCapabilityRepository(dbx),
 		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 		AuthFailure:        repository.NewAuthFailureRepository(db),        // ✅ For failed authentication monitoring
+		DataTransfer:       repository.NewDataTransferRepository(db),       // ✅ For data exfiltration detection
 	}, oauthRepo
 }
 
@@ -541,6 +543,9 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 
 	// ✅ Wire AgentRepository into SecurityPolicyService for trust score enforcement (suspending agents)
 	securityPolicyService.SetAgentRepository(repos.Agent)
+
+	// ✅ Wire DataTransferRepository into SecurityPolicyService for exfiltration detection
+	securityPolicyService.SetDataTransferRepository(repos.DataTransfer)
 
 	complianceService := application.NewComplianceService(
 		repos.AuditLog,

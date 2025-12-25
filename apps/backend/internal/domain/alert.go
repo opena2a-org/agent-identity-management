@@ -26,6 +26,9 @@ const (
 	AlertAuthFailurePattern  AlertType = "auth_failure_pattern"  // Multiple failed auth attempts detected
 	AlertAccountLocked       AlertType = "account_locked"        // Account locked due to failed attempts
 	AlertBruteForceAttempt   AlertType = "brute_force_attempt"   // Potential brute force attack detected
+
+	// Data exfiltration alerts
+	AlertDataExfiltration AlertType = "data_exfiltration" // Large data transfer detected
 )
 
 // AlertSeverity represents alert severity level

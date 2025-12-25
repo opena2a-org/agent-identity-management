@@ -106,50 +106,66 @@ Trust scores are now actively enforced with automatic policy evaluation:
 
 ---
 
-### Unusual Activity Detection
+### Unusual Activity Detection ✅
 **Priority**: Medium
-**Status**: Planned (Phase 3)
+**Status**: ✅ IMPLEMENTED
 **Estimated Effort**: 6 hours
 
-**Current**: Agent API calls are logged but no anomaly detection
-**Needed**: Real-time detection of unusual behavior patterns
+**What Was Implemented**:
+- ✅ `BehaviorAnalysisService` with per-agent baseline learning
+- ✅ `AgentBehaviorBaseline` domain model with velocity/capability/resource tracking
+- ✅ `behavior_baselines` and `behavioral_anomalies` tables (migration 055)
+- ✅ Statistical anomaly detection using sigma thresholds (2σ to 5σ)
+- ✅ `EvaluateUnusualActivity()` in SecurityPolicyService
+- ✅ Velocity spike detection (calls per hour vs baseline)
+- ✅ New capability/resource access detection
+- ✅ Risk-weighted activity scoring
+- ✅ Alert creation for detected anomalies
+- ✅ Configurable blocking via policy enforcement
 
-**Policy to Enforce**:
-- Unusual Activity Monitoring (api_rate_threshold: 1000, time_window: 1h, check_off_hours: true)
+**Anomaly Types Detected**:
+- `velocity_spike` - Sudden increase in activity rate
+- `new_capability` - First-time use of a capability
+- `new_resource` - Access to never-before-seen resource
+- `pattern_break` - Unusual action sequence
+- `risk_spike` - Sudden increase in risk-weighted score
 
-**Implementation**:
-- Add middleware to track API call rates
-- Implement baseline behavior profiling per agent
-- Add `EvaluateUnusualActivity()` method
-- Detect API rate spikes
-- Detect off-hours access patterns
-- Create alerts for anomalies
-- Optional blocking of suspicious activity
+**Key Files**:
+- `apps/backend/internal/domain/behavior_baseline.go`
+- `apps/backend/internal/application/behavior_analysis_service.go`
+- `apps/backend/internal/infrastructure/repository/behavior_baseline_repository.go`
+- `apps/backend/migrations/055_add_agent_behavior_baselines.sql`
 
 **Use Case**: Detect compromised agents or malicious behavior
 
 ---
 
-### Data Exfiltration Detection
+### Data Exfiltration Detection ✅
 **Priority**: Medium
-**Status**: Planned (Phase 3)
-**Estimated Effort**: 8 hours
+**Status**: ✅ IMPLEMENTED
+**Estimated Effort**: 4 hours
 
-**Current**: No tracking of data transfers or response sizes
-**Needed**: Detection and prevention of large-scale data exfiltration
+**What Was Implemented**:
+- ✅ `data_transfers` table for individual transfer records
+- ✅ `data_transfer_aggregates` table for hourly rollups
+- ✅ `DataTransferRepository` with cumulative size tracking
+- ✅ Size-based detection in `EvaluateDataExfiltration()`
+- ✅ Pattern-based detection (fetch_external_url, bulk_export, etc.)
+- ✅ `AlertDataExfiltration` alert type
+- ✅ Configurable thresholds (default: 100MB per hour)
+- ✅ Destination IP/domain logging
+- ✅ Policy-based enforcement (block/alert/allow)
 
-**Policy to Enforce**:
-- Data Exfiltration Detection (data_threshold_mb: 100, time_window: 1h)
+**Configuration** (via policy rules):
+- `data_threshold_mb`: Transfer size threshold (default: 100 MB)
+- `time_window_mins`: Time window for threshold (default: 60 minutes)
+- `patterns`: Suspicious action patterns to detect
 
-**Implementation**:
-- Add response size tracking middleware
-- Track cumulative data transfer per agent
-- Add `EvaluateDataExfiltration()` method
-- Detect large data transfers
-- Detect unusual download patterns
-- Create alerts for suspicious transfers
-- Optional blocking of exfiltration attempts
-- Log destination IPs/domains
+**Key Files**:
+- `apps/backend/internal/domain/data_transfer.go`
+- `apps/backend/internal/infrastructure/repository/data_transfer_repository.go`
+- `apps/backend/migrations/063_add_data_transfer_tracking.sql`
+- `apps/backend/internal/application/security_policy_service.go` (updated)
 
 **Use Case**: Prevent data breaches and insider threats
 
