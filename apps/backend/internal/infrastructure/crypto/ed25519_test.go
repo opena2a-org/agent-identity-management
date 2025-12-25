@@ -1,256 +1,249 @@
 package crypto
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewED25519Service(t *testing.T) {
+	service := NewED25519Service()
+	assert.NotNil(t, service)
+}
 
 func TestED25519Service_GenerateKeyPair(t *testing.T) {
 	service := NewED25519Service()
 
-	t.Run("generates valid keypair", func(t *testing.T) {
-		keypair, err := service.GenerateKeyPair()
-		if err != nil {
-			t.Fatalf("GenerateKeyPair() error = %v", err)
-		}
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+	assert.NotNil(t, keyPair)
+	assert.NotEmpty(t, keyPair.PublicKey)
+	assert.NotEmpty(t, keyPair.PrivateKey)
 
-		if keypair == nil {
-			t.Fatal("GenerateKeyPair() returned nil keypair")
-		}
+	// Verify keys are valid base64
+	pubKey, err := base64.StdEncoding.DecodeString(keyPair.PublicKey)
+	require.NoError(t, err)
+	assert.Len(t, pubKey, ed25519.PublicKeySize)
 
-		if keypair.PublicKey == "" {
-			t.Error("PublicKey is empty")
-		}
+	privKey, err := base64.StdEncoding.DecodeString(keyPair.PrivateKey)
+	require.NoError(t, err)
+	assert.Len(t, privKey, ed25519.PrivateKeySize)
+}
 
-		if keypair.PrivateKey == "" {
-			t.Error("PrivateKey is empty")
-		}
+func TestED25519Service_GenerateKeyPair_Unique(t *testing.T) {
+	service := NewED25519Service()
 
-		// Verify keys are valid base64
-		_, err = base64.StdEncoding.DecodeString(keypair.PublicKey)
-		if err != nil {
-			t.Errorf("PublicKey is not valid base64: %v", err)
-		}
+	kp1, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-		_, err = base64.StdEncoding.DecodeString(keypair.PrivateKey)
-		if err != nil {
-			t.Errorf("PrivateKey is not valid base64: %v", err)
-		}
-	})
+	kp2, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-	t.Run("generates unique keypairs", func(t *testing.T) {
-		keypair1, err := service.GenerateKeyPair()
-		if err != nil {
-			t.Fatalf("GenerateKeyPair() error = %v", err)
-		}
-
-		keypair2, err := service.GenerateKeyPair()
-		if err != nil {
-			t.Fatalf("GenerateKeyPair() error = %v", err)
-		}
-
-		if keypair1.PublicKey == keypair2.PublicKey {
-			t.Error("Generated keypairs have identical public keys")
-		}
-
-		if keypair1.PrivateKey == keypair2.PrivateKey {
-			t.Error("Generated keypairs have identical private keys")
-		}
-	})
+	assert.NotEqual(t, kp1.PublicKey, kp2.PublicKey)
+	assert.NotEqual(t, kp1.PrivateKey, kp2.PrivateKey)
 }
 
 func TestED25519Service_Sign(t *testing.T) {
 	service := NewED25519Service()
-	keypair, _ := service.GenerateKeyPair()
-	message := []byte("test message")
 
-	t.Run("signs message successfully", func(t *testing.T) {
-		signature, err := service.Sign(keypair.PrivateKey, message)
-		if err != nil {
-			t.Fatalf("Sign() error = %v", err)
-		}
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-		if signature == "" {
-			t.Error("Sign() returned empty signature")
-		}
+	message := []byte("Hello, World!")
+	signature, err := service.Sign(keyPair.PrivateKey, message)
+	require.NoError(t, err)
+	assert.NotEmpty(t, signature)
 
-		// Verify signature is valid base64
-		_, err = base64.StdEncoding.DecodeString(signature)
-		if err != nil {
-			t.Errorf("Signature is not valid base64: %v", err)
-		}
-	})
+	// Signature should be valid base64
+	sigBytes, err := base64.StdEncoding.DecodeString(signature)
+	require.NoError(t, err)
+	assert.Len(t, sigBytes, ed25519.SignatureSize)
+}
 
-	t.Run("returns error for invalid private key", func(t *testing.T) {
-		_, err := service.Sign("invalid-key", message)
-		if err == nil {
-			t.Error("Sign() should return error for invalid private key")
-		}
-	})
+func TestED25519Service_Sign_InvalidPrivateKey(t *testing.T) {
+	service := NewED25519Service()
 
-	t.Run("returns error for wrong size private key", func(t *testing.T) {
-		wrongSizeKey := base64.StdEncoding.EncodeToString([]byte("short"))
-		_, err := service.Sign(wrongSizeKey, message)
-		if err == nil {
-			t.Error("Sign() should return error for wrong size private key")
-		}
-	})
+	message := []byte("Hello, World!")
+
+	// Invalid base64
+	_, err := service.Sign("not-valid-base64!!!", message)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode private key")
+
+	// Wrong size
+	wrongSize := base64.StdEncoding.EncodeToString([]byte("too short"))
+	_, err = service.Sign(wrongSize, message)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid private key size")
 }
 
 func TestED25519Service_Verify(t *testing.T) {
 	service := NewED25519Service()
-	keypair, _ := service.GenerateKeyPair()
-	message := []byte("test message")
-	signature, _ := service.Sign(keypair.PrivateKey, message)
 
-	t.Run("verifies valid signature", func(t *testing.T) {
-		valid, err := service.Verify(keypair.PublicKey, message, signature)
-		if err != nil {
-			t.Fatalf("Verify() error = %v", err)
-		}
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-		if !valid {
-			t.Error("Verify() returned false for valid signature")
-		}
-	})
+	message := []byte("Hello, World!")
+	signature, err := service.Sign(keyPair.PrivateKey, message)
+	require.NoError(t, err)
 
-	t.Run("rejects invalid signature", func(t *testing.T) {
-		invalidSignature := base64.StdEncoding.EncodeToString(make([]byte, 64))
-		valid, err := service.Verify(keypair.PublicKey, message, invalidSignature)
-		if err != nil {
-			t.Fatalf("Verify() error = %v", err)
-		}
+	valid, err := service.Verify(keyPair.PublicKey, message, signature)
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
 
-		if valid {
-			t.Error("Verify() returned true for invalid signature")
-		}
-	})
+func TestED25519Service_Verify_WrongMessage(t *testing.T) {
+	service := NewED25519Service()
 
-	t.Run("rejects tampered message", func(t *testing.T) {
-		tamperedMessage := []byte("tampered message")
-		valid, err := service.Verify(keypair.PublicKey, tamperedMessage, signature)
-		if err != nil {
-			t.Fatalf("Verify() error = %v", err)
-		}
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-		if valid {
-			t.Error("Verify() returned true for tampered message")
-		}
-	})
+	message := []byte("Hello, World!")
+	signature, err := service.Sign(keyPair.PrivateKey, message)
+	require.NoError(t, err)
 
-	t.Run("returns error for invalid public key", func(t *testing.T) {
-		_, err := service.Verify("invalid-key", message, signature)
-		if err == nil {
-			t.Error("Verify() should return error for invalid public key")
-		}
-	})
+	wrongMessage := []byte("Goodbye, World!")
+	valid, err := service.Verify(keyPair.PublicKey, wrongMessage, signature)
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
 
-	t.Run("returns error for wrong size public key", func(t *testing.T) {
-		wrongSizeKey := base64.StdEncoding.EncodeToString([]byte("short"))
-		_, err := service.Verify(wrongSizeKey, message, signature)
-		if err == nil {
-			t.Error("Verify() should return error for wrong size public key")
-		}
-	})
+func TestED25519Service_Verify_WrongKey(t *testing.T) {
+	service := NewED25519Service()
 
-	t.Run("returns error for invalid signature format", func(t *testing.T) {
-		_, err := service.Verify(keypair.PublicKey, message, "invalid-signature")
-		if err == nil {
-			t.Error("Verify() should return error for invalid signature format")
-		}
-	})
+	kp1, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	kp2, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	message := []byte("Hello, World!")
+	signature, err := service.Sign(kp1.PrivateKey, message)
+	require.NoError(t, err)
+
+	// Verify with different public key should fail
+	valid, err := service.Verify(kp2.PublicKey, message, signature)
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
+
+func TestED25519Service_Verify_InvalidPublicKey(t *testing.T) {
+	service := NewED25519Service()
+
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	message := []byte("Hello, World!")
+	signature, err := service.Sign(keyPair.PrivateKey, message)
+	require.NoError(t, err)
+
+	// Invalid base64
+	_, err = service.Verify("not-valid-base64!!!", message, signature)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode public key")
+
+	// Wrong size
+	wrongSize := base64.StdEncoding.EncodeToString([]byte("too short"))
+	_, err = service.Verify(wrongSize, message, signature)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid public key size")
+}
+
+func TestED25519Service_Verify_InvalidSignature(t *testing.T) {
+	service := NewED25519Service()
+
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	message := []byte("Hello, World!")
+
+	// Invalid base64 signature
+	_, err = service.Verify(keyPair.PublicKey, message, "not-valid-base64!!!")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode signature")
 }
 
 func TestED25519Service_GenerateChallenge(t *testing.T) {
 	service := NewED25519Service()
 
-	t.Run("generates valid challenge", func(t *testing.T) {
-		challenge, err := service.GenerateChallenge()
-		if err != nil {
-			t.Fatalf("GenerateChallenge() error = %v", err)
-		}
+	challenge, err := service.GenerateChallenge()
+	require.NoError(t, err)
+	assert.NotEmpty(t, challenge)
 
-		if challenge == "" {
-			t.Error("GenerateChallenge() returned empty challenge")
-		}
-
-		// Verify challenge is valid base64
-		decoded, err := base64.StdEncoding.DecodeString(challenge)
-		if err != nil {
-			t.Errorf("Challenge is not valid base64: %v", err)
-		}
-
-		// Verify challenge is 32 bytes
-		if len(decoded) != 32 {
-			t.Errorf("Challenge should be 32 bytes, got %d", len(decoded))
-		}
-	})
-
-	t.Run("generates unique challenges", func(t *testing.T) {
-		challenge1, err := service.GenerateChallenge()
-		if err != nil {
-			t.Fatalf("GenerateChallenge() error = %v", err)
-		}
-
-		challenge2, err := service.GenerateChallenge()
-		if err != nil {
-			t.Fatalf("GenerateChallenge() error = %v", err)
-		}
-
-		if challenge1 == challenge2 {
-			t.Error("Generated challenges are identical")
-		}
-	})
+	// Should be valid base64
+	decoded, err := base64.StdEncoding.DecodeString(challenge)
+	require.NoError(t, err)
+	assert.Len(t, decoded, 32)
 }
 
-func TestED25519Service_SignAndVerifyIntegration(t *testing.T) {
+func TestED25519Service_GenerateChallenge_Unique(t *testing.T) {
 	service := NewED25519Service()
 
-	t.Run("complete sign and verify workflow", func(t *testing.T) {
-		// Generate keypair
-		keypair, err := service.GenerateKeyPair()
-		if err != nil {
-			t.Fatalf("GenerateKeyPair() error = %v", err)
-		}
+	challenge1, err := service.GenerateChallenge()
+	require.NoError(t, err)
 
-		// Create message
-		message := []byte("Integration test message")
+	challenge2, err := service.GenerateChallenge()
+	require.NoError(t, err)
 
-		// Sign message
-		signature, err := service.Sign(keypair.PrivateKey, message)
-		if err != nil {
-			t.Fatalf("Sign() error = %v", err)
-		}
+	assert.NotEqual(t, challenge1, challenge2)
+}
 
-		// Verify signature
-		valid, err := service.Verify(keypair.PublicKey, message, signature)
-		if err != nil {
-			t.Fatalf("Verify() error = %v", err)
-		}
+func TestED25519Service_SignAndVerifyChallenge(t *testing.T) {
+	service := NewED25519Service()
 
-		if !valid {
-			t.Error("Signature verification failed for valid signature")
-		}
-	})
+	// Generate keypair
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
 
-	t.Run("cross-keypair verification fails", func(t *testing.T) {
-		// Generate two keypairs
-		keypair1, _ := service.GenerateKeyPair()
-		keypair2, _ := service.GenerateKeyPair()
+	// Generate challenge
+	challenge, err := service.GenerateChallenge()
+	require.NoError(t, err)
 
-		message := []byte("test message")
+	// Sign challenge
+	signature, err := service.Sign(keyPair.PrivateKey, []byte(challenge))
+	require.NoError(t, err)
 
-		// Sign with keypair1
-		signature, _ := service.Sign(keypair1.PrivateKey, message)
+	// Verify signature
+	valid, err := service.Verify(keyPair.PublicKey, []byte(challenge), signature)
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
 
-		// Try to verify with keypair2's public key (should fail)
-		valid, err := service.Verify(keypair2.PublicKey, message, signature)
-		if err != nil {
-			t.Fatalf("Verify() error = %v", err)
-		}
+func TestED25519Service_EmptyMessage(t *testing.T) {
+	service := NewED25519Service()
 
-		if valid {
-			t.Error("Signature should not verify with different public key")
-		}
-	})
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	// Empty message should work
+	message := []byte{}
+	signature, err := service.Sign(keyPair.PrivateKey, message)
+	require.NoError(t, err)
+
+	valid, err := service.Verify(keyPair.PublicKey, message, signature)
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
+
+func TestED25519Service_LargeMessage(t *testing.T) {
+	service := NewED25519Service()
+
+	keyPair, err := service.GenerateKeyPair()
+	require.NoError(t, err)
+
+	// Large message (1MB)
+	largeMessage := make([]byte, 1024*1024)
+	for i := range largeMessage {
+		largeMessage[i] = byte(i % 256)
+	}
+
+	signature, err := service.Sign(keyPair.PrivateKey, largeMessage)
+	require.NoError(t, err)
+
+	valid, err := service.Verify(keyPair.PublicKey, largeMessage, signature)
+	require.NoError(t, err)
+	assert.True(t, valid)
 }
