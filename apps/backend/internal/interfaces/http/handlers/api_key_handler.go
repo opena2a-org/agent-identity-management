@@ -78,8 +78,32 @@ func (h *APIKeyHandler) ListAPIKeys(c fiber.Ctx) error {
 
 // CreateAPIKey generates a new API key
 func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
 
 	var req struct {
 		AgentID   string  `json:"agentId"`
@@ -155,8 +179,33 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 
 // DisableAPIKey disables an API key (sets is_active=false)
 func (h *APIKeyHandler) DisableAPIKey(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
+
 	keyID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -190,8 +239,33 @@ func (h *APIKeyHandler) DisableAPIKey(c fiber.Ctx) error {
 
 // DeleteAPIKey permanently deletes an API key (only if disabled)
 func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	// Safe type assertion with error checking
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid organization ID type in context",
+		})
+	}
+
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid user ID type in context",
+		})
+	}
+
 	keyID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

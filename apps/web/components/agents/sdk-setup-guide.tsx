@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Code2, Copy, CheckCircle2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useClipboard } from '@/hooks/use-clipboard';
 
 interface SDKSetupGuideProps {
   agentId: string;
@@ -12,19 +12,10 @@ interface SDKSetupGuideProps {
 }
 
 export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuideProps) {
-  const [copiedQuick, setCopiedQuick] = useState(false);
-  const [copiedAdvanced, setCopiedAdvanced] = useState(false);
-
-  const copyToClipboard = (text: string, type: 'quick' | 'advanced') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'quick') {
-      setCopiedQuick(true);
-      setTimeout(() => setCopiedQuick(false), 2000);
-    } else {
-      setCopiedAdvanced(true);
-      setTimeout(() => setCopiedAdvanced(false), 2000);
-    }
-  };
+  // Use separate clipboard hooks for each copy button to track state independently
+  // This hook handles error handling, timeout cleanup, and fallback for older browsers
+  const quickClipboard = useClipboard();
+  const advancedClipboard = useClipboard();
 
   // Backend API URL - dynamic based on deployment
   // In production: same domain (reverse proxy handles routing)
@@ -95,9 +86,9 @@ verification = client.verify_action(
             <Button
               size="sm"
               className="absolute top-3 right-3 bg-primary hover:bg-primary/90"
-              onClick={() => copyToClipboard(quickStartCode, 'quick')}
+              onClick={() => quickClipboard.copy(quickStartCode)}
             >
-              {copiedQuick ? (
+              {quickClipboard.copied ? (
                 <>
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   Copied!
@@ -152,9 +143,9 @@ verification = client.verify_action(
               size="sm"
               variant="ghost"
               className="absolute top-2 right-2"
-              onClick={() => copyToClipboard(advancedCode, 'advanced')}
+              onClick={() => advancedClipboard.copy(advancedCode)}
             >
-              {copiedAdvanced ? (
+              {advancedClipboard.copied ? (
                 <>
                   <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" />
                   Copied!

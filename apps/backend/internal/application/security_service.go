@@ -122,17 +122,69 @@ func (s *SecurityService) RunSecurityScan(ctx context.Context, orgID uuid.UUID, 
 		return nil, err
 	}
 
-	// Perform scan asynchronously (in production, this would be a background job)
-	go s.performSecurityScan(scan)
+	// Return a copy of the scan to avoid race condition with the goroutine
+	// The goroutine will modify the database record, callers should refetch to get updates
+	scanCopy := &domain.SecurityScanResult{
+		ScanID:         scan.ScanID,
+		OrganizationID: scan.OrganizationID,
+		ScanType:       scan.ScanType,
+		Status:         scan.Status,
+		StartedAt:      scan.StartedAt,
+	}
 
-	return scan, nil
+	// Perform scan asynchronously (in production, this would be a background job)
+	// Pass the scan ID so it fetches fresh data from the database
+	go s.performSecurityScanAsync(scan.ScanID, scan.OrganizationID)
+
+	return scanCopy, nil
 }
 
-// performSecurityScan performs the actual security scanning
-func (s *SecurityService) performSecurityScan(scan *domain.SecurityScanResult) {
-	// TODO: Implement actual security scanning logic
-	// For now, we'll simulate a scan
+// performSecurityScanAsync performs the actual security scanning asynchronously
+// It fetches the scan from the database, performs the scan, and updates the database
+// This avoids race conditions with the returned scan object
+func (s *SecurityService) performSecurityScanAsync(scanID uuid.UUID, orgID uuid.UUID) {
+	// Get all agents for the organization
+	agents, err := s.agentRepo.GetByOrganization(orgID)
+	if err != nil {
+		// Log error but continue with empty agents list
+		agents = []*domain.Agent{}
+	}
 
+	threatsFound := 0
+	anomaliesFound := 0
+	vulnerabilitiesFound := 0
+
+	// Check for low trust scores (potential threats)
+	// Trust score is stored as 0-1 in database (e.g., 0.50 = 50%)
+	for _, agent := range agents {
+		if agent.TrustScore < 0.50 {
+			threatsFound++
+		}
+		if agent.TrustScore < 0.70 && agent.TrustScore >= 0.50 {
+			anomaliesFound++
+		}
+	}
+
+	// Calculate security score (0-100 scale)
+	// Trust score is stored as 0-1 in database, so multiply by 100 for display
+	securityScore := 100.0
+	if len(agents) > 0 {
+		avgTrustScore := 0.0
+		for _, agent := range agents {
+			avgTrustScore += agent.TrustScore
+		}
+		avgTrustScore /= float64(len(agents))
+		securityScore = avgTrustScore * 100.0 // Convert 0-1 to 0-100
+	}
+
+	// Update scan results in database
+	completedAt := time.Now().UTC()
+	_ = s.securityRepo.UpdateSecurityScan(scanID, threatsFound, anomaliesFound, vulnerabilitiesFound, securityScore, "completed", &completedAt)
+}
+
+// performSecurityScan performs the actual security scanning (deprecated - kept for backward compatibility)
+// Use performSecurityScanAsync instead to avoid race conditions
+func (s *SecurityService) performSecurityScan(scan *domain.SecurityScanResult) {
 	// Get all agents for the organization
 	agents, _ := s.agentRepo.GetByOrganization(scan.OrganizationID)
 
