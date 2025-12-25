@@ -223,3 +223,26 @@ func TestConsoleEmailService_ValidateConnection(t *testing.T) {
 	assert.Contains(t, output, "Console email service initialized")
 	assert.Contains(t, output, "sender@example.com")
 }
+
+func TestConsoleEmailService_SendTemplatedEmail_InvalidTemplate(t *testing.T) {
+	old := os.Stdout
+	_, w, _ := os.Pipe()
+	os.Stdout = w
+
+	config := domain.EmailConfig{
+		Provider:    "console",
+		FromAddress: "sender@example.com",
+		FromName:    "Sender",
+	}
+	service, err := NewConsoleEmailService(config)
+	require.NoError(t, err)
+
+	// Use an invalid template name to trigger the error path
+	err = service.SendTemplatedEmail(domain.EmailTemplate("invalid_template"), "recipient@example.com", nil)
+
+	w.Close()
+	os.Stdout = old
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to render template")
+}
