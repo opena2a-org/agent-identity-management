@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1433,3 +1434,678 @@ func TestParseClaudeDesktopConfig_NoMCPServersKey(t *testing.T) {
 	assert.Empty(t, servers)
 }
 
+// ===========================
+// CreateAgent Tests
+// ===========================
+
+func TestAgentService_CreateAgent_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	// Initialize key vault for testing (base64 encoded 32-byte key)
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, _ := crypto.NewKeyVault(masterKey)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		keyVault:       keyVault,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	req := &CreateAgentRequest{
+		Name:        "test-agent",
+		DisplayName: "Test Agent",
+		Description: "A test agent",
+		AgentType:   domain.AgentTypeAI,
+		Version:     "1.0.0",
+	}
+
+	// Setup expectations
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{
+		ID:      uuid.New(),
+		Score:   0.75,
+	}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, nil, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	assert.Equal(t, "test-agent", agent.Name)
+	assert.Equal(t, "Test Agent", agent.DisplayName)
+	assert.Equal(t, orgID, agent.OrganizationID)
+	assert.NotNil(t, agent.PublicKey)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_CreateAgent_WithPublicKey(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	// SDK provides its own public key
+	req := &CreateAgentRequest{
+		Name:        "sdk-agent",
+		DisplayName: "SDK Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:   "sdk-provided-public-key-base64",
+	}
+
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{
+		ID:    uuid.New(),
+		Score: 0.80,
+	}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, nil, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	assert.Equal(t, "sdk-provided-public-key-base64", *agent.PublicKey)
+	assert.Equal(t, "Ed25519", agent.KeyAlgorithm)
+	// No encrypted private key since SDK provided its own
+	assert.Nil(t, agent.EncryptedPrivateKey)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_CreateAgent_MissingName(t *testing.T) {
+	service := &AgentService{}
+
+	req := &CreateAgentRequest{
+		DisplayName: "Test Agent",
+		AgentType:   domain.AgentTypeAI,
+	}
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+	assert.Contains(t, err.Error(), "name and display_name are required")
+}
+
+func TestAgentService_CreateAgent_MissingDisplayName(t *testing.T) {
+	service := &AgentService{}
+
+	req := &CreateAgentRequest{
+		Name:      "test-agent",
+		AgentType: domain.AgentTypeAI,
+	}
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+	assert.Contains(t, err.Error(), "name and display_name are required")
+}
+
+func TestAgentService_CreateAgent_InvalidAgentType(t *testing.T) {
+	service := &AgentService{}
+
+	req := &CreateAgentRequest{
+		Name:        "test-agent",
+		DisplayName: "Test Agent",
+		AgentType:   domain.AgentType("invalid_type"),
+	}
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+	assert.Contains(t, err.Error(), "invalid agent_type")
+}
+
+func TestAgentService_CreateAgent_WithCapabilities(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	req := &CreateAgentRequest{
+		Name:         "agent-with-caps",
+		DisplayName:  "Agent with Capabilities",
+		AgentType:    domain.AgentTypeAI,
+		PublicKey:    "test-key",
+		Capabilities: []string{"file:read", "api:call"},
+	}
+
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{
+		ID:    uuid.New(),
+		Score: 0.75,
+	}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+	mockCapabilityRepo.On("CreateCapability", mock.AnythingOfType("*domain.AgentCapability")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, nil, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	// Verify capabilities were passed to repo
+	mockCapabilityRepo.AssertNumberOfCalls(t, "CreateCapability", 2)
+}
+
+func TestAgentService_CreateAgent_WithTalksTo(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	req := &CreateAgentRequest{
+		Name:        "mcp-connected-agent",
+		DisplayName: "MCP Connected Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:   "test-key",
+		TalksTo:     []string{"memory", "filesystem", "github"},
+	}
+
+	mockAgentRepo.On("Create", mock.MatchedBy(func(a *domain.Agent) bool {
+		return len(a.TalksTo) == 3 &&
+			a.TalksTo[0] == "memory" &&
+			a.TalksTo[1] == "filesystem" &&
+			a.TalksTo[2] == "github"
+	})).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{
+		ID:    uuid.New(),
+		Score: 0.75,
+	}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, nil, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	assert.Equal(t, []string{"memory", "filesystem", "github"}, agent.TalksTo)
+}
+
+func TestAgentService_CreateAgent_SanitizesMalformedTalksTo(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	// Malformed talksTo with comma-separated values in single string
+	req := &CreateAgentRequest{
+		Name:        "malformed-talks-to-agent",
+		DisplayName: "Malformed TalksTo Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:   "test-key",
+		TalksTo:     []string{"memory,filesystem,github"}, // Malformed!
+	}
+
+	// Should be sanitized to 3 separate entries
+	mockAgentRepo.On("Create", mock.MatchedBy(func(a *domain.Agent) bool {
+		return len(a.TalksTo) == 3
+	})).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{ID: uuid.New(), Score: 0.75}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, nil, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_CreateAgent_RepoError(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	req := &CreateAgentRequest{
+		Name:        "test-agent",
+		DisplayName: "Test Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:   "test-key",
+	}
+
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+	assert.Contains(t, err.Error(), "failed to create agent")
+}
+
+func TestAgentService_CreateAgent_WithSDKToken(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	sdkTokenID := uuid.New()
+
+	req := &CreateAgentRequest{
+		Name:        "sdk-token-agent",
+		DisplayName: "SDK Token Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:   "test-key",
+	}
+
+	// Verify SDK token ID is stored
+	mockAgentRepo.On("Create", mock.MatchedBy(func(a *domain.Agent) bool {
+		return a.CreatedBySDKTokenID != nil && *a.CreatedBySDKTokenID == sdkTokenID
+	})).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{ID: uuid.New(), Score: 0.75}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, orgID, userID, &sdkTokenID, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	assert.Equal(t, &sdkTokenID, agent.CreatedBySDKTokenID)
+}
+
+// ===========================
+// UpdateAgent Tests
+// ===========================
+
+func TestAgentService_UpdateAgent_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+	}
+
+	existingAgent := createTestAgentForService()
+	mockAgentRepo.On("GetByID", existingAgent.ID).Return(existingAgent, nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	newTrustScore := &domain.TrustScore{ID: uuid.New(), AgentID: existingAgent.ID, Score: 0.88}
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
+	mockTrustScoreRepo.On("Create", newTrustScore).Return(nil)
+
+	// UpdateAgent uses CreateAgentRequest
+	req := &CreateAgentRequest{
+		DisplayName: "Updated Display Name",
+		Description: "Updated description",
+		Version:     "2.0.0",
+	}
+
+	ctx := context.Background()
+	agent, err := service.UpdateAgent(ctx, existingAgent.ID, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, agent)
+	assert.Equal(t, "Updated Display Name", agent.DisplayName)
+	assert.Equal(t, "Updated description", agent.Description)
+	assert.Equal(t, "2.0.0", agent.Version)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_UpdateAgent_NotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
+
+	req := &CreateAgentRequest{DisplayName: "New Name"}
+
+	ctx := context.Background()
+	agent, err := service.UpdateAgent(ctx, agentID, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+}
+
+// ===========================
+// MCPServerRepository Mock for GetAgentMCPServers tests
+// ===========================
+
+type AgentServiceMockMCPServerRepository struct {
+	mock.Mock
+}
+
+func (m *AgentServiceMockMCPServerRepository) Create(server *domain.MCPServer) error {
+	args := m.Called(server)
+	return args.Error(0)
+}
+
+func (m *AgentServiceMockMCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServer), args.Error(1)
+}
+
+func (m *AgentServiceMockMCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPServer, error) {
+	args := m.Called(orgID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MCPServer), args.Error(1)
+}
+
+func (m *AgentServiceMockMCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
+	args := m.Called(url)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServer), args.Error(1)
+}
+
+func (m *AgentServiceMockMCPServerRepository) Update(server *domain.MCPServer) error {
+	args := m.Called(server)
+	return args.Error(0)
+}
+
+func (m *AgentServiceMockMCPServerRepository) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *AgentServiceMockMCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MCPServer), args.Error(1)
+}
+
+func (m *AgentServiceMockMCPServerRepository) GetVerificationStatus(id uuid.UUID) (*domain.MCPServerVerificationStatus, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MCPServerVerificationStatus), args.Error(1)
+}
+
+// ===========================
+// RotateCredentials Tests
+// ===========================
+
+func TestAgentService_RotateCredentials_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	// Initialize key vault for testing
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, err := crypto.NewKeyVault(masterKey)
+	assert.NoError(t, err)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+		keyVault:  keyVault,
+	}
+
+	agent := createTestAgentForService()
+	oldPublicKey := "old-public-key-base64"
+	agent.PublicKey = &oldPublicKey
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockAgentRepo.On("Update", mock.MatchedBy(func(a *domain.Agent) bool {
+		// Verify new keys were generated and old key is preserved
+		return a.PublicKey != nil &&
+			*a.PublicKey != oldPublicKey &&
+			a.PreviousPublicKey != nil &&
+			*a.PreviousPublicKey == oldPublicKey &&
+			a.RotationCount == 1
+	})).Return(nil)
+
+	ctx := context.Background()
+	publicKey, privateKey, err := service.RotateCredentials(ctx, agent.ID)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, publicKey)
+	assert.NotEmpty(t, privateKey)
+	assert.NotEqual(t, oldPublicKey, publicKey)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_RotateCredentials_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
+
+	ctx := context.Background()
+	publicKey, privateKey, err := service.RotateCredentials(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "agent not found")
+	assert.Empty(t, publicKey)
+	assert.Empty(t, privateKey)
+}
+
+func TestAgentService_RotateCredentials_UpdateError(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, _ := crypto.NewKeyVault(masterKey)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+		keyVault:  keyVault,
+	}
+
+	agent := createTestAgentForService()
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(errors.New("database error"))
+
+	ctx := context.Background()
+	publicKey, privateKey, err := service.RotateCredentials(ctx, agent.ID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update")
+	assert.Empty(t, publicKey)
+	assert.Empty(t, privateKey)
+}
+
+// ===========================
+// GetAgentMCPServers Tests
+// ===========================
+
+func TestAgentService_GetAgentMCPServers_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockMCPRepo := new(AgentServiceMockMCPServerRepository)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+	}
+
+	agent := createTestAgentForService()
+	agent.TalksTo = []string{"memory", "github"}
+
+	memoryServer := &domain.MCPServer{
+		ID:             uuid.New(),
+		Name:           "memory",
+		OrganizationID: agent.OrganizationID,
+	}
+	githubServer := &domain.MCPServer{
+		ID:             uuid.New(),
+		Name:           "github",
+		OrganizationID: agent.OrganizationID,
+	}
+	otherServer := &domain.MCPServer{
+		ID:             uuid.New(),
+		Name:           "slack",
+		OrganizationID: agent.OrganizationID,
+	}
+
+	allServers := []*domain.MCPServer{memoryServer, githubServer, otherServer}
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockMCPRepo.On("GetByOrganization", agent.OrganizationID).Return(allServers, nil)
+
+	ctx := context.Background()
+	result, err := service.GetAgentMCPServers(ctx, agent.ID, mockMCPRepo)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 2) // Only memory and github, not slack
+	mockAgentRepo.AssertExpectations(t)
+	mockMCPRepo.AssertExpectations(t)
+}
+
+func TestAgentService_GetAgentMCPServers_NoTalksTo(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+	}
+
+	agent := createTestAgentForService()
+	agent.TalksTo = nil // No talks_to
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+
+	ctx := context.Background()
+	result, err := service.GetAgentMCPServers(ctx, agent.ID, nil)
+
+	assert.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestAgentService_GetAgentMCPServers_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
+
+	ctx := context.Background()
+	result, err := service.GetAgentMCPServers(ctx, agentID, nil)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+// ===========================
+// UpdateAgentPublicKey Tests
+// ===========================
+
+func TestAgentService_UpdateAgentPublicKey_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, _ := crypto.NewKeyVault(masterKey)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+		keyVault:  keyVault,
+	}
+
+	agent := createTestAgentForService()
+	newPublicKey := "new-sdk-public-key-base64"
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockAgentRepo.On("Update", mock.MatchedBy(func(a *domain.Agent) bool {
+		return a.PublicKey != nil && *a.PublicKey == newPublicKey
+	})).Return(nil)
+
+	ctx := context.Background()
+	err := service.UpdateAgentPublicKey(ctx, agent.ID, newPublicKey)
+
+	assert.NoError(t, err)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_UpdateAgentPublicKey_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
+
+	ctx := context.Background()
+	err := service.UpdateAgentPublicKey(ctx, agentID, "new-key")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "agent not found")
+}
