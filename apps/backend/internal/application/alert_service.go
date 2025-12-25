@@ -12,9 +12,10 @@ import (
 
 // AlertService handles alert management
 type AlertService struct {
-	alertRepo domain.AlertRepository
-	agentRepo domain.AgentRepository
-	db        *sql.DB // For anomaly detection queries
+	alertRepo      domain.AlertRepository
+	agentRepo      domain.AgentRepository
+	db             *sql.DB // For anomaly detection queries
+	webhookService *WebhookService
 }
 
 // NewAlertService creates a new alert service
@@ -30,9 +31,48 @@ func NewAlertService(
 	}
 }
 
-// CreateAlert creates a new alert
+// SetWebhookService sets the webhook service for triggering webhooks
+func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
+	s.webhookService = webhookService
+}
+
+// CreateAlert creates a new alert and triggers webhooks
 func (s *AlertService) CreateAlert(ctx context.Context, alert *domain.Alert) error {
-	return s.alertRepo.Create(alert)
+	if err := s.alertRepo.Create(alert); err != nil {
+		return err
+	}
+
+	// Trigger webhook for alert.created
+	if s.webhookService != nil {
+		s.triggerAlertWebhook(ctx, alert, domain.WebhookEventAlertCreated)
+	}
+
+	return nil
+}
+
+// triggerAlertWebhook sends webhook notification for alert events
+func (s *AlertService) triggerAlertWebhook(ctx context.Context, alert *domain.Alert, event domain.WebhookEvent) {
+	data := map[string]interface{}{
+		"alertId":       alert.ID.String(),
+		"alertType":     string(alert.AlertType),
+		"severity":      string(alert.Severity),
+		"title":         alert.Title,
+		"description":   alert.Description,
+		"resourceType":  alert.ResourceType,
+		"resourceId":    alert.ResourceID.String(),
+		"acknowledged":  alert.IsAcknowledged,
+		"createdAt":     alert.CreatedAt,
+	}
+
+	if alert.AgentName != "" {
+		data["agentName"] = alert.AgentName
+	}
+
+	go func() {
+		if err := s.webhookService.TriggerEvent(ctx, alert.OrganizationID, event, data); err != nil {
+			fmt.Printf("⚠️  Failed to trigger %s webhook: %v\n", event, err)
+		}
+	}()
 }
 
 // GetUnacknowledgedAlerts retrieves unacknowledged alerts
@@ -157,7 +197,24 @@ func (s *AlertService) AcknowledgeAlert(
 	orgID uuid.UUID,
 	userID uuid.UUID,
 ) error {
-	return s.alertRepo.Acknowledge(alertID, userID)
+	// Get alert first to have full data for webhook
+	alert, err := s.alertRepo.GetByID(alertID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.alertRepo.Acknowledge(alertID, userID); err != nil {
+		return err
+	}
+
+	// Trigger webhook for alert.acknowledged
+	if s.webhookService != nil {
+		alert.IsAcknowledged = true
+		alert.AcknowledgedBy = &userID
+		s.triggerAlertWebhook(ctx, alert, domain.WebhookEventAlertAcknowledged)
+	}
+
+	return nil
 }
 
 // BulkAcknowledgeAlerts acknowledges multiple alerts in one request
