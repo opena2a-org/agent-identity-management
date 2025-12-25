@@ -13,6 +13,8 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
 [![Java](https://img.shields.io/badge/Java-17+-ED8B00?logo=openjdk)](https://openjdk.org/)
+[![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](apps/backend)
 
 [📚 Documentation](https://opena2a.org/docs) • [📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
