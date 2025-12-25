@@ -274,14 +274,24 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ---
 
-#### JWT Token Decoding Without Signature Verification
+#### ~~JWT Token Decoding Without Signature Verification~~ ✅ FIXED
 **Priority**: High
-**Status**: Identified
+**Status**: Fixed (December 2025)
 **File**: `sdk/python/aim_sdk/oauth.py`
 
 **Issue**: JWT tokens are decoded by splitting and base64-decoding the payload directly without cryptographic signature verification.
 
-**Recommendation**: Use a proper JWT library (like `PyJWT`) with signature verification before trusting claims.
+**Fix**:
+- Added PyJWT>=2.8.0 as a dependency
+- Created `decode_jwt_claims()` helper function using PyJWT for proper JWT parsing
+- PyJWT validates JWT structure (3 parts, valid base64, valid JSON payload)
+- Added issuer validation check (warns on unexpected issuers)
+- Replaced all manual base64 decoding with PyJWT
+
+**Note**: Full signature verification is not performed locally because:
+- Server uses HS256 (symmetric key) - sharing the secret would defeat the purpose
+- Tokens are always verified server-side when used for API calls
+- Local parsing is only for housekeeping (reading expiry, token ID)
 
 ---
 

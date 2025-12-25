@@ -42,6 +42,7 @@ setup(
         "PyNaCl>=1.5.0",  # Ed25519 signing
         "cryptography>=43.0.1",  # REQUIRED: Secure credential encryption (CVE-2023-50782 fix)
         "keyring>=24.0.0",  # REQUIRED: System keyring for encryption keys
+        "PyJWT>=2.8.0",  # JWT parsing with structure validation
     ],
     extras_require={
         "dev": [

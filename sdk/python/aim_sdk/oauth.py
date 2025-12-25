@@ -6,15 +6,21 @@ Note: This is NOT OAuth provider authentication (Google/Microsoft/Okta) - that w
 This manages the JWT tokens embedded in downloaded SDKs for zero-config authentication.
 
 Handles automatic token refresh with token rotation and secure storage.
+
+Security Note:
+- JWT tokens are parsed using PyJWT library for proper structure validation
+- Signature verification is NOT performed locally (server uses HS256 with secret key)
+- Full token validation occurs server-side when tokens are used for API calls
+- Local parsing is only for reading claims (expiry, token ID) for housekeeping
 """
 
-import base64
 import json
 import os
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+import jwt  # PyJWT for proper JWT parsing
 import requests
 
 from .exceptions import AuthenticationError
@@ -43,6 +49,61 @@ except ImportError as e:
         "   Credentials will be stored in PLAINTEXT without encryption.\n"
         "   For encrypted storage, install: pip install cryptography keyring\n"
     )
+
+
+# Expected JWT issuers from AIM server
+VALID_JWT_ISSUERS = {"agent-identity-management", "agent-identity-management-sdk"}
+
+
+def decode_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode JWT token claims using PyJWT library.
+
+    Security Note:
+    - Signature verification is NOT performed (server uses HS256 with secret key)
+    - Full token validation occurs server-side when tokens are used for API calls
+    - This function only reads claims for housekeeping (expiry, token ID)
+    - Basic structure validation is performed by PyJWT
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Dictionary of claims or None if token is malformed
+    """
+    try:
+        # Decode without signature verification (we don't have the secret)
+        # PyJWT still validates JWT structure (3 parts, valid base64, valid JSON)
+        claims = jwt.decode(
+            token,
+            options={
+                "verify_signature": False,  # Server uses HS256, we don't have secret
+                "verify_exp": False,  # We check expiry manually
+                "verify_aud": False,
+                "verify_iss": False,  # We check issuer separately for logging
+            }
+        )
+
+        # Basic sanity check: verify issuer looks like it came from AIM
+        issuer = claims.get("iss", "")
+        if issuer and issuer not in VALID_JWT_ISSUERS:
+            # Log but don't fail - could be a new issuer we don't know about
+            import warnings
+            warnings.warn(
+                f"JWT has unexpected issuer '{issuer}'. Expected one of: {VALID_JWT_ISSUERS}",
+                UserWarning,
+                stacklevel=2
+            )
+
+        return claims
+
+    except jwt.exceptions.DecodeError as e:
+        # Token is malformed (not a valid JWT)
+        print(f"⚠️  Warning: Failed to decode JWT: {e}")
+        return None
+    except Exception as e:
+        print(f"⚠️  Warning: Unexpected error decoding JWT: {e}")
+        return None
 
 
 class OAuthTokenManager:
@@ -285,34 +346,22 @@ class OAuthTokenManager:
                                 # Save recovered credentials
                                 self.credentials['refreshToken'] = new_refresh_token
 
-                                # Update sdkTokenId
-                                try:
-                                    token_parts = new_refresh_token.split('.')
-                                    if len(token_parts) == 3:
-                                        payload_part = token_parts[1]
-                                        padding = 4 - len(payload_part) % 4
-                                        if padding != 4:
-                                            payload_part += '=' * padding
-                                        token_payload = json.loads(base64.b64decode(payload_part))
-                                        new_token_id = token_payload.get('jti')
-                                        if new_token_id:
-                                            self.credentials['sdkTokenId'] = new_token_id
-                                except Exception:
-                                    pass
+                                # Update sdkTokenId using PyJWT
+                                token_payload = decode_jwt_claims(new_refresh_token)
+                                if token_payload:
+                                    new_token_id = token_payload.get('jti')
+                                    if new_token_id:
+                                        self.credentials['sdkTokenId'] = new_token_id
 
                                 self.save_credentials(self.credentials)
                                 print("✅ Token recovered automatically! SDK credentials updated.")
                                 print("💡 No need to re-download the SDK - everything just works!")
 
-                                # Decode new access token expiry
-                                try:
-                                    payload_part = self.access_token.split('.')[1]
-                                    padding = 4 - len(payload_part) % 4
-                                    if padding != 4:
-                                        payload_part += '=' * padding
-                                    payload = json.loads(base64.b64decode(payload_part))
+                                # Decode new access token expiry using PyJWT
+                                payload = decode_jwt_claims(self.access_token)
+                                if payload:
                                     self.access_token_expiry = payload.get('exp')
-                                except Exception:
+                                else:
                                     self.access_token_expiry = time.time() + 3600
 
                                 security_logger.log_authentication(
@@ -362,22 +411,13 @@ class OAuthTokenManager:
                 # Token rotation: save new refresh token
                 self.credentials['refreshToken'] = new_refresh_token
 
-                # Also update sdkTokenId if present in the new token
+                # Also update sdkTokenId if present in the new token (using PyJWT)
                 new_token_id_full = None
-                try:
-                    # Decode new refresh token to get JTI
-                    token_parts = new_refresh_token.split('.')
-                    if len(token_parts) == 3:
-                        payload_part = token_parts[1]
-                        padding = 4 - len(payload_part) % 4
-                        if padding != 4:
-                            payload_part += '=' * padding
-                        token_payload = json.loads(base64.b64decode(payload_part))
-                        new_token_id_full = token_payload.get('jti')
-                        if new_token_id_full:
-                            self.credentials['sdkTokenId'] = new_token_id_full
-                except Exception:
-                    pass  # Continue even if JTI extraction fails
+                token_payload = decode_jwt_claims(new_refresh_token)
+                if token_payload:
+                    new_token_id_full = token_payload.get('jti')
+                    if new_token_id_full:
+                        self.credentials['sdkTokenId'] = new_token_id_full
 
                 self.save_credentials(self.credentials)
                 security_logger.log_credential_event(
@@ -391,21 +431,12 @@ class OAuthTokenManager:
                 )
                 print("🔄 Token rotated successfully")
 
-            # Decode token to get expiry (JWT format)
+            # Decode token to get expiry using PyJWT
             if self.access_token:
-                try:
-                    # JWT tokens are base64url encoded: header.payload.signature
-                    # Note: base64 here is for decoding JWT claims, NOT for security
-                    payload_part = self.access_token.split('.')[1]
-                    # Add padding if needed
-                    padding = 4 - len(payload_part) % 4
-                    if padding != 4:
-                        payload_part += '=' * padding
-
-                    payload = json.loads(base64.b64decode(payload_part))
+                payload = decode_jwt_claims(self.access_token)
+                if payload:
                     self.access_token_expiry = payload.get('exp')
-                except Exception as e:
-                    print(f"⚠️  Warning: Failed to decode token expiry: {e}")
+                else:
                     # Assume 1 hour expiry if we can't decode
                     self.access_token_expiry = time.time() + 3600
 
