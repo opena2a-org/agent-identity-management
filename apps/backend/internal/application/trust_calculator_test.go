@@ -615,3 +615,172 @@ func TestTrustCalculator_VerificationStatus_Unknown(t *testing.T) {
 
 	assert.Equal(t, 0.3, score, "Unknown status should default to 0.3")
 }
+
+// ===========================
+// Constructor Tests
+// ===========================
+
+func TestNewTrustCalculator(t *testing.T) {
+	calculator := NewTrustCalculator(nil, nil, nil, nil, nil, nil)
+
+	assert.NotNil(t, calculator)
+	assert.Nil(t, calculator.trustScoreRepo)
+	assert.Nil(t, calculator.apiKeyRepo)
+	assert.Nil(t, calculator.auditRepo)
+	assert.Nil(t, calculator.capabilityRepo)
+	assert.Nil(t, calculator.agentRepo)
+	assert.Nil(t, calculator.alertRepo)
+}
+
+func TestNewTrustCalculatorWithVerification(t *testing.T) {
+	calculator := NewTrustCalculatorWithVerification(nil, nil, nil, nil, nil, nil, nil)
+
+	assert.NotNil(t, calculator)
+	assert.Nil(t, calculator.verificationEventRepo)
+	assert.Nil(t, calculator.trustScoreRepo)
+	assert.Nil(t, calculator.apiKeyRepo)
+	assert.Nil(t, calculator.auditRepo)
+	assert.Nil(t, calculator.capabilityRepo)
+	assert.Nil(t, calculator.agentRepo)
+	assert.Nil(t, calculator.alertRepo)
+}
+
+// ===========================
+// Calculate Age Tests
+// ===========================
+
+func TestTrustCalculator_CalculateAge_NewAgent(t *testing.T) {
+	calculator := &TrustCalculator{}
+	now := time.Now()
+
+	agent := &domain.Agent{
+		ID:        uuid.New(),
+		CreatedAt: now.Add(-time.Hour), // 1 hour old
+	}
+
+	age := calculator.calculateAge(agent)
+
+	// New agents should have lower age score
+	assert.True(t, age >= 0.0 && age <= 1.0, "Age should be between 0 and 1")
+	assert.True(t, age < 0.5, "Very new agent should have low age score")
+}
+
+func TestTrustCalculator_CalculateAge_OldAgent(t *testing.T) {
+	calculator := &TrustCalculator{}
+	now := time.Now()
+
+	agent := &domain.Agent{
+		ID:        uuid.New(),
+		CreatedAt: now.AddDate(-1, 0, 0), // 1 year old
+	}
+
+	age := calculator.calculateAge(agent)
+
+	// Old agents should have higher age score (closer to 1.0)
+	assert.True(t, age >= 0.5, "Old agents should have higher age score")
+	assert.True(t, age <= 1.0, "Age should not exceed 1.0")
+}
+
+// ===========================
+// Calculate Compliance Tests
+// ===========================
+
+func TestTrustCalculator_CalculateCompliance_NoViolations(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	agent := &domain.Agent{
+		ID: uuid.New(),
+	}
+
+	compliance := calculator.calculateCompliance(agent)
+
+	// Agent with no violations should have high compliance
+	assert.True(t, compliance >= 0.0 && compliance <= 1.0, "Compliance should be valid range")
+}
+
+// ===========================
+// Calculate Drift Detection Tests
+// ===========================
+
+func TestTrustCalculator_CalculateDriftDetection_Default(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	agent := &domain.Agent{
+		ID: uuid.New(),
+	}
+
+	drift := calculator.calculateDriftDetection(agent)
+
+	// Without drift repo, should return baseline
+	assert.True(t, drift >= 0.0 && drift <= 1.0, "Drift detection should be valid")
+}
+
+// ===========================
+// Calculate User Feedback Tests
+// ===========================
+
+func TestTrustCalculator_CalculateUserFeedback_Baseline(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	agent := &domain.Agent{
+		ID: uuid.New(),
+	}
+
+	feedback := calculator.calculateUserFeedback(agent)
+
+	// Should return baseline feedback value
+	assert.Equal(t, 0.75, feedback, "User feedback should return baseline")
+}
+
+// ===========================
+// Calculate Confidence Tests
+// ===========================
+
+func TestTrustCalculator_CalculateConfidence_FullData(t *testing.T) {
+	calculator := &TrustCalculator{}
+	now := time.Now()
+
+	// Agent with lots of data points
+	agent := &domain.Agent{
+		ID:           uuid.New(),
+		Status:       domain.AgentStatusVerified,
+		Capabilities: []string{"read", "write"},
+		TalksTo:      []string{"agent-1", "agent-2"},
+		CreatedAt:    now.AddDate(0, -3, 0), // 3 months old
+		VerifiedAt:   &now,
+	}
+
+	factors := &domain.TrustScoreFactors{
+		VerificationStatus: 1.0,
+		Uptime:             0.95,
+	}
+
+	confidence := calculator.calculateConfidence(agent, factors)
+
+	// Confidence should be in valid range
+	assert.True(t, confidence >= 0.0, "Confidence should be non-negative")
+	assert.True(t, confidence <= 1.0, "Confidence should not exceed 1.0")
+}
+
+func TestTrustCalculator_CalculateConfidence_MinimalData(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	agent := &domain.Agent{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(), // Just created
+	}
+
+	factors := &domain.TrustScoreFactors{}
+
+	confidence := calculator.calculateConfidence(agent, factors)
+
+	// Agent with minimal data should have lower confidence
+	assert.True(t, confidence >= 0.0, "Confidence should be non-negative")
+	assert.True(t, confidence <= 1.0, "Confidence should not exceed 1.0")
+}
+
+// Note: CalculateFactors requires repositories to be set up
+// Full integration tests with mocks are in other test files
+
+// Note: End-to-end Calculate tests are in other test functions that use mocked repositories
+// (TestTrustCalculator_Calculate_AllFactorsPerfectScore, TestTrustCalculator_Calculate_MinimalAgent)

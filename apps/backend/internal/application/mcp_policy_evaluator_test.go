@@ -160,3 +160,15 @@ func TestMatchDomainPattern(t *testing.T) {
 		})
 	}
 }
+
+// ========================================
+// Constructor Tests
+// ========================================
+
+func TestNewMCPPolicyEvaluator(t *testing.T) {
+	evaluator := NewMCPPolicyEvaluator(nil, nil)
+
+	assert.NotNil(t, evaluator)
+	assert.Nil(t, evaluator.policyRepo)
+	assert.Nil(t, evaluator.mcpRepo)
+}
