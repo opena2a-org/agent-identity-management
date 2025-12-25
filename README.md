@@ -351,6 +351,10 @@ The SDK automatically determines risk levels based on capability patterns:
 @agent.perform_action(capability="internal:api", risk_level="critical")
 ```
 
+### Known Issues
+
+Both SDKs have known issues identified during code review that are tracked for resolution. See the **SDK Security & Stability Fixes** section in [ROADMAP.md](ROADMAP.md#-sdk-security--stability-fixes) for details.
+
 ---
 
 ## Security Model
