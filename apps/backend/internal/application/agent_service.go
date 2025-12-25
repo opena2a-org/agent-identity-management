@@ -620,6 +620,8 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 		return nil, err
 	}
 
+	previousScore := agent.TrustScore
+
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate trust score: %w", err)
@@ -634,6 +636,11 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 	// Save trust score history
 	if err := s.trustScoreRepo.Create(trustScore); err != nil {
 		return nil, fmt.Errorf("failed to save trust score: %w", err)
+	}
+
+	// Evaluate trust score policy enforcement (alerts and suspension)
+	if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, trustScore.Score); err != nil {
+		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
 	}
 
 	return trustScore, nil
@@ -659,8 +666,16 @@ func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, 
 		return fmt.Errorf("failed to update trust score: %w", err)
 	}
 
+	// Update agent object for policy evaluation
+	agent.TrustScore = newScore
+
 	// Check for significant trust score drop and create alert if needed
 	s.checkAndCreateTrustScoreDropAlert(ctx, agent, previousScore, newScore)
+
+	// Evaluate trust score policy enforcement (alerts and suspension)
+	if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, newScore); err != nil {
+		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+	}
 
 	return nil
 }
@@ -1074,6 +1089,13 @@ func (s *AgentService) VerifyCapability(
 		// Increment violation count on agent record
 		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
 			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
+		}
+
+		// Evaluate trust score policy enforcement (alerts and suspension)
+		previousScore := agent.TrustScore  // Store before updating
+		agent.TrustScore = newScore        // Update agent object for policy evaluation
+		if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, newScore); err != nil {
+			fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
 		}
 
 		// Return enforcement decision from policy
