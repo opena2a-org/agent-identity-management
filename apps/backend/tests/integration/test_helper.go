@@ -236,6 +236,44 @@ func (tc *TestContext) AssertStatusCode(method, path string, body interface{}, t
 	return respBody
 }
 
+// Request makes an HTTP request and returns the raw response (for tests that need to check status codes without asserting)
+func (tc *TestContext) Request(method, path string, body interface{}, token string) (*http.Response, []byte) {
+	var bodyReader io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			tc.T.Fatalf("failed to marshal body: %v", err)
+		}
+		bodyReader = bytes.NewReader(jsonBody)
+	}
+
+	req, err := http.NewRequest(method, tc.Config.BaseURL+path, bodyReader)
+	if err != nil {
+		tc.T.Fatalf("failed to create request: %v", err)
+	}
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := tc.Client.Do(req)
+	if err != nil {
+		tc.T.Fatalf("request failed: %v", err)
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		tc.T.Fatalf("failed to read response: %v", err)
+	}
+
+	return resp, respBody
+}
+
 // CleanupTestData removes test data (agents, users, etc.)
 func (tc *TestContext) CleanupTestData() error {
 	// In a real implementation, this would clean up test data
