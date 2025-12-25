@@ -15,7 +15,8 @@ type SecurityPolicyService struct {
 	policyRepo       domain.SecurityPolicyRepository
 	alertRepo        domain.AlertRepository
 	auditLogRepo     domain.AuditLogRepository
-	behaviorAnalysis *BehaviorAnalysisService // Intelligent behavioral anomaly detection
+	agentRepo        domain.AgentRepository             // For suspending agents on critical trust score
+	behaviorAnalysis *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -36,6 +37,12 @@ func NewSecurityPolicyService(
 // This uses setter injection to break circular dependency between services
 func (s *SecurityPolicyService) SetBehaviorAnalysis(behaviorService *BehaviorAnalysisService) {
 	s.behaviorAnalysis = behaviorService
+}
+
+// SetAgentRepository sets the agent repository for suspending agents on critical trust score
+// This uses setter injection to break circular dependency between services
+func (s *SecurityPolicyService) SetAgentRepository(agentRepo domain.AgentRepository) {
+	s.agentRepo = agentRepo
 }
 
 // EvaluateCapabilityViolation evaluates security policies for capability violations
@@ -293,6 +300,149 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 
 	// No policy triggered
 	return false, false, "", nil
+}
+
+// TrustScoreEnforcementThresholds defines thresholds for trust score enforcement
+const (
+	TrustScoreThresholdWarning  = 0.70 // 70% - Generate warning alert
+	TrustScoreThresholdCritical = 0.50 // 50% - Suspend agent and create critical alert
+)
+
+// TrustScoreEnforcementResult contains the result of trust score evaluation
+type TrustScoreEnforcementResult struct {
+	ShouldAlert   bool
+	ShouldSuspend bool
+	AlertSeverity domain.AlertSeverity
+	PolicyName    string
+	Message       string
+}
+
+// EvaluateTrustScoreOnUpdate evaluates trust score policies after a score update.
+// This is called after every trust score change (recalculation, manual update, violation impact).
+//
+// Enforcement rules:
+// - Score < 70%: Create warning alert (agent continues to operate)
+// - Score < 50%: Create critical alert AND suspend agent
+//
+// Returns enforcement result with actions to take.
+func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
+	ctx context.Context,
+	agent *domain.Agent,
+	previousScore float64,
+	currentScore float64,
+) (*TrustScoreEnforcementResult, error) {
+	result := &TrustScoreEnforcementResult{}
+
+	// Only evaluate if score dropped (don't alert on improvements)
+	if currentScore >= previousScore {
+		return result, nil
+	}
+
+	// Only evaluate active/verified agents
+	if agent.Status != domain.AgentStatusVerified && agent.Status != domain.AgentStatusPending {
+		return result, nil
+	}
+
+	// Check for critical threshold breach (< 50%)
+	if currentScore < TrustScoreThresholdCritical {
+		result.ShouldAlert = true
+		result.ShouldSuspend = true
+		result.AlertSeverity = domain.SeverityCritical
+		result.PolicyName = "Critical Trust Score Enforcement"
+		result.Message = fmt.Sprintf(
+			"Agent trust score dropped to %.1f%% (below critical threshold of %.0f%%). Agent has been automatically suspended.",
+			currentScore*100, TrustScoreThresholdCritical*100,
+		)
+
+		// Create critical alert
+		if err := s.createTrustScoreAlert(ctx, agent, result); err != nil {
+			fmt.Printf("⚠️  Failed to create critical trust score alert: %v\n", err)
+		}
+
+		// Suspend the agent
+		if err := s.suspendAgentForLowTrustScore(ctx, agent); err != nil {
+			fmt.Printf("⚠️  Failed to suspend agent %s: %v\n", agent.Name, err)
+		} else {
+			fmt.Printf("🛑 Agent '%s' suspended due to critical trust score (%.1f%%)\n",
+				agent.Name, currentScore*100)
+		}
+
+		return result, nil
+	}
+
+	// Check for warning threshold breach (< 70%)
+	if currentScore < TrustScoreThresholdWarning {
+		result.ShouldAlert = true
+		result.ShouldSuspend = false
+		result.AlertSeverity = domain.SeverityWarning
+		result.PolicyName = "Low Trust Score Warning"
+		result.Message = fmt.Sprintf(
+			"Agent trust score dropped to %.1f%% (below warning threshold of %.0f%%). Consider investigating recent activity.",
+			currentScore*100, TrustScoreThresholdWarning*100,
+		)
+
+		// Create warning alert
+		if err := s.createTrustScoreAlert(ctx, agent, result); err != nil {
+			fmt.Printf("⚠️  Failed to create trust score warning alert: %v\n", err)
+		} else {
+			fmt.Printf("⚠️  Low trust score alert created for agent '%s' (%.1f%%)\n",
+				agent.Name, currentScore*100)
+		}
+
+		return result, nil
+	}
+
+	return result, nil
+}
+
+// createTrustScoreAlert creates an alert for trust score threshold breach
+func (s *SecurityPolicyService) createTrustScoreAlert(
+	ctx context.Context,
+	agent *domain.Agent,
+	result *TrustScoreEnforcementResult,
+) error {
+	// Check for recent duplicate alerts (within last hour)
+	recentAlerts, err := s.alertRepo.GetByOrganization(agent.OrganizationID, 50, 0)
+	if err == nil {
+		cutoff := time.Now().Add(-1 * time.Hour)
+		for _, existing := range recentAlerts {
+			if existing.ResourceID == agent.ID &&
+				existing.AlertType == domain.AlertTrustScoreLow &&
+				existing.CreatedAt.After(cutoff) {
+				// Duplicate alert within the last hour, skip
+				return nil
+			}
+		}
+	}
+
+	alert := &domain.Alert{
+		OrganizationID: agent.OrganizationID,
+		AlertType:      domain.AlertTrustScoreLow,
+		Severity:       result.AlertSeverity,
+		Title:          fmt.Sprintf("%s: %s", result.PolicyName, agent.DisplayName),
+		Description:    result.Message,
+		ResourceType:   "agent",
+		ResourceID:     agent.ID,
+		Metadata: map[string]interface{}{
+			"agentName":        agent.Name,
+			"trustScore":       agent.TrustScore,
+			"policyName":       result.PolicyName,
+			"actionTaken":      result.ShouldSuspend,
+			"enforcementLevel": string(result.AlertSeverity),
+		},
+	}
+
+	return s.alertRepo.Create(alert)
+}
+
+// suspendAgentForLowTrustScore suspends an agent due to critical trust score
+func (s *SecurityPolicyService) suspendAgentForLowTrustScore(ctx context.Context, agent *domain.Agent) error {
+	if s.agentRepo == nil {
+		return fmt.Errorf("agent repository not configured")
+	}
+
+	agent.Status = domain.AgentStatusSuspended
+	return s.agentRepo.Update(agent)
 }
 
 // EvaluateUnusualActivity evaluates security policies for unusual activity patterns

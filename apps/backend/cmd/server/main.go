@@ -536,6 +536,9 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	// ✅ Wire BehaviorAnalysisService into SecurityPolicyService for smart detection
 	securityPolicyService.SetBehaviorAnalysis(behaviorAnalysisService)
 
+	// ✅ Wire AgentRepository into SecurityPolicyService for trust score enforcement (suspending agents)
+	securityPolicyService.SetAgentRepository(repos.Agent)
+
 	complianceService := application.NewComplianceService(
 		repos.AuditLog,
 		repos.Agent,

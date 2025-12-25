@@ -1,12 +1,19 @@
 # 🗺️ AIM Development Roadmap
 
-**Last Updated**: December 22, 2025
+**Last Updated**: December 24, 2025
 
 This document tracks future enhancements and features that are deferred from the current development cycle.
 
 ---
 
 ## ✅ Recently Completed
+
+### Trust Score Policy Enforcement (December 2025)
+- Automatic enforcement when trust scores fall below thresholds
+- Score < 70%: Warning alert created (agent continues to operate)
+- Score < 50%: Critical alert created AND agent automatically suspended
+- Deduplication prevents duplicate alerts within 1 hour
+- Integrated into all trust score update paths
 
 ### Java SDK (December 2025)
 - Full Java SDK with Maven/Gradle support
@@ -41,26 +48,27 @@ This document tracks future enhancements and features that are deferred from the
 
 ---
 
-### Trust Score Policy Enforcement
+### ~~Trust Score Policy Enforcement~~ ✅ IMPLEMENTED
 **Priority**: High
-**Status**: Planned (Phase 1)
-**Estimated Effort**: 2 hours
+**Status**: Implemented (December 2025)
 
-**Current**: Trust scores are calculated and displayed, but not enforced
-**Needed**: Automatic enforcement when trust scores fall below thresholds
+Trust scores are now actively enforced with automatic policy evaluation:
 
-**Policies to Enforce**:
-- Low Trust Score Alert (threshold: 70, action: alert_only)
-- Critical Trust Score Block (threshold: 50, action: block_and_alert)
+**Enforcement Rules**:
+- Score < 70%: Warning alert created (agent continues to operate)
+- Score < 50%: Critical alert created AND agent automatically suspended
 
 **Implementation**:
-- Add `EvaluateTrustScore()` method to `SecurityPolicyService`
-- Call after every trust score update in `AgentService`
-- Create alerts for low scores
-- Automatically disable agents with critical scores
-- Send notifications to administrators
+- Added `EvaluateTrustScoreOnUpdate()` method to `SecurityPolicyService`
+- Called after every trust score update (recalculation, manual update, violation impact)
+- Creates alerts with deduplication (prevents duplicate alerts within 1 hour)
+- Automatically suspends agents with critical trust scores
+- Integrated into `RecalculateTrustScore()`, `UpdateTrustScore()`, and capability violation handling
 
-**Use Case**: Proactive threat detection based on agent behavior changes
+**Files Modified**:
+- `apps/backend/internal/application/security_policy_service.go`
+- `apps/backend/internal/application/agent_service.go`
+- `apps/backend/cmd/server/main.go`
 
 ---
 
