@@ -259,14 +259,18 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ---
 
-#### Silent Fallback to Unencrypted Storage
+#### ~~Silent Fallback to Unencrypted Storage~~ ✅ FIXED
 **Priority**: Medium
-**Status**: Identified
-**File**: `sdk/python/aim_sdk/secure_storage.py`
+**Status**: Fixed (December 2025)
+**File**: `sdk/python/aim_sdk/oauth.py`
 
 **Issue**: When secure storage initialization fails (e.g., keyring unavailable), the code silently falls back to storing credentials in plaintext without warning the user.
 
-**Recommendation**: Make fallback behavior configurable and emit a prominent warning when using unencrypted storage.
+**Fix**:
+- Added prominent `UserWarning` when falling back to plaintext storage
+- Added `allow_plaintext_fallback` parameter to `OAuthTokenManager`:
+  - `True` (default): Falls back with warning
+  - `False`: Raises `RuntimeError` requiring secure storage
 
 ---
 
