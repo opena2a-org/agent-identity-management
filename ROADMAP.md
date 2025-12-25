@@ -213,14 +213,14 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ### Python SDK Issues
 
-#### Memory Leak in LangChain Callback Handler
+#### ~~Memory Leak in LangChain Callback Handler~~ ✅ FIXED
 **Priority**: Medium
-**Status**: Identified
+**Status**: Fixed (December 2025)
 **File**: `sdk/python/aim_sdk/integrations/langchain/callback.py`
 
 **Issue**: The `_active_tools` dictionary stores tool invocation data keyed by `run_id`. If `on_tool_end` or `on_tool_error` is never called for a tool (e.g., due to exception or unexpected flow), entries accumulate and are never cleaned up.
 
-**Recommendation**: Add a cleanup mechanism with TTL or maximum size limit, or use `WeakValueDictionary`.
+**Fix**: Added TTL-based cleanup mechanism with 1-hour expiry and max 1000 entries limit.
 
 ---
 
@@ -248,27 +248,25 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ### Java SDK Issues
 
-#### HTTP Connection Pool Not Properly Closed
+#### ~~HTTP Connection Pool Not Properly Closed~~ ✅ FIXED
 **Priority**: Medium
-**Status**: Identified
+**Status**: Already Fixed
 **File**: `sdk/java/src/main/java/org/opena2a/aim/client/AIMClient.java`
-**Lines**: 2468-2471
 
 **Issue**: The `close()` method shuts down the executor service but does not evict connections from the OkHttpClient connection pool.
 
-**Recommendation**: Add `httpClient.connectionPool().evictAll()` before shutting down the executor.
+**Fix**: Already fixed - `evictAll()` is called for both httpClient and authClient connection pools.
 
 ---
 
-#### Race Condition in Key Rotation
+#### ~~Race Condition in Key Rotation~~ ✅ FIXED
 **Priority**: High
-**Status**: Identified
+**Status**: Fixed (December 2025)
 **File**: `sdk/java/src/main/java/org/opena2a/aim/security/SecureCredentialStorage.java`
-**Lines**: 253-295
 
 **Issue**: The `rotateKey()` method is not synchronized. Concurrent calls could corrupt credentials or the key file.
 
-**Recommendation**: Add synchronization or use a lock to prevent concurrent key rotation.
+**Fix**: Added `synchronized` keyword to `rotateKey()` method to prevent concurrent execution.
 
 ---
 
@@ -290,27 +288,25 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ---
 
-#### No Retry Logic in Client Credentials OAuth Flow
+#### ~~No Retry Logic in Client Credentials OAuth Flow~~ ✅ FIXED
 **Priority**: Medium
-**Status**: Identified
+**Status**: Already Fixed
 **File**: `sdk/java/src/main/java/org/opena2a/aim/client/AIMClient.java`
-**Lines**: 1072-1100
 
-**Issue**: The `authenticateWithClientCredentials()` method has no retry logic for transient network failures, unlike the refresh token flow.
+**Issue**: The `authenticateWithClientCredentials()` method has no retry logic for transient network failures.
 
-**Recommendation**: Add retry logic with exponential backoff for transient failures.
+**Fix**: Already fixed - method uses `httpClient` which has retry interceptor with exponential backoff.
 
 ---
 
-#### Missing Agent Name Length Validation
+#### ~~Missing Agent Name Length Validation~~ ✅ FIXED
 **Priority**: Low
-**Status**: Identified
+**Status**: Fixed (December 2025)
 **File**: `sdk/java/src/main/java/org/opena2a/aim/credentials/CredentialManager.java`
-**Lines**: 399-403
 
 **Issue**: Agent names are sanitized for filesystem safety but there's no maximum length validation, which could exceed filesystem path limits.
 
-**Recommendation**: Add maximum length check (e.g., 255 characters) and truncate or throw an error.
+**Fix**: Added 200-character maximum length check with clear error message.
 
 ---
 
