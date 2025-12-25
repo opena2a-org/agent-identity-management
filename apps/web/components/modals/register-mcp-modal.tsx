@@ -153,10 +153,10 @@ export function RegisterMCPModal({
         serverData.version = formData.version;
       }
       if (formData.public_key) {
-        serverData.public_key = formData.public_key;  // Backend expects snake_case
+        serverData.publicKey = formData.public_key;  // Backend expects camelCase
       }
       if (formData.verification_url) {
-        serverData.verification_url = formData.verification_url;  // Backend expects snake_case
+        serverData.verificationUrl = formData.verification_url;  // Backend expects camelCase
       }
       // Note: Capabilities are auto-detected by the backend from /.well-known/mcp/capabilities
 
