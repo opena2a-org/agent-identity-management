@@ -309,21 +309,25 @@ The following issues were identified during a comprehensive code review (Decembe
 
 ---
 
-#### Master Key Security Concerns
+#### ~~Master Key Security Concerns~~ ✅ PARTIALLY FIXED
 **Priority**: High
-**Status**: Identified
+**Status**: Partially Fixed (December 2025)
 **File**: `sdk/java/src/main/java/org/opena2a/aim/security/SecureCredentialStorage.java`
-**Lines**: 132-153
 
 **Issue**:
 1. Master encryption key stored in plain file (`~/.aim/secure/.keystore`)
 2. Key is never zeroed from memory after use
 3. No integrity check on the key file
 
-**Recommendation**:
-- Zero out key material after use with `Arrays.fill()`
-- Consider OS keychain integration (macOS Keychain, Windows Credential Manager)
-- Add HMAC integrity check for key file
+**Fixes Applied**:
+- ✅ `deriveKey()` now zeros PBEKeySpec password and intermediate key bytes after use
+- ✅ Added `clearMasterKey()` method to securely zero master key from memory
+- ✅ Auto-registers JVM shutdown hook to clear key on exit
+- ✅ `rotateKey()` already zeros old key after rotation
+
+**Still TODO**:
+- OS keychain integration (macOS Keychain, Windows Credential Manager)
+- HMAC integrity check for key file
 
 ---
 

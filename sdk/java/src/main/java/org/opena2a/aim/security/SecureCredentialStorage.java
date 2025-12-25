@@ -115,6 +115,9 @@ public class SecureCredentialStorage {
             loadOrGenerateMasterKey();
             initialized = true;
 
+            // Register shutdown hook to clear master key from memory on JVM exit
+            registerShutdownHook();
+
             SecurityLogger.getInstance().logCredentialEvent(
                     EventTypes.Cred.SECURE_STORAGE_ENABLED, "aes-256-gcm", true);
 
@@ -323,6 +326,32 @@ public class SecureCredentialStorage {
         return initialized;
     }
 
+    /**
+     * Securely clear the master key from memory.
+     * Call this when the storage is no longer needed (e.g., application shutdown).
+     *
+     * <p>WARNING: After calling this method, the storage will not be able to
+     * encrypt or decrypt credentials until re-initialized.</p>
+     */
+    public void clearMasterKey() {
+        if (masterKeyBytes != null) {
+            Arrays.fill(masterKeyBytes, (byte) 0);
+            masterKeyBytes = null;
+            initialized = false;
+            log.debug("Master key securely cleared from memory");
+        }
+    }
+
+    /**
+     * Cleanup hook for JVM shutdown.
+     * Registers a shutdown hook to clear the master key when the JVM exits.
+     */
+    public void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            clearMasterKey();
+        }, "aim-secure-storage-cleanup"));
+    }
+
     // =========================================================================
     // ENCRYPTION / DECRYPTION
     // =========================================================================
@@ -343,7 +372,7 @@ public class SecureCredentialStorage {
         cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
         byte[] ciphertext = cipher.doFinal(plaintext);
 
-        // Format: salt || iv || ciphertext
+        // Format: salt || iv || ciphertext (salt and iv are not secret, ok to include in output)
         byte[] result = new byte[SALT_LENGTH + IV_LENGTH + ciphertext.length];
         System.arraycopy(salt, 0, result, 0, SALT_LENGTH);
         System.arraycopy(iv, 0, result, SALT_LENGTH, IV_LENGTH);
@@ -376,14 +405,29 @@ public class SecureCredentialStorage {
     private SecretKey deriveKey(byte[] masterKey, byte[] salt) throws Exception {
         // Use PBKDF2 for key derivation
         SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_DERIVATION);
-        KeySpec spec = new PBEKeySpec(
-                Base64.getEncoder().encodeToString(masterKey).toCharArray(),
-                salt,
-                ITERATIONS,
-                KEY_LENGTH
-        );
-        SecretKey tmp = factory.generateSecret(spec);
-        return new SecretKeySpec(tmp.getEncoded(), KEY_ALGORITHM);
+
+        // Convert master key to char array for PBEKeySpec (required by API)
+        char[] password = Base64.getEncoder().encodeToString(masterKey).toCharArray();
+        byte[] tmpEncoded = null;
+
+        try {
+            PBEKeySpec spec = new PBEKeySpec(password, salt, ITERATIONS, KEY_LENGTH);
+            try {
+                SecretKey tmp = factory.generateSecret(spec);
+                tmpEncoded = tmp.getEncoded();
+                return new SecretKeySpec(tmpEncoded, KEY_ALGORITHM);
+            } finally {
+                // Clear the PBEKeySpec password (it has a clearPassword() method)
+                spec.clearPassword();
+            }
+        } finally {
+            // Zero out the password char array
+            Arrays.fill(password, '\0');
+            // Zero out intermediate key material
+            if (tmpEncoded != null) {
+                Arrays.fill(tmpEncoded, (byte) 0);
+            }
+        }
     }
 
     // =========================================================================
