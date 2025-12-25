@@ -509,7 +509,7 @@ func TestTrustCalculator_Calculate_AllFactorsPerfectScore(t *testing.T) {
 
 	// Mock no capabilities (neutral risk) - may be called multiple times by different factors
 	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agent.ID).Return([]*domain.AgentCapability{}, nil).Maybe()
-	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 100, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
 	// Mock no alerts for this agent
 	mockAlertRepo.On("GetUnacknowledgedByResourceID", agent.ID).Return([]*domain.Alert{}, nil).Maybe()
 	mockAlertRepo.On("GetByResourceID", agent.ID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
@@ -552,7 +552,7 @@ func TestTrustCalculator_Calculate_MinimalAgent(t *testing.T) {
 	}
 
 	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agent.ID).Return([]*domain.AgentCapability{}, nil).Maybe()
-	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 100, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
 	mockAlertRepo.On("GetUnacknowledgedByResourceID", agent.ID).Return([]*domain.Alert{}, nil).Maybe()
 	mockAlertRepo.On("GetByResourceID", agent.ID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
 
