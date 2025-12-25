@@ -225,3 +225,81 @@ func TestNewEmailProvider_Azure_MissingConfig(t *testing.T) {
 		assert.NotNil(t, provider)
 	}
 }
+
+func TestNewEmailProvider_SMTP_Valid(t *testing.T) {
+	config := EmailConfig{
+		Provider:    ProviderSMTP,
+		SMTPHost:    "smtp.example.com",
+		SMTPPort:    587,
+		FromAddress: "noreply@example.com",
+		FromName:    "Example",
+	}
+
+	provider, err := NewEmailProvider(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "SMTP", provider.GetProviderName())
+}
+
+func TestNewEmailProvider_Azure_Valid(t *testing.T) {
+	config := EmailConfig{
+		Provider:              ProviderAzure,
+		AzureConnectionString: "endpoint=https://test.communication.azure.com;accesskey=abc123==",
+		FromAddress:           "noreply@example.com",
+		FromName:              "Example",
+	}
+
+	provider, err := NewEmailProvider(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "Azure Communication Services", provider.GetProviderName())
+}
+
+func TestNewEmailProvider_AWSSES_Valid(t *testing.T) {
+	config := EmailConfig{
+		Provider:           ProviderAWSSES,
+		AWSRegion:          "us-east-1",
+		AWSAccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		AWSSecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		FromAddress:        "noreply@example.com",
+		FromName:           "Example",
+	}
+
+	provider, err := NewEmailProvider(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "AWS SES", provider.GetProviderName())
+}
+
+func TestNewEmailProvider_SendGrid_Valid(t *testing.T) {
+	config := EmailConfig{
+		Provider:       ProviderSendGrid,
+		SendGridAPIKey: "SG.valid-api-key",
+		FromAddress:    "noreply@example.com",
+		FromName:       "Example",
+	}
+
+	provider, err := NewEmailProvider(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "SendGrid", provider.GetProviderName())
+}
+
+func TestNewEmailProvider_Resend_Valid(t *testing.T) {
+	config := EmailConfig{
+		Provider:     ProviderResend,
+		ResendAPIKey: "re_valid-api-key",
+		FromAddress:  "noreply@example.com",
+		FromName:     "Example",
+	}
+
+	provider, err := NewEmailProvider(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "Resend", provider.GetProviderName())
+}

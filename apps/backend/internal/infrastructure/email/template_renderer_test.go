@@ -28,6 +28,14 @@ func TestNewTemplateRenderer_WithNonExistentCustomDir(t *testing.T) {
 	assert.NotNil(t, renderer)
 }
 
+func TestNewTemplateRenderer_WithExistingDir(t *testing.T) {
+	// Using current directory as a valid path
+	renderer, err := NewTemplateRenderer(".")
+
+	require.NoError(t, err)
+	assert.NotNil(t, renderer)
+}
+
 // ===========================
 // Render Tests
 // ===========================

@@ -259,6 +259,39 @@ func TestNewEmailServiceWithConfig_UnsupportedProvider(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported")
 }
 
+func TestNewEmailServiceWithConfig_Azure(t *testing.T) {
+	config := domain.EmailConfig{
+		Provider:    "azure",
+		FromAddress: "test@example.com",
+		FromName:    "Test",
+		Azure: domain.AzureEmailConfig{
+			ConnectionString: "endpoint=https://test.communication.azure.com;accesskey=dGVzdGtleQ==",
+		},
+	}
+
+	service, err := NewEmailServiceWithConfig(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, service)
+}
+
+func TestNewEmailServiceWithConfig_SMTP(t *testing.T) {
+	config := domain.EmailConfig{
+		Provider:    "smtp",
+		FromAddress: "test@example.com",
+		FromName:    "Test",
+		SMTP: domain.SMTPConfig{
+			Host: "smtp.example.com",
+			Port: 587,
+		},
+	}
+
+	service, err := NewEmailServiceWithConfig(config)
+
+	require.NoError(t, err)
+	assert.NotNil(t, service)
+}
+
 // ===========================
 // Helper Function Tests
 // ===========================
@@ -327,4 +360,55 @@ func TestGetEnvAsBool_Default(t *testing.T) {
 	result := getEnvAsBool("NONEXISTENT_BOOL_KEY", true)
 
 	assert.True(t, result)
+}
+
+// ===========================
+// NewEmailService Tests
+// ===========================
+
+func TestNewEmailService_ConsoleProvider(t *testing.T) {
+	t.Setenv("EMAIL_PROVIDER", "console")
+	t.Setenv("EMAIL_FROM_ADDRESS", "test@example.com")
+
+	service, err := NewEmailService()
+
+	require.NoError(t, err)
+	assert.NotNil(t, service)
+}
+
+func TestNewEmailService_MissingFromAddress(t *testing.T) {
+	t.Setenv("EMAIL_PROVIDER", "console")
+	// Don't set EMAIL_FROM_ADDRESS
+
+	service, err := NewEmailService()
+
+	assert.Error(t, err)
+	assert.Nil(t, service)
+}
+
+func TestLoadEmailConfigFromEnv_SMTP_TLSSettings(t *testing.T) {
+	t.Setenv("EMAIL_PROVIDER", "smtp")
+	t.Setenv("EMAIL_FROM_ADDRESS", "noreply@example.com")
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_TLS_ENABLED", "true")
+	t.Setenv("SMTP_MAX_CONNECTIONS", "20")
+
+	config, err := LoadEmailConfigFromEnv()
+
+	require.NoError(t, err)
+	assert.True(t, config.SMTP.TLSEnabled)
+	assert.Equal(t, 20, config.SMTP.MaxConnections)
+}
+
+func TestLoadEmailConfigFromEnv_AzurePollingEnabled(t *testing.T) {
+	t.Setenv("EMAIL_PROVIDER", "azure")
+	t.Setenv("EMAIL_FROM_ADDRESS", "noreply@example.com")
+	t.Setenv("AZURE_EMAIL_CONNECTION_STRING", "endpoint=https://test.communication.azure.com/;accesskey=test123")
+	t.Setenv("AZURE_EMAIL_POLLING_ENABLED", "true")
+
+	config, err := LoadEmailConfigFromEnv()
+
+	require.NoError(t, err)
+	assert.True(t, config.Azure.PollingEnabled)
 }
