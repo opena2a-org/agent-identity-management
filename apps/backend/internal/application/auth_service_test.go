@@ -275,7 +275,7 @@ func TestAuthService_LoginWithPassword_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -303,7 +303,7 @@ func TestAuthService_LoginWithPassword_UserNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	mockUserRepo.On("GetByEmail", "nonexistent@example.com").Return(nil, errors.New("user not found"))
 
@@ -326,7 +326,7 @@ func TestAuthService_LoginWithPassword_WrongPassword(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -351,7 +351,7 @@ func TestAuthService_LoginWithPassword_DeactivatedUser(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	user.Status = domain.UserStatusDeactivated
@@ -377,7 +377,7 @@ func TestAuthService_LoginWithPassword_SoftDeletedUser(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	deletedAt := time.Now()
@@ -404,7 +404,7 @@ func TestAuthService_LoginWithPassword_NoPasswordHash(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	user.PasswordHash = nil // User has no password (e.g., OAuth-only user)
@@ -430,7 +430,7 @@ func TestAuthService_LoginWithPassword_UpdateLastLoginFails(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -460,7 +460,7 @@ func TestAuthService_GetUserByID_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -485,7 +485,7 @@ func TestAuthService_GetUserByID_NotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	userID := uuid.New()
 	mockUserRepo.On("GetByID", userID).Return(nil, errors.New("user not found"))
@@ -512,7 +512,7 @@ func TestAuthService_GetUserByEmail_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -537,7 +537,7 @@ func TestAuthService_GetUserByEmail_NotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	mockUserRepo.On("GetByEmail", "nonexistent@example.com").Return(nil, errors.New("user not found"))
 
@@ -563,7 +563,7 @@ func TestAuthService_GetUsersByOrganization_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	orgID := uuid.New()
 	users := []*domain.User{
@@ -592,7 +592,7 @@ func TestAuthService_GetUsersByOrganization_EmptyOrg(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	orgID := uuid.New()
 	mockUserRepo.On("GetByOrganization", orgID).Return([]*domain.User{}, nil)
@@ -616,7 +616,7 @@ func TestAuthService_GetUsersByOrganization_Error(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	orgID := uuid.New()
 	mockUserRepo.On("GetByOrganization", orgID).Return(nil, errors.New("database error"))
@@ -643,7 +643,7 @@ func TestAuthService_UpdateUserRole_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	adminID := uuid.New()
@@ -670,7 +670,7 @@ func TestAuthService_UpdateUserRole_UserNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	userID := uuid.New()
 	orgID := uuid.New()
@@ -696,7 +696,7 @@ func TestAuthService_UpdateUserRole_WrongOrganization(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	differentOrgID := uuid.New()
@@ -723,7 +723,7 @@ func TestAuthService_UpdateUserRole_UpdateFails(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	adminID := uuid.New()
@@ -753,7 +753,7 @@ func TestAuthService_DeactivateUser_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	adminID := uuid.New()
@@ -778,7 +778,7 @@ func TestAuthService_DeactivateUser_UserNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	userID := uuid.New()
 	orgID := uuid.New()
@@ -803,7 +803,7 @@ func TestAuthService_DeactivateUser_WrongOrganization(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	differentOrgID := uuid.New()
@@ -829,7 +829,7 @@ func TestAuthService_DeactivateUser_SelfDeactivation(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -853,7 +853,7 @@ func TestAuthService_DeactivateUser_UpdateFails(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	adminID := uuid.New()
@@ -882,7 +882,7 @@ func TestAuthService_ChangePassword_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	user.ForcePasswordChange = true
@@ -907,7 +907,7 @@ func TestAuthService_ChangePassword_UserNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	userID := uuid.New()
 	mockUserRepo.On("GetByID", userID).Return(nil, errors.New("user not found"))
@@ -930,7 +930,7 @@ func TestAuthService_ChangePassword_NoPasswordHash(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	user.PasswordHash = nil
@@ -955,7 +955,7 @@ func TestAuthService_ChangePassword_WrongCurrentPassword(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -979,7 +979,7 @@ func TestAuthService_ChangePassword_WeakNewPassword(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -1003,7 +1003,7 @@ func TestAuthService_ChangePassword_UpdateFails(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 
@@ -1032,7 +1032,7 @@ func TestAuthService_ValidateAPIKey_Success(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()
@@ -1072,7 +1072,7 @@ func TestAuthService_ValidateAPIKey_InvalidKey(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	rawKey := "invalid_key"
 	hash := sha256.Sum256([]byte(rawKey))
@@ -1098,7 +1098,7 @@ func TestAuthService_ValidateAPIKey_KeyNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	rawKey := "aim_test_nonexistent"
 	hash := sha256.Sum256([]byte(rawKey))
@@ -1125,7 +1125,7 @@ func TestAuthService_ValidateAPIKey_InactiveKey(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()
@@ -1158,7 +1158,7 @@ func TestAuthService_ValidateAPIKey_ExpiredKey(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()
@@ -1192,7 +1192,7 @@ func TestAuthService_ValidateAPIKey_UserNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()
@@ -1226,7 +1226,7 @@ func TestAuthService_ValidateAPIKey_OrganizationNotFound(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()
@@ -1262,7 +1262,7 @@ func TestAuthService_ValidateAPIKey_UpdateLastUsedFails(t *testing.T) {
 	mockAPIKeyRepo := new(MockAPIKeyRepository)
 	mockEmailService := new(MockEmailService)
 
-	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, mockEmailService)
+	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
 	org := createTestOrganization()

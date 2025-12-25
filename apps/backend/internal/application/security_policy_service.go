@@ -1025,3 +1025,91 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 
 	return false, false, "", nil
 }
+
+// EvaluateAuthFailures handles authentication failure events and creates appropriate alerts.
+// This is called by AuthService when:
+// - failureCount >= AlertThreshold (default 3): Creates a warning alert about multiple failures
+// - isLocked == true: Creates a high-severity alert that account was locked
+//
+// This enables security teams to:
+// - Monitor for brute force attack patterns
+// - Track account lockouts across the organization
+// - Investigate repeated authentication failures
+func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UUID, failureCount int, isLocked bool) {
+	if s.alertRepo == nil {
+		fmt.Printf("⚠️  Alert repository not configured, skipping auth failure alert\n")
+		return
+	}
+
+	// Check for recent duplicate alerts (within last 15 minutes for failures, 1 hour for lockouts)
+	recentAlerts, err := s.alertRepo.GetByOrganization(orgID, 50, 0)
+	if err == nil {
+		var cutoff time.Time
+		if isLocked {
+			cutoff = time.Now().Add(-1 * time.Hour)
+		} else {
+			cutoff = time.Now().Add(-15 * time.Minute)
+		}
+
+		for _, existing := range recentAlerts {
+			// Check if there's a recent similar alert for this email
+			if existingEmail, ok := existing.Metadata["email"].(string); ok && existingEmail == email {
+				if (isLocked && existing.AlertType == domain.AlertAccountLocked) ||
+					(!isLocked && existing.AlertType == domain.AlertAuthFailurePattern) {
+					if existing.CreatedAt.After(cutoff) {
+						// Duplicate alert within the cooldown period, skip
+						return
+					}
+				}
+			}
+		}
+	}
+
+	if isLocked {
+		// Account locked - high severity alert
+		alert := &domain.Alert{
+			OrganizationID: orgID,
+			AlertType:      domain.AlertAccountLocked,
+			Severity:       domain.AlertSeverityHigh,
+			Title:          fmt.Sprintf("Account Locked: %s", email),
+			Description:    fmt.Sprintf("Account for '%s' has been locked after %d failed authentication attempts. This may indicate a brute force attack. The account will be automatically unlocked after the lockout period, or can be manually unlocked by an administrator.", email, failureCount),
+			ResourceType:   "user",
+			ResourceID:     uuid.Nil, // We don't have user ID for unknown users
+			Metadata: map[string]interface{}{
+				"email":          email,
+				"failureCount":   failureCount,
+				"eventType":      "account_locked",
+				"recommendation": "Review authentication logs and consider blocking the source IP if this appears malicious",
+			},
+		}
+
+		if err := s.alertRepo.Create(alert); err != nil {
+			fmt.Printf("⚠️  Failed to create account locked alert: %v\n", err)
+		} else {
+			fmt.Printf("🔒 Account locked alert created for %s (after %d failures)\n", email, failureCount)
+		}
+	} else {
+		// Multiple failures but not yet locked - warning alert
+		alert := &domain.Alert{
+			OrganizationID: orgID,
+			AlertType:      domain.AlertAuthFailurePattern,
+			Severity:       domain.AlertSeverityWarning,
+			Title:          fmt.Sprintf("Multiple Auth Failures: %s", email),
+			Description:    fmt.Sprintf("Detected %d failed authentication attempts for '%s'. This may indicate a brute force attempt. Account will be locked after additional failures.", failureCount, email),
+			ResourceType:   "user",
+			ResourceID:     uuid.Nil,
+			Metadata: map[string]interface{}{
+				"email":          email,
+				"failureCount":   failureCount,
+				"eventType":      "auth_failure_pattern",
+				"recommendation": "Monitor for additional failures and review source IPs",
+			},
+		}
+
+		if err := s.alertRepo.Create(alert); err != nil {
+			fmt.Printf("⚠️  Failed to create auth failure pattern alert: %v\n", err)
+		} else {
+			fmt.Printf("⚠️  Auth failure pattern alert created for %s (%d failures)\n", email, failureCount)
+		}
+	}
+}

@@ -72,24 +72,35 @@ Trust scores are now actively enforced with automatic policy evaluation:
 
 ---
 
-### Failed Authentication Monitoring
+### Failed Authentication Monitoring ✅
 **Priority**: High
-**Status**: Planned (Phase 2)
+**Status**: ✅ IMPLEMENTED
 **Estimated Effort**: 4 hours
 
-**Current**: Auth failures are logged but not tracked or enforced
-**Needed**: Account lockout and alerts for repeated failures
+**What Was Implemented**:
+- ✅ `auth_failures` table to track failed login attempts (email, IP, user agent, metadata)
+- ✅ `auth_lockouts` table to track account lockouts with automatic unlock scheduling
+- ✅ `AuthFailureRepository` with full CRUD + lockout management
+- ✅ `LoginWithPasswordExtended()` in AuthService with lockout checking and failure recording
+- ✅ `EvaluateAuthFailures()` in SecurityPolicyService for alert creation
+- ✅ Automatic account lockout after 5 failed attempts within 15 minutes
+- ✅ 30-minute lockout duration (auto-unlock)
+- ✅ Warning alerts after 3 failures, high-severity alerts on lockout
+- ✅ Admin unlock capability via `UnlockAccount()` method
+- ✅ Duplicate alert prevention (cooldown periods)
 
-**Policy to Enforce**:
-- Failed Authentication Monitoring (max_attempts: 5, time_window: 15m, lockout: 30m)
+**Policy Configuration** (default):
+- `max_attempts`: 5 failed attempts before lockout
+- `time_window`: 15 minutes for counting attempts
+- `lockout_duration`: 30 minutes
+- `alert_threshold`: 3 failures before warning alert
 
-**Implementation**:
-- Add failed attempt counter per agent/user
-- Add `EvaluateAuthFailures()` method
-- Implement temporary account lockout
-- Create alerts for suspicious patterns
-- Send email notifications for lockouts
-- Admin dashboard to unlock accounts
+**Key Files**:
+- `apps/backend/internal/domain/auth_failure.go`
+- `apps/backend/internal/infrastructure/repository/auth_failure_repository.go`
+- `apps/backend/migrations/062_add_auth_failures_monitoring.sql`
+- `apps/backend/internal/application/auth_service.go` (updated)
+- `apps/backend/internal/application/security_policy_service.go` (updated)
 
 **Use Case**: Prevent brute force attacks and credential stuffing
 

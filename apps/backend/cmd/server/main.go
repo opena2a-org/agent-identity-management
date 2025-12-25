@@ -389,6 +389,7 @@ type Repositories struct {
 	SDKToken           domain.SDKTokenRepository
 	Capability         domain.CapabilityRepository
 	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
+	AuthFailure        *repository.AuthFailureRepository  // ✅ For failed authentication monitoring
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -419,6 +420,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		SDKToken:           repository.NewSDKTokenRepository(db),
 		Capability:         repository.NewCapabilityRepository(dbx),
 		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
+		AuthFailure:        repository.NewAuthFailureRepository(db),        // ✅ For failed authentication monitoring
 	}, oauthRepo
 }
 
@@ -467,6 +469,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.User,
 		repos.Organization,
 		repos.APIKey,
+		repos.AuthFailure,     // ✅ For failed authentication monitoring
 		securityPolicyService, // ✅ For auto-creating default policies
 		emailService,          // ✅ For sending welcome/approval emails
 	)
