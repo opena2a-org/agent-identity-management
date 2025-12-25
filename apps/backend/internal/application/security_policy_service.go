@@ -12,11 +12,13 @@ import (
 
 // SecurityPolicyService handles security policy evaluation and management
 type SecurityPolicyService struct {
-	policyRepo       domain.SecurityPolicyRepository
-	alertRepo        domain.AlertRepository
-	auditLogRepo     domain.AuditLogRepository
-	agentRepo        domain.AgentRepository             // For suspending agents on critical trust score
-	behaviorAnalysis *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
+	policyRepo         domain.SecurityPolicyRepository
+	alertRepo          domain.AlertRepository
+	auditLogRepo       domain.AuditLogRepository
+	agentRepo          domain.AgentRepository             // For suspending agents on critical trust score
+	behaviorAnalysis   *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
+	dataTransferRepo   domain.DataTransferRepository      // For data exfiltration detection
+	exfiltrationConfig domain.DataExfiltrationConfig      // Exfiltration detection thresholds
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -43,6 +45,13 @@ func (s *SecurityPolicyService) SetBehaviorAnalysis(behaviorService *BehaviorAna
 // This uses setter injection to break circular dependency between services
 func (s *SecurityPolicyService) SetAgentRepository(agentRepo domain.AgentRepository) {
 	s.agentRepo = agentRepo
+}
+
+// SetDataTransferRepository sets the data transfer repository for exfiltration detection
+// This uses setter injection to break circular dependency between services
+func (s *SecurityPolicyService) SetDataTransferRepository(repo domain.DataTransferRepository) {
+	s.dataTransferRepo = repo
+	s.exfiltrationConfig = domain.DefaultDataExfiltrationConfig()
 }
 
 // EvaluateCapabilityViolation evaluates security policies for capability violations
@@ -623,7 +632,49 @@ func (s *SecurityPolicyService) EvaluateDataExfiltration(
 			continue
 		}
 
-		// Check for data exfiltration patterns in action
+		// =====================================================================
+		// SIZE-BASED DETECTION: Check cumulative transfer volume
+		// =====================================================================
+		if s.dataTransferRepo != nil {
+			// Get threshold from policy rules, or use default
+			thresholdMB := s.exfiltrationConfig.ThresholdMB
+			if policyThreshold, ok := policy.Rules["data_threshold_mb"].(float64); ok {
+				thresholdMB = int(policyThreshold)
+			}
+			timeWindowMins := s.exfiltrationConfig.TimeWindowMins
+			if policyWindow, ok := policy.Rules["time_window_mins"].(float64); ok {
+				timeWindowMins = int(policyWindow)
+			}
+
+			// Check cumulative transfer size
+			_, responseBytes, err := s.dataTransferRepo.GetCumulativeSize(agent.ID, timeWindowMins)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to get cumulative transfer size for agent %s: %v\n", agent.Name, err)
+			} else {
+				thresholdBytes := domain.MBToBytes(thresholdMB)
+				if responseBytes >= thresholdBytes {
+					transferMB := domain.BytesToMB(responseBytes)
+					fmt.Printf("🚨 Data Exfiltration Policy '%s' triggered for agent %s (%.2f MB transferred in %d mins, threshold: %d MB)\n",
+						policy.Name, agent.Name, transferMB, timeWindowMins, thresholdMB)
+
+					// Create alert for exfiltration threshold breach
+					s.createDataExfiltrationAlert(ctx, agent, policy, responseBytes, thresholdMB, timeWindowMins)
+
+					switch policy.EnforcementAction {
+					case domain.EnforcementBlockAndAlert:
+						return true, true, policy.Name + " (Size Threshold)", nil
+					case domain.EnforcementAlertOnly:
+						return false, true, policy.Name + " (Size Threshold)", nil
+					case domain.EnforcementAllow:
+						return false, false, policy.Name + " (Size Threshold - Logged)", nil
+					}
+				}
+			}
+		}
+
+		// =====================================================================
+		// PATTERN-BASED DETECTION: Check for suspicious action patterns
+		// =====================================================================
 		patterns, ok := policy.Rules["patterns"].([]interface{})
 		if ok {
 			for _, p := range patterns {
@@ -652,6 +703,63 @@ func (s *SecurityPolicyService) EvaluateDataExfiltration(
 	}
 
 	return false, false, "", nil
+}
+
+// createDataExfiltrationAlert creates an alert for data exfiltration threshold breach
+func (s *SecurityPolicyService) createDataExfiltrationAlert(
+	ctx context.Context,
+	agent *domain.Agent,
+	policy *domain.SecurityPolicy,
+	bytesTransferred int64,
+	thresholdMB int,
+	timeWindowMins int,
+) {
+	if s.alertRepo == nil {
+		return
+	}
+
+	// Check for recent duplicate alerts (within last hour)
+	recentAlerts, err := s.alertRepo.GetByOrganization(agent.OrganizationID, 50, 0)
+	if err == nil {
+		cutoff := time.Now().Add(-1 * time.Hour)
+		for _, existing := range recentAlerts {
+			if existing.ResourceID == agent.ID &&
+				existing.AlertType == domain.AlertDataExfiltration &&
+				existing.CreatedAt.After(cutoff) {
+				return // Duplicate alert, skip
+			}
+		}
+	}
+
+	transferMB := domain.BytesToMB(bytesTransferred)
+	alert := &domain.Alert{
+		OrganizationID: agent.OrganizationID,
+		AlertType:      domain.AlertDataExfiltration,
+		Severity:       domain.AlertSeverityHigh,
+		Title:          fmt.Sprintf("Data Exfiltration Detected: %s", agent.DisplayName),
+		Description: fmt.Sprintf(
+			"Agent '%s' has transferred %.2f MB of data in the last %d minutes, exceeding the threshold of %d MB. This may indicate data exfiltration.",
+			agent.Name, transferMB, timeWindowMins, thresholdMB,
+		),
+		ResourceType: "agent",
+		ResourceID:   agent.ID,
+		AgentName:    agent.Name,
+		Metadata: map[string]interface{}{
+			"bytesTransferred": bytesTransferred,
+			"transferMB":       transferMB,
+			"thresholdMB":      thresholdMB,
+			"timeWindowMins":   timeWindowMins,
+			"policyName":       policy.Name,
+			"recommendation":   "Review agent activity and consider revoking access if unauthorized",
+		},
+	}
+
+	if err := s.alertRepo.Create(alert); err != nil {
+		fmt.Printf("⚠️  Failed to create data exfiltration alert: %v\n", err)
+	} else {
+		fmt.Printf("🚨 Data exfiltration alert created for agent '%s' (%.2f MB transferred)\n",
+			agent.Name, transferMB)
+	}
 }
 
 // EvaluateConfigDrift evaluates security policies for configuration drift
