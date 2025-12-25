@@ -390,13 +390,24 @@ public class CredentialManager {
     // AGENT CREDENTIALS (Ed25519 keys for registered agents)
     // =========================================================================
 
+    /** Maximum length for agent names to avoid filesystem path limits */
+    private static final int MAX_AGENT_NAME_LENGTH = 200;
+
     /**
      * Get the path to an agent's credentials file.
      *
      * @param agentName Name of the agent
      * @return Path to the agent credentials file
+     * @throws IllegalArgumentException if agent name is null, empty, or exceeds maximum length
      */
     public static Path getAgentCredentialsPath(String agentName) {
+        if (agentName == null || agentName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Agent name cannot be null or empty");
+        }
+        if (agentName.length() > MAX_AGENT_NAME_LENGTH) {
+            throw new IllegalArgumentException(
+                "Agent name exceeds maximum length of " + MAX_AGENT_NAME_LENGTH + " characters");
+        }
         // Sanitize agent name for filesystem
         String safeName = agentName.replaceAll("[^a-zA-Z0-9\\-_]", "_");
         return Paths.get(System.getProperty("user.home"), AIM_DIR, AGENTS_DIR, safeName + ".json");

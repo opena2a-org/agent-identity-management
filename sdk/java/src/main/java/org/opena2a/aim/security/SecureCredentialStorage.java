@@ -249,8 +249,9 @@ public class SecureCredentialStorage {
     /**
      * Rotate the master encryption key.
      * Re-encrypts all stored credentials with a new key.
+     * Synchronized to prevent concurrent key rotation which could corrupt credentials.
      */
-    public void rotateKey() {
+    public synchronized void rotateKey() {
         if (!initialized) return;
 
         try {

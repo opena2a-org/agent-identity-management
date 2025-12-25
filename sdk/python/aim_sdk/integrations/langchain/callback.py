@@ -4,9 +4,15 @@ AIM Callback Handler for LangChain
 Automatically logs all LangChain tool invocations to AIM for audit and compliance.
 """
 
+import time
 from typing import Any, Dict, List, Optional
 from langchain_core.callbacks import BaseCallbackHandler
 from aim_sdk import AIMClient
+
+
+# Configuration for memory leak prevention
+_MAX_ACTIVE_TOOLS = 1000  # Maximum entries before cleanup
+_TOOL_TTL_SECONDS = 3600  # 1 hour TTL for stale entries
 
 
 class AIMCallbackHandler(BaseCallbackHandler):
@@ -72,6 +78,27 @@ class AIMCallbackHandler(BaseCallbackHandler):
         self.verbose = verbose
         self._active_tools: Dict[str, Dict[str, Any]] = {}
 
+    def _cleanup_stale_entries(self) -> None:
+        """Remove stale entries to prevent memory leaks.
+
+        Called periodically when new tools start to clean up entries where
+        on_tool_end/on_tool_error was never called (e.g., due to exceptions).
+        """
+        if len(self._active_tools) < _MAX_ACTIVE_TOOLS:
+            return
+
+        current_time = time.time()
+        stale_ids = [
+            run_id for run_id, data in self._active_tools.items()
+            if current_time - data.get("_start_time", 0) > _TOOL_TTL_SECONDS
+        ]
+
+        for run_id in stale_ids:
+            if self.verbose:
+                tool_name = self._active_tools[run_id].get("tool_name", "unknown")
+                print(f"🧹 AIM: Cleaning up stale tool entry - {tool_name} (run_id: {run_id})")
+            del self._active_tools[run_id]
+
     def on_tool_start(
         self,
         serialized: Dict[str, Any],
@@ -84,6 +111,9 @@ class AIMCallbackHandler(BaseCallbackHandler):
         **kwargs: Any
     ) -> Any:
         """Called when a tool starts executing"""
+        # Cleanup stale entries to prevent memory leaks
+        self._cleanup_stale_entries()
+
         tool_name = serialized.get("name", "unknown_tool")
 
         if self.verbose:
@@ -96,7 +126,8 @@ class AIMCallbackHandler(BaseCallbackHandler):
             "tags": tags or [],
             "metadata": metadata or {},
             "run_id": run_id,
-            "parent_run_id": parent_run_id
+            "parent_run_id": parent_run_id,
+            "_start_time": time.time()  # Track start time for TTL cleanup
         }
 
     def on_tool_end(
