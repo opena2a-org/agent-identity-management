@@ -207,6 +207,113 @@ End-to-end testing of simplified deployment:
 
 ---
 
+## 🐛 SDK Security & Stability Fixes
+
+The following issues were identified during a comprehensive code review (December 2025) and are tracked for resolution.
+
+### Python SDK Issues
+
+#### Memory Leak in LangChain Callback Handler
+**Priority**: Medium
+**Status**: Identified
+**File**: `sdk/python/aim_sdk/integrations/langchain/callback.py`
+
+**Issue**: The `_active_tools` dictionary stores tool invocation data keyed by `run_id`. If `on_tool_end` or `on_tool_error` is never called for a tool (e.g., due to exception or unexpected flow), entries accumulate and are never cleaned up.
+
+**Recommendation**: Add a cleanup mechanism with TTL or maximum size limit, or use `WeakValueDictionary`.
+
+---
+
+#### Silent Fallback to Unencrypted Storage
+**Priority**: Medium
+**Status**: Identified
+**File**: `sdk/python/aim_sdk/secure_storage.py`
+
+**Issue**: When secure storage initialization fails (e.g., keyring unavailable), the code silently falls back to storing credentials in plaintext without warning the user.
+
+**Recommendation**: Make fallback behavior configurable and emit a prominent warning when using unencrypted storage.
+
+---
+
+#### JWT Token Decoding Without Signature Verification
+**Priority**: High
+**Status**: Identified
+**File**: `sdk/python/aim_sdk/oauth.py`
+
+**Issue**: JWT tokens are decoded by splitting and base64-decoding the payload directly without cryptographic signature verification.
+
+**Recommendation**: Use a proper JWT library (like `PyJWT`) with signature verification before trusting claims.
+
+---
+
+### Java SDK Issues
+
+#### HTTP Connection Pool Not Properly Closed
+**Priority**: Medium
+**Status**: Identified
+**File**: `sdk/java/src/main/java/org/opena2a/aim/client/AIMClient.java`
+**Lines**: 2468-2471
+
+**Issue**: The `close()` method shuts down the executor service but does not evict connections from the OkHttpClient connection pool.
+
+**Recommendation**: Add `httpClient.connectionPool().evictAll()` before shutting down the executor.
+
+---
+
+#### Race Condition in Key Rotation
+**Priority**: High
+**Status**: Identified
+**File**: `sdk/java/src/main/java/org/opena2a/aim/security/SecureCredentialStorage.java`
+**Lines**: 253-295
+
+**Issue**: The `rotateKey()` method is not synchronized. Concurrent calls could corrupt credentials or the key file.
+
+**Recommendation**: Add synchronization or use a lock to prevent concurrent key rotation.
+
+---
+
+#### Master Key Security Concerns
+**Priority**: High
+**Status**: Identified
+**File**: `sdk/java/src/main/java/org/opena2a/aim/security/SecureCredentialStorage.java`
+**Lines**: 132-153
+
+**Issue**:
+1. Master encryption key stored in plain file (`~/.aim/secure/.keystore`)
+2. Key is never zeroed from memory after use
+3. No integrity check on the key file
+
+**Recommendation**:
+- Zero out key material after use with `Arrays.fill()`
+- Consider OS keychain integration (macOS Keychain, Windows Credential Manager)
+- Add HMAC integrity check for key file
+
+---
+
+#### No Retry Logic in Client Credentials OAuth Flow
+**Priority**: Medium
+**Status**: Identified
+**File**: `sdk/java/src/main/java/org/opena2a/aim/client/AIMClient.java`
+**Lines**: 1072-1100
+
+**Issue**: The `authenticateWithClientCredentials()` method has no retry logic for transient network failures, unlike the refresh token flow.
+
+**Recommendation**: Add retry logic with exponential backoff for transient failures.
+
+---
+
+#### Missing Agent Name Length Validation
+**Priority**: Low
+**Status**: Identified
+**File**: `sdk/java/src/main/java/org/opena2a/aim/credentials/CredentialManager.java`
+**Lines**: 399-403
+
+**Issue**: Agent names are sanitized for filesystem safety but there's no maximum length validation, which could exceed filesystem path limits.
+
+**Recommendation**: Add maximum length check (e.g., 255 characters) and truncate or throw an error.
+
+---
+
 ## 🔐 Security Enhancements
 
 ### Advanced RBAC System
