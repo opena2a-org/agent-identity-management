@@ -1,8 +1,6 @@
-# AIM — Agent Identity Management
+# Agent Identity Management (AIM)
 
 <div align="center">
-
-***AIM for a better security***
 
 **The open-source platform for securing AI agents in production.**
 
