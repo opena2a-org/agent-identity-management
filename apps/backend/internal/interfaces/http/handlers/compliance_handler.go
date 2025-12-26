@@ -11,8 +11,13 @@ import (
 )
 
 type ComplianceHandler struct {
+	// Concrete service pointers (used by existing code)
 	complianceService *application.ComplianceService
 	auditService      *application.AuditService
+
+	// Interface fields for testability (used when set)
+	complianceServicer ComplianceServicerExtended
+	auditServicer      AuditServicer
 }
 
 func NewComplianceHandler(
@@ -25,12 +30,39 @@ func NewComplianceHandler(
 	}
 }
 
+// NewComplianceHandlerWithInterfaces creates a ComplianceHandler using interfaces for testability
+func NewComplianceHandlerWithInterfaces(
+	complianceService ComplianceServicerExtended,
+	auditService AuditServicer,
+) *ComplianceHandler {
+	return &ComplianceHandler{
+		complianceServicer: complianceService,
+		auditServicer:      auditService,
+	}
+}
+
+// Helper methods to use interfaces when available, otherwise use concrete types
+func (h *ComplianceHandler) getComplianceService() ComplianceServicerExtended {
+	if h.complianceServicer != nil {
+		return h.complianceServicer
+	}
+	return h.complianceService
+}
+
+func (h *ComplianceHandler) getAuditService() AuditServicer {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
+}
+
 // GetComplianceStatus returns current compliance status
 func (h *ComplianceHandler) GetComplianceStatus(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	status, err := h.complianceService.GetComplianceStatus(c.Context(), orgID)
+	compSvc := h.getComplianceService()
+	status, err := compSvc.GetComplianceStatus(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch compliance status",
@@ -38,7 +70,8 @@ func (h *ComplianceHandler) GetComplianceStatus(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -95,7 +128,8 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 	}
 
 	// Get metrics
-	metrics, err := h.complianceService.GetComplianceMetrics(
+	compSvc := h.getComplianceService()
+	metrics, err := compSvc.GetComplianceMetrics(
 		c.Context(),
 		orgID,
 		startDate,
@@ -109,7 +143,8 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -138,7 +173,8 @@ func (h *ComplianceHandler) GetAccessReview(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	review, err := h.complianceService.GetAccessReview(c.Context(), orgID)
+	compSvc := h.getComplianceService()
+	review, err := compSvc.GetAccessReview(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to generate access review",
@@ -146,7 +182,8 @@ func (h *ComplianceHandler) GetAccessReview(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -182,7 +219,8 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 	}
 
 	// Run compliance checks
-	results, err := h.complianceService.RunComplianceCheck(
+	compSvc := h.getComplianceService()
+	results, err := compSvc.RunComplianceCheck(
 		c.Context(),
 		orgID,
 		req.CheckType,
@@ -194,7 +232,8 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -259,7 +298,8 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -276,9 +316,10 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 		},
 	)
 
+	compSvc := h.getComplianceService()
 	if format == "json" {
 		// Full JSON export with all compliance data
-		report, err := h.complianceService.ExportComplianceReportFull(
+		report, err := compSvc.ExportComplianceReportFull(
 			c.Context(),
 			orgID,
 			framework,
@@ -298,7 +339,7 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 	}
 
 	// CSV format
-	csvData, err := h.complianceService.ExportToCSV(c.Context(), orgID, framework)
+	csvData, err := compSvc.ExportToCSV(c.Context(), orgID, framework)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to generate CSV report",
@@ -348,7 +389,8 @@ func (h *ComplianceHandler) GetComplianceTrending(c fiber.Ctx) error {
 		}
 	}
 
-	trending, err := h.complianceService.GetComplianceTrending(
+	compSvc := h.getComplianceService()
+	trending, err := compSvc.GetComplianceTrending(
 		c.Context(),
 		orgID,
 		framework,
@@ -362,7 +404,8 @@ func (h *ComplianceHandler) GetComplianceTrending(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -414,7 +457,8 @@ func (h *ComplianceHandler) RecordComplianceSnapshot(c fiber.Ctx) error {
 		})
 	}
 
-	snapshot, err := h.complianceService.RecordComplianceSnapshot(
+	compSvc := h.getComplianceService()
+	snapshot, err := compSvc.RecordComplianceSnapshot(
 		c.Context(),
 		orgID,
 		domain.ComplianceFramework(req.Framework),
@@ -426,7 +470,8 @@ func (h *ComplianceHandler) RecordComplianceSnapshot(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -462,7 +507,8 @@ func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	evidence, err := h.complianceService.ListEvidence(
+	compSvc := h.getComplianceService()
+	evidence, err := compSvc.ListEvidence(
 		c.Context(),
 		orgID,
 		framework,
@@ -476,7 +522,8 @@ func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -534,7 +581,8 @@ func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
 		})
 	}
 
-	evidence, err := h.complianceService.CollectEvidence(
+	compSvc := h.getComplianceService()
+	evidence, err := compSvc.CollectEvidence(
 		c.Context(),
 		orgID,
 		domain.ComplianceFramework(req.Framework),
@@ -548,7 +596,8 @@ func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -585,7 +634,8 @@ func (h *ComplianceHandler) GetEvidenceForCheck(c fiber.Ctx) error {
 		})
 	}
 
-	evidence, err := h.complianceService.GetEvidenceForCheck(
+	compSvc := h.getComplianceService()
+	evidence, err := compSvc.GetEvidenceForCheck(
 		c.Context(),
 		orgID,
 		checkName,
@@ -597,7 +647,8 @@ func (h *ComplianceHandler) GetEvidenceForCheck(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc := h.getAuditService()
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,

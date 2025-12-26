@@ -13,10 +13,14 @@ import (
 
 // CapabilityHandler handles capability-related HTTP requests
 type CapabilityHandler struct {
+	// Concrete service pointers (used by existing code)
 	capabilityService        *application.CapabilityService
 	capabilityRequestService *application.CapabilityRequestService
 	agentRepo                domain.AgentRepository
 	orgRepo                  domain.OrganizationRepository
+
+	// Interface fields for testability (used when set)
+	capabilityServicer CapabilityServicer
 }
 
 // NewCapabilityHandler creates a new capability handler
@@ -32,6 +36,23 @@ func NewCapabilityHandler(
 		agentRepo:                agentRepo,
 		orgRepo:                  orgRepo,
 	}
+}
+
+// NewCapabilityHandlerWithInterfaces creates a CapabilityHandler using interfaces for testability
+func NewCapabilityHandlerWithInterfaces(
+	capabilityService CapabilityServicer,
+) *CapabilityHandler {
+	return &CapabilityHandler{
+		capabilityServicer: capabilityService,
+	}
+}
+
+// Helper method to use interface when available, otherwise use concrete type
+func (h *CapabilityHandler) getCapabilityService() CapabilityServicer {
+	if h.capabilityServicer != nil {
+		return h.capabilityServicer
+	}
+	return h.capabilityService
 }
 
 // GrantCapability godoc
@@ -86,8 +107,10 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		})
 	}
 
+	capSvc := h.getCapabilityService()
+
 	// Validate capability format and auto-register custom capabilities
-	if err := h.capabilityService.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, orgID); err != nil {
+	if err := capSvc.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, orgID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: err.Error(),
 		})
@@ -100,7 +123,7 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		userIDPtr = &userID
 	}
 
-	capability, err := h.capabilityService.GrantCapability(
+	capability, err := capSvc.GrantCapability(
 		context.Background(),
 		agentID,
 		req.CapabilityType,
@@ -293,7 +316,8 @@ func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
 
 	activeOnly := c.Query("activeOnly", "true") == "true"
 
-	capabilities, err := h.capabilityService.GetAgentCapabilities(
+	capSvc := h.getCapabilityService()
+	capabilities, err := capSvc.GetAgentCapabilities(
 		context.Background(),
 		agentID,
 		activeOnly,
@@ -335,7 +359,8 @@ func (h *CapabilityHandler) RevokeCapability(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.capabilityService.RevokeCapability(
+	capSvc := h.getCapabilityService()
+	if err := capSvc.RevokeCapability(
 		context.Background(),
 		capabilityID,
 		&userID,
@@ -395,7 +420,8 @@ func (h *CapabilityHandler) VerifyAction(c fiber.Ctx) error {
 	// Get source IP
 	sourceIP := c.IP()
 
-	result, err := h.capabilityService.VerifyAction(
+	capSvc := h.getCapabilityService()
+	result, err := capSvc.VerifyAction(
 		context.Background(),
 		agentID,
 		req.RequestedCapability,
@@ -448,7 +474,8 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 		}
 	}
 
-	violations, total, err := h.capabilityService.GetViolationsByAgent(
+	capSvc := h.getCapabilityService()
+	violations, total, err := capSvc.GetViolationsByAgent(
 		context.Background(),
 		agentID,
 		limit,
@@ -503,7 +530,8 @@ func (h *CapabilityHandler) GetViolationsByOrganization(c fiber.Ctx) error {
 		}
 	}
 
-	violations, total, err := h.capabilityService.GetViolationsByOrganization(
+	capSvc := h.getCapabilityService()
+	violations, total, err := capSvc.GetViolationsByOrganization(
 		context.Background(),
 		orgID,
 		limit,
@@ -549,7 +577,8 @@ func (h *CapabilityHandler) ListCapabilities(c fiber.Ctx) error {
 	}
 
 	// Call capability service to list all capabilities with metadata
-	response, err := h.capabilityService.ListCapabilitiesWithMetadata(context.Background(), orgID)
+	capSvc := h.getCapabilityService()
+	response, err := capSvc.ListCapabilitiesWithMetadata(context.Background(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error: err.Error(),
@@ -586,7 +615,8 @@ func (h *CapabilityHandler) GetRecentViolations(c fiber.Ctx) error {
 		}
 	}
 
-	violations, err := h.capabilityService.GetRecentViolations(
+	capSvc := h.getCapabilityService()
+	violations, err := capSvc.GetRecentViolations(
 		context.Background(),
 		orgID,
 		minutes,

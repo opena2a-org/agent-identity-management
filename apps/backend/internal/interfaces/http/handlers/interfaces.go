@@ -61,6 +61,7 @@ type AuditServicer interface {
 	LogAction(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
 	GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogs(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
 }
 
 // CapabilityServicer defines the methods from CapabilityService that handlers use
@@ -102,4 +103,175 @@ type VerificationEventServicer interface {
 // MCPAttestationServicer defines the methods from MCPAttestationService that handlers use
 type MCPAttestationServicer interface {
 	GetMCPServersForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.MCPServer, error)
+}
+
+// AuthServicer defines the methods from AuthService that handlers use
+type AuthServicer interface {
+	GetUsersByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	CountActiveUsers(ctx context.Context, orgID uuid.UUID, withinMinutes int) (int, error)
+	UpdateUserRole(ctx context.Context, userID, orgID uuid.UUID, role domain.UserRole, adminID uuid.UUID) (*domain.User, error)
+	DeactivateUser(ctx context.Context, userID, orgID, adminID uuid.UUID) error
+}
+
+// AdminServicer defines the methods from AdminService that handlers use
+type AdminServicer interface {
+	GetPendingUsers(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error)
+	ApproveUser(ctx context.Context, userID, adminID uuid.UUID) error
+	RejectUser(ctx context.Context, userID, adminID uuid.UUID, reason string) error
+	ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error
+	PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error
+	GetOrganizationSettings(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error)
+	GetEnforcementSettings(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error)
+	UpdateEnforcementMode(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error
+}
+
+// AlertServicerExtended defines extended methods from AlertService that handlers use
+type AlertServicerExtended interface {
+	GetAlerts(ctx context.Context, orgID uuid.UUID, severity, status string, limit, offset int) ([]*domain.Alert, int, error)
+	GetAlertsByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error)
+	CreateAlert(ctx context.Context, alert *domain.Alert) error
+	AcknowledgeAlert(ctx context.Context, alertID, orgID, userID uuid.UUID) error
+	ResolveAlert(ctx context.Context, alertID, orgID, userID uuid.UUID, resolution string) error
+	BulkAcknowledgeAlerts(ctx context.Context, orgID, userID uuid.UUID) (int, error)
+	CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (allCount, acknowledgedCount, unacknowledgedCount int, err error)
+	CountBySeverity(ctx context.Context, orgID uuid.UUID, status string) (critical, high, warning, info int, err error)
+}
+
+// RegistrationServicer defines the methods from RegistrationService that handlers use
+type RegistrationServicer interface {
+	ListPendingRegistrationRequests(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error)
+	ApproveRegistrationRequest(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error)
+	RejectRegistrationRequest(ctx context.Context, requestID, adminID uuid.UUID, reason string) error
+}
+
+// SecurityServicer defines the methods from SecurityService that handlers use
+type SecurityServicer interface {
+	CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error)
+}
+
+// SecurityServicerExtended extends SecurityServicer with additional methods for SecurityHandler
+type SecurityServicerExtended interface {
+	SecurityServicer
+	GetThreats(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error)
+	GetAnomalies(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Anomaly, error)
+	GetSecurityMetrics(ctx context.Context, orgID uuid.UUID) (*domain.SecurityMetrics, error)
+}
+
+// ComplianceServicer defines the methods from ComplianceService that handlers use
+type ComplianceServicer interface {
+	GetComplianceStatus(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	GetComplianceMetrics(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error)
+	GetAccessReview(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	ListEvidence(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, error)
+}
+
+// ComplianceServicerExtended extends ComplianceServicer with additional methods for ComplianceHandler
+type ComplianceServicerExtended interface {
+	ComplianceServicer
+	RunComplianceCheck(ctx context.Context, orgID uuid.UUID, checkType string) (interface{}, error)
+	ExportComplianceReportFull(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time, userID uuid.UUID) (*domain.ComplianceExportReport, error)
+	ExportToCSV(ctx context.Context, orgID uuid.UUID, framework string) (string, error)
+	GetComplianceTrending(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time) (interface{}, error)
+	RecordComplianceSnapshot(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework) (*domain.ComplianceSnapshot, error)
+	CollectEvidence(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework, checkName string, userID uuid.UUID) (*domain.ComplianceEvidence, error)
+	GetEvidenceForCheck(ctx context.Context, orgID uuid.UUID, checkName string) ([]*domain.ComplianceEvidence, error)
+}
+
+// ===========================
+// MCPHandler Interfaces
+// ===========================
+
+// MCPCapabilityServicer defines the methods from MCPCapabilityService that handlers use
+type MCPCapabilityServicer interface {
+	GetCapabilities(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error)
+	DetectCapabilities(ctx context.Context, mcpServerID uuid.UUID) error
+}
+
+// AgentRepositoryer defines the methods from AgentRepository that handlers use
+type AgentRepositoryer interface {
+	GetByID(id uuid.UUID) (*domain.Agent, error)
+	GetByMCPServer(mcpServerID, orgID uuid.UUID) ([]*domain.Agent, error)
+	GetByMCPServerName(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error)
+}
+
+// VerificationEventRepositoryer defines the methods from VerificationEventRepository that handlers use
+type VerificationEventRepositoryer interface {
+	GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error)
+}
+
+// MCPServicerExtended extends MCPServicer with additional methods for MCPHandler
+type MCPServicerExtended interface {
+	MCPServicer
+	GenerateVerificationChallenge(ctx context.Context, serverID uuid.UUID) (string, error)
+}
+
+// MCPAttestationServicerExtended extends MCPAttestationServicer for audit timeline
+type MCPAttestationServicerExtended interface {
+	MCPAttestationServicer
+	GetMCPAttestations(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.AttestationWithAgentDetails, float64, time.Time, error)
+}
+
+// ===========================
+// AnalyticsHandler Interfaces
+// ===========================
+
+// VerificationEventServicerExtended extends VerificationEventServicer with analytics methods
+type VerificationEventServicerExtended interface {
+	VerificationEventServicer
+	GetLast24HoursStatistics(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error)
+}
+
+// SecurityServicerForAnalytics extends SecurityServicer with GetIncidents for AnalyticsHandler
+type SecurityServicerForAnalytics interface {
+	SecurityServicer
+	GetIncidents(ctx context.Context, orgID uuid.UUID, status domain.IncidentStatus, limit, offset int) ([]*domain.SecurityIncident, error)
+}
+
+// ===========================
+// VerificationHandler Interfaces
+// ===========================
+
+// AgentServicerForVerification extends AgentServicer with CreateSecurityAlert for VerificationHandler
+type AgentServicerForVerification interface {
+	AgentServicer
+	CreateSecurityAlert(ctx context.Context, alert *domain.Alert) error
+}
+
+// AuditServicerForVerification extends AuditServicer with Log method for VerificationHandler
+type AuditServicerForVerification interface {
+	AuditServicer
+	Log(ctx context.Context, entry *domain.AuditLog) error
+}
+
+// AlertServicerForVerification extends AlertServicer with DetectUnusualAccessPatterns for VerificationHandler
+type AlertServicerForVerification interface {
+	AlertServicer
+	DetectUnusualAccessPatterns(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID) ([]*domain.Alert, error)
+}
+
+// VerificationEventServicerForVerification extends VerificationEventServicer with full verification methods
+type VerificationEventServicerForVerification interface {
+	VerificationEventServicer
+	CreateVerificationEvent(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
+	GetVerificationEvent(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
+	UpdateVerificationResult(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
+	SearchVerifications(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)
+	UpdateExecutionStatus(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
+}
+
+// OrganizationRepositoryer defines the methods from OrganizationRepository that handlers use
+type OrganizationRepositoryer interface {
+	GetByID(id uuid.UUID) (*domain.Organization, error)
+}
+
+// ===========================
+// TrustScoreHandler Interfaces
+// ===========================
+
+// TrustCalculatorServicer defines the methods from TrustCalculator that handlers use
+type TrustCalculatorServicer interface {
+	CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetLatestTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
 }

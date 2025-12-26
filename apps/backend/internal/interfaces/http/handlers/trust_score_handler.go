@@ -10,9 +10,15 @@ import (
 )
 
 type TrustScoreHandler struct {
+	// Concrete service pointers (used by existing code)
 	trustCalculator *application.TrustCalculator
 	agentService    *application.AgentService
 	auditService    *application.AuditService
+
+	// Interface fields for testability (used when set)
+	trustCalculatorServicer TrustCalculatorServicer
+	agentServicer           AgentServicer
+	auditServicer           AuditServicer
 }
 
 func NewTrustScoreHandler(
@@ -27,6 +33,41 @@ func NewTrustScoreHandler(
 	}
 }
 
+// NewTrustScoreHandlerWithInterfaces creates a trust score handler with interface dependencies for testing
+func NewTrustScoreHandlerWithInterfaces(
+	trustCalculator TrustCalculatorServicer,
+	agentService AgentServicer,
+	auditService AuditServicer,
+) *TrustScoreHandler {
+	return &TrustScoreHandler{
+		trustCalculatorServicer: trustCalculator,
+		agentServicer:           agentService,
+		auditServicer:           auditService,
+	}
+}
+
+// Helper methods to get the appropriate service (interface or concrete)
+func (h *TrustScoreHandler) getTrustCalculator() TrustCalculatorServicer {
+	if h.trustCalculatorServicer != nil {
+		return h.trustCalculatorServicer
+	}
+	return h.trustCalculator
+}
+
+func (h *TrustScoreHandler) getAgentService() AgentServicer {
+	if h.agentServicer != nil {
+		return h.agentServicer
+	}
+	return h.agentService
+}
+
+func (h *TrustScoreHandler) getAuditService() AuditServicer {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
+}
+
 // CalculateTrustScore recalculates trust score for an agent
 func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
@@ -39,7 +80,7 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 	}
 
 	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
@@ -53,7 +94,7 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 	}
 
 	// Calculate trust score
-	score, err := h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+	score, err := h.getTrustCalculator().CalculateTrustScore(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to calculate trust score",
@@ -61,7 +102,7 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -96,7 +137,7 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 	}
 
 	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
@@ -110,10 +151,10 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 	}
 
 	// Get latest trust score, or calculate on-the-fly if none exists
-	score, err := h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
+	score, err := h.getTrustCalculator().GetLatestTrustScore(c.Context(), agentID)
 	if err != nil || score == nil {
 		// No stored score - calculate one on-the-fly
-		score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+		score, err = h.getTrustCalculator().CalculateTrustScore(c.Context(), agentID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to calculate trust score",
@@ -148,7 +189,7 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 	}
 
 	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
@@ -162,10 +203,10 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 	}
 
 	// Get latest trust score, or calculate on-the-fly if none exists
-	score, err := h.trustCalculator.GetLatestTrustScore(c.Context(), agentID)
+	score, err := h.getTrustCalculator().GetLatestTrustScore(c.Context(), agentID)
 	if err != nil || score == nil {
 		// No stored score - calculate one on-the-fly (this also updates agent.TrustScore)
-		score, err = h.trustCalculator.CalculateTrustScore(c.Context(), agentID)
+		score, err = h.getTrustCalculator().CalculateTrustScore(c.Context(), agentID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to calculate trust score",
@@ -242,7 +283,7 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	}
 
 	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
@@ -264,7 +305,7 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	}
 
 	// Get trust score audit trail from trust_score_history table
-	history, err := h.trustCalculator.GetTrustScoreHistoryAuditTrail(c.Context(), agentID, limit)
+	history, err := h.getTrustCalculator().GetTrustScoreHistoryAuditTrail(c.Context(), agentID, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch trust score history",

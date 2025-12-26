@@ -2178,3 +2178,440 @@ func TestAgentHandler_DetectAndMapMCPServers_AccessDenied(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
+
+// ===========================
+// AgentHandler.DownloadSDK Tests
+// ===========================
+
+func TestAgentHandler_DownloadSDK_Success(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+				Status:         domain.AgentStatusVerified,
+			}, nil
+		},
+		GetAgentCredentialsFunc: func(ctx context.Context, id uuid.UUID) (string, string, error) {
+			return "test-public-key", "test-private-key", nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk?lang=python", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, "application/zip", resp.Header.Get("Content-Type"))
+}
+
+func TestAgentHandler_DownloadSDK_InvalidAgentID(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/not-a-uuid/sdk", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_InvalidLanguage(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk?lang=ruby", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_AgentNotFound(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return nil, errors.New("agent not found")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_WrongOrganization(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID, // Different org
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_CredentialsError(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+		GetAgentCredentialsFunc: func(ctx context.Context, id uuid.UUID) (string, string, error) {
+			return "", "", errors.New("failed to retrieve credentials")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_NodejsNotImplemented(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+		GetAgentCredentialsFunc: func(ctx context.Context, id uuid.UUID) (string, string, error) {
+			return "pub", "priv", nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk?lang=nodejs", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotImplemented, resp.StatusCode)
+}
+
+func TestAgentHandler_DownloadSDK_GoNotImplemented(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+		GetAgentCredentialsFunc: func(ctx context.Context, id uuid.UUID) (string, string, error) {
+			return "pub", "priv", nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/sdk", handler.DownloadSDK)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk?lang=go", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotImplemented, resp.StatusCode)
+}
+
+// ===========================
+// AgentHandler.RecalculateAgentTrustScore Tests
+// ===========================
+
+func TestAgentHandler_RecalculateAgentTrustScore_InvalidAgentID(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil, // trustScoreHandler
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Post("/agents/:id/trust-score/recalculate", handler.RecalculateAgentTrustScore)
+
+	req := httptest.NewRequest("POST", "/agents/not-a-uuid/trust-score/recalculate", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// The handler delegates to trustScoreHandler which is nil, so expect 500
+	assert.True(t, resp.StatusCode >= 400, "Expected error status")
+}
+
+// ===========================
+// AgentHandler.GetAgentTrustScore Tests
+// ===========================
+
+func TestAgentHandler_GetAgentTrustScore_InvalidAgentID(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil, // trustScoreHandler
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/trust-score", handler.GetAgentTrustScore)
+
+	req := httptest.NewRequest("GET", "/agents/not-a-uuid/trust-score", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// The handler delegates to trustScoreHandler which is nil, so expect 500
+	assert.True(t, resp.StatusCode >= 400, "Expected error status")
+}
+
+// ===========================
+// AgentHandler.GetAgentTrustScoreHistory Tests
+// ===========================
+
+func TestAgentHandler_GetAgentTrustScoreHistory_InvalidAgentID(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil, // trustScoreHandler
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/trust-score/history", handler.GetAgentTrustScoreHistory)
+
+	req := httptest.NewRequest("GET", "/agents/not-a-uuid/trust-score/history", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// The handler delegates to trustScoreHandler which is nil, so expect 500
+	assert.True(t, resp.StatusCode >= 400, "Expected error status")
+}

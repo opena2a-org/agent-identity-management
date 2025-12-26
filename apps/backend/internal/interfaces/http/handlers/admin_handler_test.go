@@ -868,3 +868,9 @@ func TestAdminHandler_BulkAcknowledgeAlerts_UserIDMismatch(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
+
+// Note: Tests for GetDashboardStats, GetPendingUsers, GetOrganizationSettings,
+// ExportAuditLogs, etc. that require service calls would need interface-based
+// dependency injection similar to AgentHandler. The current approach tests
+// validation paths only. See agent_handler_integration_test.go for examples
+// of mock-based testing.

@@ -10,11 +10,19 @@ import (
 )
 
 type SecurityHandler struct {
+	// Concrete service pointers (used by existing code)
 	securityService   *application.SecurityService
 	auditService      *application.AuditService
 	alertService      *application.AlertService
 	agentService      *application.AgentService
 	capabilityService *application.CapabilityService
+
+	// Interface fields for testability (used when set)
+	securityServicer   SecurityServicerExtended
+	auditServicer      AuditServicer
+	alertServicer      AlertServicerExtended
+	agentServicer      AgentServicer
+	capabilityServicer CapabilityServicer
 }
 
 func NewSecurityHandler(
@@ -33,6 +41,52 @@ func NewSecurityHandler(
 	}
 }
 
+// NewSecurityHandlerWithInterfaces creates a SecurityHandler using interfaces for testability
+func NewSecurityHandlerWithInterfaces(
+	securityService SecurityServicerExtended,
+	auditService AuditServicer,
+	alertService AlertServicerExtended,
+	agentService AgentServicer,
+	capabilityService CapabilityServicer,
+) *SecurityHandler {
+	return &SecurityHandler{
+		securityServicer:   securityService,
+		auditServicer:      auditService,
+		alertServicer:      alertService,
+		agentServicer:      agentService,
+		capabilityServicer: capabilityService,
+	}
+}
+
+// Helper methods to use interfaces when available, otherwise use concrete types
+func (h *SecurityHandler) getSecurityService() SecurityServicerExtended {
+	if h.securityServicer != nil {
+		return h.securityServicer
+	}
+	return h.securityService
+}
+
+func (h *SecurityHandler) getAlertService() AlertServicerExtended {
+	if h.alertServicer != nil {
+		return h.alertServicer
+	}
+	return h.alertService
+}
+
+func (h *SecurityHandler) getAgentService() AgentServicer {
+	if h.agentServicer != nil {
+		return h.agentServicer
+	}
+	return h.agentService
+}
+
+func (h *SecurityHandler) getCapabilityService() CapabilityServicer {
+	if h.capabilityServicer != nil {
+		return h.capabilityServicer
+	}
+	return h.capabilityService
+}
+
 // GetThreats retrieves detected security threats
 // @Summary List security threats
 // @Description Get all detected security threats for the organization
@@ -49,7 +103,8 @@ func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	threats, err := h.securityService.GetThreats(c.Context(), orgID, limit, offset)
+	secSvc := h.getSecurityService()
+	threats, err := secSvc.GetThreats(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security threats",
@@ -80,7 +135,8 @@ func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	anomalies, err := h.securityService.GetAnomalies(c.Context(), orgID, limit, offset)
+	secSvc := h.getSecurityService()
+	anomalies, err := secSvc.GetAnomalies(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch anomalies",
@@ -106,7 +162,8 @@ func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
 func (h *SecurityHandler) GetSecurityMetrics(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	metrics, err := h.securityService.GetSecurityMetrics(c.Context(), orgID)
+	secSvc := h.getSecurityService()
+	metrics, err := secSvc.GetSecurityMetrics(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security metrics",
@@ -127,8 +184,12 @@ func (h *SecurityHandler) GetSecurityMetrics(c fiber.Ctx) error {
 func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
+	secSvc := h.getSecurityService()
+	alertSvc := h.getAlertService()
+	agentSvc := h.getAgentService()
+
 	// Get security metrics
-	metrics, err := h.securityService.GetSecurityMetrics(c.Context(), orgID)
+	metrics, err := secSvc.GetSecurityMetrics(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security metrics",
@@ -136,31 +197,31 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 	}
 
 	// Get recent threats (limit 10)
-	threats, err := h.securityService.GetThreats(c.Context(), orgID, 10, 0)
+	threats, err := secSvc.GetThreats(c.Context(), orgID, 10, 0)
 	if err != nil || threats == nil {
 		threats = make([]*domain.Threat, 0)
 	}
 
 	// Get recent anomalies (limit 10)
-	anomalies, err := h.securityService.GetAnomalies(c.Context(), orgID, 10, 0)
+	anomalies, err := secSvc.GetAnomalies(c.Context(), orgID, 10, 0)
 	if err != nil || anomalies == nil {
 		anomalies = make([]*domain.Anomaly, 0)
 	}
 
 	// Get unacknowledged alerts count
-	_, _, unacknowledgedAlerts, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	_, _, unacknowledgedAlerts, err := alertSvc.CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		unacknowledgedAlerts = 0
 	}
 
 	// Get recent alerts (limit 5)
-	recentAlerts, _, err := h.alertService.GetAlerts(c.Context(), orgID, "", "", 5, 0)
+	recentAlerts, _, err := alertSvc.GetAlerts(c.Context(), orgID, "", "", 5, 0)
 	if err != nil || recentAlerts == nil {
 		recentAlerts = make([]*domain.Alert, 0)
 	}
 
 	// Get agent security status
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := agentSvc.ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",
@@ -229,7 +290,8 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	alerts, total, err := h.alertService.GetAlerts(c.Context(), orgID, "", "", limit, offset)
+	alertSvc := h.getAlertService()
+	alerts, total, err := alertSvc.GetAlerts(c.Context(), orgID, "", "", limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security alerts",
@@ -237,7 +299,7 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 	}
 
 	// Get alert counts (all, acknowledged, unacknowledged)
-	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	allCount, acknowledgedCount, unacknowledgedCount, err := alertSvc.CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		// If count fails, set defaults but don't fail the request
 		allCount = total
@@ -273,7 +335,8 @@ func (h *SecurityHandler) GetViolations(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	violations, total, err := h.capabilityService.GetViolationsByOrganization(
+	capSvc := h.getCapabilityService()
+	violations, total, err := capSvc.GetViolationsByOrganization(
 		c.Context(),
 		orgID,
 		limit,

@@ -291,6 +291,7 @@ type MockAuditServiceImpl struct {
 	LogActionFunc        func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
 	GetAgentActivityFunc func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogsFunc     func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
+	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
 }
 
 func (m *MockAuditServiceImpl) LogAction(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error {
@@ -312,6 +313,13 @@ func (m *MockAuditServiceImpl) GetAuditLogs(ctx context.Context, orgID uuid.UUID
 		return m.GetAuditLogsFunc(ctx, orgID, action, entityType, entityID, userID, startDate, endDate, limit, offset)
 	}
 	return []*domain.AuditLog{}, 0, nil
+}
+
+func (m *MockAuditServiceImpl) GetByID(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(ctx, id)
+	}
+	return &domain.AuditLog{ID: id}, nil
 }
 
 // MockCapabilityServiceImpl implements CapabilityServicer interface
@@ -516,4 +524,853 @@ func (m *MockOrganizationRepository) Delete(id uuid.UUID) error {
 		return m.DeleteFunc(id)
 	}
 	return nil
+}
+
+// ===========================
+// Additional Mock Implementations for AdminHandler
+// ===========================
+
+// MockAuthServiceImpl implements AuthServicer interface
+type MockAuthServiceImpl struct {
+	GetUsersByOrganizationFunc func(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error)
+	GetUserByIDFunc            func(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	CountActiveUsersFunc       func(ctx context.Context, orgID uuid.UUID, withinMinutes int) (int, error)
+	UpdateUserRoleFunc         func(ctx context.Context, userID, orgID uuid.UUID, role domain.UserRole, adminID uuid.UUID) (*domain.User, error)
+	DeactivateUserFunc         func(ctx context.Context, userID, orgID, adminID uuid.UUID) error
+}
+
+func (m *MockAuthServiceImpl) GetUsersByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error) {
+	if m.GetUsersByOrganizationFunc != nil {
+		return m.GetUsersByOrganizationFunc(ctx, orgID)
+	}
+	return []*domain.User{}, nil
+}
+
+func (m *MockAuthServiceImpl) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	if m.GetUserByIDFunc != nil {
+		return m.GetUserByIDFunc(ctx, id)
+	}
+	return &domain.User{ID: id}, nil
+}
+
+func (m *MockAuthServiceImpl) CountActiveUsers(ctx context.Context, orgID uuid.UUID, withinMinutes int) (int, error) {
+	if m.CountActiveUsersFunc != nil {
+		return m.CountActiveUsersFunc(ctx, orgID, withinMinutes)
+	}
+	return 0, nil
+}
+
+func (m *MockAuthServiceImpl) UpdateUserRole(ctx context.Context, userID, orgID uuid.UUID, role domain.UserRole, adminID uuid.UUID) (*domain.User, error) {
+	if m.UpdateUserRoleFunc != nil {
+		return m.UpdateUserRoleFunc(ctx, userID, orgID, role, adminID)
+	}
+	return &domain.User{ID: userID, Role: role}, nil
+}
+
+func (m *MockAuthServiceImpl) DeactivateUser(ctx context.Context, userID, orgID, adminID uuid.UUID) error {
+	if m.DeactivateUserFunc != nil {
+		return m.DeactivateUserFunc(ctx, userID, orgID, adminID)
+	}
+	return nil
+}
+
+// MockAdminServiceImpl implements AdminServicer interface
+type MockAdminServiceImpl struct {
+	GetPendingUsersFunc        func(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error)
+	ApproveUserFunc            func(ctx context.Context, userID, adminID uuid.UUID) error
+	RejectUserFunc             func(ctx context.Context, userID, adminID uuid.UUID, reason string) error
+	ActivateUserFunc           func(ctx context.Context, userID, adminID uuid.UUID) error
+	PermanentlyDeleteUserFunc  func(ctx context.Context, userID, adminID uuid.UUID) error
+	GetOrganizationSettingsFunc func(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error)
+	GetEnforcementSettingsFunc func(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error)
+	UpdateEnforcementModeFunc  func(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error
+}
+
+func (m *MockAdminServiceImpl) GetPendingUsers(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error) {
+	if m.GetPendingUsersFunc != nil {
+		return m.GetPendingUsersFunc(ctx, adminOrgID)
+	}
+	return []*domain.User{}, nil
+}
+
+func (m *MockAdminServiceImpl) ApproveUser(ctx context.Context, userID, adminID uuid.UUID) error {
+	if m.ApproveUserFunc != nil {
+		return m.ApproveUserFunc(ctx, userID, adminID)
+	}
+	return nil
+}
+
+func (m *MockAdminServiceImpl) RejectUser(ctx context.Context, userID, adminID uuid.UUID, reason string) error {
+	if m.RejectUserFunc != nil {
+		return m.RejectUserFunc(ctx, userID, adminID, reason)
+	}
+	return nil
+}
+
+func (m *MockAdminServiceImpl) ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
+	if m.ActivateUserFunc != nil {
+		return m.ActivateUserFunc(ctx, userID, adminID)
+	}
+	return nil
+}
+
+func (m *MockAdminServiceImpl) PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error {
+	if m.PermanentlyDeleteUserFunc != nil {
+		return m.PermanentlyDeleteUserFunc(ctx, userID, adminID)
+	}
+	return nil
+}
+
+func (m *MockAdminServiceImpl) GetOrganizationSettings(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error) {
+	if m.GetOrganizationSettingsFunc != nil {
+		return m.GetOrganizationSettingsFunc(ctx, orgID)
+	}
+	return &domain.Organization{ID: orgID, Name: "Test Org", EnforcementMode: domain.EnforcementModeMonitoring}, nil
+}
+
+func (m *MockAdminServiceImpl) GetEnforcementSettings(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error) {
+	if m.GetEnforcementSettingsFunc != nil {
+		return m.GetEnforcementSettingsFunc(ctx, orgID)
+	}
+	return &application.EnforcementSettings{EnforcementMode: "monitoring"}, nil
+}
+
+func (m *MockAdminServiceImpl) UpdateEnforcementMode(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error {
+	if m.UpdateEnforcementModeFunc != nil {
+		return m.UpdateEnforcementModeFunc(ctx, orgID, mode)
+	}
+	return nil
+}
+
+// MockAlertServiceExtendedImpl implements AlertServicerExtended interface
+type MockAlertServiceExtendedImpl struct {
+	GetAlertsFunc             func(ctx context.Context, orgID uuid.UUID, severity, status string, limit, offset int) ([]*domain.Alert, int, error)
+	GetAlertsByAgentFunc      func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error)
+	CreateAlertFunc           func(ctx context.Context, alert *domain.Alert) error
+	AcknowledgeAlertFunc      func(ctx context.Context, alertID, orgID, userID uuid.UUID) error
+	ResolveAlertFunc          func(ctx context.Context, alertID, orgID, userID uuid.UUID, resolution string) error
+	BulkAcknowledgeAlertsFunc func(ctx context.Context, orgID, userID uuid.UUID) (int, error)
+	CountUnacknowledgedFunc   func(ctx context.Context, orgID uuid.UUID) (allCount, acknowledgedCount, unacknowledgedCount int, err error)
+	CountBySeverityFunc       func(ctx context.Context, orgID uuid.UUID, status string) (critical, high, warning, info int, err error)
+}
+
+func (m *MockAlertServiceExtendedImpl) GetAlerts(ctx context.Context, orgID uuid.UUID, severity, status string, limit, offset int) ([]*domain.Alert, int, error) {
+	if m.GetAlertsFunc != nil {
+		return m.GetAlertsFunc(ctx, orgID, severity, status, limit, offset)
+	}
+	return []*domain.Alert{}, 0, nil
+}
+
+func (m *MockAlertServiceExtendedImpl) GetAlertsByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	if m.GetAlertsByAgentFunc != nil {
+		return m.GetAlertsByAgentFunc(ctx, agentID, limit, offset)
+	}
+	return []*domain.Alert{}, nil
+}
+
+func (m *MockAlertServiceExtendedImpl) CreateAlert(ctx context.Context, alert *domain.Alert) error {
+	if m.CreateAlertFunc != nil {
+		return m.CreateAlertFunc(ctx, alert)
+	}
+	return nil
+}
+
+func (m *MockAlertServiceExtendedImpl) AcknowledgeAlert(ctx context.Context, alertID, orgID, userID uuid.UUID) error {
+	if m.AcknowledgeAlertFunc != nil {
+		return m.AcknowledgeAlertFunc(ctx, alertID, orgID, userID)
+	}
+	return nil
+}
+
+func (m *MockAlertServiceExtendedImpl) ResolveAlert(ctx context.Context, alertID, orgID, userID uuid.UUID, resolution string) error {
+	if m.ResolveAlertFunc != nil {
+		return m.ResolveAlertFunc(ctx, alertID, orgID, userID, resolution)
+	}
+	return nil
+}
+
+func (m *MockAlertServiceExtendedImpl) BulkAcknowledgeAlerts(ctx context.Context, orgID, userID uuid.UUID) (int, error) {
+	if m.BulkAcknowledgeAlertsFunc != nil {
+		return m.BulkAcknowledgeAlertsFunc(ctx, orgID, userID)
+	}
+	return 0, nil
+}
+
+func (m *MockAlertServiceExtendedImpl) CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (allCount, acknowledgedCount, unacknowledgedCount int, err error) {
+	if m.CountUnacknowledgedFunc != nil {
+		return m.CountUnacknowledgedFunc(ctx, orgID)
+	}
+	return 0, 0, 0, nil
+}
+
+func (m *MockAlertServiceExtendedImpl) CountBySeverity(ctx context.Context, orgID uuid.UUID, status string) (critical, high, warning, info int, err error) {
+	if m.CountBySeverityFunc != nil {
+		return m.CountBySeverityFunc(ctx, orgID, status)
+	}
+	return 0, 0, 0, 0, nil
+}
+
+// MockSecurityServiceImpl implements SecurityServicer interface
+type MockSecurityServiceImpl struct {
+	CountOpenIncidentsFunc func(ctx context.Context, orgID uuid.UUID) (int, error)
+}
+
+func (m *MockSecurityServiceImpl) CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error) {
+	if m.CountOpenIncidentsFunc != nil {
+		return m.CountOpenIncidentsFunc(ctx, orgID)
+	}
+	return 0, nil
+}
+
+// MockSecurityServiceExtendedImpl implements SecurityServicerExtended interface
+type MockSecurityServiceExtendedImpl struct {
+	CountOpenIncidentsFunc   func(ctx context.Context, orgID uuid.UUID) (int, error)
+	GetThreatsFunc           func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error)
+	GetAnomaliesFunc         func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Anomaly, error)
+	GetSecurityMetricsFunc   func(ctx context.Context, orgID uuid.UUID) (*domain.SecurityMetrics, error)
+}
+
+func (m *MockSecurityServiceExtendedImpl) CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error) {
+	if m.CountOpenIncidentsFunc != nil {
+		return m.CountOpenIncidentsFunc(ctx, orgID)
+	}
+	return 0, nil
+}
+
+func (m *MockSecurityServiceExtendedImpl) GetThreats(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error) {
+	if m.GetThreatsFunc != nil {
+		return m.GetThreatsFunc(ctx, orgID, limit, offset)
+	}
+	return []*domain.Threat{}, nil
+}
+
+func (m *MockSecurityServiceExtendedImpl) GetAnomalies(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Anomaly, error) {
+	if m.GetAnomaliesFunc != nil {
+		return m.GetAnomaliesFunc(ctx, orgID, limit, offset)
+	}
+	return []*domain.Anomaly{}, nil
+}
+
+func (m *MockSecurityServiceExtendedImpl) GetSecurityMetrics(ctx context.Context, orgID uuid.UUID) (*domain.SecurityMetrics, error) {
+	if m.GetSecurityMetricsFunc != nil {
+		return m.GetSecurityMetricsFunc(ctx, orgID)
+	}
+	return &domain.SecurityMetrics{}, nil
+}
+
+// MockComplianceServiceImpl implements ComplianceServicer interface
+type MockComplianceServiceImpl struct {
+	GetComplianceStatusFunc  func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	GetComplianceMetricsFunc func(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error)
+	GetAccessReviewFunc      func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	ListEvidenceFunc         func(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, int, error)
+}
+
+func (m *MockComplianceServiceImpl) GetComplianceStatus(ctx context.Context, orgID uuid.UUID) (interface{}, error) {
+	if m.GetComplianceStatusFunc != nil {
+		return m.GetComplianceStatusFunc(ctx, orgID)
+	}
+	return map[string]interface{}{
+		"totalAgents":       5,
+		"verifiedAgents":    3,
+		"verificationRate":  60.0,
+		"averageTrustScore": 85.0,
+	}, nil
+}
+
+func (m *MockComplianceServiceImpl) GetComplianceMetrics(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error) {
+	if m.GetComplianceMetricsFunc != nil {
+		return m.GetComplianceMetricsFunc(ctx, orgID, startDate, endDate, interval)
+	}
+	return []map[string]interface{}{}, nil
+}
+
+func (m *MockComplianceServiceImpl) GetAccessReview(ctx context.Context, orgID uuid.UUID) (interface{}, error) {
+	if m.GetAccessReviewFunc != nil {
+		return m.GetAccessReviewFunc(ctx, orgID)
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (m *MockComplianceServiceImpl) ListEvidence(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, int, error) {
+	if m.ListEvidenceFunc != nil {
+		return m.ListEvidenceFunc(ctx, orgID, framework, limit, offset)
+	}
+	return []*domain.ComplianceEvidence{}, 0, nil
+}
+
+// MockRegistrationServiceImpl implements RegistrationServicer interface
+type MockRegistrationServiceImpl struct {
+	ListPendingRegistrationRequestsFunc func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error)
+	ApproveRegistrationRequestFunc      func(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error)
+	RejectRegistrationRequestFunc       func(ctx context.Context, requestID, adminID uuid.UUID, reason string) error
+}
+
+func (m *MockRegistrationServiceImpl) ListPendingRegistrationRequests(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error) {
+	if m.ListPendingRegistrationRequestsFunc != nil {
+		return m.ListPendingRegistrationRequestsFunc(ctx, orgID, limit, offset)
+	}
+	return []*domain.UserRegistrationRequest{}, 0, nil
+}
+
+func (m *MockRegistrationServiceImpl) ApproveRegistrationRequest(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error) {
+	if m.ApproveRegistrationRequestFunc != nil {
+		return m.ApproveRegistrationRequestFunc(ctx, requestID, adminID, orgID)
+	}
+	return &domain.User{ID: uuid.New(), Email: "test@example.com"}, nil
+}
+
+func (m *MockRegistrationServiceImpl) RejectRegistrationRequest(ctx context.Context, requestID, adminID uuid.UUID, reason string) error {
+	if m.RejectRegistrationRequestFunc != nil {
+		return m.RejectRegistrationRequestFunc(ctx, requestID, adminID, reason)
+	}
+	return nil
+}
+
+// MockTrustScoreHandlerImpl provides a mock for TrustScoreHandler
+type MockTrustScoreHandlerImpl struct {
+	GetTrustScoreFunc        func(c interface{}) error
+	GetTrustScoreHistoryFunc func(c interface{}) error
+	CalculateTrustScoreFunc  func(c interface{}) error
+}
+
+// ===========================
+// MCPHandler Mock Implementations
+// ===========================
+
+// MockMCPServiceExtendedImpl implements MCPServicerExtended interface
+type MockMCPServiceExtendedImpl struct {
+	CreateMCPServerFunc               func(ctx context.Context, req *application.CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error)
+	GetMCPServerFunc                  func(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error)
+	GetMCPServerByNameFunc            func(ctx context.Context, orgID uuid.UUID, name string) (*domain.MCPServer, error)
+	ListMCPServersFunc                func(ctx context.Context, orgID uuid.UUID) ([]*domain.MCPServer, error)
+	UpdateMCPServerFunc               func(ctx context.Context, id uuid.UUID, req *application.UpdateMCPServerRequest) (*domain.MCPServer, error)
+	DeleteMCPServerFunc               func(ctx context.Context, id uuid.UUID) error
+	VerifyMCPServerFunc               func(ctx context.Context, id uuid.UUID, userID uuid.UUID, userIP string) error
+	AddPublicKeyFunc                  func(ctx context.Context, serverID uuid.UUID, req *application.AddPublicKeyRequest) error
+	GetVerificationStatusFunc         func(ctx context.Context, id uuid.UUID) (*domain.MCPServerVerificationStatus, error)
+	VerifyMCPCapabilityFunc           func(ctx context.Context, mcpID uuid.UUID, capability string, resource string, targetService string, metadata map[string]interface{}) (allowed bool, reason string, auditID uuid.UUID, err error)
+	GetConnectedAgentsFunc            func(ctx context.Context, mcpServerID uuid.UUID) ([]application.ConnectedAgent, error)
+	GetConnectedAgentsCountFunc       func(ctx context.Context, mcpServerID uuid.UUID) (int, error)
+	GenerateVerificationChallengeFunc func(ctx context.Context, serverID uuid.UUID) (string, error)
+}
+
+func (m *MockMCPServiceExtendedImpl) CreateMCPServer(ctx context.Context, req *application.CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error) {
+	if m.CreateMCPServerFunc != nil {
+		return m.CreateMCPServerFunc(ctx, req, orgID, userID, agentID, sdkTokenID, apiKeyID)
+	}
+	return &domain.MCPServer{ID: uuid.New(), OrganizationID: orgID, Name: req.Name}, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GetMCPServer(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error) {
+	if m.GetMCPServerFunc != nil {
+		return m.GetMCPServerFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GetMCPServerByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.MCPServer, error) {
+	if m.GetMCPServerByNameFunc != nil {
+		return m.GetMCPServerByNameFunc(ctx, orgID, name)
+	}
+	return nil, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) ListMCPServers(ctx context.Context, orgID uuid.UUID) ([]*domain.MCPServer, error) {
+	if m.ListMCPServersFunc != nil {
+		return m.ListMCPServersFunc(ctx, orgID)
+	}
+	return []*domain.MCPServer{}, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) UpdateMCPServer(ctx context.Context, id uuid.UUID, req *application.UpdateMCPServerRequest) (*domain.MCPServer, error) {
+	if m.UpdateMCPServerFunc != nil {
+		return m.UpdateMCPServerFunc(ctx, id, req)
+	}
+	return nil, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) DeleteMCPServer(ctx context.Context, id uuid.UUID) error {
+	if m.DeleteMCPServerFunc != nil {
+		return m.DeleteMCPServerFunc(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockMCPServiceExtendedImpl) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID uuid.UUID, userIP string) error {
+	if m.VerifyMCPServerFunc != nil {
+		return m.VerifyMCPServerFunc(ctx, id, userID, userIP)
+	}
+	return nil
+}
+
+func (m *MockMCPServiceExtendedImpl) AddPublicKey(ctx context.Context, serverID uuid.UUID, req *application.AddPublicKeyRequest) error {
+	if m.AddPublicKeyFunc != nil {
+		return m.AddPublicKeyFunc(ctx, serverID, req)
+	}
+	return nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GetVerificationStatus(ctx context.Context, id uuid.UUID) (*domain.MCPServerVerificationStatus, error) {
+	if m.GetVerificationStatusFunc != nil {
+		return m.GetVerificationStatusFunc(ctx, id)
+	}
+	return &domain.MCPServerVerificationStatus{}, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) VerifyMCPCapability(ctx context.Context, mcpID uuid.UUID, capability string, resource string, targetService string, metadata map[string]interface{}) (allowed bool, reason string, auditID uuid.UUID, err error) {
+	if m.VerifyMCPCapabilityFunc != nil {
+		return m.VerifyMCPCapabilityFunc(ctx, mcpID, capability, resource, targetService, metadata)
+	}
+	return true, "allowed", uuid.New(), nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GetConnectedAgents(ctx context.Context, mcpServerID uuid.UUID) ([]application.ConnectedAgent, error) {
+	if m.GetConnectedAgentsFunc != nil {
+		return m.GetConnectedAgentsFunc(ctx, mcpServerID)
+	}
+	return []application.ConnectedAgent{}, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GetConnectedAgentsCount(ctx context.Context, mcpServerID uuid.UUID) (int, error) {
+	if m.GetConnectedAgentsCountFunc != nil {
+		return m.GetConnectedAgentsCountFunc(ctx, mcpServerID)
+	}
+	return 0, nil
+}
+
+func (m *MockMCPServiceExtendedImpl) GenerateVerificationChallenge(ctx context.Context, serverID uuid.UUID) (string, error) {
+	if m.GenerateVerificationChallengeFunc != nil {
+		return m.GenerateVerificationChallengeFunc(ctx, serverID)
+	}
+	return "test-challenge", nil
+}
+
+// MockMCPCapabilityServiceImpl implements MCPCapabilityServicer interface
+type MockMCPCapabilityServiceImpl struct {
+	GetCapabilitiesFunc    func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error)
+	DetectCapabilitiesFunc func(ctx context.Context, mcpServerID uuid.UUID) error
+}
+
+func (m *MockMCPCapabilityServiceImpl) GetCapabilities(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error) {
+	if m.GetCapabilitiesFunc != nil {
+		return m.GetCapabilitiesFunc(ctx, mcpServerID)
+	}
+	return []*domain.MCPServerCapability{}, nil
+}
+
+func (m *MockMCPCapabilityServiceImpl) DetectCapabilities(ctx context.Context, mcpServerID uuid.UUID) error {
+	if m.DetectCapabilitiesFunc != nil {
+		return m.DetectCapabilitiesFunc(ctx, mcpServerID)
+	}
+	return nil
+}
+
+// MockAgentRepositoryerImpl implements AgentRepositoryer interface
+type MockAgentRepositoryerImpl struct {
+	GetByIDFunc          func(id uuid.UUID) (*domain.Agent, error)
+	GetByMCPServerFunc   func(mcpServerID, orgID uuid.UUID) ([]*domain.Agent, error)
+	GetByMCPServerNameFunc func(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error)
+}
+
+func (m *MockAgentRepositoryerImpl) GetByID(id uuid.UUID) (*domain.Agent, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(id)
+	}
+	return nil, nil
+}
+
+func (m *MockAgentRepositoryerImpl) GetByMCPServer(mcpServerID, orgID uuid.UUID) ([]*domain.Agent, error) {
+	if m.GetByMCPServerFunc != nil {
+		return m.GetByMCPServerFunc(mcpServerID, orgID)
+	}
+	return []*domain.Agent{}, nil
+}
+
+func (m *MockAgentRepositoryerImpl) GetByMCPServerName(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error) {
+	if m.GetByMCPServerNameFunc != nil {
+		return m.GetByMCPServerNameFunc(mcpServerName, orgID)
+	}
+	return []*domain.Agent{}, nil
+}
+
+// MockVerificationEventRepositoryerImpl implements VerificationEventRepositoryer interface
+type MockVerificationEventRepositoryerImpl struct {
+	GetByMCPServerFunc func(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error)
+}
+
+func (m *MockVerificationEventRepositoryerImpl) GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error) {
+	if m.GetByMCPServerFunc != nil {
+		return m.GetByMCPServerFunc(mcpServerID, limit, offset)
+	}
+	return []*domain.VerificationEvent{}, 0, nil
+}
+
+// MockMCPAttestationServiceExtendedImpl implements MCPAttestationServicerExtended interface
+type MockMCPAttestationServiceExtendedImpl struct {
+	GetMCPServersForAgentFunc func(ctx context.Context, agentID uuid.UUID) ([]*domain.MCPServer, error)
+	GetMCPAttestationsFunc    func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.AttestationWithAgentDetails, float64, time.Time, error)
+}
+
+func (m *MockMCPAttestationServiceExtendedImpl) GetMCPServersForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.MCPServer, error) {
+	if m.GetMCPServersForAgentFunc != nil {
+		return m.GetMCPServersForAgentFunc(ctx, agentID)
+	}
+	return []*domain.MCPServer{}, nil
+}
+
+func (m *MockMCPAttestationServiceExtendedImpl) GetMCPAttestations(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.AttestationWithAgentDetails, float64, time.Time, error) {
+	if m.GetMCPAttestationsFunc != nil {
+		return m.GetMCPAttestationsFunc(ctx, mcpServerID)
+	}
+	return []*domain.AttestationWithAgentDetails{}, 0.0, time.Time{}, nil
+}
+
+// MockComplianceServiceExtendedImpl implements ComplianceServicerExtended interface
+type MockComplianceServiceExtendedImpl struct {
+	GetComplianceStatusFunc       func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	GetComplianceMetricsFunc      func(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error)
+	GetAccessReviewFunc           func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	ListEvidenceFunc              func(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, error)
+	RunComplianceCheckFunc        func(ctx context.Context, orgID uuid.UUID, checkType string) (interface{}, error)
+	ExportComplianceReportFullFunc func(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time, userID uuid.UUID) (*domain.ComplianceExportReport, error)
+	ExportToCSVFunc               func(ctx context.Context, orgID uuid.UUID, framework string) (string, error)
+	GetComplianceTrendingFunc     func(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time) (interface{}, error)
+	RecordComplianceSnapshotFunc  func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework) (*domain.ComplianceSnapshot, error)
+	CollectEvidenceFunc           func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework, checkName string, userID uuid.UUID) (*domain.ComplianceEvidence, error)
+	GetEvidenceForCheckFunc       func(ctx context.Context, orgID uuid.UUID, checkName string) ([]*domain.ComplianceEvidence, error)
+}
+
+func (m *MockComplianceServiceExtendedImpl) GetComplianceStatus(ctx context.Context, orgID uuid.UUID) (interface{}, error) {
+	if m.GetComplianceStatusFunc != nil {
+		return m.GetComplianceStatusFunc(ctx, orgID)
+	}
+	return map[string]interface{}{"status": "ok"}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) GetComplianceMetrics(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error) {
+	if m.GetComplianceMetricsFunc != nil {
+		return m.GetComplianceMetricsFunc(ctx, orgID, startDate, endDate, interval)
+	}
+	return map[string]interface{}{"metrics": []interface{}{}}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) GetAccessReview(ctx context.Context, orgID uuid.UUID) (interface{}, error) {
+	if m.GetAccessReviewFunc != nil {
+		return m.GetAccessReviewFunc(ctx, orgID)
+	}
+	return map[string]interface{}{"review": []interface{}{}}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) ListEvidence(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, error) {
+	if m.ListEvidenceFunc != nil {
+		return m.ListEvidenceFunc(ctx, orgID, framework, limit, offset)
+	}
+	return []*domain.ComplianceEvidence{}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) RunComplianceCheck(ctx context.Context, orgID uuid.UUID, checkType string) (interface{}, error) {
+	if m.RunComplianceCheckFunc != nil {
+		return m.RunComplianceCheckFunc(ctx, orgID, checkType)
+	}
+	return map[string]interface{}{"results": []interface{}{}}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) ExportComplianceReportFull(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time, userID uuid.UUID) (*domain.ComplianceExportReport, error) {
+	if m.ExportComplianceReportFullFunc != nil {
+		return m.ExportComplianceReportFullFunc(ctx, orgID, framework, startDate, endDate, userID)
+	}
+	return &domain.ComplianceExportReport{}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) ExportToCSV(ctx context.Context, orgID uuid.UUID, framework string) (string, error) {
+	if m.ExportToCSVFunc != nil {
+		return m.ExportToCSVFunc(ctx, orgID, framework)
+	}
+	return "header1,header2\nvalue1,value2", nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) GetComplianceTrending(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time) (interface{}, error) {
+	if m.GetComplianceTrendingFunc != nil {
+		return m.GetComplianceTrendingFunc(ctx, orgID, framework, startDate, endDate)
+	}
+	return map[string]interface{}{"trending": []interface{}{}}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) RecordComplianceSnapshot(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework) (*domain.ComplianceSnapshot, error) {
+	if m.RecordComplianceSnapshotFunc != nil {
+		return m.RecordComplianceSnapshotFunc(ctx, orgID, framework)
+	}
+	return &domain.ComplianceSnapshot{
+		ID:             uuid.New(),
+		OrganizationID: orgID,
+		Framework:      framework,
+		Score:          85.0,
+	}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) CollectEvidence(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework, checkName string, userID uuid.UUID) (*domain.ComplianceEvidence, error) {
+	if m.CollectEvidenceFunc != nil {
+		return m.CollectEvidenceFunc(ctx, orgID, framework, checkName, userID)
+	}
+	return &domain.ComplianceEvidence{
+		ID:             uuid.New(),
+		OrganizationID: orgID,
+		Framework:      framework,
+		CheckName:      checkName,
+	}, nil
+}
+
+func (m *MockComplianceServiceExtendedImpl) GetEvidenceForCheck(ctx context.Context, orgID uuid.UUID, checkName string) ([]*domain.ComplianceEvidence, error) {
+	if m.GetEvidenceForCheckFunc != nil {
+		return m.GetEvidenceForCheckFunc(ctx, orgID, checkName)
+	}
+	return []*domain.ComplianceEvidence{}, nil
+}
+
+// ===========================
+// AnalyticsHandler Mock Implementations
+// ===========================
+
+// MockVerificationEventServiceExtendedImpl implements VerificationEventServicerExtended interface
+type MockVerificationEventServiceExtendedImpl struct {
+	LogVerificationEventFunc       func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	GetLast24HoursStatisticsFunc   func(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error)
+}
+
+func (m *MockVerificationEventServiceExtendedImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
+	if m.LogVerificationEventFunc != nil {
+		return m.LogVerificationEventFunc(ctx, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
+	}
+	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentID}, nil
+}
+
+func (m *MockVerificationEventServiceExtendedImpl) GetLast24HoursStatistics(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error) {
+	if m.GetLast24HoursStatisticsFunc != nil {
+		return m.GetLast24HoursStatisticsFunc(ctx, orgID)
+	}
+	return &domain.VerificationStatistics{
+		TotalVerifications: 10,
+		SuccessCount:       8,
+		FailedCount:        2,
+		PendingCount:       0,
+		AvgDurationMs:      150,
+	}, nil
+}
+
+// MockSecurityServiceForAnalyticsImpl implements SecurityServicerForAnalytics interface
+type MockSecurityServiceForAnalyticsImpl struct {
+	CountOpenIncidentsFunc func(ctx context.Context, orgID uuid.UUID) (int, error)
+	GetIncidentsFunc       func(ctx context.Context, orgID uuid.UUID, status domain.IncidentStatus, limit, offset int) ([]*domain.SecurityIncident, error)
+}
+
+func (m *MockSecurityServiceForAnalyticsImpl) CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error) {
+	if m.CountOpenIncidentsFunc != nil {
+		return m.CountOpenIncidentsFunc(ctx, orgID)
+	}
+	return 0, nil
+}
+
+func (m *MockSecurityServiceForAnalyticsImpl) GetIncidents(ctx context.Context, orgID uuid.UUID, status domain.IncidentStatus, limit, offset int) ([]*domain.SecurityIncident, error) {
+	if m.GetIncidentsFunc != nil {
+		return m.GetIncidentsFunc(ctx, orgID, status, limit, offset)
+	}
+	return []*domain.SecurityIncident{}, nil
+}
+
+// ===========================
+// VerificationHandler Mock Implementations
+// ===========================
+
+// MockAgentServiceForVerificationImpl implements AgentServicerForVerification interface
+type MockAgentServiceForVerificationImpl struct {
+	MockAgentServiceImpl
+	CreateSecurityAlertFunc func(ctx context.Context, alert *domain.Alert) error
+}
+
+func (m *MockAgentServiceForVerificationImpl) CreateSecurityAlert(ctx context.Context, alert *domain.Alert) error {
+	if m.CreateSecurityAlertFunc != nil {
+		return m.CreateSecurityAlertFunc(ctx, alert)
+	}
+	return nil
+}
+
+// MockAuditServiceForVerificationImpl implements AuditServicerForVerification interface
+type MockAuditServiceForVerificationImpl struct {
+	LogActionFunc    func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
+	GetAgentActivityFunc func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
+	GetAuditLogsFunc func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
+	GetByIDFunc      func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
+	LogFunc          func(ctx context.Context, entry *domain.AuditLog) error
+}
+
+func (m *MockAuditServiceForVerificationImpl) LogAction(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error {
+	if m.LogActionFunc != nil {
+		return m.LogActionFunc(ctx, orgID, userID, action, resourceType, resourceID, ipAddress, userAgent, metadata)
+	}
+	return nil
+}
+
+func (m *MockAuditServiceForVerificationImpl) GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	if m.GetAgentActivityFunc != nil {
+		return m.GetAgentActivityFunc(ctx, agentID, limit, offset)
+	}
+	return []*domain.AuditLog{}, nil
+}
+
+func (m *MockAuditServiceForVerificationImpl) GetAuditLogs(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error) {
+	if m.GetAuditLogsFunc != nil {
+		return m.GetAuditLogsFunc(ctx, orgID, action, entityType, entityID, userID, startDate, endDate, limit, offset)
+	}
+	return []*domain.AuditLog{}, 0, nil
+}
+
+func (m *MockAuditServiceForVerificationImpl) GetByID(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockAuditServiceForVerificationImpl) Log(ctx context.Context, entry *domain.AuditLog) error {
+	if m.LogFunc != nil {
+		return m.LogFunc(ctx, entry)
+	}
+	return nil
+}
+
+// MockAlertServiceForVerificationImpl implements AlertServicerForVerification interface
+type MockAlertServiceForVerificationImpl struct {
+	CreateAlertFunc                   func(ctx context.Context, alert *domain.Alert) error
+	GetAlertsByAgentFunc              func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error)
+	DetectUnusualAccessPatternsFunc   func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID) ([]*domain.Alert, error)
+}
+
+func (m *MockAlertServiceForVerificationImpl) CreateAlert(ctx context.Context, alert *domain.Alert) error {
+	if m.CreateAlertFunc != nil {
+		return m.CreateAlertFunc(ctx, alert)
+	}
+	return nil
+}
+
+func (m *MockAlertServiceForVerificationImpl) GetAlertsByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+	if m.GetAlertsByAgentFunc != nil {
+		return m.GetAlertsByAgentFunc(ctx, agentID, limit, offset)
+	}
+	return []*domain.Alert{}, nil
+}
+
+func (m *MockAlertServiceForVerificationImpl) DetectUnusualAccessPatterns(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID) ([]*domain.Alert, error) {
+	if m.DetectUnusualAccessPatternsFunc != nil {
+		return m.DetectUnusualAccessPatternsFunc(ctx, orgID, agentID)
+	}
+	return []*domain.Alert{}, nil
+}
+
+// MockVerificationEventServiceForVerificationImpl implements VerificationEventServicerForVerification interface
+type MockVerificationEventServiceForVerificationImpl struct {
+	LogVerificationEventFunc       func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	CreateVerificationEventFunc    func(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
+	GetVerificationEventFunc       func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
+	UpdateVerificationResultFunc   func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
+	SearchVerificationsFunc        func(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)
+	UpdateExecutionStatusFunc      func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
+	if m.LogVerificationEventFunc != nil {
+		return m.LogVerificationEventFunc(ctx, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
+	}
+	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentID}, nil
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) CreateVerificationEvent(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error) {
+	if m.CreateVerificationEventFunc != nil {
+		return m.CreateVerificationEventFunc(ctx, req)
+	}
+	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: req.OrganizationID, AgentID: &req.AgentID}, nil
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) GetVerificationEvent(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+	if m.GetVerificationEventFunc != nil {
+		return m.GetVerificationEventFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) UpdateVerificationResult(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+	if m.UpdateVerificationResultFunc != nil {
+		return m.UpdateVerificationResultFunc(ctx, id, result, reason, metadata)
+	}
+	return nil
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) SearchVerifications(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error) {
+	if m.SearchVerificationsFunc != nil {
+		return m.SearchVerificationsFunc(ctx, orgID, params)
+	}
+	return []*domain.VerificationEvent{}, 0, nil, nil
+}
+
+func (m *MockVerificationEventServiceForVerificationImpl) UpdateExecutionStatus(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
+	if m.UpdateExecutionStatusFunc != nil {
+		return m.UpdateExecutionStatusFunc(ctx, id, executed, strictMode, executedAt, executionError)
+	}
+	return nil
+}
+
+// MockOrganizationRepositoryerImpl implements OrganizationRepositoryer interface
+type MockOrganizationRepositoryerImpl struct {
+	GetByIDFunc func(id uuid.UUID) (*domain.Organization, error)
+}
+
+func (m *MockOrganizationRepositoryerImpl) GetByID(id uuid.UUID) (*domain.Organization, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(id)
+	}
+	return &domain.Organization{ID: id, EnforcementMode: domain.EnforcementModeMonitoring}, nil
+}
+
+// ===========================
+// TrustScoreHandler Mocks
+// ===========================
+
+// MockTrustCalculatorServicerImpl implements TrustCalculatorServicer interface
+type MockTrustCalculatorServicerImpl struct {
+	CalculateTrustScoreFunc             func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetLatestTrustScoreFunc             func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetTrustScoreHistoryAuditTrailFunc  func(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
+}
+
+func (m *MockTrustCalculatorServicerImpl) CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error) {
+	if m.CalculateTrustScoreFunc != nil {
+		return m.CalculateTrustScoreFunc(ctx, agentID)
+	}
+	return &domain.TrustScore{
+		AgentID:        agentID,
+		Score:          0.85,
+		Factors:        domain.TrustScoreFactors{VerificationStatus: 1.0, Uptime: 0.9, SuccessRate: 0.95},
+		Confidence:     0.8,
+		LastCalculated: time.Now(),
+	}, nil
+}
+
+func (m *MockTrustCalculatorServicerImpl) GetLatestTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error) {
+	if m.GetLatestTrustScoreFunc != nil {
+		return m.GetLatestTrustScoreFunc(ctx, agentID)
+	}
+	return &domain.TrustScore{
+		AgentID:        agentID,
+		Score:          0.85,
+		Factors:        domain.TrustScoreFactors{VerificationStatus: 1.0, Uptime: 0.9, SuccessRate: 0.95},
+		Confidence:     0.8,
+		LastCalculated: time.Now(),
+	}, nil
+}
+
+func (m *MockTrustCalculatorServicerImpl) GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {
+	if m.GetTrustScoreHistoryAuditTrailFunc != nil {
+		return m.GetTrustScoreHistoryAuditTrailFunc(ctx, agentID, limit)
+	}
+	return []*domain.TrustScoreHistoryEntry{}, nil
 }

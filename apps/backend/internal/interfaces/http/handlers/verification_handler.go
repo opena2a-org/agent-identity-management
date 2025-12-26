@@ -20,12 +20,20 @@ import (
 
 // VerificationHandler handles agent action verification requests
 type VerificationHandler struct {
+	// Concrete service pointers (used by existing code)
 	agentService             *application.AgentService
 	auditService             *application.AuditService
 	alertService             *application.AlertService
 	trustService             *application.TrustCalculator
 	verificationEventService *application.VerificationEventService
 	orgRepo                  domain.OrganizationRepository
+
+	// Interface fields for testability (used when set)
+	agentServicer             AgentServicerForVerification
+	auditServicer             AuditServicerForVerification
+	alertServicer             AlertServicerForVerification
+	verificationEventServicer VerificationEventServicerForVerification
+	orgRepoInterface          OrganizationRepositoryer
 }
 
 // NewVerificationHandler creates a new verification handler
@@ -45,6 +53,59 @@ func NewVerificationHandler(
 		verificationEventService: verificationEventService,
 		orgRepo:                  orgRepo,
 	}
+}
+
+// NewVerificationHandlerWithInterfaces creates a verification handler with interface dependencies for testing
+func NewVerificationHandlerWithInterfaces(
+	agentService AgentServicerForVerification,
+	auditService AuditServicerForVerification,
+	alertService AlertServicerForVerification,
+	verificationEventService VerificationEventServicerForVerification,
+	orgRepo OrganizationRepositoryer,
+) *VerificationHandler {
+	return &VerificationHandler{
+		agentServicer:             agentService,
+		auditServicer:             auditService,
+		alertServicer:             alertService,
+		verificationEventServicer: verificationEventService,
+		orgRepoInterface:          orgRepo,
+	}
+}
+
+// Helper methods to get the appropriate service (interface or concrete)
+func (h *VerificationHandler) getAgentService() AgentServicerForVerification {
+	if h.agentServicer != nil {
+		return h.agentServicer
+	}
+	return h.agentService
+}
+
+func (h *VerificationHandler) getAuditService() AuditServicerForVerification {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
+}
+
+func (h *VerificationHandler) getAlertService() AlertServicerForVerification {
+	if h.alertServicer != nil {
+		return h.alertServicer
+	}
+	return h.alertService
+}
+
+func (h *VerificationHandler) getVerificationEventService() VerificationEventServicerForVerification {
+	if h.verificationEventServicer != nil {
+		return h.verificationEventServicer
+	}
+	return h.verificationEventService
+}
+
+func (h *VerificationHandler) getOrgRepo() OrganizationRepositoryer {
+	if h.orgRepoInterface != nil {
+		return h.orgRepoInterface
+	}
+	return h.orgRepo
 }
 
 // VerificationRequest represents a capability verification request from an agent
@@ -113,7 +174,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	riskAutoDetected := req.RiskLevel == ""
 
 	// Get agent from database
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
@@ -154,7 +215,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// This enforces the security policies configured in the dashboard
 	// The old determineVerificationStatus() only checked trust scores, not capabilities!
 	// ============================================================================
-	allowed, denialReason, auditIDFromVerify, err := h.agentService.VerifyCapability(
+	allowed, denialReason, auditIDFromVerify, err := h.getAgentService().VerifyCapability(
 		c.Context(),
 		agentID,
 		req.Capability,
@@ -171,8 +232,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Get organization's enforcement mode to distinguish auto-approved vs approved
 	isMonitoringMode := false
-	if h.orgRepo != nil {
-		org, orgErr := h.orgRepo.GetByID(agent.OrganizationID)
+	orgRepo := h.getOrgRepo()
+	if orgRepo != nil {
+		org, orgErr := orgRepo.GetByID(agent.OrganizationID)
 		if orgErr == nil && org != nil {
 			isMonitoringMode = org.EnforcementMode == domain.EnforcementModeMonitoring
 		}
@@ -212,7 +274,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Medium/High-risk actions: Alert if action is denied or lacks capability
 	// SECURITY: No debug logging to prevent information leakage
 	shouldCreateAlert := false
-	hasCapability, err := h.agentService.HasCapability(c.Context(), agentID, req.Capability, req.Resource)
+	hasCapability, err := h.getAgentService().HasCapability(c.Context(), agentID, req.Capability, req.Resource)
 	if err == nil && !hasCapability {
 		// Determine if this action warrants an alert based on risk level and approval status
 		isLowRisk := isLowRiskCapability(req.Capability)
@@ -258,7 +320,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Save audit log - errors don't block the request
 	// SECURITY: No error logging to prevent information leakage
-	_ = h.auditService.Log(c.Context(), auditEntry)
+	_ = h.getAuditService().Log(c.Context(), auditEntry)
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
@@ -341,7 +403,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		// Save alert to database using AgentService's alert repository
 		// Create security alert - errors don't block the request
 		// SECURITY: No logging to prevent information leakage
-		_ = h.agentService.CreateSecurityAlert(c.Context(), alert)
+		_ = h.getAgentService().CreateSecurityAlert(c.Context(), alert)
 
 		// NOTE: Violation record is already created by VerifyAction() with correct is_blocked and severity
 		// Do NOT create a duplicate here - it was causing dashboard to show incorrect data
@@ -431,7 +493,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Save verification event using service
 	// SECURITY: No error logging to prevent information leakage
-	event, err := h.verificationEventService.CreateVerificationEvent(c.Context(), verificationEventReq)
+	event, err := h.getVerificationEventService().CreateVerificationEvent(c.Context(), verificationEventReq)
 	if err == nil {
 		// Use the actual database ID from the created event
 		verificationID = event.ID
@@ -443,19 +505,20 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// ============================================================================
 	// UNUSUAL ACCESS PATTERN DETECTION (async, non-blocking)
 	// SECURITY: No error logging to prevent information leakage
-	if h.alertService != nil {
+	alertSvc := h.getAlertService()
+	if alertSvc != nil {
 		orgID := agent.OrganizationID
 		agentIDCopy := agentID
 		go func() {
 			ctx := context.Background()
-			_, _ = h.alertService.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
+			_, _ = alertSvc.DetectUnusualAccessPatterns(ctx, orgID, agentIDCopy)
 		}()
 	}
 
 	// Get organization to determine enforcement mode
 	enforcementMode := "monitoring" // Default to safe mode
-	if h.orgRepo != nil {
-		org, err := h.orgRepo.GetByID(agent.OrganizationID)
+	if orgRepo != nil {
+		org, err := orgRepo.GetByID(agent.OrganizationID)
 		if err == nil && org != nil {
 			enforcementMode = string(org.EnforcementMode)
 		}
@@ -837,7 +900,7 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 	}
 
 	// Query verification event from database
-	event, err := h.verificationEventService.GetVerificationEvent(c.Context(), vid)
+	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Verification not found or expired",
@@ -846,8 +909,9 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 
 	// Get organization to determine enforcement mode
 	enforcementMode := "monitoring" // Default to safe mode
-	if h.orgRepo != nil {
-		org, err := h.orgRepo.GetByID(event.OrganizationID)
+	orgRepoForEvent := h.getOrgRepo()
+	if orgRepoForEvent != nil {
+		org, err := orgRepoForEvent.GetByID(event.OrganizationID)
 		if err == nil && org != nil {
 			enforcementMode = string(org.EnforcementMode)
 		}
@@ -872,12 +936,13 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 
 	// ✅ AUTOMATIC EXPIRATION CHECK: If current time is past expiration, mark as expired
 	isExpired := time.Now().After(expiresAt)
+	verifSvc := h.getVerificationEventService()
 	if isExpired && event.Result != nil && *event.Result != domain.VerificationResultExpired && *event.Result != domain.VerificationResultDenied {
 		// Update database to mark as expired (fire and forget - don't block response)
 		go func() {
 			expiredResult := domain.VerificationResultExpired
 			reason := "Access expired automatically after time limit"
-			_ = h.verificationEventService.UpdateVerificationResult(
+			_ = verifSvc.UpdateVerificationResult(
 				context.Background(),
 				event.ID,
 				expiredResult,
@@ -987,7 +1052,7 @@ func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
 	}
 
 	// Update verification event in database
-	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, reasonPtr, req.Metadata)
+	err = h.getVerificationEventService().UpdateVerificationResult(c.Context(), vid, result, reasonPtr, req.Metadata)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Verification not found or update failed",
@@ -1202,7 +1267,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		Offset:      (page - 1) * pageSize,
 	}
 
-	events, total, counts, err := h.verificationEventService.SearchVerifications(c.Context(), orgID, params)
+	events, total, counts, err := h.getVerificationEventService().SearchVerifications(c.Context(), orgID, params)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to get verification requests: %v", err),
@@ -1229,7 +1294,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 
 		// If still no name, try to get from agent repo
 		if agentName == "" && event.AgentID != nil {
-			if agent, err := h.agentService.GetAgent(c.Context(), *event.AgentID); err == nil {
+			if agent, err := h.getAgentService().GetAgent(c.Context(), *event.AgentID); err == nil {
 				if agent.DisplayName != "" {
 					agentName = agent.DisplayName
 				} else {
@@ -1369,7 +1434,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 		"manualApproval": true,
 	}
 
-	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, nil, metadata)
+	err = h.getVerificationEventService().UpdateVerificationResult(c.Context(), vid, result, nil, metadata)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Verification not found or update failed",
@@ -1394,7 +1459,7 @@ func (h *VerificationHandler) ApproveVerification(c fiber.Ctx) error {
 		},
 		Timestamp: time.Now(),
 	}
-	_ = h.auditService.Log(c.Context(), auditEntry)
+	_ = h.getAuditService().Log(c.Context(), auditEntry)
 
 	// SECURITY: No logging of approval events to prevent information leakage
 
@@ -1472,7 +1537,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 		"manualDenial": true,
 	}
 
-	err = h.verificationEventService.UpdateVerificationResult(c.Context(), vid, result, &req.Reason, metadata)
+	err = h.getVerificationEventService().UpdateVerificationResult(c.Context(), vid, result, &req.Reason, metadata)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Verification not found or update failed",
@@ -1497,7 +1562,7 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 		},
 		Timestamp: time.Now(),
 	}
-	_ = h.auditService.Log(c.Context(), auditEntry)
+	_ = h.getAuditService().Log(c.Context(), auditEntry)
 
 	// SECURITY: No logging of denial events to prevent information leakage
 
@@ -1577,7 +1642,7 @@ func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
 	}
 
 	// Update execution status in database
-	err = h.verificationEventService.UpdateExecutionStatus(
+	err = h.getVerificationEventService().UpdateExecutionStatus(
 		c.Context(),
 		vid,
 		req.Executed,
