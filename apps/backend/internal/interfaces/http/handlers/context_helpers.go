@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
+
+// ErrUnauthorized is returned when a required context value is missing.
+// The HTTP response is already sent by the Require* functions.
+var ErrUnauthorized = errors.New("unauthorized")
 
 // ContextError represents an error extracting values from request context
 type ContextError struct {
@@ -34,25 +40,29 @@ func GetUserID(c fiber.Ctx) (uuid.UUID, bool) {
 }
 
 // RequireOrganizationID extracts organization_id and returns an error response if not found.
-// Returns the organization ID and nil error on success, or uuid.Nil and an error response on failure.
+// Returns the organization ID and nil error on success, or uuid.Nil and ErrUnauthorized on failure.
+// The HTTP response is already sent when ErrUnauthorized is returned.
 func RequireOrganizationID(c fiber.Ctx) (uuid.UUID, error) {
 	orgID, ok := GetOrganizationID(c)
 	if !ok {
-		return uuid.Nil, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		_ = c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Organization ID not found in context",
 		})
+		return uuid.Nil, ErrUnauthorized
 	}
 	return orgID, nil
 }
 
 // RequireUserID extracts user_id and returns an error response if not found.
-// Returns the user ID and nil error on success, or uuid.Nil and an error response on failure.
+// Returns the user ID and nil error on success, or uuid.Nil and ErrUnauthorized on failure.
+// The HTTP response is already sent when ErrUnauthorized is returned.
 func RequireUserID(c fiber.Ctx) (uuid.UUID, error) {
 	userID, ok := GetUserID(c)
 	if !ok {
-		return uuid.Nil, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		_ = c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "User ID not found in context",
 		})
+		return uuid.Nil, ErrUnauthorized
 	}
 	return userID, nil
 }

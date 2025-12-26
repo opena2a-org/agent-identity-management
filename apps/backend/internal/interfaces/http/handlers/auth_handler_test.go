@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -14,21 +14,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAuthHandler_Me tests the Me endpoint behavior
-func TestAuthHandler_Me_NoUserContext(t *testing.T) {
-	// Test case: No user_id in context should return 401
-
-	app := fiber.New()
-	app.Get("/me", func(c fiber.Ctx) error {
-		// Simulate AuthHandler.Me behavior without user context
-		userIDValue := c.Locals("user_id")
-		if userIDValue == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - no user context",
-			})
-		}
+// authTestErrorHandler is a custom error handler that preserves already-sent responses
+func authTestErrorHandler(c fiber.Ctx, err error) error {
+	if errors.Is(err, ErrUnauthorized) {
 		return nil
+	}
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"error": err.Error(),
 	})
+}
+
+// newAuthTestApp creates a Fiber app with the auth test error handler
+func newAuthTestApp() *fiber.App {
+	return fiber.New(fiber.Config{
+		ErrorHandler: authTestErrorHandler,
+	})
+}
+
+// ===========================
+// NewAuthHandler Tests
+// ===========================
+
+func TestNewAuthHandler_NilDeps(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, nil)
+	assert.NotNil(t, handler)
+}
+
+// ===========================
+// AuthHandler.Me Tests - Calling actual handler
+// ===========================
+
+func TestAuthHandler_Me_NoUserContext(t *testing.T) {
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
+	app.Get("/me", handler.Me)
 
 	req := httptest.NewRequest("GET", "/me", nil)
 	resp, err := app.Test(req)
@@ -45,24 +64,11 @@ func TestAuthHandler_Me_NoUserContext(t *testing.T) {
 }
 
 func TestAuthHandler_Me_InvalidUserIDType(t *testing.T) {
-	// Test case: Invalid user_id type in context should return 401
-
-	app := fiber.New()
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
 	app.Get("/me", func(c fiber.Ctx) error {
 		c.Locals("user_id", "not-a-uuid") // Invalid type
-		userIDValue := c.Locals("user_id")
-		if userIDValue == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - no user context",
-			})
-		}
-		_, ok := userIDValue.(uuid.UUID)
-		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - invalid user context",
-			})
-		}
-		return nil
+		return handler.Me(c)
 	})
 
 	req := httptest.NewRequest("GET", "/me", nil)
@@ -73,146 +79,14 @@ func TestAuthHandler_Me_InvalidUserIDType(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
-func TestAuthHandler_Me_ValidUser(t *testing.T) {
-	// Test case: Valid user context returns user info
-	userID := uuid.New()
-	orgID := uuid.New()
-	now := time.Now()
-
-	app := fiber.New()
-	app.Get("/me", func(c fiber.Ctx) error {
-		c.Locals("user_id", userID)
-
-		userIDValue := c.Locals("user_id")
-		if userIDValue == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - no user context",
-			})
-		}
-
-		uid, ok := userIDValue.(uuid.UUID)
-		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - invalid user context",
-			})
-		}
-
-		// Simulate returning user info
-		return c.JSON(fiber.Map{
-			"id":             uid,
-			"email":          "test@example.com",
-			"name":           "Test User",
-			"role":           "admin",
-			"organizationId": orgID,
-			"lastLoginAt":    now,
-			"createdAt":      now,
-			"status":         "approved",
-		})
-	})
-
-	req := httptest.NewRequest("GET", "/me", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	require.NoError(t, err)
-	assert.Equal(t, userID.String(), result["id"])
-	assert.Equal(t, "test@example.com", result["email"])
-	assert.Equal(t, "admin", result["role"])
-}
-
-func TestAuthHandler_LocalLogin_MissingFields(t *testing.T) {
-	tests := []struct {
-		name     string
-		body     string
-		expected int
-	}{
-		{
-			name:     "empty body",
-			body:     `{}`,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "missing password",
-			body:     `{"email":"test@example.com"}`,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "missing email",
-			body:     `{"password":"password123"}`,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "empty email",
-			body:     `{"email":"","password":"password123"}`,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "empty password",
-			body:     `{"email":"test@example.com","password":""}`,
-			expected: fiber.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
-			app.Post("/login", func(c fiber.Ctx) error {
-				type LoginRequest struct {
-					Email    string `json:"email"`
-					Password string `json:"password"`
-				}
-
-				var req LoginRequest
-				if err := c.Bind().JSON(&req); err != nil {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Invalid request body",
-					})
-				}
-
-				if req.Email == "" || req.Password == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Email and password are required",
-					})
-				}
-
-				return c.JSON(fiber.Map{"status": "ok"})
-			})
-
-			req := httptest.NewRequest("POST", "/login", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := app.Test(req)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			assert.Equal(t, tt.expected, resp.StatusCode)
-		})
-	}
-}
+// ===========================
+// AuthHandler.LocalLogin Tests - Calling actual handler
+// ===========================
 
 func TestAuthHandler_LocalLogin_InvalidJSON(t *testing.T) {
+	handler := &AuthHandler{}
 	app := fiber.New()
-	app.Post("/login", func(c fiber.Ctx) error {
-		type LoginRequest struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
-		}
-
-		var req LoginRequest
-		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request body",
-			})
-		}
-
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
+	app.Post("/login", handler.LocalLogin)
 
 	req := httptest.NewRequest("POST", "/login", strings.NewReader("not valid json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -222,115 +96,188 @@ func TestAuthHandler_LocalLogin_InvalidJSON(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
 
-	body, _ := io.ReadAll(resp.Body)
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
+func TestAuthHandler_LocalLogin_EmptyBody(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/login", handler.LocalLogin)
+
+	req := httptest.NewRequest("POST", "/login", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assert.Contains(t, result["error"], "Invalid request body")
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
-func TestAuthHandler_ChangePassword_Validation(t *testing.T) {
-	tests := []struct {
-		name     string
-		body     string
-		hasUser  bool
-		expected int
-	}{
-		{
-			name:     "no user context",
-			body:     `{"currentPassword":"old","newPassword":"new"}`,
-			hasUser:  false,
-			expected: fiber.StatusUnauthorized,
-		},
-		{
-			name:     "missing current password",
-			body:     `{"newPassword":"new"}`,
-			hasUser:  true,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "missing new password",
-			body:     `{"currentPassword":"old"}`,
-			hasUser:  true,
-			expected: fiber.StatusBadRequest,
-		},
-		{
-			name:     "empty passwords",
-			body:     `{"currentPassword":"","newPassword":""}`,
-			hasUser:  true,
-			expected: fiber.StatusBadRequest,
-		},
-	}
+func TestAuthHandler_LocalLogin_MissingPassword(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/login", handler.LocalLogin)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			userID := uuid.New()
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(`{"email":"test@example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
 
-			app := fiber.New()
-			app.Post("/change-password", func(c fiber.Ctx) error {
-				if tt.hasUser {
-					c.Locals("user_id", userID)
-				}
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-				type ChangePasswordRequest struct {
-					CurrentPassword string `json:"currentPassword"`
-					NewPassword     string `json:"newPassword"`
-				}
-
-				var req ChangePasswordRequest
-				if err := c.Bind().JSON(&req); err != nil {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Invalid request body",
-					})
-				}
-
-				if req.CurrentPassword == "" || req.NewPassword == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Current password and new password are required",
-					})
-				}
-
-				userIDValue := c.Locals("user_id")
-				if userIDValue == nil {
-					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-						"error": "Unauthorized - no user context",
-					})
-				}
-
-				return c.JSON(fiber.Map{"message": "Password changed successfully"})
-			})
-
-			req := httptest.NewRequest("POST", "/change-password", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := app.Test(req)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			assert.Equal(t, tt.expected, resp.StatusCode)
-		})
-	}
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+func TestAuthHandler_LocalLogin_MissingEmail(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/login", handler.LocalLogin)
+
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(`{"password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_LocalLogin_EmptyEmail(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/login", handler.LocalLogin)
+
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(`{"email":"","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_LocalLogin_EmptyPassword(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/login", handler.LocalLogin)
+
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(`{"email":"test@example.com","password":""}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+// ===========================
+// AuthHandler.ChangePassword Tests - Calling actual handler
+// ===========================
+
+func TestAuthHandler_ChangePassword_InvalidJSON(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/change-password", handler.ChangePassword)
+
+	req := httptest.NewRequest("POST", "/change-password", strings.NewReader("not valid json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_ChangePassword_EmptyCurrentPassword(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/change-password", handler.ChangePassword)
+
+	req := httptest.NewRequest("POST", "/change-password", strings.NewReader(`{"currentPassword":"","newPassword":"newpass"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_ChangePassword_EmptyNewPassword(t *testing.T) {
+	handler := &AuthHandler{}
+	app := fiber.New()
+	app.Post("/change-password", handler.ChangePassword)
+
+	req := httptest.NewRequest("POST", "/change-password", strings.NewReader(`{"currentPassword":"oldpass","newPassword":""}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_ChangePassword_NoUserContext(t *testing.T) {
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
+	app.Post("/change-password", handler.ChangePassword)
+
+	req := httptest.NewRequest("POST", "/change-password", strings.NewReader(`{"currentPassword":"old","newPassword":"new"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAuthHandler_ChangePassword_InvalidUserContext(t *testing.T) {
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
+	app.Post("/change-password", func(c fiber.Ctx) error {
+		c.Locals("user_id", "not-a-uuid")
+		return handler.ChangePassword(c)
+	})
+
+	req := httptest.NewRequest("POST", "/change-password", strings.NewReader(`{"currentPassword":"old","newPassword":"new"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+// ===========================
+// AuthHandler.GetCurrentOrganization Tests - Calling actual handler
+// ===========================
 
 func TestAuthHandler_GetCurrentOrganization_NoOrgContext(t *testing.T) {
-	app := fiber.New()
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
+	app.Get("/organization", handler.GetCurrentOrganization)
+
+	req := httptest.NewRequest("GET", "/organization", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAuthHandler_GetCurrentOrganization_InvalidOrgContext(t *testing.T) {
+	handler := &AuthHandler{}
+	app := newAuthTestApp()
 	app.Get("/organization", func(c fiber.Ctx) error {
-		orgIDValue := c.Locals("organization_id")
-		if orgIDValue == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - no organization context",
-			})
-		}
-
-		_, ok := orgIDValue.(uuid.UUID)
-		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - invalid organization context",
-			})
-		}
-
-		return c.JSON(fiber.Map{"name": "Test Org"})
+		c.Locals("organization_id", "not-a-uuid")
+		return handler.GetCurrentOrganization(c)
 	})
 
 	req := httptest.NewRequest("GET", "/organization", nil)
@@ -341,76 +288,14 @@ func TestAuthHandler_GetCurrentOrganization_NoOrgContext(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
-func TestAuthHandler_GetCurrentOrganization_ValidOrg(t *testing.T) {
-	orgID := uuid.New()
-	now := time.Now()
+// ===========================
+// AuthHandler.Logout Tests - Calling actual handler
+// ===========================
 
+func TestAuthHandler_Logout_Success(t *testing.T) {
+	handler := &AuthHandler{}
 	app := fiber.New()
-	app.Get("/organization", func(c fiber.Ctx) error {
-		c.Locals("organization_id", orgID)
-
-		orgIDValue := c.Locals("organization_id")
-		if orgIDValue == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - no organization context",
-			})
-		}
-
-		oid, ok := orgIDValue.(uuid.UUID)
-		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Unauthorized - invalid organization context",
-			})
-		}
-
-		return c.JSON(fiber.Map{
-			"id":        oid,
-			"name":      "Test Organization",
-			"maxAgents": 100,
-			"isActive":  true,
-			"createdAt": now,
-			"updatedAt": now,
-		})
-	})
-
-	req := httptest.NewRequest("GET", "/organization", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	require.NoError(t, err)
-	assert.Equal(t, orgID.String(), result["id"])
-	assert.Equal(t, "Test Organization", result["name"])
-	assert.Equal(t, float64(100), result["maxAgents"])
-}
-
-func TestAuthHandler_Logout(t *testing.T) {
-	app := fiber.New()
-	app.Post("/logout", func(c fiber.Ctx) error {
-		// Clear cookies by setting empty value and expired time
-		c.Cookie(&fiber.Cookie{
-			Name:     "access_token",
-			Value:    "",
-			HTTPOnly: true,
-			MaxAge:   -1,
-		})
-
-		c.Cookie(&fiber.Cookie{
-			Name:     "refresh_token",
-			Value:    "",
-			HTTPOnly: true,
-			MaxAge:   -1,
-		})
-
-		return c.JSON(fiber.Map{
-			"message": "Logged out successfully",
-		})
-	})
+	app.Post("/logout", handler.Logout)
 
 	req := httptest.NewRequest("POST", "/logout", nil)
 	resp, err := app.Test(req)
@@ -424,116 +309,23 @@ func TestAuthHandler_Logout(t *testing.T) {
 	err = json.Unmarshal(body, &result)
 	require.NoError(t, err)
 	assert.Equal(t, "Logged out successfully", result["message"])
-
-	// Check cookies are present (clearing cookies is implementation detail)
-	// The important thing is the success message is returned
 }
 
-// TestContextHelpers tests the context helper functions
-func TestContextHelpers_GetUserIDFromContext(t *testing.T) {
-	tests := []struct {
-		name        string
-		setupLocals func(c fiber.Ctx)
-		expectError bool
-		expectNil   bool
-	}{
-		{
-			name:        "no user_id in context",
-			setupLocals: func(c fiber.Ctx) {},
-			expectError: true,
-			expectNil:   true,
-		},
-		{
-			name: "invalid user_id type",
-			setupLocals: func(c fiber.Ctx) {
-				c.Locals("user_id", "not-a-uuid")
-			},
-			expectError: true,
-			expectNil:   true,
-		},
-		{
-			name: "valid user_id",
-			setupLocals: func(c fiber.Ctx) {
-				c.Locals("user_id", uuid.New())
-			},
-			expectError: false,
-			expectNil:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
-			var gotUserID *uuid.UUID
-			var gotErr bool
-
-			app.Get("/test", func(c fiber.Ctx) error {
-				tt.setupLocals(c)
-
-				userIDValue := c.Locals("user_id")
-				if userIDValue == nil {
-					gotUserID = nil
-					gotErr = true
-					return c.SendStatus(fiber.StatusUnauthorized)
-				}
-
-				uid, ok := userIDValue.(uuid.UUID)
-				if !ok {
-					gotUserID = nil
-					gotErr = true
-					return c.SendStatus(fiber.StatusUnauthorized)
-				}
-
-				gotUserID = &uid
-				gotErr = false
-				return c.SendStatus(fiber.StatusOK)
-			})
-
-			req := httptest.NewRequest("GET", "/test", nil)
-			resp, err := app.Test(req)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			assert.Equal(t, tt.expectError, gotErr)
-			if tt.expectNil {
-				assert.Nil(t, gotUserID)
-			} else {
-				assert.NotNil(t, gotUserID)
-			}
-		})
-	}
-}
-
-// TestErrorResponseFormat tests consistent error response format
-func TestErrorResponseFormat(t *testing.T) {
+func TestAuthHandler_Logout_WithNilUserID(t *testing.T) {
+	// Test logout when user_id is nil UUID (not logged in)
+	handler := &AuthHandler{}
 	app := fiber.New()
-	app.Get("/error", func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Something went wrong",
-		})
+	app.Post("/logout", func(c fiber.Ctx) error {
+		c.Locals("user_id", uuid.Nil)
+		c.Locals("organization_id", uuid.Nil)
+		return handler.Logout(c)
 	})
 
-	req := httptest.NewRequest("GET", "/error", nil)
+	req := httptest.NewRequest("POST", "/logout", nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	require.NoError(t, err)
-
-	// Ensure error field exists
-	assert.Contains(t, result, "error")
-	assert.Equal(t, "Something went wrong", result["error"])
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
 
-// Helper function tests
-func TestErrorResponse_ContainsHelper(t *testing.T) {
-	assert.True(t, strings.Contains("not found", "not"))
-	assert.True(t, strings.Contains("not found", "found"))
-	assert.False(t, strings.Contains("not found", "error"))
-	assert.True(t, strings.Contains("Community Edition limited to 3 tags", "Community Edition"))
-}
