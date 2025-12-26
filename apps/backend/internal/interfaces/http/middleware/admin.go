@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // AdminMiddleware checks if user has admin role

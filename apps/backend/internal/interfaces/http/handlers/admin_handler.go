@@ -11,8 +11,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/application"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 type AdminHandler struct {
@@ -173,7 +173,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	}
 
 	// Get approved users
-	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
+	users, err := h.getAuthService().GetUsersByOrganization(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch users",
@@ -181,7 +181,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	}
 
 	// Get pending registration requests (optional - table may not exist in all deployments)
-	pendingRequests, _, err := h.registrationService.ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
+	pendingRequests, _, err := h.getRegistrationService().ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
 	if err != nil {
 		// ℹ️ If table doesn't exist or query fails, just show approved users
 		log.Printf("⚠️ Warning: Failed to fetch pending registration requests (table may not exist): %v", err)
@@ -252,7 +252,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -315,7 +315,7 @@ func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
 	}
 
 	// Update user role
-	user, err := h.authService.UpdateUserRole(c.Context(), targetUserID, orgID, role, adminID)
+	user, err := h.getAuthService().UpdateUserRole(c.Context(), targetUserID, orgID, role, adminID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -323,7 +323,7 @@ func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -376,14 +376,14 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.authService.DeactivateUser(c.Context(), targetUserID, orgID, adminID); err != nil {
+	if err := h.getAuthService().DeactivateUser(c.Context(), targetUserID, orgID, adminID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -415,7 +415,7 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 	}
 
 	// Verify user belongs to the same organization
-	user, err := h.authService.GetUserByID(c.Context(), targetUserID)
+	user, err := h.getAuthService().GetUserByID(c.Context(), targetUserID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "User not found",
@@ -429,14 +429,14 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 	}
 
 	// Activate user using admin service
-	if err := h.adminService.ActivateUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().ActivateUser(c.Context(), targetUserID, adminID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -467,7 +467,7 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	}
 
 	// Verify user belongs to the same organization
-	user, err := h.authService.GetUserByID(c.Context(), targetUserID)
+	user, err := h.getAuthService().GetUserByID(c.Context(), targetUserID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "User not found",
@@ -505,14 +505,14 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	userName := user.Name
 
 	// Permanently delete user using admin service
-	if err := h.adminService.PermanentlyDeleteUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().PermanentlyDeleteUser(c.Context(), targetUserID, adminID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -622,7 +622,7 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 	}
 
 	// Get audit logs
-	logs, total, err := h.auditService.GetAuditLogs(
+	logs, total, err := h.getAuditService().GetAuditLogs(
 		c.Context(),
 		orgID,
 		filters.Action,
@@ -668,7 +668,7 @@ func (h *AdminHandler) GetAuditLogs(c fiber.Ctx) error {
 		metadata["filter_end_date"] = filters.EndDate
 	}
 
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -706,7 +706,7 @@ func (h *AdminHandler) GetAuditLogByID(c fiber.Ctx) error {
 	}
 
 	// Get audit log from service
-	auditLog, err := h.auditService.GetByID(c.Context(), auditLogID)
+	auditLog, err := h.getAuditService().GetByID(c.Context(), auditLogID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch audit log",
@@ -773,7 +773,7 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 	}
 
 	// Get all audit logs (no pagination for export, up to 10000)
-	logs, total, err := h.auditService.GetAuditLogs(
+	logs, total, err := h.getAuditService().GetAuditLogs(
 		c.Context(),
 		orgID,
 		"", // action filter
@@ -792,7 +792,7 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 	}
 
 	// Log the export action
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -898,7 +898,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	}
 
 	// Get alerts
-	alerts, total, err := h.alertService.GetAlerts(
+	alerts, total, err := h.getAlertService().GetAlerts(
 		c.Context(),
 		orgID,
 		severity,
@@ -913,7 +913,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	}
 
 	// Get alert counts (all, acknowledged, unacknowledged)
-	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	allCount, acknowledgedCount, unacknowledgedCount, err := h.getAlertService().CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		// If count fails, set defaults but don't fail the request
 		allCount = total
@@ -922,7 +922,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	}
 
 	// Get severity counts based on current status filter
-	criticalCount, highCount, warningCount, infoCount, err := h.alertService.CountBySeverity(c.Context(), orgID, status)
+	criticalCount, highCount, warningCount, infoCount, err := h.getAlertService().CountBySeverity(c.Context(), orgID, status)
 	if err != nil {
 		// If severity count fails, set defaults but don't fail the request
 		criticalCount, highCount, warningCount, infoCount = 0, 0, 0, 0
@@ -948,7 +948,7 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		metadata["filter_status"] = status
 	}
 
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -986,14 +986,14 @@ func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.alertService.AcknowledgeAlert(c.Context(), alertID, orgID, userID); err != nil {
+	if err := h.getAlertService().AcknowledgeAlert(c.Context(), alertID, orgID, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1038,7 +1038,7 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 		}
 	}
 
-	ackCount, err := h.alertService.BulkAcknowledgeAlerts(c.Context(), orgID, userID)
+	ackCount, err := h.getAlertService().BulkAcknowledgeAlerts(c.Context(), orgID, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1046,7 +1046,7 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 	}
 
 	// Log audit with metadata
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1088,14 +1088,14 @@ func (h *AdminHandler) ResolveAlert(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.alertService.ResolveAlert(c.Context(), alertID, orgID, userID, req.Resolution); err != nil {
+	if err := h.getAlertService().ResolveAlert(c.Context(), alertID, orgID, userID, req.Resolution); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1299,14 +1299,14 @@ func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.adminService.ApproveUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().ApproveUser(c.Context(), targetUserID, adminID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -1345,14 +1345,14 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 		req.Reason = ""
 	}
 
-	if err := h.adminService.RejectUser(c.Context(), targetUserID, adminID, req.Reason); err != nil {
+	if err := h.getAdminService().RejectUser(c.Context(), targetUserID, adminID, req.Reason); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -1384,7 +1384,7 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 	}
 
 	// Approve registration request
-	newUser, err := h.registrationService.ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
+	newUser, err := h.getRegistrationService().ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to approve registration: %v", err),
@@ -1392,7 +1392,7 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -1435,14 +1435,14 @@ func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
 	}
 
 	// Reject registration request
-	if err := h.registrationService.RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
+	if err := h.getRegistrationService().RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to reject registration: %v", err),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		adminID,
@@ -1493,7 +1493,7 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 		})
 	}
 
-	org, err := h.adminService.GetOrganizationSettings(c.Context(), orgID)
+	org, err := h.getAdminService().GetOrganizationSettings(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch organization settings",
@@ -1501,7 +1501,7 @@ func (h *AdminHandler) GetOrganizationSettings(c fiber.Ctx) error {
 	}
 
 	// Log audit with settings viewed
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1544,7 +1544,7 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	}
 
 	// Call alert service to count alerts
-	allCount, acknowledgedCount, unacknowledgedCount, err := h.alertService.CountUnacknowledged(c.Context(), orgID)
+	allCount, acknowledgedCount, unacknowledgedCount, err := h.getAlertService().CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1575,7 +1575,7 @@ func (h *AdminHandler) GetEnforcementSettings(c fiber.Ctx) error {
 		})
 	}
 
-	settings, err := h.adminService.GetEnforcementSettings(c.Context(), orgID)
+	settings, err := h.getAdminService().GetEnforcementSettings(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch enforcement settings",
@@ -1641,14 +1641,14 @@ func (h *AdminHandler) UpdateEnforcementSettings(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.adminService.UpdateEnforcementMode(c.Context(), orgID, mode); err != nil {
+	if err := h.getAdminService().UpdateEnforcementMode(c.Context(), orgID, mode); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1663,7 +1663,7 @@ func (h *AdminHandler) UpdateEnforcementSettings(c fiber.Ctx) error {
 	)
 
 	// Return updated settings
-	settings, err := h.adminService.GetEnforcementSettings(c.Context(), orgID)
+	settings, err := h.getAdminService().GetEnforcementSettings(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch updated settings",

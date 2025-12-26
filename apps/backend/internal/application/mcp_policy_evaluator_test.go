@@ -3,7 +3,7 @@ package application
 import (
 	"testing"
 
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 

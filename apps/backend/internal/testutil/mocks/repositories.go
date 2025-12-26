@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -411,61 +411,6 @@ func (m *MockTagRepository) GetAgentsByTag(tagID uuid.UUID) ([]uuid.UUID, error)
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]uuid.UUID), args.Error(1)
-}
-
-// MockSecurityRepository is a mock implementation of SecurityRepository
-type MockSecurityRepository struct {
-	mock.Mock
-}
-
-func (m *MockSecurityRepository) RecordThreat(threat *domain.SecurityThreat) error {
-	args := m.Called(threat)
-	return args.Error(0)
-}
-
-func (m *MockSecurityRepository) GetThreats(orgID uuid.UUID, limit int) ([]*domain.SecurityThreat, error) {
-	args := m.Called(orgID, limit)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*domain.SecurityThreat), args.Error(1)
-}
-
-func (m *MockSecurityRepository) GetThreatByID(id uuid.UUID) (*domain.SecurityThreat, error) {
-	args := m.Called(id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.SecurityThreat), args.Error(1)
-}
-
-func (m *MockSecurityRepository) UpdateThreatStatus(id uuid.UUID, status domain.ThreatStatus) error {
-	args := m.Called(id, status)
-	return args.Error(0)
-}
-
-func (m *MockSecurityRepository) GetThreatStats(orgID uuid.UUID) (*domain.ThreatStats, error) {
-	args := m.Called(orgID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.ThreatStats), args.Error(1)
-}
-
-func (m *MockSecurityRepository) GetIncidentTimeline(orgID uuid.UUID, days int) ([]*domain.IncidentTimelineEntry, error) {
-	args := m.Called(orgID, days)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*domain.IncidentTimelineEntry), args.Error(1)
-}
-
-func (m *MockSecurityRepository) GetUnresolvedThreats(orgID uuid.UUID) ([]*domain.SecurityThreat, error) {
-	args := m.Called(orgID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*domain.SecurityThreat), args.Error(1)
 }
 
 // MockAuditLogRepository is a mock implementation of AuditLogRepository

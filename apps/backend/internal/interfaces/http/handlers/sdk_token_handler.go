@@ -3,7 +3,7 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 )
 
 // SDKTokenHandler handles SDK token management operations

@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/crypto"
-	"github.com/opena2a/identity/backend/internal/domain"
-	infracrypto "github.com/opena2a/identity/backend/internal/infrastructure/crypto"
-	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	infracrypto "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 )
 
 type MCPService struct {

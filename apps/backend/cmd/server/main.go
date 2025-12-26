@@ -21,17 +21,17 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/opena2a/identity/backend/internal/application"
-	"github.com/opena2a/identity/backend/internal/config"
-	"github.com/opena2a/identity/backend/internal/crypto"
-	"github.com/opena2a/identity/backend/internal/domain"
-	"github.com/opena2a/identity/backend/internal/infrastructure/auth"
-	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
-	"github.com/opena2a/identity/backend/internal/infrastructure/email"
-	"github.com/opena2a/identity/backend/internal/infrastructure/metrics"
-	"github.com/opena2a/identity/backend/internal/infrastructure/repository"
-	"github.com/opena2a/identity/backend/internal/interfaces/http/handlers"
-	"github.com/opena2a/identity/backend/internal/interfaces/http/middleware"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // @title Agent Identity Management API
