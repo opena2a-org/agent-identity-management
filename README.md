@@ -7,12 +7,13 @@
 Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threats in real-time.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/opena2a-org/agent-identity-management)](https://goreportcard.com/report/github.com/opena2a-org/agent-identity-management)
+[![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](apps/backend)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
 [![Java](https://img.shields.io/badge/Java-17+-ED8B00?logo=openjdk)](https://openjdk.org/)
-[![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](apps/backend)
 
 [📚 Documentation](https://opena2a.org/docs) • [📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
