@@ -1809,3 +1809,372 @@ func TestAgentHandler_InvalidAgentID_Various(t *testing.T) {
 		})
 	}
 }
+
+// ===========================
+// GetAgentAlerts Tests with Mocks
+// ===========================
+
+func TestAgentHandler_GetAgentAlerts_InvalidAgentID(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/invalid-uuid/alerts", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentAlerts_AgentNotFound(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return nil, errors.New("agent not found")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/alerts", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentAlerts_AccessDenied(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID, // Different org
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/alerts", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentAlerts_SuccessWithPagination(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	mockAlertService := &MockAlertServiceImpl{
+		GetAlertsByAgentFunc: func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+			return []*domain.Alert{
+				{ID: uuid.New(), OrganizationID: orgID, AlertType: domain.AlertSecurityBreach},
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		mockAlertService,
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/alerts?limit=10&offset=5", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	alerts, ok := result["alerts"].([]interface{})
+	assert.True(t, ok)
+	assert.Len(t, alerts, 1)
+}
+
+func TestAgentHandler_GetAgentAlerts_ServiceError(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	mockAlertService := &MockAlertServiceImpl{
+		GetAlertsByAgentFunc: func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
+			return nil, errors.New("database error")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		mockAlertService,
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/alerts", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+}
+
+// ===========================
+// DetectAndMapMCPServers Tests with Mocks
+// ===========================
+
+func TestAgentHandler_DetectAndMapMCPServers_InvalidAgentID_WithMocks(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Post("/agents/:id/detect-mcp-servers", handler.DetectAndMapMCPServers)
+
+	req := httptest.NewRequest("POST", "/agents/invalid-uuid/detect-mcp-servers", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAgentHandler_DetectAndMapMCPServers_InvalidJSON(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Post("/agents/:id/detect-mcp-servers", handler.DetectAndMapMCPServers)
+
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/detect-mcp-servers", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAgentHandler_DetectAndMapMCPServers_AgentNotFound(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return nil, errors.New("agent not found")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Post("/agents/:id/detect-mcp-servers", handler.DetectAndMapMCPServers)
+
+	// configPath (camelCase) is required for DetectAndMapMCPServers
+	body := `{"configPath":"/path/to/config.json"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/detect-mcp-servers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+}
+
+func TestAgentHandler_DetectAndMapMCPServers_AccessDenied(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID, // Different org
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Post("/agents/:id/detect-mcp-servers", handler.DetectAndMapMCPServers)
+
+	// configPath (camelCase) is required for DetectAndMapMCPServers
+	body := `{"configPath":"/path/to/config.json"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/detect-mcp-servers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
