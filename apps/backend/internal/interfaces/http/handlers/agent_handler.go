@@ -13,17 +13,18 @@ import (
 )
 
 type AgentHandler struct {
-	agentService             *application.AgentService
-	mcpService               *application.MCPService
-	auditService             *application.AuditService
-	apiKeyService            *application.APIKeyService
+	agentService             AgentServicer
+	mcpService               MCPServicer
+	auditService             AuditServicer
+	apiKeyService            APIKeyServicer
 	trustScoreHandler        *TrustScoreHandler
-	alertService             *application.AlertService
-	verificationEventService *application.VerificationEventService
-	capabilityService        *application.CapabilityService
-	tagService               *application.TagService              // ✅ For fetching agent tags in responses
+	alertService             AlertServicer
+	verificationEventService VerificationEventServicer
+	capabilityService        CapabilityServicer
+	tagService               TagServicer                          // ✅ For fetching agent tags in responses
 	orgRepo                  domain.OrganizationRepository        // ✅ For enforcement mode lookup
-	attestationService       *application.MCPAttestationService   // ✅ For getting MCP connections via attestations
+	attestationService       MCPAttestationServicer               // ✅ For getting MCP connections via attestations
+	mcpServiceConcrete       *application.MCPService              // Needed for DetectMCPServersFromConfig
 }
 
 func NewAgentHandler(
@@ -51,6 +52,37 @@ func NewAgentHandler(
 		tagService:               tagService,
 		orgRepo:                  orgRepo,
 		attestationService:       attestationService,
+		mcpServiceConcrete:       mcpService, // Store concrete for DetectMCPServersFromConfig
+	}
+}
+
+// NewAgentHandlerWithInterfaces creates an AgentHandler with interface-based dependencies for testing
+func NewAgentHandlerWithInterfaces(
+	agentService AgentServicer,
+	mcpService MCPServicer,
+	auditService AuditServicer,
+	apiKeyService APIKeyServicer,
+	trustScoreHandler *TrustScoreHandler,
+	alertService AlertServicer,
+	verificationEventService VerificationEventServicer,
+	capabilityService CapabilityServicer,
+	tagService TagServicer,
+	orgRepo domain.OrganizationRepository,
+	attestationService MCPAttestationServicer,
+) *AgentHandler {
+	return &AgentHandler{
+		agentService:             agentService,
+		mcpService:               mcpService,
+		auditService:             auditService,
+		apiKeyService:            apiKeyService,
+		trustScoreHandler:        trustScoreHandler,
+		alertService:             alertService,
+		verificationEventService: verificationEventService,
+		capabilityService:        capabilityService,
+		tagService:               tagService,
+		orgRepo:                  orgRepo,
+		attestationService:       attestationService,
+		mcpServiceConcrete:       nil, // Not available when using interfaces
 	}
 }
 
@@ -1348,7 +1380,7 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 		c.Context(),
 		agentID,
 		&req,
-		h.mcpService, // ✅ Pass mcpService for auto-registration
+		h.mcpServiceConcrete, // ✅ Pass mcpService for auto-registration
 		orgID,
 		userID,
 	)
