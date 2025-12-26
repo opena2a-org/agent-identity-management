@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // ========================================

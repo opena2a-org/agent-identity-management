@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // VerificationEventRepositorySimple implements the VerificationEventRepository interface using standard sql.DB

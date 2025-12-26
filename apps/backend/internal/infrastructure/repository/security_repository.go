@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 type SecurityRepository struct {

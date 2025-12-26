@@ -5,13 +5,18 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/opena2a/identity/backend/internal/application"
-	"github.com/opena2a/identity/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 type WebhookHandler struct {
+	// Concrete service pointers (used by existing code)
 	webhookService *application.WebhookService
 	auditService   *application.AuditService
+
+	// Interface fields for testability (used when set)
+	webhookServicer WebhookServicer
+	auditServicer   AuditServicer
 }
 
 func NewWebhookHandler(
@@ -22,6 +27,32 @@ func NewWebhookHandler(
 		webhookService: webhookService,
 		auditService:   auditService,
 	}
+}
+
+// NewWebhookHandlerWithInterfaces creates a webhook handler with interface dependencies for testing
+func NewWebhookHandlerWithInterfaces(
+	webhookService WebhookServicer,
+	auditService AuditServicer,
+) *WebhookHandler {
+	return &WebhookHandler{
+		webhookServicer: webhookService,
+		auditServicer:   auditService,
+	}
+}
+
+// Helper methods to get the appropriate service (interface or concrete)
+func (h *WebhookHandler) getWebhookService() WebhookServicer {
+	if h.webhookServicer != nil {
+		return h.webhookServicer
+	}
+	return h.webhookService
+}
+
+func (h *WebhookHandler) getAuditService() AuditServicer {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
 }
 
 // CreateWebhook creates a new webhook subscription
@@ -45,7 +76,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	webhook, err := h.webhookService.CreateWebhook(c.Context(), &req, orgID, userID)
+	webhook, err := h.getWebhookService().CreateWebhook(c.Context(), &req, orgID, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -53,7 +84,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -81,7 +112,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 func (h *WebhookHandler) ListWebhooks(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	webhooks, err := h.webhookService.ListWebhooks(c.Context(), orgID)
+	webhooks, err := h.getWebhookService().ListWebhooks(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch webhooks",
@@ -117,7 +148,7 @@ func (h *WebhookHandler) GetWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	webhook, err := h.webhookService.GetWebhook(c.Context(), webhookID)
+	webhook, err := h.getWebhookService().GetWebhook(c.Context(), webhookID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -153,7 +184,7 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 	}
 
 	// Verify webhook belongs to organization
-	webhook, err := h.webhookService.GetWebhook(c.Context(), webhookID)
+	webhook, err := h.getWebhookService().GetWebhook(c.Context(), webhookID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -165,14 +196,14 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.webhookService.DeleteWebhook(c.Context(), webhookID); err != nil {
+	if err := h.getWebhookService().DeleteWebhook(c.Context(), webhookID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -209,7 +240,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	}
 
 	// Verify webhook belongs to organization
-	existingWebhook, err := h.webhookService.GetWebhook(c.Context(), webhookID)
+	existingWebhook, err := h.getWebhookService().GetWebhook(c.Context(), webhookID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -229,7 +260,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	}
 
 	// Update webhook
-	webhook, err := h.webhookService.UpdateWebhook(c.Context(), webhookID, &req)
+	webhook, err := h.getWebhookService().UpdateWebhook(c.Context(), webhookID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -237,7 +268,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -275,7 +306,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	}
 
 	// Verify webhook belongs to organization
-	webhook, err := h.webhookService.GetWebhook(c.Context(), webhookID)
+	webhook, err := h.getWebhookService().GetWebhook(c.Context(), webhookID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -288,7 +319,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	}
 
 	// Send test payload
-	result, err := h.webhookService.TestWebhook(c.Context(), webhookID)
+	result, err := h.getWebhookService().TestWebhook(c.Context(), webhookID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "Failed to send test payload",
@@ -297,7 +328,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,

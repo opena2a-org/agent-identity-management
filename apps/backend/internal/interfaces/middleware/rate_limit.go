@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/opena2a/identity/backend/internal/infrastructure/cache"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
 )
 
 // RateLimitConfig holds rate limiting configuration

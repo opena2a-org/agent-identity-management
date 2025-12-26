@@ -7,7 +7,7 @@
 Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threats in real-time.
 
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
-[![Go Report Card](https://goreportcard.com/badge/github.com/opena2a/identity/backend)](https://goreportcard.com/report/github.com/opena2a/identity/backend)
+[![Go Report Card](https://goreportcard.com/badge/github.com/opena2a-org/agent-identity-management/apps/backend)](https://goreportcard.com/report/github.com/opena2a-org/agent-identity-management/apps/backend)
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](apps/backend)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
