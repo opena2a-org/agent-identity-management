@@ -874,3 +874,55 @@ func TestAdminHandler_BulkAcknowledgeAlerts_UserIDMismatch(t *testing.T) {
 // dependency injection similar to AgentHandler. The current approach tests
 // validation paths only. See agent_handler_integration_test.go for examples
 // of mock-based testing.
+
+// ===========================
+// AdminHandler Service Getter Tests
+// ===========================
+
+func TestAdminHandler_getAuthService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getAuthService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getAdminService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getAdminService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getAgentService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getAgentService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getMCPService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getMCPService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getAlertService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getAlertService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getRegistrationService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getRegistrationService()
+	assert.Nil(t, result)
+}
+
+func TestAdminHandler_getSecurityService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &AdminHandler{}
+	result := handler.getSecurityService()
+	assert.Nil(t, result)
+}

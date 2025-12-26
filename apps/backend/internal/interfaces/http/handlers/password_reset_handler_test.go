@@ -119,3 +119,20 @@ func TestPasswordResetHandler_ResetPassword_ShortPassword(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+func TestPasswordResetHandler_ResetPassword_EmptyBody(t *testing.T) {
+	handler := &PasswordResetHandler{}
+	app := fiber.New()
+	app.Post("/auth/reset-password", handler.ResetPassword)
+
+	req := httptest.NewRequest("POST", "/auth/reset-password", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Empty body with valid JSON should hit password length check
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+

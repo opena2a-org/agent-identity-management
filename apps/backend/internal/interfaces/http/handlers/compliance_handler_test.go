@@ -245,3 +245,19 @@ func TestComplianceHandler_GetEvidenceForCheck_MissingCheckName(t *testing.T) {
 // that require service calls would need interface-based dependency injection similar
 // to AgentHandler. The current approach tests validation paths only.
 // Full mock testing would require creating interfaces for ComplianceService.
+
+// ===========================
+// ComplianceHandler Service Getter Tests
+// ===========================
+
+func TestComplianceHandler_getComplianceService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &ComplianceHandler{}
+	result := handler.getComplianceService()
+	assert.Nil(t, result)
+}
+
+func TestComplianceHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &ComplianceHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}

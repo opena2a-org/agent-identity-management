@@ -656,3 +656,7 @@ func TestTagHandler_AddTagsToMCPServer_InvalidTagIDFormat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Invalid tag ID format", result["error"])
 }
+
+// Note: Some tag handler methods don't have authorization checks at the handler level
+// and rely on middleware for auth. Tests for these would require mocked services
+// to avoid nil pointer dereferences when auth passes but service is nil.

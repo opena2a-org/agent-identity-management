@@ -20,3 +20,31 @@ func TestNewSecurityHandler_NilDeps(t *testing.T) {
 // This means they will panic if no org context is set, but will hit nil
 // services if org context is set. Tests for these handlers would require
 // mocked services to be meaningful.
+
+// ===========================
+// SecurityHandler Service Getter Tests
+// ===========================
+
+func TestSecurityHandler_getSecurityService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &SecurityHandler{}
+	result := handler.getSecurityService()
+	assert.Nil(t, result)
+}
+
+func TestSecurityHandler_getCapabilityService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &SecurityHandler{}
+	result := handler.getCapabilityService()
+	assert.Nil(t, result)
+}
+
+func TestSecurityHandler_getAlertService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &SecurityHandler{}
+	result := handler.getAlertService()
+	assert.Nil(t, result)
+}
+
+func TestSecurityHandler_getAgentService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &SecurityHandler{}
+	result := handler.getAgentService()
+	assert.Nil(t, result)
+}

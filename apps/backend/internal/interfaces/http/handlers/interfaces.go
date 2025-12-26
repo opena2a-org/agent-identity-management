@@ -93,6 +93,9 @@ type APIKeyServicer interface {
 type AlertServicer interface {
 	CreateAlert(ctx context.Context, alert *domain.Alert) error
 	GetAlertsByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.Alert, error)
+	GetAlerts(ctx context.Context, orgID uuid.UUID, severity, status string, limit, offset int) ([]*domain.Alert, int, error)
+	CountUnacknowledged(ctx context.Context, orgID uuid.UUID) (allCount, acknowledgedCount, unacknowledgedCount int, err error)
+	CountBySeverity(ctx context.Context, orgID uuid.UUID, status string) (critical, high, warning, info int, err error)
 }
 
 // VerificationEventServicer defines the methods from VerificationEventService that handlers use
@@ -274,4 +277,18 @@ type TrustCalculatorServicer interface {
 	CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetLatestTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
+}
+
+// ===========================
+// WebhookHandler Interfaces
+// ===========================
+
+// WebhookServicer defines the methods from WebhookService that handlers use
+type WebhookServicer interface {
+	CreateWebhook(ctx context.Context, req *application.CreateWebhookRequest, orgID, userID uuid.UUID) (*domain.Webhook, error)
+	ListWebhooks(ctx context.Context, orgID uuid.UUID) ([]*domain.Webhook, error)
+	GetWebhook(ctx context.Context, id uuid.UUID) (*domain.Webhook, error)
+	DeleteWebhook(ctx context.Context, id uuid.UUID) error
+	UpdateWebhook(ctx context.Context, id uuid.UUID, req *application.CreateWebhookRequest) (*domain.Webhook, error)
+	TestWebhook(ctx context.Context, id uuid.UUID) (*application.WebhookTestResult, error)
 }

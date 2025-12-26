@@ -191,6 +191,13 @@ func TestPublicAgentHandler_calculateInitialTrustScore(t *testing.T) {
 			},
 			expected: 80.0, // 50 + 10 + 10 + 5 + 5
 		},
+		{
+			name: "With GitLab repo",
+			req: &PublicRegisterRequest{
+				RepositoryURL: "https://gitlab.com/example/repo",
+			},
+			expected: 70.0, // 50 + 10 + 10 (GitLab bonus)
+		},
 	}
 
 	for _, tt := range tests {

@@ -132,6 +132,64 @@ func TestMCPGraph_matchesMCPServer(t *testing.T) {
 	}
 }
 
+func TestMCPGraph_matchesMCPServer_EmptyURL(t *testing.T) {
+	serverID := uuid.New()
+	// MCP server with empty URL
+	mcpServer := &domain.MCPServer{
+		ID:   serverID,
+		Name: "test-mcp",
+		URL:  "", // Empty URL
+	}
+
+	tests := []struct {
+		name     string
+		talksTo  string
+		expected bool
+	}{
+		{"Match by name with empty URL", "test-mcp", true},
+		{"Match by ID with empty URL", serverID.String(), true},
+		{"No match with empty URL", "http://some-url.com", false},
+		// Empty talksTo matches empty URL (both are empty strings)
+		{"Empty talksTo with empty URL", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchesMCPServer(mcpServer, tt.talksTo)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMCPGraph_matchesMCPServer_NonEmptyURLWithNonMatchingTalksTo(t *testing.T) {
+	serverID := uuid.New()
+	mcpServer := &domain.MCPServer{
+		ID:   serverID,
+		Name: "production-mcp",
+		URL:  "https://mcp.example.com:8443/api",
+	}
+
+	tests := []struct {
+		name     string
+		talksTo  string
+		expected bool
+	}{
+		{"Exact URL match", "https://mcp.example.com:8443/api", true},
+		{"Exact name match", "production-mcp", true},
+		{"Exact ID match", serverID.String(), true},
+		{"Partial URL doesn't match", "mcp.example.com", false},
+		{"Different port doesn't match", "https://mcp.example.com:9000/api", false},
+		{"HTTP instead of HTTPS doesn't match", "http://mcp.example.com:8443/api", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchesMCPServer(mcpServer, tt.talksTo)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // ===========================
 // Struct Tests
 // ===========================

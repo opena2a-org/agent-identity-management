@@ -574,3 +574,13 @@ func TestSuccessResponse_Struct(t *testing.T) {
 	assert.Equal(t, "Operation completed successfully", resp.Message)
 }
 
+// ===========================
+// CapabilityHandler Service Getter Tests
+// ===========================
+
+func TestCapabilityHandler_getCapabilityService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &CapabilityHandler{}
+	result := handler.getCapabilityService()
+	assert.Nil(t, result)
+}
+

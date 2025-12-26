@@ -124,3 +124,19 @@ func TestWebhookHandler_TestWebhook_InvalidID(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+// ===========================
+// WebhookHandler Service Getter Tests
+// ===========================
+
+func TestWebhookHandler_getWebhookService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &WebhookHandler{}
+	result := handler.getWebhookService()
+	assert.Nil(t, result)
+}
+
+func TestWebhookHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &WebhookHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}

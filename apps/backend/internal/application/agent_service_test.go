@@ -2109,3 +2109,226 @@ func TestAgentService_UpdateAgentPublicKey_AgentNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "agent not found")
 }
+
+// ===========================
+// LogCapabilityResult Tests
+// ===========================
+
+func TestAgentService_LogCapabilityResult_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	service := &AgentService{
+		agentRepo:                mockAgentRepo,
+		verificationEventService: nil, // nil is handled by the code
+	}
+
+	agentID := uuid.New()
+	auditID := uuid.New()
+	orgID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	ctx := context.Background()
+	result := map[string]interface{}{"capability": "read_file"}
+	err := service.LogCapabilityResult(ctx, agentID, auditID, true, "", result)
+
+	assert.NoError(t, err)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_LogCapabilityResult_Failure(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	service := &AgentService{
+		agentRepo:                mockAgentRepo,
+		verificationEventService: nil, // nil is handled by the code
+	}
+
+	agentID := uuid.New()
+	auditID := uuid.New()
+	orgID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	ctx := context.Background()
+	err := service.LogCapabilityResult(ctx, agentID, auditID, false, "access denied", nil)
+
+	assert.NoError(t, err)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_LogCapabilityResult_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
+
+	ctx := context.Background()
+	err := service.LogCapabilityResult(ctx, agentID, uuid.New(), true, "", nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "agent not found")
+}
+
+func TestAgentService_LogCapabilityResult_WithAlertCreation(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockAlertRepo := new(MockAlertRepository)
+
+	service := &AgentService{
+		agentRepo:                mockAgentRepo,
+		alertRepo:                mockAlertRepo,
+		verificationEventService: nil, // nil is handled by the code
+	}
+
+	agentID := uuid.New()
+	auditID := uuid.New()
+	orgID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockAlertRepo.On("Create", mock.Anything).Return(nil)
+
+	ctx := context.Background()
+	result := map[string]interface{}{
+		"create_alert": true,
+	}
+	err := service.LogCapabilityResult(ctx, agentID, auditID, false, "repeated failures", result)
+
+	assert.NoError(t, err)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// ===========================
+// GetAgentCredentials Tests
+// ===========================
+
+func TestAgentService_GetAgentCredentials_Success(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	// Create a test key vault
+	masterKeyBytes := make([]byte, 32)
+	for i := range masterKeyBytes {
+		masterKeyBytes[i] = byte(i)
+	}
+	masterKey := base64.StdEncoding.EncodeToString(masterKeyBytes)
+	keyVault, err := crypto.NewKeyVault(masterKey)
+	assert.NoError(t, err)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+		keyVault:  keyVault,
+	}
+
+	agentID := uuid.New()
+	publicKey := "test-public-key-base64"
+	privateKey := "test-private-key-base64"
+
+	// Encrypt the private key for storage
+	encryptedPrivateKey, err := keyVault.EncryptPrivateKey(privateKey)
+	assert.NoError(t, err)
+
+	agent := &domain.Agent{
+		ID:                  agentID,
+		PublicKey:           &publicKey,
+		EncryptedPrivateKey: &encryptedPrivateKey,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	ctx := context.Background()
+	gotPublic, gotPrivate, err := service.GetAgentCredentials(ctx, agentID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, publicKey, gotPublic)
+	assert.Equal(t, privateKey, gotPrivate)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+func TestAgentService_GetAgentCredentials_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("not found"))
+
+	ctx := context.Background()
+	_, _, err := service.GetAgentCredentials(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "agent not found")
+}
+
+func TestAgentService_GetAgentCredentials_KeysNotGenerated(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agentID := uuid.New()
+	agent := &domain.Agent{
+		ID:                  agentID,
+		PublicKey:           nil,
+		EncryptedPrivateKey: nil,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	ctx := context.Background()
+	_, _, err := service.GetAgentCredentials(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "agent keys not generated")
+}
+
+func TestAgentService_GetAgentCredentials_DecryptionFails(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+
+	// Create a key vault with a different key than what was used to encrypt
+	masterKeyBytes := make([]byte, 32)
+	for i := range masterKeyBytes {
+		masterKeyBytes[i] = byte(i)
+	}
+	masterKey := base64.StdEncoding.EncodeToString(masterKeyBytes)
+	keyVault, err := crypto.NewKeyVault(masterKey)
+	assert.NoError(t, err)
+
+	service := &AgentService{
+		agentRepo: mockAgentRepo,
+		keyVault:  keyVault,
+	}
+
+	agentID := uuid.New()
+	publicKey := "test-public-key"
+	// Use invalid encrypted data that can't be decrypted
+	invalidEncrypted := base64.StdEncoding.EncodeToString([]byte("this-is-not-valid-encrypted-data-because-its-too-short"))
+
+	agent := &domain.Agent{
+		ID:                  agentID,
+		PublicKey:           &publicKey,
+		EncryptedPrivateKey: &invalidEncrypted,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+
+	ctx := context.Background()
+	_, _, err = service.GetAgentCredentials(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decrypt")
+}
