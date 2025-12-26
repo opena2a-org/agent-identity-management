@@ -240,3 +240,8 @@ func TestComplianceHandler_GetEvidenceForCheck_MissingCheckName(t *testing.T) {
 	// The handler checks for empty checkName and returns BadRequest
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+// Note: Tests for GetComplianceStatus, GetComplianceMetrics, GetAccessReview, ListEvidence
+// that require service calls would need interface-based dependency injection similar
+// to AgentHandler. The current approach tests validation paths only.
+// Full mock testing would require creating interfaces for ComplianceService.

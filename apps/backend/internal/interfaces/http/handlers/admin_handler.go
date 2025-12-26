@@ -16,6 +16,7 @@ import (
 )
 
 type AdminHandler struct {
+	// Concrete service pointers (used by existing code)
 	authService         *application.AuthService
 	adminService        *application.AdminService
 	agentService        *application.AgentService
@@ -24,6 +25,16 @@ type AdminHandler struct {
 	alertService        *application.AlertService
 	registrationService *application.RegistrationService
 	securityService     *application.SecurityService
+
+	// Interface fields for testability (used when set)
+	authServicer         AuthServicer
+	adminServicer        AdminServicer
+	agentServicer        AgentServicer
+	mcpServicer          MCPServicer
+	auditServicer        AuditServicer
+	alertServicer        AlertServicerExtended
+	registrationServicer RegistrationServicer
+	securityServicer     SecurityServicer
 }
 
 func NewAdminHandler(
@@ -46,6 +57,88 @@ func NewAdminHandler(
 		registrationService: registrationService,
 		securityService:     securityService,
 	}
+}
+
+// NewAdminHandlerWithInterfaces creates an AdminHandler using interface-based dependencies
+// This constructor is primarily used for testing with mock implementations
+func NewAdminHandlerWithInterfaces(
+	authService AuthServicer,
+	adminService AdminServicer,
+	agentService AgentServicer,
+	mcpService MCPServicer,
+	auditService AuditServicer,
+	alertService AlertServicerExtended,
+	registrationService RegistrationServicer,
+	securityService SecurityServicer,
+) *AdminHandler {
+	return &AdminHandler{
+		authServicer:         authService,
+		adminServicer:        adminService,
+		agentServicer:        agentService,
+		mcpServicer:          mcpService,
+		auditServicer:        auditService,
+		alertServicer:        alertService,
+		registrationServicer: registrationService,
+		securityServicer:     securityService,
+	}
+}
+
+// Helper methods to get the appropriate service (interface or concrete)
+
+func (h *AdminHandler) getAuthService() AuthServicer {
+	if h.authServicer != nil {
+		return h.authServicer
+	}
+	return h.authService
+}
+
+func (h *AdminHandler) getAdminService() AdminServicer {
+	if h.adminServicer != nil {
+		return h.adminServicer
+	}
+	return h.adminService
+}
+
+func (h *AdminHandler) getAgentService() AgentServicer {
+	if h.agentServicer != nil {
+		return h.agentServicer
+	}
+	return h.agentService
+}
+
+func (h *AdminHandler) getMCPService() MCPServicer {
+	if h.mcpServicer != nil {
+		return h.mcpServicer
+	}
+	return h.mcpService
+}
+
+func (h *AdminHandler) getAuditService() AuditServicer {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
+}
+
+func (h *AdminHandler) getAlertService() AlertServicerExtended {
+	if h.alertServicer != nil {
+		return h.alertServicer
+	}
+	return h.alertService
+}
+
+func (h *AdminHandler) getRegistrationService() RegistrationServicer {
+	if h.registrationServicer != nil {
+		return h.registrationServicer
+	}
+	return h.registrationService
+}
+
+func (h *AdminHandler) getSecurityService() SecurityServicer {
+	if h.securityServicer != nil {
+		return h.securityServicer
+	}
+	return h.securityService
 }
 
 // ListUsers returns all users in the organization including pending registration requests
@@ -1025,7 +1118,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// Get total agents
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",
@@ -1033,7 +1126,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Get total users
-	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
+	users, err := h.getAuthService().GetUsersByOrganization(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch users",
@@ -1041,7 +1134,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Get active alerts count
-	alerts, total, err := h.alertService.GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
+	alerts, total, err := h.getAlertService().GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch alerts",
@@ -1057,7 +1150,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Get MCP servers from dedicated MCP service
-	mcpServersList, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	mcpServersList, err := h.getMCPService().ListMCPServers(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch MCP servers",
@@ -1101,8 +1194,9 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 
 	// Get security incidents count
 	securityIncidents := 0
-	if h.securityService != nil {
-		incidentCount, err := h.securityService.CountOpenIncidents(c.Context(), orgID)
+	securitySvc := h.getSecurityService()
+	if securitySvc != nil {
+		incidentCount, err := securitySvc.CountOpenIncidents(c.Context(), orgID)
 		if err == nil {
 			securityIncidents = incidentCount
 		}
@@ -1110,13 +1204,13 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 
 	// Get active users count (users who logged in within the last 60 minutes)
 	activeUsers := len(users) // Default to total users if count fails
-	activeUserCount, err := h.authService.CountActiveUsers(c.Context(), orgID, 60)
+	activeUserCount, err := h.getAuthService().CountActiveUsers(c.Context(), orgID, 60)
 	if err == nil {
 		activeUsers = activeUserCount
 	}
 
 	// Log audit with dashboard metrics
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1166,7 +1260,7 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	users, err := h.adminService.GetPendingUsers(c.Context(), orgID)
+	users, err := h.getAdminService().GetPendingUsers(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch pending users",
@@ -1174,7 +1268,7 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -1583,7 +1677,7 @@ func (h *AdminHandler) UpdateEnforcementSettings(c fiber.Ctx) error {
 // Super admin is protected from deactivation and deletion to ensure system access
 func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID) (bool, error) {
 	// Get the user to check their role
-	user, err := h.authService.GetUserByID(ctx, userID)
+	user, err := h.getAuthService().GetUserByID(ctx, userID)
 	if err != nil {
 		return false, err
 	}
@@ -1599,7 +1693,7 @@ func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID
 	}
 
 	// Get all users in the organization
-	users, err := h.authService.GetUsersByOrganization(ctx, orgID)
+	users, err := h.getAuthService().GetUsersByOrganization(ctx, orgID)
 	if err != nil {
 		return false, err
 	}

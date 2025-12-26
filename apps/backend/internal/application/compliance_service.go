@@ -1976,6 +1976,16 @@ func (s *ComplianceService) ListEvidence(
 	return s.evidenceRepo.GetByOrganization(orgID, limit, offset)
 }
 
+// ListEvidenceSimple is an alias for ListEvidence for interface compatibility
+func (s *ComplianceService) ListEvidenceSimple(
+	ctx context.Context,
+	orgID uuid.UUID,
+	framework string,
+	limit, offset int,
+) ([]*domain.ComplianceEvidence, error) {
+	return s.ListEvidence(ctx, orgID, framework, limit, offset)
+}
+
 // GetEvidenceForCheck returns evidence for a specific check
 func (s *ComplianceService) GetEvidenceForCheck(
 	ctx context.Context,

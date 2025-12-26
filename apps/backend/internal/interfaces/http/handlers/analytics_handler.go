@@ -15,6 +15,7 @@ import (
 )
 
 type AnalyticsHandler struct {
+	// Concrete service pointers (used by existing code)
 	agentService             *application.AgentService
 	auditService             *application.AuditService
 	mcpService               *application.MCPService
@@ -23,6 +24,14 @@ type AnalyticsHandler struct {
 	alertService             *application.AlertService   // ✅ For fetching alert counts
 	securityService          *application.SecurityService // ✅ For fetching incident counts
 	db                       *sql.DB // Database connection for real analytics queries
+
+	// Interface fields for testability (used when set)
+	agentServicer             AgentServicer
+	mcpServicer               MCPServicer
+	verificationEventServicer VerificationEventServicerExtended
+	authServicer              AuthServicer
+	alertServicer             AlertServicerExtended
+	securityServicer          SecurityServicerForAnalytics
 }
 
 func NewAnalyticsHandler(
@@ -47,6 +56,71 @@ func NewAnalyticsHandler(
 	}
 }
 
+// NewAnalyticsHandlerWithInterfaces creates a handler with interfaces for testing
+func NewAnalyticsHandlerWithInterfaces(
+	agentService AgentServicer,
+	mcpService MCPServicer,
+	verificationEventService VerificationEventServicerExtended,
+	authService AuthServicer,
+	alertService AlertServicerExtended,
+	securityService SecurityServicerForAnalytics,
+	db *sql.DB,
+) *AnalyticsHandler {
+	return &AnalyticsHandler{
+		agentServicer:             agentService,
+		mcpServicer:               mcpService,
+		verificationEventServicer: verificationEventService,
+		authServicer:              authService,
+		alertServicer:             alertService,
+		securityServicer:          securityService,
+		db:                        db,
+	}
+}
+
+// Helper methods for selecting interface vs concrete service
+
+func (h *AnalyticsHandler) getAgentService() AgentServicer {
+	if h.agentServicer != nil {
+		return h.agentServicer
+	}
+	return h.agentService
+}
+
+func (h *AnalyticsHandler) getMCPService() MCPServicer {
+	if h.mcpServicer != nil {
+		return h.mcpServicer
+	}
+	return h.mcpService
+}
+
+func (h *AnalyticsHandler) getVerificationEventService() VerificationEventServicerExtended {
+	if h.verificationEventServicer != nil {
+		return h.verificationEventServicer
+	}
+	return h.verificationEventService
+}
+
+func (h *AnalyticsHandler) getAuthService() AuthServicer {
+	if h.authServicer != nil {
+		return h.authServicer
+	}
+	return h.authService
+}
+
+func (h *AnalyticsHandler) getAlertService() AlertServicerExtended {
+	if h.alertServicer != nil {
+		return h.alertServicer
+	}
+	return h.alertService
+}
+
+func (h *AnalyticsHandler) getSecurityService() SecurityServicerForAnalytics {
+	if h.securityServicer != nil {
+		return h.securityServicer
+	}
+	return h.securityService
+}
+
 // GetUsageStatistics retrieves usage statistics
 // @Summary Get usage statistics
 // @Description Get usage statistics for the organization
@@ -68,7 +142,7 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	daysStr := c.Query("days", "")
 	period := c.Query("period", "month")
 	
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch usage statistics",
@@ -119,19 +193,21 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	}
 
 	// Query real API calls
-	err = h.db.QueryRow(`
-		SELECT
-			COUNT(*) as api_calls,
-			COALESCE(SUM(request_size_bytes + response_size_bytes) / 1024.0 / 1024.0, 0) as data_volume_mb
-		FROM api_calls
-		WHERE organization_id = $1
-			AND called_at >= $2
-	`, orgID, startTime).Scan(&apiCalls, &dataVolumeMB)
+	if h.db != nil {
+		err = h.db.QueryRow(`
+			SELECT
+				COUNT(*) as api_calls,
+				COALESCE(SUM(request_size_bytes + response_size_bytes) / 1024.0 / 1024.0, 0) as data_volume_mb
+			FROM api_calls
+			WHERE organization_id = $1
+				AND called_at >= $2
+		`, orgID, startTime).Scan(&apiCalls, &dataVolumeMB)
 
-	if err != nil {
-		// If table doesn't exist yet (migration not run), use defaults
-		apiCalls = 0
-		dataVolumeMB = 0
+		if err != nil {
+			// If table doesn't exist yet (migration not run), use defaults
+			apiCalls = 0
+			dataVolumeMB = 0
+		}
 	}
 
 	// ✅ Calculate REAL uptime from verification events
@@ -140,17 +216,19 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	var successfulVerifications int64
 	var uptime float64
 
-	err = h.db.QueryRow(`
-		SELECT
-			COUNT(*) as total,
-			COUNT(CASE WHEN status = 'success' THEN 1 END) as successful
-		FROM verification_events
-		WHERE organization_id = $1
-			AND started_at >= $2
-	`, orgID, startTime).Scan(&totalVerifications, &successfulVerifications)
+	if h.db != nil {
+		err = h.db.QueryRow(`
+			SELECT
+				COUNT(*) as total,
+				COUNT(CASE WHEN status = 'success' THEN 1 END) as successful
+			FROM verification_events
+			WHERE organization_id = $1
+				AND started_at >= $2
+		`, orgID, startTime).Scan(&totalVerifications, &successfulVerifications)
+	}
 
-	if err != nil || totalVerifications == 0 {
-		// Default to 100% if no verification events yet
+	if err != nil || totalVerifications == 0 || h.db == nil {
+		// Default to 100% if no verification events yet or no DB
 		uptime = 100.0
 	} else {
 		uptime = (float64(successfulVerifications) / float64(totalVerifications)) * 100.0
@@ -235,10 +313,14 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			ORDER BY week_start ASC
 		`
 
-		rows, err := h.db.Query(query, orgID, weeks)
-		if err != nil {
+		var rows *sql.Rows
+		var err error
+		if h.db != nil {
+			rows, err = h.db.Query(query, orgID, weeks)
+		}
+		if h.db == nil || err != nil {
 			// Fallback: Generate trend data based on agent creation dates (weekly)
-			agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+			agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
 			
 			// Group agents by week and calculate average trust score
 			weekScores := make(map[string][]float64)
@@ -329,7 +411,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		}
 
 		// Get current average for comparison
-		agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+		agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
 		totalScore := 0.0
 		for _, agent := range agents {
 			totalScore += agent.TrustScore
@@ -394,10 +476,14 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			ORDER BY date ASC
 		`
 
-		rows, err := h.db.Query(query, orgID, days)
-		if err != nil {
+		var rows *sql.Rows
+		var err error
+		if h.db != nil {
+			rows, err = h.db.Query(query, orgID, days)
+		}
+		if h.db == nil || err != nil {
 			// Fallback: Generate trend data based on agent creation dates
-			agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+			agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
 			
 			// Group agents by creation date and calculate average trust score
 			dateScores := make(map[string][]float64)
@@ -484,7 +570,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		}
 
 		// Get current average
-		agents, _ := h.agentService.ListAgents(c.Context(), orgID)
+		agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
 		totalScore := 0.0
 		for _, agent := range agents {
 			totalScore += agent.TrustScore
@@ -555,7 +641,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	months, _ := strconv.Atoi(c.Query("months", "6"))
 
 	// Fetch agents
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch verification activity",
@@ -563,7 +649,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	}
 
 	// Fetch MCP servers
-	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	mcpServers, err := h.getMCPService().ListMCPServers(c.Context(), orgID)
 	if err != nil {
 		// Continue without MCP servers if fetch fails
 		mcpServers = []*domain.MCPServer{}
@@ -643,8 +729,11 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 		FROM monthly_totals
 	`
 
-	rows, err := h.db.Query(query, orgID, months)
-	if err != nil {
+	var rows *sql.Rows
+	if h.db != nil {
+		rows, err = h.db.Query(query, orgID, months)
+	}
+	if h.db == nil || err != nil {
 		// Fallback: if query fails, generate activity based on current data
 		monthlyData := make(map[string]map[string]int)
 		now := time.Now()
@@ -1029,9 +1118,17 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := h.db.Query(query, orgID, limit, offset)
-	if err != nil {
-		// Fallback: return empty activities if tables don't exist
+	var rows *sql.Rows
+	var err error
+	if h.db != nil {
+		rows, err = h.db.Query(query, orgID, limit, offset)
+	}
+	if h.db == nil || err != nil {
+		// Fallback: return empty activities if tables don't exist or no DB
+		errMsg := "No database connection"
+		if err != nil {
+			errMsg = err.Error()
+		}
 		return c.JSON(fiber.Map{
 			"activities": []map[string]interface{}{},
 			"summary": fiber.Map{
@@ -1043,7 +1140,7 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			"total":  0,
 			"limit":  limit,
 			"offset": offset,
-			"note":   "Activity data unavailable: " + err.Error(),
+			"note":   "Activity data unavailable: " + errMsg,
 		})
 	}
 	defer rows.Close()
@@ -1090,7 +1187,9 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			SELECT a.id FROM agents a WHERE a.organization_id = $1 AND a.verified_at IS NOT NULL AND a.verified_at > NOW() - INTERVAL '7 days'
 		) combined
 	`
-	h.db.QueryRow(countQuery, orgID).Scan(&total)
+	if h.db != nil {
+		h.db.QueryRow(countQuery, orgID).Scan(&total)
+	}
 
 	// Calculate summary statistics for the activity timeline
 	totalActivities := len(activities)
@@ -1152,7 +1251,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Fetch agents
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		// 🔍 LOG DETAILED ERROR for debugging
 		log.Printf("❌ Failed to fetch agents for org %s: %v", orgID.String(), err)
@@ -1163,7 +1262,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 
 	// Fetch MCP servers
 	// SECURITY: No error logging to prevent information leakage
-	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	mcpServers, err := h.getMCPService().ListMCPServers(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch MCP servers",
@@ -1205,7 +1304,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// Fetch verification event statistics (last 24 hours)
-	stats, err := h.verificationEventService.GetLast24HoursStatistics(c.Context(), orgID)
+	stats, err := h.getVerificationEventService().GetLast24HoursStatistics(c.Context(), orgID)
 	if err != nil {
 		// If verification stats fail, use defaults
 		stats = &domain.VerificationStatistics{
@@ -1218,7 +1317,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	}
 
 	// ✅ Fetch REAL user count from database
-	users, err := h.authService.GetUsersByOrganization(c.Context(), orgID)
+	users, err := h.getAuthService().GetUsersByOrganization(c.Context(), orgID)
 	totalUsers := 0
 	activeUsers := 0
 	if err == nil {
@@ -1235,7 +1334,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	activeAlerts := 0
 	criticalAlerts := 0
 	securityIncidents := 0
-	alerts, _, err := h.alertService.GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
+	alerts, _, err := h.getAlertService().GetAlerts(c.Context(), orgID, "", "open", 1000, 0)
 	if err == nil {
 		activeAlerts = len(alerts)
 		// Count critical severity alerts
@@ -1246,7 +1345,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		}
 	}
 	// Get open security incidents count
-	incidents, err := h.securityService.GetIncidents(c.Context(), orgID, domain.IncidentStatusOpen, 100, 0)
+	incidents, err := h.getSecurityService().GetIncidents(c.Context(), orgID, domain.IncidentStatusOpen, 100, 0)
 	if err == nil {
 		securityIncidents = len(incidents)
 	}
@@ -1338,10 +1437,12 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		FROM verification_events
 		WHERE organization_id = $1 AND created_at >= $2
 	`
-	err = h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount)
-	if err != nil {
-		log.Printf("❌ Error fetching verification count: %v", err)
-		verificationCount = 0
+	if h.db != nil {
+		err = h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount)
+		if err != nil {
+			log.Printf("❌ Error fetching verification count: %v", err)
+			verificationCount = 0
+		}
 	}
 
 	// Get attestation count for the period
@@ -1352,10 +1453,12 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		JOIN mcp_servers ms ON ma.mcp_server_id = ms.id
 		WHERE ms.organization_id = $1 AND ma.created_at >= $2
 	`
-	err = h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount)
-	if err != nil {
-		log.Printf("❌ Error fetching attestation count: %v", err)
-		attestationCount = 0
+	if h.db != nil {
+		err = h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount)
+		if err != nil {
+			log.Printf("❌ Error fetching attestation count: %v", err)
+			attestationCount = 0
+		}
 	}
 
 	// Get activity by day with date grouping
@@ -1375,20 +1478,24 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		ORDER BY date
 	`
 
-	rows, err := h.db.Query(activityByDayQuery, orgID, startTime)
-	if err != nil {
-		log.Printf("❌ Error fetching activity by day: %v", err)
-		activityByDay = []DailyActivity{}
-	} else {
-		defer rows.Close()
-		for rows.Next() {
-			var activity DailyActivity
-			if err := rows.Scan(&activity.Date, &activity.Count); err != nil {
-				log.Printf("❌ Error scanning activity row: %v", err)
-				continue
+	if h.db != nil {
+		rows, err := h.db.Query(activityByDayQuery, orgID, startTime)
+		if err != nil {
+			log.Printf("❌ Error fetching activity by day: %v", err)
+			activityByDay = []DailyActivity{}
+		} else {
+			defer rows.Close()
+			for rows.Next() {
+				var activity DailyActivity
+				if err := rows.Scan(&activity.Date, &activity.Count); err != nil {
+					log.Printf("❌ Error scanning activity row: %v", err)
+					continue
+				}
+				activityByDay = append(activityByDay, activity)
 			}
-			activityByDay = append(activityByDay, activity)
 		}
+	} else {
+		activityByDay = []DailyActivity{}
 	}
 
 	// Get recent activity events (last 20)
@@ -1419,38 +1526,42 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		LIMIT 20
 	`
 
-	activityRows, err := h.db.Query(recentActivityQuery, orgID, startTime)
-	if err != nil {
-		log.Printf("❌ Error fetching recent activity: %v", err)
-		recentActivity = []RecentActivity{}
-	} else {
-		defer activityRows.Close()
-		for activityRows.Next() {
-			var activity RecentActivity
-			if err := activityRows.Scan(
-				&activity.ID,
-				&activity.AgentID,
-				&activity.AgentName,
-				&activity.ActionType,
-				&activity.Status,
-				&activity.CreatedAt,
-				&activity.DurationMs,
-			); err != nil {
-				log.Printf("❌ Error scanning recent activity row: %v", err)
-				continue
+	if h.db != nil {
+		activityRows, err := h.db.Query(recentActivityQuery, orgID, startTime)
+		if err != nil {
+			log.Printf("❌ Error fetching recent activity: %v", err)
+			recentActivity = []RecentActivity{}
+		} else {
+			defer activityRows.Close()
+			for activityRows.Next() {
+				var activity RecentActivity
+				if err := activityRows.Scan(
+					&activity.ID,
+					&activity.AgentID,
+					&activity.AgentName,
+					&activity.ActionType,
+					&activity.Status,
+					&activity.CreatedAt,
+					&activity.DurationMs,
+				); err != nil {
+					log.Printf("❌ Error scanning recent activity row: %v", err)
+					continue
+				}
+				recentActivity = append(recentActivity, activity)
 			}
-			recentActivity = append(recentActivity, activity)
 		}
+	} else {
+		recentActivity = []RecentActivity{}
 	}
 
 	// Get agent and MCP server counts
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		log.Printf("❌ Error fetching agents: %v", err)
 		agents = []*domain.Agent{}
 	}
 
-	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	mcpServers, err := h.getMCPService().ListMCPServers(c.Context(), orgID)
 	if err != nil {
 		log.Printf("❌ Error fetching MCP servers: %v", err)
 		mcpServers = []*domain.MCPServer{}

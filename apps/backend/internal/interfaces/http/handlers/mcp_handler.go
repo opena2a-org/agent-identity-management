@@ -14,13 +14,23 @@ import (
 )
 
 type MCPHandler struct {
-	mcpService                   *application.MCPService
-	mcpCapabilityService         *application.MCPCapabilityService
-	auditService                 *application.AuditService
-	agentRepository              *repository.AgentRepository
-	verificationEventRepository  domain.VerificationEventRepository
-	tagService                   *application.TagService              // ✅ For fetching MCP server tags in responses
-	attestationService           *application.MCPAttestationService   // ✅ For rich audit trail with attestations
+	// Concrete service pointers (used by existing code)
+	mcpService                  *application.MCPService
+	mcpCapabilityService        *application.MCPCapabilityService
+	auditService                *application.AuditService
+	agentRepository             *repository.AgentRepository
+	verificationEventRepository domain.VerificationEventRepository
+	tagService                  *application.TagService            // ✅ For fetching MCP server tags in responses
+	attestationService          *application.MCPAttestationService // ✅ For rich audit trail with attestations
+
+	// Interface fields for testability (used when set)
+	mcpServicer                  MCPServicerExtended
+	mcpCapabilityServicer        MCPCapabilityServicer
+	auditServicer                AuditServicer
+	agentRepositoryer            AgentRepositoryer
+	verificationEventRepositoryer VerificationEventRepositoryer
+	tagServicer                  TagServicer
+	attestationServicer          MCPAttestationServicerExtended
 }
 
 func NewMCPHandler(
@@ -43,12 +53,84 @@ func NewMCPHandler(
 	}
 }
 
+// NewMCPHandlerWithInterfaces creates an MCPHandler with interface-based dependencies for testing
+func NewMCPHandlerWithInterfaces(
+	mcpService MCPServicerExtended,
+	mcpCapabilityService MCPCapabilityServicer,
+	auditService AuditServicer,
+	agentRepository AgentRepositoryer,
+	verificationEventRepository VerificationEventRepositoryer,
+	tagService TagServicer,
+	attestationService MCPAttestationServicerExtended,
+) *MCPHandler {
+	return &MCPHandler{
+		mcpServicer:                   mcpService,
+		mcpCapabilityServicer:         mcpCapabilityService,
+		auditServicer:                 auditService,
+		agentRepositoryer:             agentRepository,
+		verificationEventRepositoryer: verificationEventRepository,
+		tagServicer:                   tagService,
+		attestationServicer:           attestationService,
+	}
+}
+
+// Helper methods to get the appropriate service (interface or concrete)
+func (h *MCPHandler) getMCPService() MCPServicerExtended {
+	if h.mcpServicer != nil {
+		return h.mcpServicer
+	}
+	return h.mcpService
+}
+
+func (h *MCPHandler) getMCPCapabilityService() MCPCapabilityServicer {
+	if h.mcpCapabilityServicer != nil {
+		return h.mcpCapabilityServicer
+	}
+	return h.mcpCapabilityService
+}
+
+func (h *MCPHandler) getAuditService() AuditServicer {
+	if h.auditServicer != nil {
+		return h.auditServicer
+	}
+	return h.auditService
+}
+
+func (h *MCPHandler) getAgentRepository() AgentRepositoryer {
+	if h.agentRepositoryer != nil {
+		return h.agentRepositoryer
+	}
+	return h.agentRepository
+}
+
+func (h *MCPHandler) getVerificationEventRepository() VerificationEventRepositoryer {
+	if h.verificationEventRepositoryer != nil {
+		return h.verificationEventRepositoryer
+	}
+	return h.verificationEventRepository
+}
+
+func (h *MCPHandler) getTagService() TagServicer {
+	if h.tagServicer != nil {
+		return h.tagServicer
+	}
+	return h.tagService
+}
+
+func (h *MCPHandler) getAttestationService() MCPAttestationServicerExtended {
+	if h.attestationServicer != nil {
+		return h.attestationServicer
+	}
+	return h.attestationService
+}
+
 // enrichMCPServerResponse adds tags to MCP server response
 func (h *MCPHandler) enrichMCPServerResponse(c fiber.Ctx, server *domain.MCPServer) fiber.Map {
 	// ✅ Fetch tags from mcp_server_tags table
 	var tags []fiber.Map
-	if h.tagService != nil {
-		serverTags, err := h.tagService.GetMCPServerTags(c.Context(), server.ID)
+	tagSvc := h.getTagService()
+	if tagSvc != nil {
+		serverTags, err := tagSvc.GetMCPServerTags(c.Context(), server.ID)
 		if err != nil {
 			tags = []fiber.Map{}
 		} else {
@@ -226,7 +308,8 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	servers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
+	mcpSvc := h.getMCPService()
+	servers, err := mcpSvc.ListMCPServers(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch MCP servers",
@@ -235,12 +318,13 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 
 	// ✅ Enrich each server with tags and tool count
 	enriched := make([]fiber.Map, 0, len(servers))
+	capSvc := h.getMCPCapabilityService()
 	for _, server := range servers {
 		serverMap := h.enrichMCPServerResponse(c, server)
 
 		// ✅ Add actual tool count from mcp_server_capabilities table
-		if h.mcpCapabilityService != nil {
-			capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), server.ID)
+		if capSvc != nil {
+			capabilities, err := capSvc.GetCapabilities(c.Context(), server.ID)
 			if err == nil {
 				// Count only tools (not prompts/resources)
 				toolCount := 0
@@ -285,7 +369,8 @@ func (h *MCPHandler) GetMCPServer(c fiber.Ctx) error {
 		})
 	}
 
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	mcpSvc := h.getMCPService()
+	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "MCP server not found",
@@ -322,7 +407,8 @@ func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
 		})
 	}
 
-	server, err := h.mcpService.GetMCPServerByName(c.Context(), orgID, name)
+	mcpSvc := h.getMCPService()
+	server, err := mcpSvc.GetMCPServerByName(c.Context(), orgID, name)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "MCP server not found",
@@ -333,12 +419,12 @@ func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
 
 	// Return server with capabilities (for SDK caching)
 	return c.JSON(fiber.Map{
-		"id":           server.ID,
-		"name":         server.Name,
-		"url":          server.URL,
-		"capabilities": server.Capabilities,
+		"id":                    server.ID,
+		"name":                  server.Name,
+		"url":                   server.URL,
+		"capabilities":          server.Capabilities,
 		"hasCachedCapabilities": len(server.Capabilities) > 0,
-		"toolCount":    len(server.Capabilities),
+		"toolCount":             len(server.Capabilities),
 	})
 }
 
@@ -673,7 +759,8 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	mcpSvc := h.getMCPService()
+	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "MCP server not found",
@@ -686,7 +773,8 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 	}
 
 	// Fetch detailed capabilities from mcp_server_capabilities table
-	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
+	capSvc := h.getMCPCapabilityService()
+	capabilities, err := capSvc.GetCapabilities(c.Context(), serverID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch capabilities",
@@ -779,7 +867,8 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	log.Printf("🔍 GetMCPServerAgents: serverID=%s, orgID=%s", serverID, orgID)
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
+	mcpSvc := h.getMCPService()
+	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
 	if err != nil {
 		log.Printf("❌ GetMCPServerAgents: MCP server not found: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -798,7 +887,8 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	// Fetch agents that have this MCP server in their talks_to array
 	// Try both by ID and by NAME (agents often use names, not IDs)
 	log.Printf("🔍 GetMCPServerAgents: Searching for agents by MCP server ID and name...")
-	agentsByID, err := h.agentRepository.GetByMCPServer(serverID, orgID)
+	agentRepo := h.getAgentRepository()
+	agentsByID, err := agentRepo.GetByMCPServer(serverID, orgID)
 	if err != nil {
 		log.Printf("❌ GetMCPServerAgents: Failed to fetch agents by ID: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -807,7 +897,7 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	}
 	log.Printf("✅ GetMCPServerAgents: Found %d agents by ID", len(agentsByID))
 
-	agentsByName, err := h.agentRepository.GetByMCPServerName(server.Name, orgID)
+	agentsByName, err := agentRepo.GetByMCPServerName(server.Name, orgID)
 	if err != nil {
 		log.Printf("❌ GetMCPServerAgents: Failed to fetch agents by name: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1005,7 +1095,8 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 	}
 
 	// Get connected agents
-	agents, err := h.mcpService.GetConnectedAgents(c.Context(), mcpServerID)
+	mcpSvc := h.getMCPService()
+	agents, err := mcpSvc.GetConnectedAgents(c.Context(), mcpServerID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
