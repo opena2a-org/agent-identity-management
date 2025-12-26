@@ -179,7 +179,55 @@ func TestPublicRegistrationHandler_RequestAccess_EmptyEmail(t *testing.T) {
 	app := fiber.New()
 	app.Post("/public/request-access", handler.RequestAccess)
 
-	body := `{"email":"","firstName":"John","lastName":"Doe"}`
+	body := `{"email":"","fullName":"John Doe","reason":"This is a valid reason"}`
+	req := httptest.NewRequest("POST", "/public/request-access", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_RequestAccess_EmptyFullName(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/request-access", handler.RequestAccess)
+
+	body := `{"email":"test@example.com","fullName":"","reason":"This is a valid reason"}`
+	req := httptest.NewRequest("POST", "/public/request-access", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_RequestAccess_EmptyReason(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/request-access", handler.RequestAccess)
+
+	body := `{"email":"test@example.com","fullName":"John Doe","reason":""}`
+	req := httptest.NewRequest("POST", "/public/request-access", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_RequestAccess_ShortReason(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/request-access", handler.RequestAccess)
+
+	body := `{"email":"test@example.com","fullName":"John Doe","reason":"short"}`
 	req := httptest.NewRequest("POST", "/public/request-access", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -214,7 +262,23 @@ func TestPublicRegistrationHandler_ChangePassword_EmptyFields(t *testing.T) {
 	app := fiber.New()
 	app.Post("/public/change-password", handler.ChangePassword)
 
-	body := `{"email":"","currentPassword":"","newPassword":""}`
+	body := `{"email":"","oldPassword":"","newPassword":""}`
+	req := httptest.NewRequest("POST", "/public/change-password", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_ChangePassword_ShortNewPassword(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/change-password", handler.ChangePassword)
+
+	body := `{"email":"test@example.com","oldPassword":"oldpassword123","newPassword":"short"}`
 	req := httptest.NewRequest("POST", "/public/change-password", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -300,7 +364,39 @@ func TestPublicRegistrationHandler_ResetPassword_EmptyFields(t *testing.T) {
 	app := fiber.New()
 	app.Post("/public/reset-password", handler.ResetPassword)
 
-	body := `{"token":"","newPassword":""}`
+	body := `{"resetToken":"","newPassword":"","confirmPassword":""}`
+	req := httptest.NewRequest("POST", "/public/reset-password", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_ResetPassword_PasswordMismatch(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/reset-password", handler.ResetPassword)
+
+	body := `{"resetToken":"valid-token","newPassword":"password123","confirmPassword":"different456"}`
+	req := httptest.NewRequest("POST", "/public/reset-password", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_ResetPassword_ShortPassword(t *testing.T) {
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/reset-password", handler.ResetPassword)
+
+	body := `{"resetToken":"valid-token","newPassword":"short","confirmPassword":"short"}`
 	req := httptest.NewRequest("POST", "/public/reset-password", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 

@@ -80,6 +80,23 @@ func TestSDKTokenHandler_GetActiveTokenCount_NoUserContext(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
+func TestSDKTokenHandler_GetActiveTokenCount_InvalidUserIDType(t *testing.T) {
+	handler := &SDKTokenHandler{}
+	app := fiber.New()
+	app.Get("/users/me/sdk-tokens/count", func(c fiber.Ctx) error {
+		c.Locals("user_id", "not-a-uuid") // Wrong type
+		return handler.GetActiveTokenCount(c)
+	})
+
+	req := httptest.NewRequest("GET", "/users/me/sdk-tokens/count", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
 // ===========================
 // SDKTokenHandler.RevokeToken Tests
 // ===========================
@@ -112,6 +129,23 @@ func TestSDKTokenHandler_RevokeToken_InvalidTokenID(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestSDKTokenHandler_RevokeToken_InvalidUserIDType(t *testing.T) {
+	handler := &SDKTokenHandler{}
+	app := fiber.New()
+	app.Post("/users/me/sdk-tokens/:id/revoke", func(c fiber.Ctx) error {
+		c.Locals("user_id", "not-a-uuid") // Wrong type
+		return handler.RevokeToken(c)
+	})
+
+	req := httptest.NewRequest("POST", "/users/me/sdk-tokens/"+uuid.New().String()+"/revoke", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
 // ===========================
 // SDKTokenHandler.RevokeAllTokens Tests
 // ===========================
@@ -120,6 +154,23 @@ func TestSDKTokenHandler_RevokeAllTokens_NoUserContext(t *testing.T) {
 	handler := &SDKTokenHandler{}
 	app := fiber.New()
 	app.Post("/users/me/sdk-tokens/revoke-all", handler.RevokeAllTokens)
+
+	req := httptest.NewRequest("POST", "/users/me/sdk-tokens/revoke-all", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestSDKTokenHandler_RevokeAllTokens_InvalidUserIDType(t *testing.T) {
+	handler := &SDKTokenHandler{}
+	app := fiber.New()
+	app.Post("/users/me/sdk-tokens/revoke-all", func(c fiber.Ctx) error {
+		c.Locals("user_id", "not-a-uuid") // Wrong type
+		return handler.RevokeAllTokens(c)
+	})
 
 	req := httptest.NewRequest("POST", "/users/me/sdk-tokens/revoke-all", nil)
 

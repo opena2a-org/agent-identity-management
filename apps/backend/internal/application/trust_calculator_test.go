@@ -784,3 +784,208 @@ func TestTrustCalculator_CalculateConfidence_MinimalData(t *testing.T) {
 
 // Note: End-to-end Calculate tests are in other test functions that use mocked repositories
 // (TestTrustCalculator_Calculate_AllFactorsPerfectScore, TestTrustCalculator_Calculate_MinimalAgent)
+
+// ===========================
+// CalculateTrustScore Tests
+// ===========================
+
+func TestTrustCalculator_CalculateTrustScore_Success(t *testing.T) {
+	mockAgentRepo := new(TrustCalcMockAgentRepository)
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockAuditRepo := new(AgentServiceMockAuditLogRepository)
+	mockCapRepo := new(MockCapabilityRepository)
+	mockAlertRepo := new(TrustCalcMockAlertRepository)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: orgID,
+		Name:           "test-agent",
+		Status:         domain.AgentStatusVerified,
+		TrustScore:     0.8,
+		CreatedAt:      time.Now().Add(-30 * 24 * time.Hour), // 30 days old
+		UpdatedAt:      time.Now(),
+	}
+
+	// Set up mock expectations
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockCapRepo.On("GetActiveCapabilitiesByAgentID", agentID).Return([]*domain.AgentCapability{}, nil).Maybe()
+	mockCapRepo.On("GetViolationsByAgentID", agentID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockAlertRepo.On("GetUnacknowledgedByResourceID", agentID).Return([]*domain.Alert{}, nil).Maybe()
+	mockAlertRepo.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
+	mockTrustRepo.On("Create", mock.Anything).Return(nil)
+	mockAgentRepo.On("UpdateTrustScore", agentID, mock.Anything).Return(nil)
+
+	calculator := NewTrustCalculator(
+		mockTrustRepo,
+		mockAPIKeyRepo,
+		mockAuditRepo,
+		mockCapRepo,
+		mockAgentRepo,
+		mockAlertRepo,
+	)
+
+	ctx := context.Background()
+	score, err := calculator.CalculateTrustScore(ctx, agentID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, score)
+	mockTrustRepo.AssertCalled(t, "Create", mock.Anything)
+	mockAgentRepo.AssertCalled(t, "UpdateTrustScore", agentID, mock.Anything)
+}
+
+func TestTrustCalculator_CalculateTrustScore_AgentNotFound(t *testing.T) {
+	mockAgentRepo := new(TrustCalcMockAgentRepository)
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	mockAgentRepo.On("GetByID", agentID).Return(nil, assert.AnError)
+
+	calculator := &TrustCalculator{
+		agentRepo:      mockAgentRepo,
+		trustScoreRepo: mockTrustRepo,
+	}
+
+	ctx := context.Background()
+	score, err := calculator.CalculateTrustScore(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Nil(t, score)
+}
+
+// ===========================
+// GetLatestTrustScore Tests
+// ===========================
+
+func TestTrustCalculator_GetLatestTrustScore_Success(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	expectedScore := &domain.TrustScore{
+		ID:      uuid.New(),
+		AgentID: agentID,
+		Score:   0.85,
+	}
+
+	mockTrustRepo.On("GetLatest", agentID).Return(expectedScore, nil)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	score, err := calculator.GetLatestTrustScore(ctx, agentID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedScore, score)
+}
+
+func TestTrustCalculator_GetLatestTrustScore_NotFound(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	mockTrustRepo.On("GetLatest", agentID).Return(nil, assert.AnError)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	score, err := calculator.GetLatestTrustScore(ctx, agentID)
+
+	assert.Error(t, err)
+	assert.Nil(t, score)
+}
+
+// ===========================
+// GetTrustScoreHistory Tests
+// ===========================
+
+func TestTrustCalculator_GetTrustScoreHistory_Success(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	expectedHistory := []*domain.TrustScore{
+		{ID: uuid.New(), AgentID: agentID, Score: 0.90},
+		{ID: uuid.New(), AgentID: agentID, Score: 0.85},
+		{ID: uuid.New(), AgentID: agentID, Score: 0.80},
+	}
+
+	mockTrustRepo.On("GetHistory", agentID, 10).Return(expectedHistory, nil)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	history, err := calculator.GetTrustScoreHistory(ctx, agentID, 10)
+
+	assert.NoError(t, err)
+	assert.Len(t, history, 3)
+}
+
+func TestTrustCalculator_GetTrustScoreHistory_Empty(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	mockTrustRepo.On("GetHistory", agentID, 10).Return([]*domain.TrustScore{}, nil)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	history, err := calculator.GetTrustScoreHistory(ctx, agentID, 10)
+
+	assert.NoError(t, err)
+	assert.Empty(t, history)
+}
+
+// ===========================
+// GetTrustScoreHistoryAuditTrail Tests
+// ===========================
+
+func TestTrustCalculator_GetTrustScoreHistoryAuditTrail_Success(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+	prevScore := 0.80
+	expectedAuditTrail := []*domain.TrustScoreHistoryEntry{
+		{
+			ID:             uuid.New(),
+			AgentID:        agentID,
+			OrganizationID: orgID,
+			PreviousScore:  &prevScore,
+			TrustScore:     0.85,
+			RecordedAt:     time.Now(),
+			ChangeReason:   "Verification completed",
+		},
+	}
+
+	mockTrustRepo.On("GetHistoryAuditTrail", agentID, 10).Return(expectedAuditTrail, nil)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	auditTrail, err := calculator.GetTrustScoreHistoryAuditTrail(ctx, agentID, 10)
+
+	assert.NoError(t, err)
+	assert.Len(t, auditTrail, 1)
+	assert.Equal(t, "Verification completed", auditTrail[0].ChangeReason)
+}
+
+func TestTrustCalculator_GetTrustScoreHistoryAuditTrail_Error(t *testing.T) {
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+
+	agentID := uuid.New()
+	mockTrustRepo.On("GetHistoryAuditTrail", agentID, 10).Return(nil, assert.AnError)
+
+	calculator := &TrustCalculator{trustScoreRepo: mockTrustRepo}
+
+	ctx := context.Background()
+	auditTrail, err := calculator.GetTrustScoreHistoryAuditTrail(ctx, agentID, 10)
+
+	assert.Error(t, err)
+	assert.Nil(t, auditTrail)
+}
+
+// Helper function for time pointer
+func timePtr(t time.Time) *time.Time {
+	return &t
+}

@@ -168,6 +168,42 @@ func TestMCPAttestationHandler_GetAgentMCPServers_InvalidAgentID(t *testing.T) {
 // MCPAttestationHandler.ManualAttestMCP Tests
 // ===========================
 
+func TestMCPAttestationHandler_ManualAttestMCP_NoUserContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/mcp-servers/:id/manual-attest", handler.ManualAttestMCP)
+
+	body := `{"notes":"test"}`
+	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/manual-attest", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_ManualAttestMCP_NoOrgContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/mcp-servers/:id/manual-attest", func(c fiber.Ctx) error {
+		c.Locals("user_id", uuid.New())
+		// No organization_id set
+		return handler.ManualAttestMCP(c)
+	})
+
+	body := `{"notes":"test"}`
+	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/manual-attest", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
 func TestMCPAttestationHandler_ManualAttestMCP_InvalidMCPID(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
@@ -220,6 +256,73 @@ func TestMCPAttestationHandler_RevokeAttestation_InvalidAttestationID(t *testing
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestMCPAttestationHandler_RevokeAttestation_NoUserContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/attestations/:attestation_id/revoke", handler.RevokeAttestation)
+
+	body := `{"reason":"test reason"}`
+	req := httptest.NewRequest("DELETE", "/attestations/"+uuid.New().String()+"/revoke", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAttestation_NoOrgContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/attestations/:attestation_id/revoke", func(c fiber.Ctx) error {
+		c.Locals("user_id", uuid.New())
+		// No organization_id set
+		return handler.RevokeAttestation(c)
+	})
+
+	body := `{"reason":"test reason"}`
+	req := httptest.NewRequest("DELETE", "/attestations/"+uuid.New().String()+"/revoke", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAttestation_InvalidJSON(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/attestations/:attestation_id/revoke", withMCPAttestationContext(handler.RevokeAttestation))
+
+	req := httptest.NewRequest("DELETE", "/attestations/"+uuid.New().String()+"/revoke", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAttestation_MissingReason(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/attestations/:attestation_id/revoke", withMCPAttestationContext(handler.RevokeAttestation))
+
+	body := `{}`
+	req := httptest.NewRequest("DELETE", "/attestations/"+uuid.New().String()+"/revoke", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
 // ===========================
 // MCPAttestationHandler.RevokeAllAttestationsByAgent Tests
 // ===========================
@@ -230,6 +333,73 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidAgentID(t *te
 	app.Delete("/agents/:agent_id/attestations", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
 
 	req := httptest.NewRequest("DELETE", "/agents/not-a-uuid/attestations", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoUserContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/agents/:agent_id/attestations/revoke-all", handler.RevokeAllAttestationsByAgent)
+
+	body := `{"reason":"test reason"}`
+	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoOrgContext(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/agents/:agent_id/attestations/revoke-all", func(c fiber.Ctx) error {
+		c.Locals("user_id", uuid.New())
+		// No organization_id set
+		return handler.RevokeAllAttestationsByAgent(c)
+	})
+
+	body := `{"reason":"test reason"}`
+	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidJSON(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/agents/:agent_id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
+
+	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_MissingReason(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Delete("/agents/:agent_id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
+
+	body := `{}`
+	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -257,6 +427,70 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidJSON(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestMCPAttestationHandler_RecordMCPConnection_InvalidAgentID(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+
+	body := `{"mcpServerId":"` + uuid.New().String() + `","toolName":"test"}`
+	req := httptest.NewRequest("POST", "/agents/not-a-uuid/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RecordMCPConnection_MissingMCPServerID(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+
+	body := `{"toolName":"test"}`
+	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RecordMCPConnection_MissingToolName(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+
+	body := `{"mcpServerId":"` + uuid.New().String() + `"}`
+	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RecordMCPConnection_InvalidMCPServerIDFormat(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+
+	body := `{"mcpServerId":"not-a-uuid","toolName":"test"}`
+	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
 // ===========================
 // MCPAttestationHandler.RecordMCPUsageReport Tests
 // ===========================
@@ -267,6 +501,22 @@ func TestMCPAttestationHandler_RecordMCPUsageReport_InvalidJSON(t *testing.T) {
 	app.Post("/mcp-servers/usage", handler.RecordMCPUsageReport)
 
 	req := httptest.NewRequest("POST", "/mcp-servers/usage", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMCPAttestationHandler_RecordMCPUsageReport_InvalidAgentID(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:id/mcp-usage-report", handler.RecordMCPUsageReport)
+
+	body := `{"agentId":"test","mcpServers":{},"reportedAt":"2024-01-01T00:00:00Z"}`
+	req := httptest.NewRequest("POST", "/agents/not-a-uuid/mcp-usage-report", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)

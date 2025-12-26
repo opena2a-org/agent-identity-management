@@ -293,3 +293,59 @@ func TestVerificationEventHandler_DeleteVerificationEvent_InvalidID(t *testing.T
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+// ===========================
+// getOrganizationID Helper Tests
+// ===========================
+
+func TestGetOrganizationID_Success(t *testing.T) {
+	app := fiber.New()
+	expectedOrgID := uuid.New()
+
+	app.Get("/test", func(c fiber.Ctx) error {
+		c.Locals("organization_id", expectedOrgID)
+		orgID, err := getOrganizationID(c)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedOrgID, orgID)
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestGetOrganizationID_MissingContext(t *testing.T) {
+	app := fiber.New()
+
+	app.Get("/test", func(c fiber.Ctx) error {
+		_, err := getOrganizationID(c)
+		assert.Error(t, err)
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestGetOrganizationID_WrongType(t *testing.T) {
+	app := fiber.New()
+
+	app.Get("/test", func(c fiber.Ctx) error {
+		c.Locals("organization_id", "not-a-uuid") // Wrong type
+		_, err := getOrganizationID(c)
+		assert.Error(t, err)
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+}

@@ -959,3 +959,273 @@ func TestVerificationEventService_ListMCPVerificationEvents_Error(t *testing.T) 
 
 	mockEventRepo.AssertExpectations(t)
 }
+
+// ===========================
+// GetVerificationEvent Tests
+// ===========================
+
+func TestVerificationEventService_GetVerificationEvent_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+	expectedEvent := &domain.VerificationEvent{
+		ID:     eventID,
+		Status: domain.VerificationEventStatusSuccess,
+	}
+
+	mockEventRepo.On("GetByID", eventID).Return(expectedEvent, nil)
+
+	result, err := service.GetVerificationEvent(ctx, eventID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedEvent, result)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_GetVerificationEvent_NotFound(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+
+	mockEventRepo.On("GetByID", eventID).Return(nil, errors.New("not found"))
+
+	result, err := service.GetVerificationEvent(ctx, eventID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockEventRepo.AssertExpectations(t)
+}
+
+// ===========================
+// GetStatistics Tests
+// ===========================
+
+func TestVerificationEventService_GetStatistics_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	orgID := uuid.New()
+	startTime := time.Now().Add(-24 * time.Hour)
+	endTime := time.Now()
+
+	expectedStats := &domain.VerificationStatistics{
+		TotalVerifications: 100,
+		SuccessCount:       80,
+		FailedCount:        15,
+		PendingCount:       5,
+		SuccessRate:        0.80,
+	}
+
+	mockEventRepo.On("GetStatistics", orgID, startTime, endTime).Return(expectedStats, nil)
+
+	result, err := service.GetStatistics(ctx, orgID, startTime, endTime)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedStats, result)
+	assert.Equal(t, 100, result.TotalVerifications)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_GetStatistics_Error(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	orgID := uuid.New()
+	startTime := time.Now().Add(-24 * time.Hour)
+	endTime := time.Now()
+
+	mockEventRepo.On("GetStatistics", orgID, startTime, endTime).Return(nil, errors.New("database error"))
+
+	result, err := service.GetStatistics(ctx, orgID, startTime, endTime)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockEventRepo.AssertExpectations(t)
+}
+
+// ===========================
+// GetLast24HoursStatistics Tests
+// ===========================
+
+func TestVerificationEventService_GetLast24HoursStatistics_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	orgID := uuid.New()
+
+	expectedStats := &domain.VerificationStatistics{
+		TotalVerifications: 50,
+		SuccessCount:       45,
+		FailedCount:        5,
+		SuccessRate:        0.90,
+	}
+
+	// Match any time range within last 24 hours
+	mockEventRepo.On("GetStatistics", orgID, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).Return(expectedStats, nil)
+
+	result, err := service.GetLast24HoursStatistics(ctx, orgID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedStats, result)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_GetLast24HoursStatistics_Error(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	orgID := uuid.New()
+
+	mockEventRepo.On("GetStatistics", orgID, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).Return(nil, errors.New("database error"))
+
+	result, err := service.GetLast24HoursStatistics(ctx, orgID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockEventRepo.AssertExpectations(t)
+}
+
+// ===========================
+// UpdateVerificationResult Tests
+// ===========================
+
+func TestVerificationEventService_UpdateVerificationResult_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+	result := domain.VerificationResultVerified
+	reason := "Verification completed successfully"
+	metadata := map[string]interface{}{"key": "value"}
+
+	mockEventRepo.On("UpdateResult", eventID, result, &reason, metadata).Return(nil)
+
+	err := service.UpdateVerificationResult(ctx, eventID, result, &reason, metadata)
+
+	assert.NoError(t, err)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_UpdateVerificationResult_Error(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+	result := domain.VerificationResultDenied
+
+	mockEventRepo.On("UpdateResult", eventID, result, (*string)(nil), (map[string]interface{})(nil)).Return(errors.New("update failed"))
+
+	err := service.UpdateVerificationResult(ctx, eventID, result, nil, nil)
+
+	assert.Error(t, err)
+	mockEventRepo.AssertExpectations(t)
+}
+
+// ===========================
+// UpdateExecutionStatus Tests
+// ===========================
+
+func TestVerificationEventService_UpdateExecutionStatus_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+	executed := true
+	strictMode := true
+	executedAt := time.Now()
+
+	mockEventRepo.On("UpdateExecutionStatus", eventID, executed, strictMode, executedAt, (*string)(nil)).Return(nil)
+
+	err := service.UpdateExecutionStatus(ctx, eventID, executed, strictMode, executedAt, nil)
+
+	assert.NoError(t, err)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_UpdateExecutionStatus_WithError(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+	executed := false
+	strictMode := false
+	executedAt := time.Now()
+	execError := "execution failed"
+
+	mockEventRepo.On("UpdateExecutionStatus", eventID, executed, strictMode, executedAt, &execError).Return(nil)
+
+	err := service.UpdateExecutionStatus(ctx, eventID, executed, strictMode, executedAt, &execError)
+
+	assert.NoError(t, err)
+	mockEventRepo.AssertExpectations(t)
+}
+
+// ===========================
+// DeleteVerificationEvent Tests
+// ===========================
+
+func TestVerificationEventService_DeleteVerificationEvent_Success(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+
+	mockEventRepo.On("Delete", eventID).Return(nil)
+
+	err := service.DeleteVerificationEvent(ctx, eventID)
+
+	assert.NoError(t, err)
+	mockEventRepo.AssertExpectations(t)
+}
+
+func TestVerificationEventService_DeleteVerificationEvent_Error(t *testing.T) {
+	mockEventRepo := new(MockEventRepoForService)
+	mockAgentRepo := new(MockAgentRepoForVerification)
+
+	service := NewVerificationEventService(mockEventRepo, mockAgentRepo, nil)
+
+	ctx := context.Background()
+	eventID := uuid.New()
+
+	mockEventRepo.On("Delete", eventID).Return(errors.New("delete failed"))
+
+	err := service.DeleteVerificationEvent(ctx, eventID)
+
+	assert.Error(t, err)
+	mockEventRepo.AssertExpectations(t)
+}

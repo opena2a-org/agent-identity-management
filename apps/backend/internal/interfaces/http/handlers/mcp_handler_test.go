@@ -359,6 +359,20 @@ func TestMCPHandler_GetConnectedAgents_InvalidID(t *testing.T) {
 // MCPHandler.GetMCPServerAuditLogs Tests
 // ===========================
 
+func TestMCPHandler_GetMCPServerAuditLogs_NoOrgContext(t *testing.T) {
+	handler := &MCPHandler{}
+	app := fiber.New()
+	app.Get("/mcp-servers/:id/audit-logs", handler.GetMCPServerAuditLogs)
+
+	req := httptest.NewRequest("GET", "/mcp-servers/"+uuid.New().String()+"/audit-logs", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
 func TestMCPHandler_GetMCPServerAuditLogs_InvalidID(t *testing.T) {
 	handler := &MCPHandler{}
 	app := fiber.New()
@@ -430,4 +444,54 @@ func TestMCPHandler_getTimestamp(t *testing.T) {
 		})
 	}
 }
+
+// ===========================
+// MCPHandler Service Getter Tests
+// ===========================
+
+func TestMCPHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	// When both auditServicer and auditService are nil, returns nil
+	handler := &MCPHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getVerificationEventRepository_NilInterfaceReturnsNil(t *testing.T) {
+	// When both verificationEventRepositoryer and verificationEventRepository are nil, returns nil
+	handler := &MCPHandler{}
+	result := handler.getVerificationEventRepository()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getAttestationService_NilInterfaceReturnsNil(t *testing.T) {
+	// When both attestationServicer and attestationService are nil, returns nil
+	handler := &MCPHandler{}
+	result := handler.getAttestationService()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getMCPService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &MCPHandler{}
+	result := handler.getMCPService()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getMCPCapabilityService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &MCPHandler{}
+	result := handler.getMCPCapabilityService()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getAgentRepository_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &MCPHandler{}
+	result := handler.getAgentRepository()
+	assert.Nil(t, result)
+}
+
+func TestMCPHandler_getTagService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &MCPHandler{}
+	result := handler.getTagService()
+	assert.Nil(t, result)
+}
+
 

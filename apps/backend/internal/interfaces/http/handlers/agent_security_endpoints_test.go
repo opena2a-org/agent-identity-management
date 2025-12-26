@@ -117,3 +117,75 @@ func TestAgentHandler_GetAgentAuditLogs_InvalidAgentID(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+func TestAgentHandler_GetAgentAuditLogs_InvalidOrgIDType(t *testing.T) {
+	handler := &AgentHandler{}
+	app := fiber.New()
+	app.Get("/agents/:id/audit-logs", func(c fiber.Ctx) error {
+		c.Locals("organization_id", "not-a-uuid") // Wrong type
+		c.Locals("user_id", uuid.New())
+		return handler.GetAgentAuditLogs(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+uuid.New().String()+"/audit-logs", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentAuditLogs_InvalidUserIDType(t *testing.T) {
+	handler := &AgentHandler{}
+	app := fiber.New()
+	app.Get("/agents/:id/audit-logs", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		c.Locals("user_id", "not-a-uuid") // Wrong type
+		return handler.GetAgentAuditLogs(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+uuid.New().String()+"/audit-logs", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentKeyVault_InvalidOrgIDType(t *testing.T) {
+	handler := &AgentHandler{}
+	app := fiber.New()
+	app.Get("/agents/:id/key-vault", func(c fiber.Ctx) error {
+		c.Locals("organization_id", "not-a-uuid") // Wrong type
+		c.Locals("user_id", uuid.New())
+		return handler.GetAgentKeyVault(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+uuid.New().String()+"/key-vault", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAgentHandler_GetAgentKeyVault_InvalidUserIDType(t *testing.T) {
+	handler := &AgentHandler{}
+	app := fiber.New()
+	app.Get("/agents/:id/key-vault", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		c.Locals("user_id", "not-a-uuid") // Wrong type
+		return handler.GetAgentKeyVault(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+uuid.New().String()+"/key-vault", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}

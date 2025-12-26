@@ -99,3 +99,25 @@ func TestTrustScoreHandler_GetTrustScoreHistory_InvalidAgentID(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
+
+// ===========================
+// TrustScoreHandler Service Getter Tests
+// ===========================
+
+func TestTrustScoreHandler_getTrustCalculator_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &TrustScoreHandler{}
+	result := handler.getTrustCalculator()
+	assert.Nil(t, result)
+}
+
+func TestTrustScoreHandler_getAgentService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &TrustScoreHandler{}
+	result := handler.getAgentService()
+	assert.Nil(t, result)
+}
+
+func TestTrustScoreHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &TrustScoreHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}

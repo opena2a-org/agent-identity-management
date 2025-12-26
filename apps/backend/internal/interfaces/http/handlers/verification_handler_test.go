@@ -375,6 +375,7 @@ func TestVerificationHandler_normalizeVerificationStatus(t *testing.T) {
 		{"pending", "pending", "pending"},
 		{"success", "success", "approved"},
 		{"failed", "failed", "denied"},
+		{"unknown_status", "UNKNOWN", "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -388,6 +389,9 @@ func TestVerificationHandler_normalizeVerificationStatus(t *testing.T) {
 				domainStatus = domain.VerificationEventStatusSuccess
 			case "failed":
 				domainStatus = domain.VerificationEventStatusFailed
+			default:
+				// Test the default case with an unknown status
+				domainStatus = domain.VerificationEventStatus(tt.status)
 			}
 			result := normalizeVerificationStatus(domainStatus)
 			assert.Equal(t, tt.expected, result)
@@ -435,6 +439,12 @@ func TestVerificationHandler_customJSONFormat(t *testing.T) {
 		{"comma separated", `{"a":"1","b":"2"}`, `{"a": "1", "b": "2"}`},
 		{"nested object", `{"a":{"b":"c"}}`, `{"a": {"b": "c"}}`},
 		{"with spaces in string", `{"key":"value with spaces"}`, `{"key": "value with spaces"}`},
+		{"with escaped quote", `{"key":"value\"quoted"}`, `{"key": "value\"quoted"}`},
+		{"with escaped backslash", `{"key":"path\\to\\file"}`, `{"key": "path\\to\\file"}`},
+		{"with already spaced colon", `{"key": "value"}`, `{"key": "value"}`},
+		{"with already spaced comma", `{"a": "1", "b": "2"}`, `{"a": "1", "b": "2"}`},
+		{"empty object", `{}`, `{}`},
+		{"array value", `{"arr":[1,2,3]}`, `{"arr": [1, 2, 3]}`},
 	}
 
 	for _, tt := range tests {
@@ -720,4 +730,182 @@ func TestUpdateExecutionStatusRequest_Successful(t *testing.T) {
 	assert.True(t, req.Executed)
 	assert.False(t, req.StrictMode)
 	assert.Nil(t, req.ExecutionError)
+}
+
+// ===========================
+// VerificationHandler.calculateCapabilityTrustScore Tests
+// ===========================
+
+func TestVerificationHandler_calculateCapabilityTrustScore(t *testing.T) {
+	handler := &VerificationHandler{}
+
+	tests := []struct {
+		name       string
+		agent      *domain.Agent
+		capability string
+		resource   string
+		expected   float64
+	}{
+		{
+			name:       "High trust agent with low risk capability",
+			agent:      &domain.Agent{TrustScore: 0.9},
+			capability: "read_database",
+			resource:   "/data",
+			expected:   0.9, // 0.9 * 1.0 = 0.9
+		},
+		{
+			name:       "High trust agent with write capability",
+			agent:      &domain.Agent{TrustScore: 0.9},
+			capability: "write_database",
+			resource:   "/data",
+			expected:   0.72, // 0.9 * 0.8 = 0.72
+		},
+		{
+			name:       "High trust agent with delete capability",
+			agent:      &domain.Agent{TrustScore: 0.9},
+			capability: "delete_data",
+			resource:   "/data",
+			expected:   0.45, // 0.9 * 0.5 = 0.45
+		},
+		{
+			name:       "High trust agent with execute command",
+			agent:      &domain.Agent{TrustScore: 0.9},
+			capability: "execute_command",
+			resource:   "cmd",
+			expected:   0.27, // 0.9 * 0.3 = 0.27
+		},
+		{
+			name:       "Low trust agent with read capability",
+			agent:      &domain.Agent{TrustScore: 0.3},
+			capability: "read_file",
+			resource:   "/file",
+			expected:   0.3, // 0.3 * 1.0 = 0.3
+		},
+		{
+			name:       "Unknown capability uses default risk",
+			agent:      &domain.Agent{TrustScore: 1.0},
+			capability: "unknown_action",
+			resource:   "/unknown",
+			expected:   0.8, // 1.0 * 0.8 = 0.8
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.calculateCapabilityTrustScore(tt.agent, tt.capability, tt.resource)
+			assert.InDelta(t, tt.expected, result, 0.001)
+		})
+	}
+}
+
+// ===========================
+// VerificationHandler.determineVerificationStatus Tests
+// ===========================
+
+func TestVerificationHandler_determineVerificationStatus(t *testing.T) {
+	handler := &VerificationHandler{}
+
+	tests := []struct {
+		name           string
+		agent          *domain.Agent
+		actionType     string
+		trustScore     float64
+		expectedStatus string
+		expectDenial   bool
+	}{
+		{
+			name:           "Critical action always pending",
+			agent:          &domain.Agent{TrustScore: 1.0},
+			actionType:     "delete_production_data",
+			trustScore:     1.0,
+			expectedStatus: "pending",
+			expectDenial:   false,
+		},
+		{
+			name:           "Critical action drop_database",
+			agent:          &domain.Agent{TrustScore: 0.95},
+			actionType:     "drop_database",
+			trustScore:     0.95,
+			expectedStatus: "pending",
+			expectDenial:   false,
+		},
+		{
+			name:           "High risk action with low trust denied",
+			agent:          &domain.Agent{TrustScore: 0.5},
+			actionType:     "delete_data",
+			trustScore:     0.5,
+			expectedStatus: "denied",
+			expectDenial:   true,
+		},
+		{
+			name:           "High risk action with high trust approved",
+			agent:          &domain.Agent{TrustScore: 0.95},
+			actionType:     "delete_data",
+			trustScore:     0.95,
+			expectedStatus: "approved",
+			expectDenial:   false,
+		},
+		{
+			name:           "Low risk action with any trust approved",
+			agent:          &domain.Agent{TrustScore: 0.3},
+			actionType:     "read_file",
+			trustScore:     0.3,
+			expectedStatus: "approved",
+			expectDenial:   false,
+		},
+		{
+			name:           "Medium trust action requires review",
+			agent:          &domain.Agent{TrustScore: 0.75},
+			actionType:     "delete_file",
+			trustScore:     0.75,
+			expectedStatus: "pending",
+			expectDenial:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, denialReason := handler.determineVerificationStatus(tt.agent, tt.actionType, tt.trustScore)
+			assert.Equal(t, tt.expectedStatus, status)
+			if tt.expectDenial {
+				assert.NotEmpty(t, denialReason)
+			}
+		})
+	}
+}
+
+// ===========================
+// VerificationHandler Service Getter Tests
+// ===========================
+
+func TestVerificationHandler_getAgentService_NilInterfaceReturnsNil(t *testing.T) {
+	// When both agentServicer and agentService are nil, returns nil
+	handler := &VerificationHandler{}
+	result := handler.getAgentService()
+	assert.Nil(t, result)
+}
+
+func TestVerificationHandler_getAlertService_NilInterfaceReturnsNil(t *testing.T) {
+	// When both alertServicer and alertService are nil, returns nil
+	handler := &VerificationHandler{}
+	result := handler.getAlertService()
+	assert.Nil(t, result)
+}
+
+func TestVerificationHandler_getAuditService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &VerificationHandler{}
+	result := handler.getAuditService()
+	assert.Nil(t, result)
+}
+
+func TestVerificationHandler_getVerificationEventService_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &VerificationHandler{}
+	result := handler.getVerificationEventService()
+	assert.Nil(t, result)
+}
+
+func TestVerificationHandler_getOrgRepo_NilInterfaceReturnsNil(t *testing.T) {
+	handler := &VerificationHandler{}
+	result := handler.getOrgRepo()
+	assert.Nil(t, result)
 }
