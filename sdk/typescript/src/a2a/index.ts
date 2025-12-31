@@ -25,4 +25,6 @@ export type {
   A2ASecuritySettings,
   A2ASecurityViolation,
   CapableAgent,
+  A2ASkillAttestation,
+  A2AConsensusResult,
 } from './types';

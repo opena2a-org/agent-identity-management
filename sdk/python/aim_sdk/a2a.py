@@ -292,6 +292,133 @@ class A2AClient:
         )
 
     # =========================================================================
+    # Multi-Agent Skill Attestation (Consensus Verification)
+    # =========================================================================
+
+    def attest_skill(
+        self,
+        target_agent_id: str,
+        skill_id: str,
+        attestation_type: str = "SKILL_VERIFICATION",
+        confidence: float = 1.0,
+        evidence: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Attest to another agent's skill capability.
+
+        This creates a signed attestation that contributes to multi-agent
+        consensus verification. Skills become "verified" when they reach
+        the consensus threshold (3+ unique attesters, 2+ unique owners).
+
+        Args:
+            target_agent_id: Agent whose skill is being attested
+            skill_id: ID of the skill being attested
+            attestation_type: Type of attestation (SKILL_VERIFICATION, QUALITY, SECURITY)
+            confidence: Confidence level (0.0 to 1.0)
+            evidence: Optional evidence supporting the attestation
+
+        Returns:
+            The created attestation record
+
+        Example:
+            >>> attestation = a2a.attest_skill(
+            ...     target_agent_id="agent-123",
+            ...     skill_id="code-analysis",
+            ...     confidence=0.95,
+            ...     evidence={"test_run_id": "abc123", "accuracy": 0.98}
+            ... )
+        """
+        return self._make_request(
+            "POST",
+            "/api/v1/a2a/attestations",
+            data={
+                "attestedAgentId": target_agent_id,
+                "skillId": skill_id,
+                "attestationType": attestation_type,
+                "confidence": confidence,
+                "evidence": evidence or {}
+            }
+        )
+
+    def get_skill_attestations(
+        self,
+        agent_id: str,
+        skill_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get attestations for an agent's skill(s).
+
+        Args:
+            agent_id: Agent to get attestations for
+            skill_id: Optional specific skill (all skills if not specified)
+
+        Returns:
+            List of attestation records
+
+        Example:
+            >>> attestations = a2a.get_skill_attestations("agent-123", "code-analysis")
+            >>> print(f"Found {len(attestations)} attestations")
+        """
+        params = {}
+        if skill_id:
+            params["skillId"] = skill_id
+        return self._make_request(
+            "GET",
+            f"/api/v1/a2a/agents/{agent_id}/attestations",
+            params=params
+        ).get("attestations", [])
+
+    def get_consensus_status(
+        self,
+        agent_id: str,
+        skill_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get the consensus verification status for a skill.
+
+        Returns whether a skill has reached the verification threshold
+        through multi-agent consensus.
+
+        Args:
+            agent_id: Agent that owns the skill
+            skill_id: Skill to check
+
+        Returns:
+            Consensus status including:
+            - isVerified: Whether consensus threshold is met
+            - attestationCount: Total number of attestations
+            - uniqueAttesters: Number of unique attesting agents
+            - uniqueOwners: Number of unique organization owners
+            - confidenceScore: Calculated confidence score
+
+        Example:
+            >>> status = a2a.get_consensus_status("agent-123", "code-analysis")
+            >>> if status["isVerified"]:
+            ...     print("Skill is verified by consensus!")
+        """
+        return self._make_request(
+            "GET",
+            f"/api/v1/a2a/agents/{agent_id}/skills/{skill_id}/consensus"
+        )
+
+    def revoke_attestation(self, attestation_id: str, reason: str) -> Dict[str, Any]:
+        """
+        Revoke a previously made attestation.
+
+        Args:
+            attestation_id: ID of the attestation to revoke
+            reason: Reason for revocation
+
+        Returns:
+            The revoked attestation record
+        """
+        return self._make_request(
+            "POST",
+            f"/api/v1/a2a/attestations/{attestation_id}/revoke",
+            data={"reason": reason}
+        )
+
+    # =========================================================================
     # Request Signing
     # =========================================================================
 

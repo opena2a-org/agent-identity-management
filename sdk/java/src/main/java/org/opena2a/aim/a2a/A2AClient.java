@@ -160,6 +160,121 @@ public class A2AClient {
         }
     }
 
+    // ==================== Multi-Agent Skill Attestation ====================
+
+    /**
+     * Attest to another agent's skill capability.
+     *
+     * <p>Creates a signed attestation that contributes to multi-agent consensus
+     * verification. Skills become "verified" when they reach the consensus
+     * threshold (3+ unique attesters, 2+ unique owners).</p>
+     *
+     * @param targetAgentId Agent whose skill is being attested
+     * @param skillId ID of the skill being attested
+     * @param attestationType Type of attestation (SKILL_VERIFICATION, QUALITY, SECURITY)
+     * @param confidence Confidence level (0.0 to 1.0)
+     * @param evidence Optional evidence supporting the attestation
+     * @return The created attestation record
+     * @throws A2AException if attestation fails
+     */
+    public Map<String, Object> attestSkill(String targetAgentId, String skillId,
+                                            String attestationType, double confidence,
+                                            Map<String, Object> evidence) throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("attestedAgentId", targetAgentId);
+            body.put("skillId", skillId);
+            body.put("attestationType", attestationType);
+            body.put("confidence", confidence);
+            if (evidence != null) {
+                body.set("evidence", objectMapper.valueToTree(evidence));
+            }
+
+            String response = post(A2A_BASE_PATH + "/attestations", objectMapper.writeValueAsString(body));
+            return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to attest skill: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Attest to another agent's skill with default parameters.
+     */
+    public Map<String, Object> attestSkill(String targetAgentId, String skillId) throws A2AException {
+        return attestSkill(targetAgentId, skillId, "SKILL_VERIFICATION", 1.0, null);
+    }
+
+    /**
+     * Get attestations for an agent's skill(s).
+     *
+     * @param agentId Agent to get attestations for
+     * @param skillId Optional specific skill (null for all skills)
+     * @return List of attestation records
+     * @throws A2AException if retrieval fails
+     */
+    public List<Map<String, Object>> getSkillAttestations(String agentId, String skillId) throws A2AException {
+        try {
+            String path = A2A_BASE_PATH + "/agents/" + agentId + "/attestations";
+            if (skillId != null && !skillId.isEmpty()) {
+                path += "?skillId=" + skillId;
+            }
+            String response = get(path);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode attestationsNode = root.has("attestations") ? root.get("attestations") : root;
+            return objectMapper.convertValue(attestationsNode, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to get skill attestations: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get all attestations for an agent.
+     */
+    public List<Map<String, Object>> getSkillAttestations(String agentId) throws A2AException {
+        return getSkillAttestations(agentId, null);
+    }
+
+    /**
+     * Get the consensus verification status for a skill.
+     *
+     * <p>Returns whether a skill has reached the verification threshold
+     * through multi-agent consensus.</p>
+     *
+     * @param agentId Agent that owns the skill
+     * @param skillId Skill to check
+     * @return Consensus status including isVerified, attestationCount, uniqueAttesters, etc.
+     * @throws A2AException if retrieval fails
+     */
+    public A2AConsensusResult getConsensusStatus(String agentId, String skillId) throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/agents/" + agentId + "/skills/" + skillId + "/consensus");
+            return objectMapper.readValue(response, A2AConsensusResult.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to get consensus status: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Revoke a previously made attestation.
+     *
+     * @param attestationId ID of the attestation to revoke
+     * @param reason Reason for revocation
+     * @return The revoked attestation record
+     * @throws A2AException if revocation fails
+     */
+    public Map<String, Object> revokeAttestation(String attestationId, String reason) throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("reason", reason);
+
+            String response = post(A2A_BASE_PATH + "/attestations/" + attestationId + "/revoke",
+                                   objectMapper.writeValueAsString(body));
+            return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to revoke attestation: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * List all agent cards.
      *

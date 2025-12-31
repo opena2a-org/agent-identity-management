@@ -187,3 +187,41 @@ export interface CapableAgent {
   matchingSkills: A2ASkill[];
   relevanceScore?: number;
 }
+
+/**
+ * A2A Skill Attestation - Multi-agent consensus verification
+ */
+export interface A2ASkillAttestation {
+  id: string;
+  attestingAgentId: string;
+  attestingAgentName?: string;
+  attestedAgentId: string;
+  skillId: string;
+  attestationType: 'SKILL_VERIFICATION' | 'QUALITY' | 'SECURITY';
+  confidence: number;
+  evidence?: Record<string, unknown>;
+  signature: string;
+  isRevoked: boolean;
+  revokedAt?: string;
+  revokedReason?: string;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+/**
+ * A2A Consensus Result - Multi-agent verification status
+ *
+ * Skills become "verified" when they meet thresholds:
+ * - 3+ unique attesting agents
+ * - 2+ unique organization owners
+ * - 60.0+ confidence score
+ */
+export interface A2AConsensusResult {
+  skillId: string;
+  agentId: string;
+  attestationCount: number;
+  uniqueAttesters: number;
+  uniqueOwners: number;
+  confidenceScore: number;
+  isVerified: boolean;
+}

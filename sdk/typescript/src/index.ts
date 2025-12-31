@@ -139,6 +139,8 @@ export {
   type A2ASecuritySettings,
   type A2ASecurityViolation,
   type CapableAgent,
+  type A2ASkillAttestation,
+  type A2AConsensusResult,
 } from './a2a';
 
 // Version

@@ -42,6 +42,8 @@ import type {
   A2ASecurityViolation,
   CapableAgent,
   A2ASkill,
+  A2ASkillAttestation,
+  A2AConsensusResult,
 } from './types';
 
 const A2A_BASE_PATH = '/api/v1/a2a';
@@ -82,6 +84,79 @@ export class A2AClient {
    */
   async refreshAttestation(agentId: string): Promise<A2AAgentCard> {
     return this.post<A2AAgentCard>(`${A2A_BASE_PATH}/cards/${agentId}/attestation`, {});
+  }
+
+  // ==================== Multi-Agent Skill Attestation ====================
+
+  /**
+   * Attest to another agent's skill capability.
+   *
+   * Creates a signed attestation that contributes to multi-agent consensus
+   * verification. Skills become "verified" when they reach the consensus
+   * threshold (3+ unique attesters, 2+ unique owners).
+   *
+   * @param targetAgentId Agent whose skill is being attested
+   * @param skillId ID of the skill being attested
+   * @param attestationType Type of attestation
+   * @param confidence Confidence level (0.0 to 1.0)
+   * @param evidence Optional evidence supporting the attestation
+   */
+  async attestSkill(
+    targetAgentId: string,
+    skillId: string,
+    attestationType: 'SKILL_VERIFICATION' | 'QUALITY' | 'SECURITY' = 'SKILL_VERIFICATION',
+    confidence = 1.0,
+    evidence?: Record<string, unknown>
+  ): Promise<A2ASkillAttestation> {
+    return this.post<A2ASkillAttestation>(`${A2A_BASE_PATH}/attestations`, {
+      attestedAgentId: targetAgentId,
+      skillId,
+      attestationType,
+      confidence,
+      evidence: evidence ?? {},
+    });
+  }
+
+  /**
+   * Get attestations for an agent's skill(s).
+   *
+   * @param agentId Agent to get attestations for
+   * @param skillId Optional specific skill (all skills if not specified)
+   */
+  async getSkillAttestations(agentId: string, skillId?: string): Promise<A2ASkillAttestation[]> {
+    const path = skillId
+      ? `${A2A_BASE_PATH}/agents/${agentId}/attestations?skillId=${skillId}`
+      : `${A2A_BASE_PATH}/agents/${agentId}/attestations`;
+    const response = await this.get<{ attestations: A2ASkillAttestation[] }>(path);
+    return response.attestations ?? [];
+  }
+
+  /**
+   * Get the consensus verification status for a skill.
+   *
+   * Returns whether a skill has reached the verification threshold
+   * through multi-agent consensus.
+   *
+   * @param agentId Agent that owns the skill
+   * @param skillId Skill to check
+   */
+  async getConsensusStatus(agentId: string, skillId: string): Promise<A2AConsensusResult> {
+    return this.get<A2AConsensusResult>(
+      `${A2A_BASE_PATH}/agents/${agentId}/skills/${skillId}/consensus`
+    );
+  }
+
+  /**
+   * Revoke a previously made attestation.
+   *
+   * @param attestationId ID of the attestation to revoke
+   * @param reason Reason for revocation
+   */
+  async revokeAttestation(attestationId: string, reason: string): Promise<A2ASkillAttestation> {
+    return this.post<A2ASkillAttestation>(
+      `${A2A_BASE_PATH}/attestations/${attestationId}/revoke`,
+      { reason }
+    );
   }
 
   /**
