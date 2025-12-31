@@ -606,7 +606,7 @@ func (r *A2ATaskRepository) Create(ctx context.Context, task *domain.A2ATask) er
 		nullTime(task.StartedAt),
 		nullTime(task.CompletedAt),
 		nullInt(task.DurationMs),
-		task.PolicyDecision,
+		nullJSON(task.PolicyDecision),
 		nullTime(task.PolicyEvaluatedAt),
 		nullFloat(task.ClientTrustScoreSnapshot),
 		nullFloat(task.RemoteTrustScoreSnapshot),
@@ -670,7 +670,7 @@ func (r *A2ATaskRepository) Update(ctx context.Context, task *domain.A2ATask) er
 		nullTime(task.StartedAt),
 		nullTime(task.CompletedAt),
 		nullInt(task.DurationMs),
-		task.PolicyDecision,
+		nullJSON(task.PolicyDecision),
 		nullTime(task.PolicyEvaluatedAt),
 		task.MessageCount,
 		nullString(task.ErrorCode),
@@ -1501,6 +1501,13 @@ func nullFloat(f *float64) sql.NullFloat64 {
 		return sql.NullFloat64{}
 	}
 	return sql.NullFloat64{Float64: *f, Valid: true}
+}
+
+func nullJSON(j json.RawMessage) interface{} {
+	if j == nil || len(j) == 0 {
+		return nil
+	}
+	return j
 }
 
 func nullUUID(u *uuid.UUID) sql.NullString {

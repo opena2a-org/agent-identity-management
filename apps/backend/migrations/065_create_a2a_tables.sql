@@ -239,7 +239,7 @@ CREATE INDEX idx_a2a_consent_user ON a2a_consent_records(user_id, revoked);
 CREATE INDEX idx_a2a_consent_agents ON a2a_consent_records(grantor_agent_id, recipient_agent_id);
 CREATE INDEX idx_a2a_consent_org ON a2a_consent_records(organization_id) WHERE organization_id IS NOT NULL;
 CREATE INDEX idx_a2a_consent_active ON a2a_consent_records(user_id, grantor_agent_id, recipient_agent_id)
-    WHERE revoked = FALSE AND (expires_at IS NULL OR expires_at > NOW());
+    WHERE revoked = FALSE;
 
 -- ============================================================================
 -- A2A Trust Scores
