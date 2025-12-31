@@ -23,6 +23,10 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 
 ---
 
+> **No Proxies. Direct Observation.** AIM doesn't intercept your agent traffic. Agents report actions explicitly via SDK decorators while communicating directly with target systems. [Learn more →](#architecture-direct-observation-no-proxies)
+
+---
+
 ## Get Started
 
 | Option | Best For | Link |
@@ -42,6 +46,66 @@ Your AI agents are autonomous. They call APIs, access databases, and make decisi
 - **A single rogue agent can** — Exfiltrate data, rack up API bills, delete production databases
 
 **AIM solves this** with cryptographic identity, capability enforcement, and real-time threat detection.
+
+---
+
+## Architecture: Direct Observation, No Proxies
+
+AIM uses **direct, declarative observation** — not proxies or network interception. This is a fundamental design choice that preserves agent autonomy while providing complete visibility.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          YOUR AGENT                                      │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  @agent.perform_action(capability="db:read")                     │    │
+│  │  def get_customer(id):                                           │    │
+│  │      return database.query(id)  ─────────────────────────────────┼────┼──► Target System
+│  └─────────────────────────────────────────────────────────────────┘    │    (Direct Connection)
+│                          │                                               │
+│                          │ Reports action                                │
+│                          ▼                                               │
+│                    AIM Backend                                           │
+│              (Verification + Logging)                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### What AIM Does NOT Do
+
+| Anti-Pattern | Why We Avoid It |
+|--------------|-----------------|
+| **Network Proxy** | No man-in-the-middle between agent and target systems |
+| **Traffic Interception** | No packet sniffing or request redirection |
+| **Transparent Wrapping** | Agents explicitly declare actions via SDK decorators |
+| **Request Modification** | Agent requests pass directly to targets unchanged |
+
+### What AIM Does
+
+| Approach | How It Works |
+|----------|--------------|
+| **Explicit Declaration** | `@perform_action` decorator reports what the agent is doing |
+| **Cryptographic Signing** | Agent signs actions with Ed25519 private key |
+| **MCP Discovery** | SDK scans local config files, reports MCP servers in use |
+| **Capability Verification** | SDK calls AIM API before executing sensitive actions |
+
+### Performance Characteristics
+
+| Operation | Overhead | Blocking? |
+|-----------|----------|-----------|
+| Agent → Target communication | **Zero** | No proxy in path |
+| Capability verification | ~50-200ms | Yes (per action) |
+| MCP discovery & attestation | ~5-30s | No (background thread) |
+| Security logging | <5ms | Configurable (sync/async) |
+
+**Key point:** AIM adds no latency to the agent↔target communication path. Verification overhead applies only to the AIM reporting call, not to your agent's actual work.
+
+### Why This Matters
+
+- **No single point of failure** — If AIM is down, agents can optionally continue (fail-open mode)
+- **No compatibility issues** — Works with any MCP server, API, or database without modification
+- **Full audit trail** — Every action is cryptographically signed and logged
+- **Agent retains control** — Agents explicitly choose what to report, nothing is intercepted
 
 ---
 
