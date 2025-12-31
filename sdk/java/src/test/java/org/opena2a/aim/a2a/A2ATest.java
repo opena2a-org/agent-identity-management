@@ -537,25 +537,23 @@ class A2ATest {
             A2AConsent consent = A2AConsent.builder()
                     .id("consent-123")
                     .userId("user-456")
-                    .sourceAgentId("agent-A")
-                    .targetAgentId("agent-B")
+                    .grantorAgentId("agent-A")
+                    .recipientAgentId("agent-B")
                     .purpose("Data sharing for analytics")
                     .dataTypes(Arrays.asList("profile", "preferences"))
                     .status(A2AConsent.ConsentStatus.GRANTED)
                     .grantedAt(now)
                     .expiresAt(expires)
-                    .legalBasis("consent")
                     .retentionPeriod("90 days")
                     .build();
 
             assertEquals("consent-123", consent.getId());
             assertEquals("user-456", consent.getUserId());
-            assertEquals("agent-A", consent.getSourceAgentId());
-            assertEquals("agent-B", consent.getTargetAgentId());
+            assertEquals("agent-A", consent.getGrantorAgentId());
+            assertEquals("agent-B", consent.getRecipientAgentId());
             assertEquals("Data sharing for analytics", consent.getPurpose());
             assertEquals(2, consent.getDataTypes().size());
             assertEquals(A2AConsent.ConsentStatus.GRANTED, consent.getStatus());
-            assertEquals("consent", consent.getLegalBasis());
         }
 
         @Test
@@ -674,8 +672,8 @@ class A2ATest {
             A2AConsent consent = A2AConsent.builder()
                     .id("consent-123")
                     .userId("user-456")
-                    .sourceAgentId("source")
-                    .targetAgentId("target")
+                    .grantorAgentId("source")
+                    .recipientAgentId("target")
                     .purpose("testing")
                     .status(A2AConsent.ConsentStatus.GRANTED)
                     .build();
