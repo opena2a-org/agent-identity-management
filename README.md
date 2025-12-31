@@ -57,17 +57,17 @@ AIM uses **direct, declarative observation** — not proxies or network intercep
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          YOUR AGENT                                      │
+│                          YOUR AGENT                                     │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │  @agent.perform_action(capability="db:read")                     │    │
-│  │  def get_customer(id):                                           │    │
-│  │      return database.query(id)  ─────────────────────────────────┼────┼──► Target System
+│  │  @agent.perform_action(capability="db:read")                    │    │
+│  │  def get_customer(id):                                          │    │
+│  │      return database.query(id)   ───────────────────────────────┼────┼──► Target System
 │  └─────────────────────────────────────────────────────────────────┘    │    (Direct Connection)
-│                          │                                               │
-│                          │ Reports action                                │
-│                          ▼                                               │
-│                    AIM Backend                                           │
-│              (Verification + Logging)                                    │
+│                          │                                              │
+│                          │ Reports action                               │
+│                          ▼                                              │
+│                    AIM Backend                                          │
+│              (Verification + Logging)                                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
