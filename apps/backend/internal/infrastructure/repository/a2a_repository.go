@@ -588,6 +588,17 @@ func (r *A2ASkillRepository) IncrementUsage(ctx context.Context, id uuid.UUID, s
 	return nil
 }
 
+// MarkVerified marks a skill as verified after consensus is reached
+func (r *A2ASkillRepository) MarkVerified(ctx context.Context, agentID uuid.UUID, skillID string) error {
+	query := `
+		UPDATE a2a_skills
+		SET is_verified = TRUE, verified_at = NOW(), attestation_count = COALESCE(attestation_count, 0) + 1, updated_at = NOW()
+		WHERE agent_id = $1 AND skill_id = $2
+	`
+	_, err := r.db.ExecContext(ctx, query, agentID, skillID)
+	return err
+}
+
 func (r *A2ASkillRepository) querySkills(ctx context.Context, query string, args ...interface{}) ([]*domain.A2ASkill, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

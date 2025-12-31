@@ -398,8 +398,10 @@ type Repositories struct {
 	A2APeerTrust    *repository.A2APeerTrustRepository
 	A2AConsent      *repository.A2AConsentRepository
 	A2ATrustScore   *repository.A2ATrustScoreRepository
-	A2ARequestNonce *repository.A2ARequestNonceRepository
-	A2APolicy       *repository.A2APolicyRepository
+	A2ARequestNonce   *repository.A2ARequestNonceRepository
+	A2APolicy         *repository.A2APolicyRepository
+	A2AAttestation    *repository.A2AAgentAttestationRepository
+	A2ARevokedAgent   *repository.A2ARevokedAgentRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -439,8 +441,10 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		A2APeerTrust:    repository.NewA2APeerTrustRepository(db),
 		A2AConsent:      repository.NewA2AConsentRepository(db),
 		A2ATrustScore:   repository.NewA2ATrustScoreRepository(db),
-		A2ARequestNonce: repository.NewA2ARequestNonceRepository(db),
-		A2APolicy:       repository.NewA2APolicyRepository(db),
+		A2ARequestNonce:   repository.NewA2ARequestNonceRepository(db),
+		A2APolicy:         repository.NewA2APolicyRepository(db),
+		A2AAttestation:    repository.NewA2AAgentAttestationRepository(db),
+		A2ARevokedAgent:   repository.NewA2ARevokedAgentRepository(db),
 	}, oauthRepo
 }
 
@@ -663,6 +667,8 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.A2ATrustScore,
 		repos.A2ARequestNonce,
 		repos.A2APolicy,
+		repos.A2AAttestation,
+		repos.A2ARevokedAgent,
 		repos.Agent,
 		keyVault,
 	)

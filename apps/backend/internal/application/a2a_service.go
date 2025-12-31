@@ -66,17 +66,19 @@ func getNonceExpiryMinutes() int {
 
 // A2AService handles A2A (Agent-to-Agent) protocol operations
 type A2AService struct {
-	cardRepo       *repository.A2AAgentCardRepository
-	skillRepo      *repository.A2ASkillRepository
-	taskRepo       *repository.A2ATaskRepository
-	peerTrustRepo  *repository.A2APeerTrustRepository
-	consentRepo    *repository.A2AConsentRepository
-	trustScoreRepo *repository.A2ATrustScoreRepository
-	nonceRepo      *repository.A2ARequestNonceRepository
-	policyRepo     *repository.A2APolicyRepository
-	agentRepo      *repository.AgentRepository
-	keyVault       *crypto.KeyVault
-	httpClient     *http.Client
+	cardRepo        *repository.A2AAgentCardRepository
+	skillRepo       *repository.A2ASkillRepository
+	taskRepo        *repository.A2ATaskRepository
+	peerTrustRepo   *repository.A2APeerTrustRepository
+	consentRepo     *repository.A2AConsentRepository
+	trustScoreRepo  *repository.A2ATrustScoreRepository
+	nonceRepo       *repository.A2ARequestNonceRepository
+	policyRepo      *repository.A2APolicyRepository
+	attestationRepo *repository.A2AAgentAttestationRepository
+	revokedRepo     *repository.A2ARevokedAgentRepository
+	agentRepo       *repository.AgentRepository
+	keyVault        *crypto.KeyVault
+	httpClient      *http.Client
 }
 
 // NewA2AService creates a new A2A service
@@ -89,20 +91,24 @@ func NewA2AService(
 	trustScoreRepo *repository.A2ATrustScoreRepository,
 	nonceRepo *repository.A2ARequestNonceRepository,
 	policyRepo *repository.A2APolicyRepository,
+	attestationRepo *repository.A2AAgentAttestationRepository,
+	revokedRepo *repository.A2ARevokedAgentRepository,
 	agentRepo *repository.AgentRepository,
 	keyVault *crypto.KeyVault,
 ) *A2AService {
 	return &A2AService{
-		cardRepo:       cardRepo,
-		skillRepo:      skillRepo,
-		taskRepo:       taskRepo,
-		peerTrustRepo:  peerTrustRepo,
-		consentRepo:    consentRepo,
-		trustScoreRepo: trustScoreRepo,
-		nonceRepo:      nonceRepo,
-		policyRepo:     policyRepo,
-		agentRepo:      agentRepo,
-		keyVault:       keyVault,
+		cardRepo:        cardRepo,
+		skillRepo:       skillRepo,
+		taskRepo:        taskRepo,
+		peerTrustRepo:   peerTrustRepo,
+		consentRepo:     consentRepo,
+		trustScoreRepo:  trustScoreRepo,
+		nonceRepo:       nonceRepo,
+		policyRepo:      policyRepo,
+		attestationRepo: attestationRepo,
+		revokedRepo:     revokedRepo,
+		agentRepo:       agentRepo,
+		keyVault:        keyVault,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -840,6 +846,174 @@ func (s *A2AService) RouteByIntent(ctx context.Context, intent string, minTrustS
 // CapableOf returns all agents capable of a given intent
 func (s *A2AService) CapableOf(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*domain.RoutedAgent, error) {
 	return s.skillRepo.SearchByIntent(ctx, intent, minTrustScore, limit)
+}
+
+// ============================================================================
+// Agent-to-Agent Attestation (Multi-Agent Consensus)
+// ============================================================================
+
+// Consensus thresholds
+const (
+	DefaultMinAgentsForA2AConsensus  = 3
+	DefaultMinOwnersForA2AConsensus  = 2
+	MinA2AConfidenceForVerification  = 60.0
+	DefaultMinTrustForA2AAttestation = 0.30
+	DefaultAttestationValidityDays   = 30
+)
+
+// AutoAttestAfterTask creates attestation after successful A2A task
+func (s *A2AService) AutoAttestAfterTask(ctx context.Context, task *domain.A2ATask) error {
+	if task.State != domain.A2ATaskStateCompleted {
+		return nil // Only attest successful tasks
+	}
+
+	// Check if client agent can attest (trust score threshold)
+	clientAgent, err := s.agentRepo.GetByID(task.ClientAgentID)
+	if err != nil || clientAgent == nil {
+		return nil
+	}
+	if clientAgent.TrustScore < DefaultMinTrustForA2AAttestation {
+		return nil // Low trust agents can't attest
+	}
+
+	// Check if remote agent is revoked
+	revoked, _ := s.revokedRepo.IsRevoked(ctx, task.RemoteAgentID)
+	if revoked {
+		return nil // Don't attest revoked agents
+	}
+
+	// Create attestation
+	attestation := &domain.A2AAgentAttestation{
+		AttestingAgentID:   task.ClientAgentID,
+		AttestedAgentID:    task.RemoteAgentID,
+		SkillID:            task.SkillID,
+		TaskID:             &task.ID,
+		TaskCompleted:      true,
+		ResponseTimeMs:     task.DurationMs,
+		AttesterTrustScore: clientAgent.TrustScore,
+		ExpiresAt:          time.Now().Add(time.Duration(DefaultAttestationValidityDays) * 24 * time.Hour),
+	}
+
+	// Sign attestation
+	signature, err := s.signAttestation(ctx, task.ClientAgentID, attestation)
+	if err != nil {
+		return fmt.Errorf("failed to sign attestation: %w", err)
+	}
+	attestation.AttestationSignature = signature
+
+	// Save attestation
+	if err := s.attestationRepo.Create(ctx, attestation); err != nil {
+		return fmt.Errorf("failed to save attestation: %w", err)
+	}
+
+	// Check consensus and possibly verify skill
+	if task.SkillID != "" {
+		s.checkAndApplyA2AConsensus(ctx, task.RemoteAgentID, task.SkillID)
+	}
+
+	return nil
+}
+
+// signAttestation signs an attestation with the attesting agent's key
+func (s *A2AService) signAttestation(ctx context.Context, agentID uuid.UUID, att *domain.A2AAgentAttestation) (string, error) {
+	// Get agent with private key
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil || agent == nil {
+		return "", fmt.Errorf("agent not found")
+	}
+
+	if agent.EncryptedPrivateKey == nil || *agent.EncryptedPrivateKey == "" {
+		return "", fmt.Errorf("agent has no private key")
+	}
+
+	// Decrypt private key
+	privateKeyB64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt private key: %w", err)
+	}
+	privateKey, err := base64.StdEncoding.DecodeString(privateKeyB64)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode private key: %w", err)
+	}
+
+	// Create attestation payload
+	payload := fmt.Sprintf("%s:%s:%s:%t:%d",
+		att.AttestingAgentID.String(),
+		att.AttestedAgentID.String(),
+		att.SkillID,
+		att.TaskCompleted,
+		time.Now().UnixNano(),
+	)
+
+	hash := sha256.Sum256([]byte(payload))
+	signature := ed25519.Sign(privateKey, hash[:])
+	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+// checkAndApplyA2AConsensus checks if a skill meets consensus thresholds
+func (s *A2AService) checkAndApplyA2AConsensus(ctx context.Context, agentID uuid.UUID, skillID string) {
+	// Count unique attesters
+	uniqueAttesters, _ := s.attestationRepo.CountUniqueAttesters(ctx, agentID, skillID)
+	if uniqueAttesters < DefaultMinAgentsForA2AConsensus {
+		return // Not enough attesters yet
+	}
+
+	// Count unique owners (organizations)
+	uniqueOwners, _ := s.attestationRepo.CountUniqueOwners(ctx, agentID, skillID)
+	if uniqueOwners < DefaultMinOwnersForA2AConsensus {
+		return // Not enough independent owners
+	}
+
+	// Calculate confidence score
+	confidence := float64(uniqueAttesters*10 + uniqueOwners*20)
+	if confidence < MinA2AConfidenceForVerification {
+		return
+	}
+
+	// Mark skill as verified (update a2a_skills table)
+	s.skillRepo.MarkVerified(ctx, agentID, skillID)
+}
+
+// IsAgentRevoked checks if an agent has been revoked
+func (s *A2AService) IsAgentRevoked(ctx context.Context, agentID uuid.UUID) (bool, error) {
+	return s.revokedRepo.IsRevoked(ctx, agentID)
+}
+
+// RevokeAgent marks an agent as revoked
+func (s *A2AService) RevokeAgent(ctx context.Context, agentID uuid.UUID, reason string, revokedBy *uuid.UUID) error {
+	return s.revokedRepo.Revoke(ctx, agentID, reason, revokedBy)
+}
+
+// ReinstateAgent removes an agent from the revoked list
+func (s *A2AService) ReinstateAgent(ctx context.Context, agentID uuid.UUID) error {
+	return s.revokedRepo.Reinstate(ctx, agentID)
+}
+
+// GetAgentAttestations returns attestations for an agent
+func (s *A2AService) GetAgentAttestations(ctx context.Context, agentID uuid.UUID, skillID string) ([]*domain.A2AAgentAttestation, error) {
+	return s.attestationRepo.GetByAttestedAgent(ctx, agentID, skillID)
+}
+
+// GetConsensusStatus returns the consensus verification status for a skill
+func (s *A2AService) GetConsensusStatus(ctx context.Context, agentID uuid.UUID, skillID string) (*domain.A2AConsensusResult, error) {
+	attesters, _ := s.attestationRepo.CountUniqueAttesters(ctx, agentID, skillID)
+	owners, _ := s.attestationRepo.CountUniqueOwners(ctx, agentID, skillID)
+	attestations, _ := s.attestationRepo.GetByAttestedAgent(ctx, agentID, skillID)
+
+	confidence := float64(attesters*10 + owners*20)
+	isVerified := attesters >= DefaultMinAgentsForA2AConsensus &&
+		owners >= DefaultMinOwnersForA2AConsensus &&
+		confidence >= MinA2AConfidenceForVerification
+
+	return &domain.A2AConsensusResult{
+		SkillID:          skillID,
+		AgentID:          agentID,
+		AttestationCount: len(attestations),
+		UniqueAttesters:  attesters,
+		UniqueOwners:     owners,
+		ConfidenceScore:  confidence,
+		IsVerified:       isVerified,
+	}, nil
 }
 
 // ============================================================================
