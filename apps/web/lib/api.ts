@@ -262,6 +262,52 @@ export interface A2AConsent {
   updatedAt: string;
 }
 
+export interface A2ATask {
+  id: string;
+  externalTaskId: string;
+  contextId?: string;
+  clientAgentId: string;
+  clientAgentName?: string;
+  remoteAgentId: string;
+  remoteAgentName?: string;
+  skillId?: string;
+  state: "SUBMITTED" | "WORKING" | "INPUT_NEEDED" | "COMPLETED" | "FAILED" | "CANCELLED";
+  policyDecision?: Record<string, any>;
+  clientTrustScoreSnapshot?: number;
+  remoteTrustScoreSnapshot?: number;
+  messageCount: number;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface A2APeerTrust {
+  id: string;
+  agentId: string;
+  agentName?: string;
+  peerAgentId: string;
+  peerAgentName?: string;
+  tasksInitiated: number;
+  tasksInitiatedCompleted: number;
+  tasksInitiatedFailed: number;
+  tasksReceived: number;
+  tasksReceivedCompleted: number;
+  tasksReceivedFailed: number;
+  successRate: number;
+  avgResponseTimeMs?: number;
+  p95ResponseTimeMs?: number;
+  peerTrustScore: number;
+  trustComputedAt?: string;
+  trustDataPoints: number;
+  firstInteractionAt?: string;
+  lastInteractionAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentCapability {
   id: string;
   agentId: string;
@@ -2984,32 +3030,47 @@ class APIClient {
   /**
    * A2A Agent Card interfaces
    */
-  async listA2AAgentCards(limit: number = 100, offset: number = 0): Promise<{
+  async listA2AAgentCards(): Promise<{
     cards: A2AAgentCard[];
     total: number;
   }> {
-    return this.request(`/api/v1/a2a/cards?limit=${limit}&offset=${offset}`);
+    // Get all agents and their A2A cards
+    const agents = await this.listAgents();
+    const cards: A2AAgentCard[] = [];
+
+    for (const agent of agents.agents || []) {
+      try {
+        const card = await this.getA2AAgentCard(agent.id);
+        if (card) {
+          cards.push(card);
+        }
+      } catch {
+        // Agent doesn't have a card, skip
+      }
+    }
+
+    return { cards, total: cards.length };
   }
 
   async getA2AAgentCard(agentId: string): Promise<A2AAgentCard> {
-    return this.request(`/api/v1/a2a/cards/${agentId}`);
+    return this.request(`/api/v1/a2a/agents/${agentId}/card`);
   }
 
-  async registerA2AAgentCard(cardUrl: string): Promise<A2AAgentCard> {
-    return this.request(`/api/v1/a2a/cards`, {
+  async registerA2AAgentCard(agentId: string, cardUrl: string, cardData?: Record<string, any>): Promise<A2AAgentCard> {
+    return this.request(`/api/v1/a2a/agents/${agentId}/card`, {
       method: "POST",
-      body: JSON.stringify({ cardUrl }),
+      body: JSON.stringify({ cardUrl, cardData }),
     });
   }
 
   async refreshA2AAttestation(agentId: string): Promise<A2AAgentCard> {
-    return this.request(`/api/v1/a2a/cards/${agentId}/attestation`, {
+    return this.request(`/api/v1/a2a/agents/${agentId}/card/refresh`, {
       method: "POST",
     });
   }
 
   async deleteA2AAgentCard(agentId: string): Promise<void> {
-    return this.request(`/api/v1/a2a/cards/${agentId}`, {
+    return this.request(`/api/v1/a2a/agents/${agentId}/card`, {
       method: "DELETE",
     });
   }
@@ -3017,27 +3078,99 @@ class APIClient {
   /**
    * A2A Trust Score interfaces
    */
-  async listA2ATrustScores(agentId?: string): Promise<{
-    trustScores: A2ATrustScore[];
+  async getA2ATrustScore(agentId: string): Promise<{
+    agentId: string;
+    a2aTrustScore: number;
+    totalTasksAsClient: number;
+    totalTasksAsRemote: number;
+    tasksCompleted: number;
+    tasksFailed: number;
+    avgResponseTimeMs?: number;
+    uniquePeersCount: number;
+    computedAt?: string;
+  }> {
+    return this.request(`/api/v1/a2a/agents/${agentId}/trust-score`);
+  }
+
+  async computeA2ATrustScore(agentId: string): Promise<{
+    agentId: string;
+    a2aTrustScore: number;
+    message: string;
+  }> {
+    return this.request(`/api/v1/a2a/agents/${agentId}/trust-score/compute`, {
+      method: "POST",
+    });
+  }
+
+  async getA2APeerTrust(agentId: string, peerAgentId: string): Promise<A2APeerTrust> {
+    return this.request(`/api/v1/a2a/agents/${agentId}/peers/${peerAgentId}/trust`);
+  }
+
+  /**
+   * A2A Skills interfaces
+   */
+  async getA2AAgentSkills(agentId: string): Promise<{
+    skills: A2ASkill[];
     total: number;
   }> {
-    const query = agentId ? `?agentId=${agentId}` : "";
-    return this.request(`/api/v1/a2a/trust${query}`);
+    return this.request(`/api/v1/a2a/agents/${agentId}/skills`);
   }
 
-  async getA2ATrustScore(sourceAgentId: string, targetAgentId: string): Promise<A2ATrustScore> {
-    return this.request(`/api/v1/a2a/trust/${targetAgentId}?evaluator=${sourceAgentId}`);
+  async searchA2ASkills(query: string, tags?: string[]): Promise<{
+    skills: Array<A2ASkill & { agentId: string; agentName: string }>;
+    total: number;
+  }> {
+    let url = `/api/v1/a2a/skills/search?q=${encodeURIComponent(query)}`;
+    if (tags && tags.length > 0) {
+      url += `&tags=${encodeURIComponent(tags.join(","))}`;
+    }
+    return this.request(url);
   }
 
-  async updateA2ATrustScore(
-    targetAgentId: string,
-    score: number,
-    confidence: number,
-    factors?: Record<string, number>
-  ): Promise<A2ATrustScore> {
-    return this.request(`/api/v1/a2a/trust/${targetAgentId}`, {
+  /**
+   * A2A Task interfaces
+   */
+  async listA2ATasks(params?: {
+    agentId?: string;
+    state?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    tasks: A2ATask[];
+    total: number;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.agentId) searchParams.set("agentId", params.agentId);
+    if (params?.state) searchParams.set("state", params.state);
+    if (params?.limit) searchParams.set("limit", params.limit.toString());
+    if (params?.offset) searchParams.set("offset", params.offset.toString());
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return this.request(`/api/v1/a2a/tasks${query}`);
+  }
+
+  async logA2ATask(task: {
+    externalTaskId: string;
+    contextId?: string;
+    clientAgentId: string;
+    remoteAgentId: string;
+    skillId?: string;
+    state?: string;
+  }): Promise<A2ATask> {
+    return this.request(`/api/v1/a2a/tasks`, {
+      method: "POST",
+      body: JSON.stringify(task),
+    });
+  }
+
+  async updateA2ATaskState(
+    taskId: string,
+    state: string,
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<A2ATask> {
+    return this.request(`/api/v1/a2a/tasks/${taskId}/state`, {
       method: "PUT",
-      body: JSON.stringify({ score, confidence, factors }),
+      body: JSON.stringify({ state, errorCode, errorMessage }),
     });
   }
 
@@ -3048,21 +3181,35 @@ class APIClient {
     consents: A2AConsent[];
     total: number;
   }> {
-    const query = userId ? `?userId=${userId}` : "";
-    return this.request(`/api/v1/a2a/consent${query}`);
+    if (userId) {
+      return this.request(`/api/v1/a2a/consent/user/${userId}`);
+    }
+    // No general list endpoint, return empty for now
+    return { consents: [], total: 0 };
   }
 
   async recordA2AConsent(
     userId: string,
-    targetAgentId: string,
+    grantorAgentId: string,
+    recipientAgentId: string,
     purpose: string,
     dataTypes: string[],
-    legalBasis: string,
+    scope: string[],
+    consentMethod: string,
     expiresAt?: string
   ): Promise<A2AConsent> {
     return this.request(`/api/v1/a2a/consent`, {
       method: "POST",
-      body: JSON.stringify({ userId, targetAgentId, purpose, dataTypes, legalBasis, expiresAt }),
+      body: JSON.stringify({
+        userId,
+        grantorAgentId,
+        recipientAgentId,
+        purpose,
+        dataTypes,
+        scope,
+        consentMethod,
+        expiresAt
+      }),
     });
   }
 
@@ -3075,7 +3222,8 @@ class APIClient {
 
   async checkA2AConsent(
     userId: string,
-    targetAgentId: string,
+    grantorAgentId: string,
+    recipientAgentId: string,
     purpose: string,
     dataType: string
   ): Promise<{
@@ -3083,7 +3231,7 @@ class APIClient {
     consent?: A2AConsent;
   }> {
     return this.request(
-      `/api/v1/a2a/consent/check?userId=${userId}&targetAgentId=${targetAgentId}&purpose=${purpose}&dataType=${dataType}`
+      `/api/v1/a2a/consent/check?userId=${encodeURIComponent(userId)}&grantorAgentId=${grantorAgentId}&recipientAgentId=${recipientAgentId}&purpose=${encodeURIComponent(purpose)}&dataType=${encodeURIComponent(dataType)}`
     );
   }
 
@@ -3098,6 +3246,10 @@ class APIClient {
       avgTrustScore: number;
       activeConsents: number;
       tasksLast24h: number;
+      totalTasks: number;
+      completedTasks: number;
+      failedTasks: number;
+      totalSkills: number;
     };
     recentActivity: Array<{
       type: "card_registered" | "trust_updated" | "consent_granted" | "task_completed";
@@ -3106,8 +3258,75 @@ class APIClient {
       timestamp: string;
       details: string;
     }>;
+    tasksByState: Array<{
+      state: string;
+      count: number;
+    }>;
+    trustDistribution: Array<{
+      range: string;
+      count: number;
+    }>;
   }> {
-    return this.request(`/api/v1/a2a/dashboard`);
+    // Build dashboard from available data
+    try {
+      const [agents] = await Promise.all([
+        this.listAgents(),
+      ]);
+
+      // Count cards by checking each agent
+      let totalCards = 0;
+      let verifiedCards = 0;
+      let totalSkills = 0;
+
+      for (const agent of agents.agents || []) {
+        try {
+          const card = await this.getA2AAgentCard(agent.id);
+          if (card) {
+            totalCards++;
+            if (card.verified) verifiedCards++;
+            if (card.skills) totalSkills += card.skills.length;
+          }
+        } catch {
+          // Skip agents without cards
+        }
+      }
+
+      return {
+        stats: {
+          totalAgentCards: totalCards,
+          verifiedCards,
+          totalTrustRelationships: 0,
+          avgTrustScore: 0,
+          activeConsents: 0,
+          tasksLast24h: 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          failedTasks: 0,
+          totalSkills,
+        },
+        recentActivity: [],
+        tasksByState: [],
+        trustDistribution: [],
+      };
+    } catch {
+      return {
+        stats: {
+          totalAgentCards: 0,
+          verifiedCards: 0,
+          totalTrustRelationships: 0,
+          avgTrustScore: 0,
+          activeConsents: 0,
+          tasksLast24h: 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          failedTasks: 0,
+          totalSkills: 0,
+        },
+        recentActivity: [],
+        tasksByState: [],
+        trustDistribution: [],
+      };
+    }
   }
 }
 
