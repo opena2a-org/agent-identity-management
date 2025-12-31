@@ -531,15 +531,15 @@ def verify_hybrid(
     """
     _require_pqc()
 
+    # Import nacl exceptions at function scope (before try block)
+    from nacl.signing import VerifyKey
+    from nacl.exceptions import BadSignatureError
+
     # Verify Ed25519 first (faster)
     try:
-        from nacl.signing import VerifyKey
-        from nacl.exceptions import BadSignature
-
         verify_key = VerifyKey(ed25519_public_key)
         verify_key.verify(message, ed25519_signature)
-        ed25519_valid = True
-    except BadSignature:
+    except BadSignatureError:
         return False, "Ed25519 signature invalid"
     except Exception as e:
         return False, f"Ed25519 verification error: {e}"
