@@ -143,7 +143,7 @@ class TestVerifyAction:
         # Mock successful verification response
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "approved",
@@ -168,7 +168,7 @@ class TestVerifyAction:
         """Test action verification with denial"""
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "denied",
@@ -189,7 +189,7 @@ class TestVerifyAction:
         # First request returns pending
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "pending"
@@ -200,7 +200,7 @@ class TestVerifyAction:
         # Subsequent polls return approved
         responses.add(
             responses.GET,
-            "https://aim.example.com/api/v1/verifications/verification-123",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123",
             json={
                 "id": "verification-123",
                 "status": "approved",
@@ -224,7 +224,7 @@ class TestVerifyAction:
         """Test action verification with authentication failure"""
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={"error": "Unauthorized"},
             status=401
         )
@@ -244,7 +244,7 @@ class TestLogActionResult:
         """Test logging successful action result"""
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications/verification-123/result",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
             json={"status": "logged"},
             status=200
         )
@@ -258,7 +258,7 @@ class TestLogActionResult:
 
         assert len(responses.calls) == 1
         request_body = json.loads(responses.calls[0].request.body)
-        assert request_body["success"] is True
+        assert request_body["result"] == "success"
         assert request_body["result_summary"] == "Operation completed successfully"
 
     @responses.activate
@@ -266,7 +266,7 @@ class TestLogActionResult:
         """Test logging failed action result"""
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications/verification-123/result",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
             json={"status": "logged"},
             status=200
         )
@@ -279,7 +279,7 @@ class TestLogActionResult:
 
         assert len(responses.calls) == 1
         request_body = json.loads(responses.calls[0].request.body)
-        assert request_body["success"] is False
+        assert request_body["result"] == "failure"
         assert request_body["error_message"] == "Database connection failed"
 
     @responses.activate
@@ -287,7 +287,7 @@ class TestLogActionResult:
         """Test that logging errors don't raise exceptions"""
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications/verification-123/result",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
             json={"error": "Internal server error"},
             status=500
         )
@@ -305,10 +305,18 @@ class TestPerformActionDecorator:
     @responses.activate
     def test_decorator_success(self, aim_client):
         """Test decorator with successful verification and execution"""
+        # Mock capability auto-registration (happens first on decorated function call)
+        responses.add(
+            responses.POST,
+            f"https://aim.example.com/api/v1/sdk-api/agents/{aim_client.agent_id}/capabilities/register",
+            json={"status": "granted", "message": "Capability registered"},
+            status=200
+        )
+
         # Mock verification approval
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "approved",
@@ -321,26 +329,34 @@ class TestPerformActionDecorator:
         # Mock result logging
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications/verification-123/result",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
             json={"status": "logged"},
             status=200
         )
 
-        @aim_client.perform_action("read_database", resource="users_table")
+        @aim_client.perform_action("db:read", resource="users_table")
         def get_users():
             return {"users": [{"id": 1, "name": "Alice"}]}
 
         result = get_users()
 
         assert result == {"users": [{"id": 1, "name": "Alice"}]}
-        assert len(responses.calls) == 2  # Verification + logging
+        assert len(responses.calls) == 3  # Auto-registration + Verification + logging
 
     @responses.activate
     def test_decorator_action_denied(self, aim_client):
         """Test decorator when action is denied"""
+        # Mock capability auto-registration
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            f"https://aim.example.com/api/v1/sdk-api/agents/{aim_client.agent_id}/capabilities/register",
+            json={"status": "granted", "message": "Capability registered"},
+            status=200
+        )
+
+        responses.add(
+            responses.POST,
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "denied",
@@ -349,7 +365,7 @@ class TestPerformActionDecorator:
             status=200
         )
 
-        @aim_client.perform_action("delete_database", resource="production")
+        @aim_client.perform_action("db:delete", resource="production")
         def dangerous_action():
             return "should not execute"
 
@@ -359,10 +375,18 @@ class TestPerformActionDecorator:
     @responses.activate
     def test_decorator_logs_execution_error(self, aim_client):
         """Test decorator logs errors when function fails"""
+        # Mock capability auto-registration
+        responses.add(
+            responses.POST,
+            f"https://aim.example.com/api/v1/sdk-api/agents/{aim_client.agent_id}/capabilities/register",
+            json={"status": "granted", "message": "Capability registered"},
+            status=200
+        )
+
         # Mock verification approval
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
             json={
                 "id": "verification-123",
                 "status": "approved",
@@ -375,12 +399,12 @@ class TestPerformActionDecorator:
         # Mock result logging
         responses.add(
             responses.POST,
-            "https://aim.example.com/api/v1/verifications/verification-123/result",
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
             json={"status": "logged"},
             status=200
         )
 
-        @aim_client.perform_action("read_database", resource="users_table")
+        @aim_client.perform_action("db:read", resource="users_table")
         def failing_function():
             raise ValueError("Database connection failed")
 
@@ -388,9 +412,9 @@ class TestPerformActionDecorator:
             failing_function()
 
         # Verify error was logged
-        assert len(responses.calls) == 2
-        log_request = json.loads(responses.calls[1].request.body)
-        assert log_request["success"] is False
+        assert len(responses.calls) == 3  # Auto-registration + Verification + logging
+        log_request = json.loads(responses.calls[2].request.body)
+        assert log_request["result"] == "failure"
         assert "Database connection failed" in log_request["error_message"]
 
 
