@@ -648,7 +648,170 @@ public class A2AClient {
         }
     }
 
-    // ==================== Discovery ====================
+    // ==================== Intent-Based Discovery ====================
+
+    /**
+     * Route a natural language intent to capable agents.
+     *
+     * <p>Uses full-text search to find agents with skills matching the intent.
+     * Returns agents ranked by relevance and trust score.</p>
+     *
+     * @param intent Natural language description of what you need (e.g., "analyze code quality")
+     * @param minTrustScore Minimum trust score required (0.0 to 1.0)
+     * @return List of capable agents with their matching skills
+     * @throws A2AException if routing fails
+     */
+    public List<Map<String, Object>> routeByIntent(String intent, double minTrustScore) throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("intent", intent);
+            body.put("minTrustScore", minTrustScore);
+
+            String response = post(A2A_BASE_PATH + "/discovery/route", objectMapper.writeValueAsString(body));
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode agentsNode = root.has("agents") ? root.get("agents") : root;
+            return objectMapper.convertValue(agentsNode, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to route intent: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Route a natural language intent with default trust score.
+     *
+     * @param intent Natural language description of what you need
+     * @return List of capable agents
+     * @throws A2AException if routing fails
+     */
+    public List<Map<String, Object>> routeByIntent(String intent) throws A2AException {
+        return routeByIntent(intent, 0.0);
+    }
+
+    /**
+     * Find agents capable of handling specific skills.
+     *
+     * @param skillIds List of skill IDs to search for
+     * @param minTrustScore Minimum trust score required
+     * @return List of capable agents
+     * @throws A2AException if search fails
+     */
+    public List<Map<String, Object>> getCapableAgents(List<String> skillIds, double minTrustScore)
+            throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.set("skillIds", objectMapper.valueToTree(skillIds));
+            body.put("minTrustScore", minTrustScore);
+
+            String response = post(A2A_BASE_PATH + "/discovery/capable", objectMapper.writeValueAsString(body));
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode agentsNode = root.has("agents") ? root.get("agents") : root;
+            return objectMapper.convertValue(agentsNode, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to find capable agents: " + e.getMessage(), e);
+        }
+    }
+
+    // ==================== Security Policy Operations ====================
+
+    /**
+     * Check security policy before making an A2A call.
+     *
+     * <p>Evaluates security settings to determine if an A2A call is allowed.
+     * In "monitor" mode, violations are logged but allowed.
+     * In "strict" mode, violations block the request.</p>
+     *
+     * @param targetAgentId Agent being called
+     * @param skillId Skill being invoked (optional)
+     * @return Security check result
+     * @throws A2AException if check fails
+     */
+    public A2ASecurityCheckResult checkSecurity(String targetAgentId, String skillId) throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("targetAgentId", targetAgentId);
+            if (skillId != null && !skillId.isEmpty()) {
+                body.put("skillId", skillId);
+            }
+
+            String response = post(A2A_BASE_PATH + "/security/check", objectMapper.writeValueAsString(body));
+            return objectMapper.readValue(response, A2ASecurityCheckResult.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to check security: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Check security policy before making an A2A call (without skill).
+     *
+     * @param targetAgentId Agent being called
+     * @return Security check result
+     * @throws A2AException if check fails
+     */
+    public A2ASecurityCheckResult checkSecurity(String targetAgentId) throws A2AException {
+        return checkSecurity(targetAgentId, null);
+    }
+
+    /**
+     * Get organization's A2A security settings.
+     *
+     * @return Security settings
+     * @throws A2AException if retrieval fails
+     */
+    public A2ASecuritySettings getSecuritySettings() throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/security/settings");
+            return objectMapper.readValue(response, A2ASecuritySettings.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to get security settings: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Update organization's A2A security settings.
+     *
+     * @param settings Updated security settings
+     * @return Updated settings
+     * @throws A2AException if update fails
+     */
+    public A2ASecuritySettings updateSecuritySettings(A2ASecuritySettings settings) throws A2AException {
+        try {
+            String response = put(A2A_BASE_PATH + "/security/settings",
+                                  objectMapper.writeValueAsString(settings));
+            return objectMapper.readValue(response, A2ASecuritySettings.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to update security settings: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get recent security violations.
+     *
+     * @param limit Maximum number of violations to return
+     * @return List of security violations
+     * @throws A2AException if retrieval fails
+     */
+    public List<A2ASecurityViolation> getSecurityViolations(int limit) throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/security/violations?limit=" + limit);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode violationsNode = root.has("violations") ? root.get("violations") : root;
+            return objectMapper.convertValue(violationsNode, new TypeReference<List<A2ASecurityViolation>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to get security violations: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get security violations with default limit.
+     *
+     * @return List of security violations
+     * @throws A2AException if retrieval fails
+     */
+    public List<A2ASecurityViolation> getSecurityViolations() throws A2AException {
+        return getSecurityViolations(100);
+    }
+
+    // ==================== URL-Based Discovery ====================
 
     /**
      * Discover agent by URL (fetch and register their agent card).
