@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -452,54 +451,4 @@ func TestInteroperabilityMatrix(t *testing.T) {
 	t.Log("")
 	t.Log("Note: Cross-SDK tests require SDK clients with PQC support running")
 	t.Log("against a live backend. These will be implemented as the SDKs mature.")
-}
-
-// =============================================================================
-// HELPER ADDITIONS FOR PQC TESTS
-// =============================================================================
-
-// Put makes a PUT request (added for key rotation)
-func (tc *TestContext) Put(path string, body interface{}, token string) ([]byte, error) {
-	return tc.doRequest("PUT", path, body, token)
-}
-
-// doRequest is a helper to make HTTP requests
-func (tc *TestContext) doRequest(method, path string, body interface{}, token string) ([]byte, error) {
-	var bodyReader *bytes.Reader
-	if body != nil {
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal body: %w", err)
-		}
-		bodyReader = bytes.NewReader(bodyBytes)
-	} else {
-		bodyReader = bytes.NewReader(nil)
-	}
-
-	req, err := http.NewRequest(method, tc.Config.BaseURL+path, bodyReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := tc.Client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
 }
