@@ -1909,6 +1909,17 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
+     * Gets the current access token.
+     * Ensures the token is valid before returning.
+     *
+     * @return the current access token
+     */
+    public String getAccessToken() {
+        ensureValidToken();
+        return accessToken;
+    }
+
+    /**
      * Gets the agent type.
      *
      * @return the agent type

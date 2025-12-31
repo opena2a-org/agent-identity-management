@@ -185,6 +185,83 @@ export interface AddTagsInput {
   tagIds: string[];
 }
 
+// A2A Protocol Types
+export interface A2AAgentCard {
+  id: string;
+  agentId: string;
+  name: string;
+  description?: string;
+  url: string;
+  version?: string;
+  provider?: {
+    organization: string;
+    url?: string;
+  };
+  capabilities?: {
+    streaming: boolean;
+    pushNotifications: boolean;
+    stateTransitionHistory: boolean;
+  };
+  skills?: A2ASkill[];
+  authentication?: {
+    schemes: string[];
+    credentials?: string;
+  };
+  defaultInputModes?: string[];
+  defaultOutputModes?: string[];
+  supportsAuthenticatedExtendedCard?: boolean;
+  aimAttestation?: string;
+  aimAttestationExpiresAt?: string;
+  publicKey?: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface A2ASkill {
+  id: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  examples?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+}
+
+export interface A2ATrustScore {
+  id: string;
+  evaluatorAgentId: string;
+  subjectAgentId: string;
+  score: number;
+  confidence: number;
+  interactionCount: number;
+  successfulInteractions: number;
+  failedInteractions: number;
+  lastInteractionAt?: string;
+  factors?: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface A2AConsent {
+  id: string;
+  userId: string;
+  sourceAgentId: string;
+  targetAgentId: string;
+  purpose: string;
+  dataTypes: string[];
+  status: "pending" | "granted" | "denied" | "revoked" | "expired";
+  grantedAt?: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  revocationReason?: string;
+  legalBasis?: string;
+  retentionPeriod?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentCapability {
   id: string;
   agentId: string;
@@ -2900,6 +2977,137 @@ class APIClient {
     }>;
   }> {
     return this.request(`/api/v1/supply-chain/drift-alerts?days=${days}`);
+  }
+
+  // ==================== A2A Protocol ====================
+
+  /**
+   * A2A Agent Card interfaces
+   */
+  async listA2AAgentCards(limit: number = 100, offset: number = 0): Promise<{
+    cards: A2AAgentCard[];
+    total: number;
+  }> {
+    return this.request(`/api/v1/a2a/cards?limit=${limit}&offset=${offset}`);
+  }
+
+  async getA2AAgentCard(agentId: string): Promise<A2AAgentCard> {
+    return this.request(`/api/v1/a2a/cards/${agentId}`);
+  }
+
+  async registerA2AAgentCard(cardUrl: string): Promise<A2AAgentCard> {
+    return this.request(`/api/v1/a2a/cards`, {
+      method: "POST",
+      body: JSON.stringify({ cardUrl }),
+    });
+  }
+
+  async refreshA2AAttestation(agentId: string): Promise<A2AAgentCard> {
+    return this.request(`/api/v1/a2a/cards/${agentId}/attestation`, {
+      method: "POST",
+    });
+  }
+
+  async deleteA2AAgentCard(agentId: string): Promise<void> {
+    return this.request(`/api/v1/a2a/cards/${agentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * A2A Trust Score interfaces
+   */
+  async listA2ATrustScores(agentId?: string): Promise<{
+    trustScores: A2ATrustScore[];
+    total: number;
+  }> {
+    const query = agentId ? `?agentId=${agentId}` : "";
+    return this.request(`/api/v1/a2a/trust${query}`);
+  }
+
+  async getA2ATrustScore(sourceAgentId: string, targetAgentId: string): Promise<A2ATrustScore> {
+    return this.request(`/api/v1/a2a/trust/${targetAgentId}?evaluator=${sourceAgentId}`);
+  }
+
+  async updateA2ATrustScore(
+    targetAgentId: string,
+    score: number,
+    confidence: number,
+    factors?: Record<string, number>
+  ): Promise<A2ATrustScore> {
+    return this.request(`/api/v1/a2a/trust/${targetAgentId}`, {
+      method: "PUT",
+      body: JSON.stringify({ score, confidence, factors }),
+    });
+  }
+
+  /**
+   * A2A Consent Management interfaces
+   */
+  async listA2AConsents(userId?: string): Promise<{
+    consents: A2AConsent[];
+    total: number;
+  }> {
+    const query = userId ? `?userId=${userId}` : "";
+    return this.request(`/api/v1/a2a/consent${query}`);
+  }
+
+  async recordA2AConsent(
+    userId: string,
+    targetAgentId: string,
+    purpose: string,
+    dataTypes: string[],
+    legalBasis: string,
+    expiresAt?: string
+  ): Promise<A2AConsent> {
+    return this.request(`/api/v1/a2a/consent`, {
+      method: "POST",
+      body: JSON.stringify({ userId, targetAgentId, purpose, dataTypes, legalBasis, expiresAt }),
+    });
+  }
+
+  async revokeA2AConsent(consentId: string, reason: string): Promise<A2AConsent> {
+    return this.request(`/api/v1/a2a/consent/${consentId}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async checkA2AConsent(
+    userId: string,
+    targetAgentId: string,
+    purpose: string,
+    dataType: string
+  ): Promise<{
+    hasConsent: boolean;
+    consent?: A2AConsent;
+  }> {
+    return this.request(
+      `/api/v1/a2a/consent/check?userId=${userId}&targetAgentId=${targetAgentId}&purpose=${purpose}&dataType=${dataType}`
+    );
+  }
+
+  /**
+   * A2A Dashboard and Analytics
+   */
+  async getA2ADashboard(): Promise<{
+    stats: {
+      totalAgentCards: number;
+      verifiedCards: number;
+      totalTrustRelationships: number;
+      avgTrustScore: number;
+      activeConsents: number;
+      tasksLast24h: number;
+    };
+    recentActivity: Array<{
+      type: "card_registered" | "trust_updated" | "consent_granted" | "task_completed";
+      agentId: string;
+      agentName: string;
+      timestamp: string;
+      details: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/a2a/dashboard`);
   }
 }
 

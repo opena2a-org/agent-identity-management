@@ -391,6 +391,15 @@ type Repositories struct {
 	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 	AuthFailure        *repository.AuthFailureRepository  // ✅ For failed authentication monitoring
 	DataTransfer       *repository.DataTransferRepository // ✅ For data exfiltration detection
+	// A2A (Agent-to-Agent) protocol repositories
+	A2AAgentCard    *repository.A2AAgentCardRepository
+	A2ASkill        *repository.A2ASkillRepository
+	A2ATask         *repository.A2ATaskRepository
+	A2APeerTrust    *repository.A2APeerTrustRepository
+	A2AConsent      *repository.A2AConsentRepository
+	A2ATrustScore   *repository.A2ATrustScoreRepository
+	A2ARequestNonce *repository.A2ARequestNonceRepository
+	A2APolicy       *repository.A2APolicyRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -423,6 +432,15 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 		AuthFailure:        repository.NewAuthFailureRepository(db),        // ✅ For failed authentication monitoring
 		DataTransfer:       repository.NewDataTransferRepository(db),       // ✅ For data exfiltration detection
+		// A2A (Agent-to-Agent) protocol repositories
+		A2AAgentCard:    repository.NewA2AAgentCardRepository(db),
+		A2ASkill:        repository.NewA2ASkillRepository(db),
+		A2ATask:         repository.NewA2ATaskRepository(db),
+		A2APeerTrust:    repository.NewA2APeerTrustRepository(db),
+		A2AConsent:      repository.NewA2AConsentRepository(db),
+		A2ATrustScore:   repository.NewA2ATrustScoreRepository(db),
+		A2ARequestNonce: repository.NewA2ARequestNonceRepository(db),
+		A2APolicy:       repository.NewA2APolicyRepository(db),
 	}, oauthRepo
 }
 
@@ -449,6 +467,7 @@ type Services struct {
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
+	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -634,6 +653,20 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
+	// ✅ Initialize A2A (Agent-to-Agent) protocol service
+	a2aService := application.NewA2AService(
+		repos.A2AAgentCard,
+		repos.A2ASkill,
+		repos.A2ATask,
+		repos.A2APeerTrust,
+		repos.A2AConsent,
+		repos.A2ATrustScore,
+		repos.A2ARequestNonce,
+		repos.A2APolicy,
+		repos.Agent,
+		keyVault,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -657,6 +690,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
+		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
 	}, keyVault
 }
 
@@ -688,6 +722,7 @@ type Handlers struct {
 	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
+	A2A                *handlers.A2AHandler                // ✅ For A2A (Agent-to-Agent) protocol
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -838,6 +873,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			repos.Agent,
 			repos.MCPServer,
 			repos.MCPCapability,
+		),
+		A2A: handlers.NewA2AHandler(
+			services.A2A,
+			services.Agent,
+			services.Audit,
 		),
 	}
 }
@@ -1221,6 +1261,60 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToMCPServer)
 	mcpServers.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromMCPServer)
 	mcpServers.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForMCPServer)
+
+	// ============================================================================
+	// A2A (Agent-to-Agent) Protocol Routes
+	// Google A2A protocol implementation with AIM security enhancements
+	// ============================================================================
+
+	// Public A2A discovery endpoint (no auth required)
+	// /.well-known/agent.json - Standard A2A agent card discovery
+	v1.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
+
+	// A2A signature verification (no auth - validates incoming A2A requests)
+	v1.Post("/a2a/verify", h.A2A.VerifyRequest)
+
+	// A2A routes (JWT authenticated - web UI)
+	a2a := v1.Group("/a2a")
+	a2a.Use(middleware.AuthMiddleware(jwtService))
+	a2a.Use(middleware.RateLimitMiddleware())
+
+	// Agent Card management
+	a2a.Post("/agents/:id/card", middleware.MemberMiddleware(), h.A2A.RegisterAgentCard)
+	a2a.Get("/agents/:id/card", h.A2A.GetAgentCard)
+	a2a.Post("/agents/:id/card/refresh", middleware.MemberMiddleware(), h.A2A.RefreshCardAttestation)
+
+	// Request signing (SDK/programmatic)
+	a2a.Post("/agents/:id/sign", h.A2A.SignRequest)
+
+	// A2A Trust Scores
+	a2a.Get("/agents/:id/trust-score", h.A2A.GetA2ATrustScore)
+	a2a.Post("/agents/:id/trust-score/compute", middleware.ManagerMiddleware(), h.A2A.ComputeA2ATrustScore)
+	a2a.Get("/agents/:id/peers/:peer_id/trust", h.A2A.GetPeerTrustScore)
+
+	// A2A Skills
+	a2a.Get("/agents/:id/skills", h.A2A.GetAgentSkills)
+	a2a.Get("/skills/search", h.A2A.SearchSkills)
+
+	// A2A Tasks (audit trail)
+	a2a.Post("/tasks", h.A2A.LogTask)
+	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)
+
+	// A2A Consent Management (GDPR/PSD2 compliance)
+	a2a.Post("/consent", h.A2A.RecordConsent)
+	a2a.Get("/consent/check", h.A2A.CheckConsent)
+	a2a.Post("/consent/:id/revoke", h.A2A.RevokeConsent)
+	a2a.Get("/consent/user/:userId", h.A2A.ListUserConsents)
+
+	// A2A Policy Evaluation
+	a2a.Post("/policies/evaluate", h.A2A.EvaluatePolicy)
+
+	// A2A Maintenance (admin only)
+	a2aAdmin := v1.Group("/a2a/maintenance")
+	a2aAdmin.Use(middleware.AuthMiddleware(jwtService))
+	a2aAdmin.Use(middleware.AdminMiddleware())
+	a2aAdmin.Post("/cleanup-nonces", h.A2A.CleanupExpiredNonces)
+	a2aAdmin.Post("/refresh-cards", h.A2A.RefreshExpiredCards)
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {
