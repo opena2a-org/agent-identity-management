@@ -747,6 +747,162 @@ class A2AClient:
         ]
 
     # =========================================================================
+    # Intent-Based Discovery
+    # =========================================================================
+
+    def route_by_intent(
+        self,
+        intent: str,
+        min_trust_score: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Find an agent capable of handling a natural language intent.
+
+        Uses PostgreSQL full-text search to find agents with matching skills.
+
+        Args:
+            intent: Natural language description of what you want to do
+            min_trust_score: Minimum trust score required (0.0-1.0)
+
+        Returns:
+            Best matching agent with skill details, or error if none found
+
+        Example:
+            >>> result = a2a.route_by_intent("send an email to john@example.com")
+            >>> if result.get("agent"):
+            ...     print(f"Found: {result['agent']['agentName']} with {result['agent']['skillName']}")
+        """
+        return self._make_request(
+            "GET",
+            f"/api/v1/a2a/route?intent={intent}&minTrustScore={min_trust_score}"
+        )
+
+    def get_capable_agents(
+        self,
+        intent: str,
+        min_trust_score: float = 0.0,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Find all agents capable of handling a natural language intent.
+
+        Args:
+            intent: Natural language description of what you want to do
+            min_trust_score: Minimum trust score required (0.0-1.0)
+            limit: Maximum number of results
+
+        Returns:
+            List of matching agents with skill details, sorted by relevance
+
+        Example:
+            >>> agents = a2a.get_capable_agents("analyze data", limit=5)
+            >>> for agent in agents:
+            ...     print(f"{agent['agentName']}: {agent['skillName']} (trust: {agent['trustScore']})")
+        """
+        response = self._make_request(
+            "GET",
+            f"/api/v1/a2a/capable-of?intent={intent}&minTrustScore={min_trust_score}&limit={limit}"
+        )
+        return response.get("agents", [])
+
+    # =========================================================================
+    # Security Policy Enforcement
+    # =========================================================================
+
+    def check_security(
+        self,
+        target_agent_id: str,
+        skill_id: Optional[str] = None,
+        request_signature: Optional[str] = None,
+        request_nonce: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Check if an A2A request passes security policies.
+
+        Evaluates the request against the target organization's security settings:
+        - Agent revocation status
+        - Allowed/blocked agent lists
+        - Trust score requirements
+        - Verified skill requirements
+        - Request signing requirements
+        - Nonce anti-replay validation
+
+        Args:
+            target_agent_id: ID of the agent being called
+            skill_id: Optional skill ID being invoked
+            request_signature: Optional request signature
+            request_nonce: Optional request nonce for anti-replay
+
+        Returns:
+            Security check result with allowed status and any violations
+
+        Example:
+            >>> result = a2a.check_security("target-agent-id", skill_id="analyze-data")
+            >>> if result["allowed"]:
+            ...     # Proceed with request
+            ... else:
+            ...     print(f"Blocked: {result['violations']}")
+        """
+        return self._make_request(
+            "POST",
+            "/api/v1/a2a/security/check",
+            data={
+                "requestingAgentId": self.agent_id,
+                "targetAgentId": target_agent_id,
+                "skillId": skill_id or "",
+                "requestSignature": request_signature or "",
+                "requestNonce": request_nonce or ""
+            }
+        )
+
+    def get_security_settings(self, organization_id: str) -> Dict[str, Any]:
+        """
+        Get A2A security settings for an organization.
+
+        Args:
+            organization_id: Organization ID
+
+        Returns:
+            Security settings including enforcement mode and requirements
+
+        Example:
+            >>> settings = a2a.get_security_settings("org-id")
+            >>> print(f"Mode: {settings['enforcementMode']}")  # 'monitor' or 'strict'
+        """
+        return self._make_request(
+            "GET",
+            f"/api/v1/a2a/security/settings/{organization_id}"
+        )
+
+    def get_security_violations(
+        self,
+        organization_id: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Get security violations for an organization.
+
+        Args:
+            organization_id: Organization ID
+            limit: Maximum number of results
+            offset: Pagination offset
+
+        Returns:
+            List of security violations
+
+        Example:
+            >>> violations = a2a.get_security_violations("org-id")
+            >>> for v in violations:
+            ...     print(f"{v['violationType']}: {v['actionTaken']}")
+        """
+        response = self._make_request(
+            "GET",
+            f"/api/v1/a2a/security/violations/{organization_id}?limit={limit}&offset={offset}"
+        )
+        return response.get("violations", [])
+
+    # =========================================================================
     # Policy Evaluation
     # =========================================================================
 
@@ -808,6 +964,32 @@ def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(value)
     except:
         return None
+
+
+# Convenience function for simple intent-based agent interaction
+def do(intent: str, min_trust_score: float = 0.0) -> Dict[str, Any]:
+    """
+    Find and return an agent capable of handling a natural language intent.
+
+    This is a convenience function for the common pattern of finding an agent
+    by intent. It creates a client from environment variables and routes the intent.
+
+    Args:
+        intent: Natural language description of what you want to do
+        min_trust_score: Minimum trust score required (0.0-1.0)
+
+    Returns:
+        Agent details if found, or error information
+
+    Example:
+        >>> from aim_sdk.a2a import do
+        >>> result = do("send email to john@example.com")
+        >>> if result.get("agent"):
+        ...     agent = result["agent"]
+        ...     print(f"Use {agent['agentName']} with skill {agent['skillId']}")
+    """
+    client = create_a2a_client_from_env()
+    return client.route_by_intent(intent, min_trust_score)
 
 
 # Convenience function for creating A2A client from environment
