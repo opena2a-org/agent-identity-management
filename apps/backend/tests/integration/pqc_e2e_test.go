@@ -74,6 +74,7 @@ func TestPQCKeyRegistrationFlow(t *testing.T) {
 	// Create test agent with Ed25519
 	agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 		"name":        fmt.Sprintf("pqc-test-agent-%d", time.Now().UnixNano()),
+		"displayName": "PQC Test Agent",
 		"description": "Test agent for PQC integration tests",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
@@ -145,6 +146,7 @@ func TestHybridModeToggle(t *testing.T) {
 	// Create agent with PQC key
 	agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 		"name":        fmt.Sprintf("hybrid-toggle-agent-%d", time.Now().UnixNano()),
+		"displayName": "Hybrid Toggle Agent",
 		"description": "Test agent for hybrid mode toggle",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
@@ -212,6 +214,7 @@ func TestPQCKeyRotation(t *testing.T) {
 	// Create agent and register first PQC key
 	agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 		"name":        fmt.Sprintf("key-rotation-agent-%d", time.Now().UnixNano()),
+		"displayName": "Key Rotation Agent",
 		"description": "Test agent for key rotation",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
@@ -283,6 +286,7 @@ func TestAllMLDSAVariants(t *testing.T) {
 			// Create agent
 			agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 				"name":        fmt.Sprintf("variant-test-%s-%d", variant, time.Now().UnixNano()),
+				"displayName": fmt.Sprintf("Variant Test %s", variant),
 				"description": fmt.Sprintf("Test agent for %s", variant),
 				"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 			}, tc.AdminToken)
@@ -324,6 +328,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	// Create agent with Ed25519 only (no PQC)
 	agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 		"name":        fmt.Sprintf("ed25519-only-agent-%d", time.Now().UnixNano()),
+		"displayName": "Ed25519 Only Agent",
 		"description": "Test agent for backward compatibility",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
@@ -362,6 +367,7 @@ func TestInvalidPQCKeyRejection(t *testing.T) {
 	// Create agent
 	agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 		"name":        fmt.Sprintf("invalid-key-test-%d", time.Now().UnixNano()),
+		"displayName": "Invalid Key Test Agent",
 		"description": "Test agent for invalid key rejection",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
