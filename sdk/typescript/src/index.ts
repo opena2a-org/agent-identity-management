@@ -108,7 +108,7 @@ export {
   saveCredentialsToFile,
 } from './auth/oauth';
 
-// Crypto utilities
+// Crypto utilities (Ed25519)
 export {
   generateKeyPair,
   sign,
@@ -120,6 +120,44 @@ export {
   createRequestSignature,
   type KeyPair,
 } from './crypto/ed25519';
+
+// Post-Quantum Crypto utilities (ML-DSA)
+// Requires optional dependency: @noble/post-quantum
+export {
+  // PQC availability check
+  isPQCAvailable,
+  // ML-DSA operations
+  generateMLDSAKeyPair,
+  signMLDSA,
+  verifyMLDSA,
+  // Hybrid Ed25519+ML-DSA operations
+  generateHybridKeyPair,
+  hybridSign,
+  hybridVerify,
+  getHybridPublicKey,
+  // Encoding/decoding
+  encodeHybridSignature,
+  decodeHybridSignature,
+  encodeHybridPublicKey,
+  decodeHybridPublicKey,
+  // Algorithm helpers
+  getMLDSAVariant,
+  isHybridAlgorithm,
+  isPQCAlgorithm,
+  validateKeySize,
+  // Hybrid request headers
+  createHybridRequestHeaders,
+  // Constants
+  KEY_SIZES,
+  // Types
+  type Algorithm,
+  type MLDSAKeyPair,
+  type HybridKeyPair,
+  type HybridSignature,
+  type HybridPublicKey,
+  type EncodedHybridSignature,
+  type EncodedHybridPublicKey,
+} from './crypto/pqc';
 
 // Version
 export const VERSION = '1.0.0';
