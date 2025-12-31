@@ -25,10 +25,13 @@ type Organization struct {
 	MaxAgents       int                    `json:"maxAgents"`
 	MaxUsers        int                    `json:"maxUsers"`
 	IsActive        bool                   `json:"isActive"`
-	EnforcementMode EnforcementMode        `json:"enforcementMode"` // strict or monitoring
-	Settings        map[string]interface{} `json:"settings"`        // Additional org settings
-	CreatedAt       time.Time              `json:"createdAt"`
-	UpdatedAt       time.Time              `json:"updatedAt"`
+	EnforcementMode     EnforcementMode        `json:"enforcementMode"` // strict or monitoring
+	Settings            map[string]interface{} `json:"settings"`        // Additional org settings
+	// Post-Quantum Cryptography (PQC) settings
+	DefaultPQCAlgorithm *string                `json:"defaultPqcAlgorithm,omitempty"` // ML-DSA-44, ML-DSA-65, ML-DSA-87
+	RequirePQC          bool                   `json:"requirePqc"`                    // Require PQC keys for new agents
+	CreatedAt           time.Time              `json:"createdAt"`
+	UpdatedAt           time.Time              `json:"updatedAt"`
 }
 
 // OrganizationRepository defines the interface for organization persistence

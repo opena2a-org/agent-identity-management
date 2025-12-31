@@ -260,6 +260,21 @@ func GetExpectedPublicKeySize(alg Algorithm) (int, error) {
 	}
 }
 
+// GetPureAlgorithm extracts the pure ML-DSA algorithm from a hybrid or returns the algorithm as-is
+// This is useful when storing the algorithm in the database (we store pure, not hybrid)
+func GetPureAlgorithm(alg Algorithm) Algorithm {
+	switch alg {
+	case AlgorithmHybridEd25519MLDSA44:
+		return AlgorithmMLDSA44
+	case AlgorithmHybridEd25519MLDSA65:
+		return AlgorithmMLDSA65
+	case AlgorithmHybridEd25519MLDSA87:
+		return AlgorithmMLDSA87
+	default:
+		return alg
+	}
+}
+
 // GetExpectedSignatureSize returns the expected signature size for an algorithm
 func GetExpectedSignatureSize(alg Algorithm) (int, error) {
 	switch alg {

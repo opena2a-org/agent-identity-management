@@ -84,6 +84,13 @@ type Agent struct {
 	KeyRotationGraceUntil    *time.Time  `json:"keyRotationGraceUntil,omitempty"`
 	PreviousPublicKey        *string     `json:"-"` // Not exposed in API, used for grace period verification
 	RotationCount            int         `json:"rotationCount"`
+	// Post-Quantum Cryptography (PQC) support
+	PQCPublicKey             *string     `json:"pqcPublicKey,omitempty"`
+	PQCKeyAlgorithm          *string     `json:"pqcKeyAlgorithm,omitempty"` // ML-DSA-44, ML-DSA-65, ML-DSA-87
+	HybridModeEnabled        bool        `json:"hybridModeEnabled"`
+	PQCKeyCreatedAt          *time.Time  `json:"pqcKeyCreatedAt,omitempty"`
+	PQCKeyExpiresAt          *time.Time  `json:"pqcKeyExpiresAt,omitempty"`
+	PreviousPQCPublicKey     *string     `json:"-"` // Not exposed in API, used for grace period verification
 	CreatedAt                time.Time   `json:"createdAt"`
 	UpdatedAt                time.Time   `json:"updatedAt"`
 	CreatedBy                uuid.UUID   `json:"createdBy"`

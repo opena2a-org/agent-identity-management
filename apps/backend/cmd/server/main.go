@@ -970,6 +970,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)   // Get agent's key vault info (public key, expiration, rotation status)
 	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
 	agents.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
+	// Post-Quantum Cryptography (PQC) endpoints
+	agents.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                  // Get agent's PQC key vault info
+	agents.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)  // Register PQC public key
+	agents.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)     // Rotate PQC key
+	agents.Post("/:id/hybrid-mode", middleware.MemberMiddleware(), h.Agent.SetHybridMode) // Enable/disable hybrid mode
+
+	// Cryptographic algorithms info (public)
+	crypto := v1.Group("/crypto")
+	crypto.Get("/algorithms", h.Agent.GetSupportedAlgorithms) // List supported algorithms (Ed25519, ML-DSA, hybrid)
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
