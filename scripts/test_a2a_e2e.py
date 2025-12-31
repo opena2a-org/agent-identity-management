@@ -21,6 +21,8 @@ import json
 import time
 import requests
 import hashlib
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timedelta
 
 # Add SDK to path
@@ -53,6 +55,57 @@ def print_section(name: str):
     print(f"{BLUE}{'='*60}{RESET}")
 
 
+class AgentCardServer:
+    """Simple HTTP server to serve A2A Agent Card JSON for testing."""
+
+    def __init__(self, port: int = 9999):
+        self.port = port
+        self.server = None
+        self.thread = None
+        self.card_data = None
+
+    def set_card_data(self, card_data: dict):
+        """Set the agent card data to serve."""
+        self.card_data = card_data
+
+    def start(self):
+        """Start the HTTP server in a background thread."""
+        card_server = self
+
+        class CardHandler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass  # Suppress logging
+
+            def do_GET(self):
+                if self.path == '/.well-known/agent.json':
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(card_server.card_data).encode())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+        self.server = HTTPServer(('0.0.0.0', self.port), CardHandler)
+        self.thread = threading.Thread(target=self.server.serve_forever)
+        self.thread.daemon = True
+        self.thread.start()
+        print(f"  {GREEN}✓ Agent Card server started on port {self.port}{RESET}")
+
+    def stop(self):
+        """Stop the HTTP server."""
+        if self.server:
+            self.server.shutdown()
+            print(f"  {GREEN}✓ Agent Card server stopped{RESET}")
+
+    def get_card_url(self) -> str:
+        """Get the URL for the agent card.
+        Uses host.docker.internal for Docker containers to access host machine.
+        """
+        # Use host.docker.internal so Docker container can access host
+        return f"http://host.docker.internal:{self.port}/.well-known/agent.json"
+
+
 class A2AIntegrationTest:
     def __init__(self):
         self.base_url = BASE_URL
@@ -64,6 +117,7 @@ class A2AIntegrationTest:
         self.agent2_id = None
         self.agent2_api_key = None
         self.results = {"passed": 0, "failed": 0}
+        self.card_server = AgentCardServer(port=9999)
 
     def run(self) -> bool:
         """Run all integration tests."""
@@ -269,37 +323,45 @@ class A2AIntegrationTest:
 
     def test_agent_cards(self):
         """Test A2A Agent Card registration and retrieval."""
+        # Start the local HTTP server to serve the agent card
+        agent_card_json = {
+            "name": "A2A Test Agent 1",
+            "description": "First agent for A2A testing",
+            "url": "http://host.docker.internal:9999",
+            "version": "1.0.0",
+            "provider": {
+                "organization": "Test Org",
+                "url": "https://testorg.com"
+            },
+            "capabilities": {
+                "streaming": True,
+                "pushNotifications": False,
+                "stateTransitionHistory": True
+            },
+            "skills": [
+                {
+                    "id": "data-analysis",
+                    "name": "Data Analysis",
+                    "description": "Analyze data patterns",
+                    "tags": ["analytics", "ml"],
+                    "inputModes": ["text", "file"],
+                    "outputModes": ["text", "json"]
+                }
+            ],
+            "defaultInputModes": ["text"],
+            "defaultOutputModes": ["text", "json"]
+        }
+
+        # Set card data and start the server
+        self.card_server.set_card_data(agent_card_json)
+        self.card_server.start()
+        time.sleep(0.2)  # Give server time to start
+
         # Test 1: Register Agent Card for Agent 1
         # Endpoint: POST /api/v1/a2a/agents/:id/card
         card_data = {
-            "cardUrl": f"https://agent1.example.com/.well-known/agent.json",
-            "cardData": {
-                "name": "A2A Test Agent 1",
-                "description": "First agent for A2A testing",
-                "url": "https://agent1.example.com",
-                "version": "1.0.0",
-                "provider": {
-                    "organization": "Test Org",
-                    "url": "https://testorg.com"
-                },
-                "capabilities": {
-                    "streaming": True,
-                    "pushNotifications": False,
-                    "stateTransitionHistory": True
-                },
-                "skills": [
-                    {
-                        "id": "data-analysis",
-                        "name": "Data Analysis",
-                        "description": "Analyze data patterns",
-                        "tags": ["analytics", "ml"],
-                        "inputModes": ["text", "file"],
-                        "outputModes": ["text", "json"]
-                    }
-                ],
-                "defaultInputModes": ["text"],
-                "defaultOutputModes": ["text", "json"]
-            }
+            "cardUrl": self.card_server.get_card_url(),
+            "cardData": agent_card_json
         }
 
         resp = self.session.post(
@@ -317,9 +379,11 @@ class A2AIntegrationTest:
             resp = self.session.get(
                 f"{self.base_url}/api/v1/a2a/agents/{self.agent1_id}/card"
             )
+            # Response returns card directly, not nested under "cardData"
+            card_resp = resp.json() if resp.status_code == 200 else {}
             self.record_result(
                 "Get Agent Card by Agent ID",
-                resp.status_code == 200 and "cardData" in resp.json(),
+                resp.status_code == 200 and ("name" in card_resp or "aim" in card_resp),
                 f"Status: {resp.status_code}"
             )
 
@@ -333,13 +397,13 @@ class A2AIntegrationTest:
                 f"Status: {resp.status_code}"
             )
 
-            # Test 4: Search Skills
+            # Test 4: Search Skills (uses 'q' parameter, not 'tags')
             resp = self.session.get(
                 f"{self.base_url}/api/v1/a2a/skills/search",
-                params={"tags": "analytics"}
+                params={"q": "analytics"}
             )
             self.record_result(
-                "Search Skills by Tag",
+                "Search Skills by Query",
                 resp.status_code == 200,
                 f"Status: {resp.status_code}"
             )
@@ -544,6 +608,9 @@ class A2AIntegrationTest:
     def cleanup(self):
         """Clean up test data."""
         try:
+            # Stop the agent card server
+            self.card_server.stop()
+
             # Delete Agent 1
             if self.agent1_id:
                 resp = self.session.delete(
