@@ -756,3 +756,159 @@ type A2ASecurityViolationRepository interface {
 	CountByOrganization(ctx context.Context, orgID uuid.UUID, since time.Time) (int, error)
 	CountByType(ctx context.Context, orgID uuid.UUID, violationType A2AViolationType, since time.Time) (int, error)
 }
+
+// ============================================================================
+// A2A Supply Chain Tracking
+// ============================================================================
+
+// A2ACallChainStatus represents the status of a call in the chain
+type A2ACallChainStatus string
+
+const (
+	A2ACallChainActive    A2ACallChainStatus = "ACTIVE"
+	A2ACallChainCompleted A2ACallChainStatus = "COMPLETED"
+	A2ACallChainFailed    A2ACallChainStatus = "FAILED"
+	A2ACallChainTimeout   A2ACallChainStatus = "TIMEOUT"
+)
+
+// A2ACallChain represents a single call in an agent-to-agent chain
+type A2ACallChain struct {
+	ID             uuid.UUID `json:"id"`
+	ChainID        uuid.UUID `json:"chainId"`
+	SequenceNumber int       `json:"sequenceNumber"`
+	ParentCallID   *uuid.UUID `json:"parentCallId,omitempty"`
+
+	// Participants
+	CallerAgentID *uuid.UUID `json:"callerAgentId,omitempty"`
+	CalleeAgentID *uuid.UUID `json:"calleeAgentId,omitempty"`
+	SkillID       string     `json:"skillId,omitempty"`
+	TaskID        *uuid.UUID `json:"taskId,omitempty"`
+
+	// Chain origin
+	IsHumanInitiated     bool       `json:"isHumanInitiated"`
+	OriginUserID         *uuid.UUID `json:"originUserId,omitempty"`
+	OriginOrganizationID *uuid.UUID `json:"originOrganizationId,omitempty"`
+
+	// Timing
+	CallStartedAt time.Time  `json:"callStartedAt"`
+	CallEndedAt   *time.Time `json:"callEndedAt,omitempty"`
+	DurationMs    int        `json:"durationMs,omitempty"`
+
+	// Status
+	Status       A2ACallChainStatus `json:"status"`
+	ErrorMessage string             `json:"errorMessage,omitempty"`
+
+	// Data flow
+	DataInputSizeBytes  int  `json:"dataInputSizeBytes,omitempty"`
+	DataOutputSizeBytes int  `json:"dataOutputSizeBytes,omitempty"`
+	PIIDetected         bool `json:"piiDetected"`
+
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// A2ADelegation represents a delegation authorization between agents
+type A2ADelegation struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organizationId"`
+
+	// Delegation parties
+	DelegatorAgentID uuid.UUID `json:"delegatorAgentId"`
+	DelegateAgentID  uuid.UUID `json:"delegateAgentId"`
+
+	// Scope
+	SkillIDs      []string `json:"skillIds,omitempty"`
+	MaxChainDepth int      `json:"maxChainDepth"`
+
+	// Permissions
+	CanDelegateFurther bool `json:"canDelegateFurther"`
+	RequiresConsent    bool `json:"requiresConsent"`
+
+	// Validity
+	IsActive   bool       `json:"isActive"`
+	ValidFrom  time.Time  `json:"validFrom"`
+	ValidUntil *time.Time `json:"validUntil,omitempty"`
+
+	// Audit
+	CreatedBy *uuid.UUID `json:"createdBy,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+}
+
+// A2ADependencyType represents the type of dependency between agents
+type A2ADependencyType string
+
+const (
+	A2ADependencySkill         A2ADependencyType = "SKILL"
+	A2ADependencyData          A2ADependencyType = "DATA"
+	A2ADependencyOrchestration A2ADependencyType = "ORCHESTRATION"
+)
+
+// A2AAgentDependency represents a dependency between agents
+type A2AAgentDependency struct {
+	ID              uuid.UUID `json:"id"`
+	AgentID         uuid.UUID `json:"agentId"`
+	DependsOnAgentID uuid.UUID `json:"dependsOnAgentId"`
+
+	// Dependency details
+	DependencyType A2ADependencyType `json:"dependencyType"`
+	SkillIDs       []string          `json:"skillIds,omitempty"`
+	IsCritical     bool              `json:"isCritical"`
+
+	// Statistics
+	CallCount    int `json:"callCount"`
+	SuccessCount int `json:"successCount"`
+	FailureCount int `json:"failureCount"`
+	AvgLatencyMs int `json:"avgLatencyMs,omitempty"`
+
+	FirstSeenAt time.Time `json:"firstSeenAt"`
+	LastSeenAt  time.Time `json:"lastSeenAt"`
+}
+
+// A2AChainSummary provides an overview of an agent call chain
+type A2AChainSummary struct {
+	ChainID         uuid.UUID   `json:"chainId"`
+	TotalCalls      int         `json:"totalCalls"`
+	MaxDepth        int         `json:"maxDepth"`
+	UniqueAgents    int         `json:"uniqueAgents"`
+	AgentIDs        []uuid.UUID `json:"agentIds"`
+	IsHumanInitiated bool       `json:"isHumanInitiated"`
+	OriginUserID    *uuid.UUID  `json:"originUserId,omitempty"`
+	StartedAt       time.Time   `json:"startedAt"`
+	CompletedAt     *time.Time  `json:"completedAt,omitempty"`
+	Status          A2ACallChainStatus `json:"status"`
+	HasPII          bool        `json:"hasPii"`
+}
+
+// A2ACallChainRepository defines operations for call chain tracking
+type A2ACallChainRepository interface {
+	Create(ctx context.Context, call *A2ACallChain) error
+	GetByID(ctx context.Context, id uuid.UUID) (*A2ACallChain, error)
+	GetByChainID(ctx context.Context, chainID uuid.UUID) ([]*A2ACallChain, error)
+	GetByCallerAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*A2ACallChain, error)
+	GetByCalleeAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*A2ACallChain, error)
+	GetByOrganization(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2ACallChain, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status A2ACallChainStatus, errorMessage string) error
+	CompleteCall(ctx context.Context, id uuid.UUID, outputSizeBytes int) error
+	GetChainSummary(ctx context.Context, chainID uuid.UUID) (*A2AChainSummary, error)
+}
+
+// A2ADelegationRepository defines operations for delegation management
+type A2ADelegationRepository interface {
+	Create(ctx context.Context, delegation *A2ADelegation) error
+	GetByID(ctx context.Context, id uuid.UUID) (*A2ADelegation, error)
+	GetByDelegator(ctx context.Context, delegatorID uuid.UUID) ([]*A2ADelegation, error)
+	GetByDelegate(ctx context.Context, delegateID uuid.UUID) ([]*A2ADelegation, error)
+	GetByOrganization(ctx context.Context, orgID uuid.UUID) ([]*A2ADelegation, error)
+	IsAuthorizedDelegate(ctx context.Context, delegatorID, delegateID uuid.UUID, skillID string) (bool, error)
+	Update(ctx context.Context, delegation *A2ADelegation) error
+	Revoke(ctx context.Context, id uuid.UUID) error
+}
+
+// A2AAgentDependencyRepository defines operations for dependency tracking
+type A2AAgentDependencyRepository interface {
+	Upsert(ctx context.Context, dep *A2AAgentDependency) error
+	GetByAgentID(ctx context.Context, agentID uuid.UUID) ([]*A2AAgentDependency, error)
+	GetDependents(ctx context.Context, dependsOnAgentID uuid.UUID) ([]*A2AAgentDependency, error)
+	GetCriticalDependencies(ctx context.Context, agentID uuid.UUID) ([]*A2AAgentDependency, error)
+	IncrementStats(ctx context.Context, agentID, dependsOnID uuid.UUID, success bool, latencyMs int) error
+}
