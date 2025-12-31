@@ -2056,3 +2056,345 @@ func (r *A2APolicyRepository) queryPolicies(ctx context.Context, query string, a
 	}
 	return policies, nil
 }
+
+// ============================================================================
+// A2A Agent Attestation Repository
+// ============================================================================
+
+// A2AAgentAttestationRepository handles agent attestation storage
+type A2AAgentAttestationRepository struct {
+	db *sql.DB
+}
+
+// NewA2AAgentAttestationRepository creates a new attestation repository
+func NewA2AAgentAttestationRepository(db *sql.DB) *A2AAgentAttestationRepository {
+	return &A2AAgentAttestationRepository{db: db}
+}
+
+func (r *A2AAgentAttestationRepository) Create(ctx context.Context, att *domain.A2AAgentAttestation) error {
+	query := `
+		INSERT INTO a2a_agent_attestations (
+			id, attesting_agent_id, attested_agent_id, skill_id, task_id,
+			task_completed, response_time_ms, quality_score,
+			attestation_signature, challenge, attester_trust_score,
+			verified_at, expires_at, is_valid, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	`
+
+	if att.ID == uuid.Nil {
+		att.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	att.CreatedAt = now
+	att.VerifiedAt = now
+	att.IsValid = true
+
+	var qualityScorePtr, attesterTrustPtr *float64
+	if att.QualityScore != 0 {
+		qualityScorePtr = &att.QualityScore
+	}
+	if att.AttesterTrustScore != 0 {
+		attesterTrustPtr = &att.AttesterTrustScore
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		att.ID,
+		att.AttestingAgentID,
+		att.AttestedAgentID,
+		nullString(att.SkillID),
+		nullUUID(att.TaskID),
+		att.TaskCompleted,
+		nullInt(att.ResponseTimeMs),
+		nullFloat(qualityScorePtr),
+		att.AttestationSignature,
+		nullString(att.Challenge),
+		nullFloat(attesterTrustPtr),
+		att.VerifiedAt,
+		att.ExpiresAt,
+		att.IsValid,
+		att.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create attestation: %w", err)
+	}
+	return nil
+}
+
+func (r *A2AAgentAttestationRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.A2AAgentAttestation, error) {
+	query := `
+		SELECT id, attesting_agent_id, attested_agent_id, skill_id, task_id,
+			task_completed, response_time_ms, quality_score,
+			attestation_signature, challenge, attester_trust_score,
+			verified_at, expires_at, is_valid, revoked_at, revoked_reason, created_at
+		FROM a2a_agent_attestations
+		WHERE id = $1
+	`
+
+	att := &domain.A2AAgentAttestation{}
+	var skillID, challenge, revokedReason sql.NullString
+	var taskID sql.NullString
+	var responseTimeMs sql.NullInt64
+	var qualityScore, attesterTrustScore sql.NullFloat64
+	var revokedAt sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&att.ID,
+		&att.AttestingAgentID,
+		&att.AttestedAgentID,
+		&skillID,
+		&taskID,
+		&att.TaskCompleted,
+		&responseTimeMs,
+		&qualityScore,
+		&att.AttestationSignature,
+		&challenge,
+		&attesterTrustScore,
+		&att.VerifiedAt,
+		&att.ExpiresAt,
+		&att.IsValid,
+		&revokedAt,
+		&revokedReason,
+		&att.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestation: %w", err)
+	}
+
+	if skillID.Valid {
+		att.SkillID = skillID.String
+	}
+	if taskID.Valid {
+		id, _ := uuid.Parse(taskID.String)
+		att.TaskID = &id
+	}
+	if responseTimeMs.Valid {
+		att.ResponseTimeMs = int(responseTimeMs.Int64)
+	}
+	if qualityScore.Valid {
+		att.QualityScore = qualityScore.Float64
+	}
+	if challenge.Valid {
+		att.Challenge = challenge.String
+	}
+	if attesterTrustScore.Valid {
+		att.AttesterTrustScore = attesterTrustScore.Float64
+	}
+	if revokedAt.Valid {
+		att.RevokedAt = &revokedAt.Time
+	}
+	if revokedReason.Valid {
+		att.RevokedReason = revokedReason.String
+	}
+
+	return att, nil
+}
+
+func (r *A2AAgentAttestationRepository) GetByAttestedAgent(ctx context.Context, agentID uuid.UUID, skillID string) ([]*domain.A2AAgentAttestation, error) {
+	query := `
+		SELECT id, attesting_agent_id, attested_agent_id, skill_id, task_id,
+			task_completed, response_time_ms, quality_score,
+			attestation_signature, challenge, attester_trust_score,
+			verified_at, expires_at, is_valid, revoked_at, revoked_reason, created_at
+		FROM a2a_agent_attestations
+		WHERE attested_agent_id = $1 AND is_valid = TRUE AND expires_at > NOW()
+	`
+	args := []interface{}{agentID}
+	if skillID != "" {
+		query += " AND skill_id = $2"
+		args = append(args, skillID)
+	}
+	query += " ORDER BY created_at DESC"
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestations: %w", err)
+	}
+	defer rows.Close()
+
+	var attestations []*domain.A2AAgentAttestation
+	for rows.Next() {
+		att := &domain.A2AAgentAttestation{}
+		var sID, ch, rr sql.NullString
+		var tID sql.NullString
+		var rtMs sql.NullInt64
+		var qs, ats sql.NullFloat64
+		var ra sql.NullTime
+
+		err := rows.Scan(
+			&att.ID, &att.AttestingAgentID, &att.AttestedAgentID, &sID, &tID,
+			&att.TaskCompleted, &rtMs, &qs, &att.AttestationSignature, &ch, &ats,
+			&att.VerifiedAt, &att.ExpiresAt, &att.IsValid, &ra, &rr, &att.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan attestation: %w", err)
+		}
+		if sID.Valid {
+			att.SkillID = sID.String
+		}
+		if tID.Valid {
+			id, _ := uuid.Parse(tID.String)
+			att.TaskID = &id
+		}
+		if rtMs.Valid {
+			att.ResponseTimeMs = int(rtMs.Int64)
+		}
+		if qs.Valid {
+			att.QualityScore = qs.Float64
+		}
+		if ch.Valid {
+			att.Challenge = ch.String
+		}
+		if ats.Valid {
+			att.AttesterTrustScore = ats.Float64
+		}
+		if ra.Valid {
+			att.RevokedAt = &ra.Time
+		}
+		if rr.Valid {
+			att.RevokedReason = rr.String
+		}
+		attestations = append(attestations, att)
+	}
+	return attestations, nil
+}
+
+func (r *A2AAgentAttestationRepository) CountUniqueAttesters(ctx context.Context, agentID uuid.UUID, skillID string) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT attesting_agent_id)
+		FROM a2a_agent_attestations
+		WHERE attested_agent_id = $1 AND is_valid = TRUE AND expires_at > NOW()
+	`
+	args := []interface{}{agentID}
+	if skillID != "" {
+		query += " AND skill_id = $2"
+		args = append(args, skillID)
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count attesters: %w", err)
+	}
+	return count, nil
+}
+
+func (r *A2AAgentAttestationRepository) CountUniqueOwners(ctx context.Context, agentID uuid.UUID, skillID string) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT a.organization_id)
+		FROM a2a_agent_attestations att
+		JOIN agents a ON a.id = att.attesting_agent_id
+		WHERE att.attested_agent_id = $1 AND att.is_valid = TRUE AND att.expires_at > NOW()
+	`
+	args := []interface{}{agentID}
+	if skillID != "" {
+		query += " AND att.skill_id = $2"
+		args = append(args, skillID)
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count owners: %w", err)
+	}
+	return count, nil
+}
+
+func (r *A2AAgentAttestationRepository) Revoke(ctx context.Context, id uuid.UUID, reason string) error {
+	query := `UPDATE a2a_agent_attestations SET is_valid = FALSE, revoked_at = NOW(), revoked_reason = $2 WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, id, reason)
+	return err
+}
+
+func (r *A2AAgentAttestationRepository) DeleteExpired(ctx context.Context) (int, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM a2a_agent_attestations WHERE expires_at < NOW()`)
+	if err != nil {
+		return 0, err
+	}
+	count, _ := result.RowsAffected()
+	return int(count), nil
+}
+
+// ============================================================================
+// A2A Revoked Agent Repository
+// ============================================================================
+
+// A2ARevokedAgentRepository handles revoked agent storage
+type A2ARevokedAgentRepository struct {
+	db *sql.DB
+}
+
+// NewA2ARevokedAgentRepository creates a new revoked agent repository
+func NewA2ARevokedAgentRepository(db *sql.DB) *A2ARevokedAgentRepository {
+	return &A2ARevokedAgentRepository{db: db}
+}
+
+func (r *A2ARevokedAgentRepository) Revoke(ctx context.Context, agentID uuid.UUID, reason string, revokedBy *uuid.UUID) error {
+	query := `INSERT INTO a2a_revoked_agents (agent_id, reason, revoked_by) VALUES ($1, $2, $3) ON CONFLICT (agent_id) DO NOTHING`
+	_, err := r.db.ExecContext(ctx, query, agentID, nullString(reason), nullUUID(revokedBy))
+	return err
+}
+
+func (r *A2ARevokedAgentRepository) IsRevoked(ctx context.Context, agentID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM a2a_revoked_agents WHERE agent_id = $1)`
+	var exists bool
+	err := r.db.QueryRowContext(ctx, query, agentID).Scan(&exists)
+	return exists, err
+}
+
+func (r *A2ARevokedAgentRepository) GetByAgentID(ctx context.Context, agentID uuid.UUID) (*domain.A2ARevokedAgent, error) {
+	query := `SELECT agent_id, revoked_at, reason, revoked_by FROM a2a_revoked_agents WHERE agent_id = $1`
+	ra := &domain.A2ARevokedAgent{}
+	var reason sql.NullString
+	var revokedBy sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, agentID).Scan(&ra.AgentID, &ra.RevokedAt, &reason, &revokedBy)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if reason.Valid {
+		ra.Reason = reason.String
+	}
+	if revokedBy.Valid {
+		id, _ := uuid.Parse(revokedBy.String)
+		ra.RevokedBy = &id
+	}
+	return ra, nil
+}
+
+func (r *A2ARevokedAgentRepository) List(ctx context.Context, limit, offset int) ([]*domain.A2ARevokedAgent, error) {
+	query := `SELECT agent_id, revoked_at, reason, revoked_by FROM a2a_revoked_agents ORDER BY revoked_at DESC LIMIT $1 OFFSET $2`
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*domain.A2ARevokedAgent
+	for rows.Next() {
+		ra := &domain.A2ARevokedAgent{}
+		var reason, revokedBy sql.NullString
+		if err := rows.Scan(&ra.AgentID, &ra.RevokedAt, &reason, &revokedBy); err != nil {
+			return nil, err
+		}
+		if reason.Valid {
+			ra.Reason = reason.String
+		}
+		if revokedBy.Valid {
+			id, _ := uuid.Parse(revokedBy.String)
+			ra.RevokedBy = &id
+		}
+		list = append(list, ra)
+	}
+	return list, nil
+}
+
+func (r *A2ARevokedAgentRepository) Reinstate(ctx context.Context, agentID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM a2a_revoked_agents WHERE agent_id = $1`, agentID)
+	return err
+}

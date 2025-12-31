@@ -450,6 +450,64 @@ type RouteIntentResponse struct {
 }
 
 // ============================================================================
+// A2A Agent Attestation (Multi-Agent Consensus)
+// ============================================================================
+
+// A2AAgentAttestation represents one agent attesting to another's capabilities
+type A2AAgentAttestation struct {
+	ID uuid.UUID `json:"id"`
+
+	// Participants
+	AttestingAgentID uuid.UUID `json:"attestingAgentId"`
+	AttestedAgentID  uuid.UUID `json:"attestedAgentId"`
+
+	// What was attested
+	SkillID string     `json:"skillId,omitempty"`
+	TaskID  *uuid.UUID `json:"taskId,omitempty"`
+
+	// Attestation result
+	TaskCompleted  bool    `json:"taskCompleted"`
+	ResponseTimeMs int     `json:"responseTimeMs,omitempty"`
+	QualityScore   float64 `json:"qualityScore,omitempty"`
+
+	// Cryptographic proof
+	AttestationSignature string `json:"attestationSignature"`
+	Challenge            string `json:"challenge,omitempty"`
+
+	// Trust weight
+	AttesterTrustScore float64 `json:"attesterTrustScore,omitempty"`
+
+	// Validity
+	VerifiedAt    time.Time  `json:"verifiedAt"`
+	ExpiresAt     time.Time  `json:"expiresAt"`
+	IsValid       bool       `json:"isValid"`
+	RevokedAt     *time.Time `json:"revokedAt,omitempty"`
+	RevokedReason string     `json:"revokedReason,omitempty"`
+
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// A2ARevokedAgent represents a revoked/banned agent
+type A2ARevokedAgent struct {
+	AgentID   uuid.UUID  `json:"agentId"`
+	RevokedAt time.Time  `json:"revokedAt"`
+	Reason    string     `json:"reason,omitempty"`
+	RevokedBy *uuid.UUID `json:"revokedBy,omitempty"`
+}
+
+// A2AConsensusResult represents the consensus status for a skill
+type A2AConsensusResult struct {
+	SkillID          string    `json:"skillId"`
+	AgentID          uuid.UUID `json:"agentId"`
+	AttestationCount int       `json:"attestationCount"`
+	UniqueAttesters  int       `json:"uniqueAttesters"`
+	UniqueOwners     int       `json:"uniqueOwners"`
+	ConfidenceScore  float64   `json:"confidenceScore"`
+	IsVerified       bool      `json:"isVerified"`
+	VerifiedAt       time.Time `json:"verifiedAt,omitempty"`
+}
+
+// ============================================================================
 // Repository Interfaces
 // ============================================================================
 
@@ -538,4 +596,24 @@ type A2APolicyRepository interface {
 	GetActivePolicies(ctx context.Context, orgID uuid.UUID) ([]*A2APolicy, error)
 	Update(ctx context.Context, policy *A2APolicy) error
 	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// A2AAgentAttestationRepository defines operations for agent attestations
+type A2AAgentAttestationRepository interface {
+	Create(ctx context.Context, attestation *A2AAgentAttestation) error
+	GetByID(ctx context.Context, id uuid.UUID) (*A2AAgentAttestation, error)
+	GetByAttestedAgent(ctx context.Context, agentID uuid.UUID, skillID string) ([]*A2AAgentAttestation, error)
+	CountUniqueAttesters(ctx context.Context, agentID uuid.UUID, skillID string) (int, error)
+	CountUniqueOwners(ctx context.Context, agentID uuid.UUID, skillID string) (int, error)
+	Revoke(ctx context.Context, id uuid.UUID, reason string) error
+	DeleteExpired(ctx context.Context) (int, error)
+}
+
+// A2ARevokedAgentRepository defines operations for revoked agents
+type A2ARevokedAgentRepository interface {
+	Revoke(ctx context.Context, agentID uuid.UUID, reason string, revokedBy *uuid.UUID) error
+	IsRevoked(ctx context.Context, agentID uuid.UUID) (bool, error)
+	GetByAgentID(ctx context.Context, agentID uuid.UUID) (*A2ARevokedAgent, error)
+	List(ctx context.Context, limit, offset int) ([]*A2ARevokedAgent, error)
+	Reinstate(ctx context.Context, agentID uuid.UUID) error
 }
