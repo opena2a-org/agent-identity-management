@@ -50,9 +50,12 @@ const A2A_BASE_PATH = '/api/v1/a2a';
 
 export class A2AClient {
   private readonly aimClient: AIMClient;
+  private readonly agentId: string;
 
-  constructor(aimClient: AIMClient) {
+  constructor(aimClient: AIMClient, agentId?: string) {
     this.aimClient = aimClient;
+    // Use provided agentId or get from AIMClient credentials
+    this.agentId = agentId ?? (aimClient as unknown as { credentials?: { agentId?: string } }).credentials?.agentId ?? '';
   }
 
   // ==================== Agent Card Operations ====================
@@ -339,35 +342,45 @@ export class A2AClient {
 
   /**
    * Record consent for cross-agent data sharing.
+   *
+   * @param userId - ID of the user granting consent
+   * @param recipientAgentId - ID of the agent receiving data
+   * @param scope - Consent scopes (e.g., ['pii', 'payment'])
+   * @param purpose - Purpose of the consent
+   * @param dataTypes - Types of data being shared
+   * @param consentMethod - How consent was obtained (explicit_consent, contract, etc.)
+   * @param expiresInHours - Hours until consent expires
    */
   async recordConsent(
     userId: string,
-    targetAgentId: string,
+    recipientAgentId: string,
+    scope: string[],
     purpose: string,
     dataTypes: string[],
-    legalBasis: string,
-    expiresAt?: Date
+    consentMethod = 'explicit_consent',
+    expiresInHours = 24
   ): Promise<A2AConsent> {
     return this.post<A2AConsent>(`${A2A_BASE_PATH}/consent`, {
       userId,
-      targetAgentId,
+      grantorAgentId: this.agentId,
+      recipientAgentId,
+      scope,
       purpose,
       dataTypes,
-      legalBasis,
-      expiresAt: expiresAt?.toISOString(),
+      consentMethod,
+      expiresInHours,
     });
   }
 
   /**
-   * Check if consent exists for a specific operation.
+   * Check if consent exists for a specific scope.
    */
   async checkConsent(
     userId: string,
-    targetAgentId: string,
-    purpose: string,
-    dataType: string
+    recipientAgentId: string,
+    scope: string
   ): Promise<{ hasConsent: boolean; consent?: A2AConsent }> {
-    const query = `userId=${userId}&targetAgentId=${targetAgentId}&purpose=${purpose}&dataType=${dataType}`;
+    const query = `userId=${encodeURIComponent(userId)}&grantorAgentId=${encodeURIComponent(this.agentId)}&recipientAgentId=${encodeURIComponent(recipientAgentId)}&scope=${encodeURIComponent(scope)}`;
     return this.get<{ hasConsent: boolean; consent?: A2AConsent }>(
       `${A2A_BASE_PATH}/consent/check?${query}`
     );
@@ -383,9 +396,9 @@ export class A2AClient {
   /**
    * List all consents for a user.
    */
-  async listUserConsents(userId: string): Promise<A2AConsent[]> {
+  async listUserConsents(userId: string, includeRevoked = false): Promise<A2AConsent[]> {
     const response = await this.get<{ consents: A2AConsent[] }>(
-      `${A2A_BASE_PATH}/consent?userId=${userId}`
+      `${A2A_BASE_PATH}/consent/user/${encodeURIComponent(userId)}?includeRevoked=${includeRevoked}`
     );
     return response.consents ?? [];
   }

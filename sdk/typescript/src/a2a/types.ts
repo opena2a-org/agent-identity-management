@@ -94,11 +94,12 @@ export interface A2APeerTrust {
 export interface A2AConsent {
   id: string;
   userId: string;
-  sourceAgentId: string;
-  targetAgentId: string;
+  grantorAgentId: string;
+  recipientAgentId: string;
+  scope: string[];
   purpose: string;
   dataTypes: string[];
-  legalBasis: string;
+  consentMethod: string;
   status: 'active' | 'revoked' | 'expired';
   grantedAt: string;
   expiresAt?: string;

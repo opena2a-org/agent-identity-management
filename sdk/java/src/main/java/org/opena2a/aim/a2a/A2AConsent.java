@@ -20,17 +20,23 @@ public class A2AConsent {
     @JsonProperty("userId")
     private String userId;
 
-    @JsonProperty("sourceAgentId")
-    private String sourceAgentId;
+    @JsonProperty("grantorAgentId")
+    private String grantorAgentId;
 
-    @JsonProperty("targetAgentId")
-    private String targetAgentId;
+    @JsonProperty("recipientAgentId")
+    private String recipientAgentId;
+
+    @JsonProperty("scope")
+    private List<String> scope;
 
     @JsonProperty("purpose")
     private String purpose;
 
     @JsonProperty("dataTypes")
     private List<String> dataTypes;
+
+    @JsonProperty("consentMethod")
+    private String consentMethod;
 
     @JsonProperty("status")
     private ConsentStatus status;
@@ -46,9 +52,6 @@ public class A2AConsent {
 
     @JsonProperty("revocationReason")
     private String revocationReason;
-
-    @JsonProperty("legalBasis")
-    private String legalBasis;
 
     @JsonProperty("retentionPeriod")
     private String retentionPeriod;
@@ -73,16 +76,17 @@ public class A2AConsent {
     // Getters
     public String getId() { return id; }
     public String getUserId() { return userId; }
-    public String getSourceAgentId() { return sourceAgentId; }
-    public String getTargetAgentId() { return targetAgentId; }
+    public String getGrantorAgentId() { return grantorAgentId; }
+    public String getRecipientAgentId() { return recipientAgentId; }
+    public List<String> getScope() { return scope; }
     public String getPurpose() { return purpose; }
     public List<String> getDataTypes() { return dataTypes; }
+    public String getConsentMethod() { return consentMethod; }
     public ConsentStatus getStatus() { return status; }
     public Instant getGrantedAt() { return grantedAt; }
     public Instant getExpiresAt() { return expiresAt; }
     public Instant getRevokedAt() { return revokedAt; }
     public String getRevocationReason() { return revocationReason; }
-    public String getLegalBasis() { return legalBasis; }
     public String getRetentionPeriod() { return retentionPeriod; }
     public Map<String, Object> getMetadata() { return metadata; }
     public Instant getCreatedAt() { return createdAt; }
@@ -91,16 +95,17 @@ public class A2AConsent {
     // Setters for Jackson
     public void setId(String id) { this.id = id; }
     public void setUserId(String userId) { this.userId = userId; }
-    public void setSourceAgentId(String sourceAgentId) { this.sourceAgentId = sourceAgentId; }
-    public void setTargetAgentId(String targetAgentId) { this.targetAgentId = targetAgentId; }
+    public void setGrantorAgentId(String grantorAgentId) { this.grantorAgentId = grantorAgentId; }
+    public void setRecipientAgentId(String recipientAgentId) { this.recipientAgentId = recipientAgentId; }
+    public void setScope(List<String> scope) { this.scope = scope; }
     public void setPurpose(String purpose) { this.purpose = purpose; }
     public void setDataTypes(List<String> dataTypes) { this.dataTypes = dataTypes; }
+    public void setConsentMethod(String consentMethod) { this.consentMethod = consentMethod; }
     public void setStatus(ConsentStatus status) { this.status = status; }
     public void setGrantedAt(Instant grantedAt) { this.grantedAt = grantedAt; }
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public void setRevokedAt(Instant revokedAt) { this.revokedAt = revokedAt; }
     public void setRevocationReason(String revocationReason) { this.revocationReason = revocationReason; }
-    public void setLegalBasis(String legalBasis) { this.legalBasis = legalBasis; }
     public void setRetentionPeriod(String retentionPeriod) { this.retentionPeriod = retentionPeriod; }
     public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
@@ -164,16 +169,17 @@ public class A2AConsent {
 
         public Builder id(String id) { consent.id = id; return this; }
         public Builder userId(String userId) { consent.userId = userId; return this; }
-        public Builder sourceAgentId(String sourceAgentId) { consent.sourceAgentId = sourceAgentId; return this; }
-        public Builder targetAgentId(String targetAgentId) { consent.targetAgentId = targetAgentId; return this; }
+        public Builder grantorAgentId(String grantorAgentId) { consent.grantorAgentId = grantorAgentId; return this; }
+        public Builder recipientAgentId(String recipientAgentId) { consent.recipientAgentId = recipientAgentId; return this; }
+        public Builder scope(List<String> scope) { consent.scope = scope; return this; }
         public Builder purpose(String purpose) { consent.purpose = purpose; return this; }
         public Builder dataTypes(List<String> dataTypes) { consent.dataTypes = dataTypes; return this; }
+        public Builder consentMethod(String consentMethod) { consent.consentMethod = consentMethod; return this; }
         public Builder status(ConsentStatus status) { consent.status = status; return this; }
         public Builder grantedAt(Instant grantedAt) { consent.grantedAt = grantedAt; return this; }
         public Builder expiresAt(Instant expiresAt) { consent.expiresAt = expiresAt; return this; }
         public Builder revokedAt(Instant revokedAt) { consent.revokedAt = revokedAt; return this; }
         public Builder revocationReason(String revocationReason) { consent.revocationReason = revocationReason; return this; }
-        public Builder legalBasis(String legalBasis) { consent.legalBasis = legalBasis; return this; }
         public Builder retentionPeriod(String retentionPeriod) { consent.retentionPeriod = retentionPeriod; return this; }
         public Builder metadata(Map<String, Object> metadata) { consent.metadata = metadata; return this; }
 
@@ -185,8 +191,8 @@ public class A2AConsent {
         return "A2AConsent{" +
                 "id='" + id + '\'' +
                 ", userId='" + userId + '\'' +
-                ", sourceAgentId='" + sourceAgentId + '\'' +
-                ", targetAgentId='" + targetAgentId + '\'' +
+                ", grantorAgentId='" + grantorAgentId + '\'' +
+                ", recipientAgentId='" + recipientAgentId + '\'' +
                 ", purpose='" + purpose + '\'' +
                 ", status=" + status +
                 ", isActive=" + isActive() +
