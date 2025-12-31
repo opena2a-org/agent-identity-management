@@ -485,6 +485,80 @@ func (r *A2ASkillRepository) Search(ctx context.Context, query string, limit int
 	return r.querySkills(ctx, sql, "%"+query+"%", limit)
 }
 
+// SearchByIntent performs intent-based agent discovery using PostgreSQL full-text search.
+// Returns agents with matching skills, ranked by relevance and trust score.
+func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*domain.RoutedAgent, error) {
+	query := `
+		SELECT
+			s.id as skill_uuid,
+			s.agent_id,
+			s.skill_id,
+			s.name as skill_name,
+			s.description as skill_description,
+			a.name as agent_name,
+			a.status as agent_status,
+			COALESCE(t.a2a_trust_score, 0.5) as trust_score,
+			ts_rank(s.search_vector, plainto_tsquery('english', $1)) as relevance
+		FROM a2a_skills s
+		JOIN agents a ON a.id = s.agent_id
+		LEFT JOIN a2a_trust_scores t ON t.agent_id = s.agent_id
+		WHERE s.search_vector @@ plainto_tsquery('english', $1)
+		  AND COALESCE(t.a2a_trust_score, 0.5) >= $2
+		  AND a.status = 'verified'
+		ORDER BY ts_rank(s.search_vector, plainto_tsquery('english', $1))
+		       * COALESCE(t.a2a_trust_score, 0.5) DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, intent, minTrustScore, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search by intent: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.RoutedAgent
+	for rows.Next() {
+		ra := &domain.RoutedAgent{}
+		err := rows.Scan(
+			&ra.SkillUUID,
+			&ra.AgentID,
+			&ra.SkillID,
+			&ra.SkillName,
+			&ra.SkillDescription,
+			&ra.AgentName,
+			&ra.AgentStatus,
+			&ra.TrustScore,
+			&ra.Relevance,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan routed agent: %w", err)
+		}
+		results = append(results, ra)
+	}
+
+	return results, nil
+}
+
+// CountByIntent returns the number of agents matching an intent
+func (r *A2ASkillRepository) CountByIntent(ctx context.Context, intent string, minTrustScore float64) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT s.agent_id)
+		FROM a2a_skills s
+		JOIN agents a ON a.id = s.agent_id
+		LEFT JOIN a2a_trust_scores t ON t.agent_id = s.agent_id
+		WHERE s.search_vector @@ plainto_tsquery('english', $1)
+		  AND COALESCE(t.a2a_trust_score, 0.5) >= $2
+		  AND a.status = 'verified'
+	`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, intent, minTrustScore).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count by intent: %w", err)
+	}
+	return count, nil
+}
+
 func (r *A2ASkillRepository) IncrementUsage(ctx context.Context, id uuid.UUID, success bool, durationMs int) error {
 	var query string
 	if success {

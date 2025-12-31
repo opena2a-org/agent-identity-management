@@ -1296,6 +1296,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/agents/:id/skills", h.A2A.GetAgentSkills)
 	a2a.Get("/skills/search", h.A2A.SearchSkills)
 
+	// A2A Intent-Based Discovery
+	a2a.Get("/route", h.A2A.RouteByIntent)
+	a2a.Get("/capable-of", h.A2A.CapableOf)
+
 	// A2A Tasks (audit trail)
 	a2a.Post("/tasks", h.A2A.LogTask)
 	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)

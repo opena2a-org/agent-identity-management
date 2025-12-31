@@ -812,6 +812,37 @@ func (s *A2AService) IncrementSkillUsage(ctx context.Context, skillID uuid.UUID,
 }
 
 // ============================================================================
+// Intent-Based Discovery
+// ============================================================================
+
+// RouteByIntent finds the best agent for a given intent using FTS
+func (s *A2AService) RouteByIntent(ctx context.Context, intent string, minTrustScore float64) (*domain.RouteIntentResponse, error) {
+	// Search for agents matching the intent
+	agents, err := s.skillRepo.SearchByIntent(ctx, intent, minTrustScore, 10)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search by intent: %w", err)
+	}
+
+	if len(agents) == 0 {
+		return &domain.RouteIntentResponse{
+			Agent:        nil,
+			Alternatives: 0,
+		}, nil
+	}
+
+	// Best match is first (sorted by relevance * trust)
+	return &domain.RouteIntentResponse{
+		Agent:        agents[0],
+		Alternatives: len(agents) - 1,
+	}, nil
+}
+
+// CapableOf returns all agents capable of a given intent
+func (s *A2AService) CapableOf(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*domain.RoutedAgent, error) {
+	return s.skillRepo.SearchByIntent(ctx, intent, minTrustScore, limit)
+}
+
+// ============================================================================
 // Maintenance Operations
 // ============================================================================
 

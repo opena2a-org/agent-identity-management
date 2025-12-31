@@ -493,6 +493,86 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 }
 
 // ============================================================================
+// Intent-Based Routing (Discovery)
+// ============================================================================
+
+// RouteByIntent finds the best agent for a given intent using FTS
+// GET /api/v1/a2a/route?intent=X
+func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
+	intent := c.Query("intent")
+	if intent == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'intent' is required",
+		})
+	}
+
+	// Parse optional min trust score (default 0.5)
+	minTrustScore := 0.5
+	if minTrustStr := c.Query("minTrustScore"); minTrustStr != "" {
+		if score, err := strconv.ParseFloat(minTrustStr, 64); err == nil && score >= 0 && score <= 1 {
+			minTrustScore = score
+		}
+	}
+
+	resp, err := h.a2aService.RouteByIntent(c.Context(), intent, minTrustScore)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if resp.Agent == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":        "No agent found matching intent",
+			"intent":       intent,
+			"alternatives": 0,
+		})
+	}
+
+	return c.JSON(resp)
+}
+
+// CapableOf finds agents capable of a given skill/intent (multiple results)
+// GET /api/v1/a2a/capable-of?intent=X
+func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
+	intent := c.Query("intent")
+	if intent == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'intent' is required",
+		})
+	}
+
+	// Parse optional min trust score (default 0.5)
+	minTrustScore := 0.5
+	if minTrustStr := c.Query("minTrustScore"); minTrustStr != "" {
+		if score, err := strconv.ParseFloat(minTrustStr, 64); err == nil && score >= 0 && score <= 1 {
+			minTrustScore = score
+		}
+	}
+
+	// Parse limit (default 10)
+	limit := 10
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 50 {
+			limit = l
+		}
+	}
+
+	agents, err := h.a2aService.CapableOf(c.Context(), intent, minTrustScore, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"intent": intent,
+		"agents": agents,
+		"count":  len(agents),
+	})
+}
+
+// ============================================================================
 // Consent Management Endpoints
 // ============================================================================
 

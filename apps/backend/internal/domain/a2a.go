@@ -420,6 +420,36 @@ type A2APolicyDecision struct {
 }
 
 // ============================================================================
+// A2A Discovery / Intent Routing
+// ============================================================================
+
+// RoutedAgent represents an agent matched by intent-based discovery
+type RoutedAgent struct {
+	SkillUUID        uuid.UUID `json:"skillUuid"`
+	AgentID          uuid.UUID `json:"agentId"`
+	SkillID          string    `json:"skillId"`
+	SkillName        string    `json:"skillName"`
+	SkillDescription string    `json:"skillDescription,omitempty"`
+	AgentName        string    `json:"agentName"`
+	AgentStatus      string    `json:"agentStatus"`
+	TrustScore       float64   `json:"trustScore"`
+	Relevance        float64   `json:"relevance"`
+}
+
+// RouteIntentRequest represents a request to route by intent
+type RouteIntentRequest struct {
+	Intent        string  `json:"intent"`
+	MinTrustScore float64 `json:"minTrustScore,omitempty"`
+}
+
+// RouteIntentResponse represents the routing response
+type RouteIntentResponse struct {
+	Agent        *RoutedAgent `json:"agent,omitempty"`
+	Alternatives int          `json:"alternatives"`
+	Error        string       `json:"error,omitempty"`
+}
+
+// ============================================================================
 // Repository Interfaces
 // ============================================================================
 
@@ -443,6 +473,10 @@ type A2ASkillRepository interface {
 	DeleteByAgentID(ctx context.Context, agentID uuid.UUID) error
 	Search(ctx context.Context, query string, limit int) ([]*A2ASkill, error)
 	IncrementUsage(ctx context.Context, id uuid.UUID, success bool, durationMs int) error
+
+	// Intent-based discovery (FTS)
+	SearchByIntent(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*RoutedAgent, error)
+	CountByIntent(ctx context.Context, intent string, minTrustScore float64) (int, error)
 }
 
 // A2ATaskRepository defines operations for A2A tasks
