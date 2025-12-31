@@ -66,19 +66,21 @@ func getNonceExpiryMinutes() int {
 
 // A2AService handles A2A (Agent-to-Agent) protocol operations
 type A2AService struct {
-	cardRepo        *repository.A2AAgentCardRepository
-	skillRepo       *repository.A2ASkillRepository
-	taskRepo        *repository.A2ATaskRepository
-	peerTrustRepo   *repository.A2APeerTrustRepository
-	consentRepo     *repository.A2AConsentRepository
-	trustScoreRepo  *repository.A2ATrustScoreRepository
-	nonceRepo       *repository.A2ARequestNonceRepository
-	policyRepo      *repository.A2APolicyRepository
-	attestationRepo *repository.A2AAgentAttestationRepository
-	revokedRepo     *repository.A2ARevokedAgentRepository
-	agentRepo       *repository.AgentRepository
-	keyVault        *crypto.KeyVault
-	httpClient      *http.Client
+	cardRepo          *repository.A2AAgentCardRepository
+	skillRepo         *repository.A2ASkillRepository
+	taskRepo          *repository.A2ATaskRepository
+	peerTrustRepo     *repository.A2APeerTrustRepository
+	consentRepo       *repository.A2AConsentRepository
+	trustScoreRepo    *repository.A2ATrustScoreRepository
+	nonceRepo         *repository.A2ARequestNonceRepository
+	policyRepo        *repository.A2APolicyRepository
+	attestationRepo   *repository.A2AAgentAttestationRepository
+	revokedRepo       *repository.A2ARevokedAgentRepository
+	securityRepo      *repository.A2ASecuritySettingsRepository
+	violationRepo     *repository.A2ASecurityViolationRepository
+	agentRepo         *repository.AgentRepository
+	keyVault          *crypto.KeyVault
+	httpClient        *http.Client
 }
 
 // NewA2AService creates a new A2A service
@@ -93,6 +95,8 @@ func NewA2AService(
 	policyRepo *repository.A2APolicyRepository,
 	attestationRepo *repository.A2AAgentAttestationRepository,
 	revokedRepo *repository.A2ARevokedAgentRepository,
+	securityRepo *repository.A2ASecuritySettingsRepository,
+	violationRepo *repository.A2ASecurityViolationRepository,
 	agentRepo *repository.AgentRepository,
 	keyVault *crypto.KeyVault,
 ) *A2AService {
@@ -107,6 +111,8 @@ func NewA2AService(
 		policyRepo:      policyRepo,
 		attestationRepo: attestationRepo,
 		revokedRepo:     revokedRepo,
+		securityRepo:    securityRepo,
+		violationRepo:   violationRepo,
 		agentRepo:       agentRepo,
 		keyVault:        keyVault,
 		httpClient: &http.Client{
@@ -1014,6 +1020,206 @@ func (s *A2AService) GetConsensusStatus(ctx context.Context, agentID uuid.UUID, 
 		ConfidenceScore:  confidence,
 		IsVerified:       isVerified,
 	}, nil
+}
+
+// ============================================================================
+// A2A Security Policy Enforcement
+// ============================================================================
+
+// GetSecuritySettings returns the A2A security settings for an organization
+func (s *A2AService) GetSecuritySettings(ctx context.Context, orgID uuid.UUID) (*domain.A2ASecuritySettings, error) {
+	settings, err := s.securityRepo.GetByOrganization(ctx, orgID)
+	if err != nil {
+		// Return default settings if none exist
+		return &domain.A2ASecuritySettings{
+			OrganizationID:         orgID,
+			EnforcementMode:        domain.A2AEnforcementMonitor,
+			RequireVerifiedSkills:  false,
+			MinTrustScore:          0.0,
+			MinAttestationCount:    0,
+			RequireRequestSigning:  true,
+			RequireNonceValidation: true,
+			NonceValiditySeconds:   300,
+			MaxRequestsPerMinute:   60,
+			MaxRequestsPerHour:     1000,
+		}, nil
+	}
+	return settings, nil
+}
+
+// UpdateSecuritySettings updates the A2A security settings for an organization
+func (s *A2AService) UpdateSecuritySettings(ctx context.Context, settings *domain.A2ASecuritySettings) error {
+	existing, err := s.securityRepo.GetByOrganization(ctx, settings.OrganizationID)
+	if err != nil {
+		// Create new settings
+		settings.ID = uuid.New()
+		settings.CreatedAt = time.Now()
+		settings.UpdatedAt = time.Now()
+		return s.securityRepo.Create(ctx, settings)
+	}
+	// Update existing
+	settings.ID = existing.ID
+	settings.UpdatedAt = time.Now()
+	return s.securityRepo.Update(ctx, settings)
+}
+
+// CheckA2ASecurity evaluates all security policies for an A2A request
+func (s *A2AService) CheckA2ASecurity(ctx context.Context, req *domain.A2ASecurityCheckRequest) (*domain.A2ASecurityCheckResult, error) {
+	// Get target agent to find organization
+	targetAgent, err := s.agentRepo.GetByID(req.TargetAgentID)
+	if err != nil || targetAgent == nil {
+		return &domain.A2ASecurityCheckResult{
+			Allowed:    false,
+			Violations: []domain.A2AViolationType{domain.A2AViolationAgentBlocked},
+			Reason:     "target agent not found",
+			Mode:       domain.A2AEnforcementStrict,
+		}, nil
+	}
+
+	// Get security settings for the target agent's organization
+	settings, _ := s.GetSecuritySettings(ctx, targetAgent.OrganizationID)
+	var violations []domain.A2AViolationType
+
+	// Check 1: Is requesting agent revoked?
+	revoked, _ := s.revokedRepo.IsRevoked(ctx, req.RequestingAgentID)
+	if revoked {
+		violations = append(violations, domain.A2AViolationRevokedAgent)
+	}
+
+	// Check 2: Is requesting agent blocked?
+	for _, blockedID := range settings.BlockedAgentIDs {
+		if blockedID == req.RequestingAgentID {
+			violations = append(violations, domain.A2AViolationAgentBlocked)
+			break
+		}
+	}
+
+	// Check 3: Is requesting agent in allowed list (if list is not empty)?
+	if len(settings.AllowedAgentIDs) > 0 {
+		allowed := false
+		for _, allowedID := range settings.AllowedAgentIDs {
+			if allowedID == req.RequestingAgentID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			violations = append(violations, domain.A2AViolationAgentBlocked)
+		}
+	}
+
+	// Check 4: Trust score requirement
+	if settings.MinTrustScore > 0 {
+		trustScore, _ := s.trustScoreRepo.GetByAgentID(ctx, req.RequestingAgentID)
+		if trustScore == nil || trustScore.A2ATrustScore == nil || *trustScore.A2ATrustScore < settings.MinTrustScore {
+			violations = append(violations, domain.A2AViolationLowTrust)
+		}
+	}
+
+	// Check 5: Verified skill requirement
+	if settings.RequireVerifiedSkills && req.SkillID != "" {
+		skill, _ := s.skillRepo.GetBySkillID(ctx, req.TargetAgentID, req.SkillID)
+		if skill == nil || !skill.IsVerified {
+			violations = append(violations, domain.A2AViolationUnverifiedSkill)
+		}
+	}
+
+	// Check 6: Request signing requirement
+	if settings.RequireRequestSigning && req.RequestSignature == "" {
+		violations = append(violations, domain.A2AViolationUnsignedRequest)
+	}
+
+	// Check 7: Nonce validation requirement
+	if settings.RequireNonceValidation && req.RequestNonce != "" {
+		// Check if nonce exists (unused nonces are valid)
+		exists, _ := s.nonceRepo.Exists(ctx, req.RequestNonce)
+		if exists {
+			// Nonce already used - invalid
+			violations = append(violations, domain.A2AViolationNonceInvalid)
+		}
+	}
+
+	// Determine if request is allowed based on mode
+	allowed := len(violations) == 0
+	action := domain.A2ASecurityActionLogged
+	if settings.EnforcementMode == domain.A2AEnforcementStrict && !allowed {
+		action = domain.A2ASecurityActionBlocked
+	} else if settings.EnforcementMode == domain.A2AEnforcementMonitor {
+		// Monitor mode: allow request but log violations
+		allowed = true
+	}
+
+	// Log violations
+	if len(violations) > 0 {
+		for _, v := range violations {
+			violation := &domain.A2ASecurityViolation{
+				ID:                uuid.New(),
+				OrganizationID:    targetAgent.OrganizationID,
+				RequestingAgentID: &req.RequestingAgentID,
+				TargetAgentID:     &req.TargetAgentID,
+				SkillID:           req.SkillID,
+				TaskID:            req.TaskID,
+				ViolationType:     v,
+				ActionTaken:       action,
+				RequestSignature:  req.RequestSignature,
+				RequestNonce:      req.RequestNonce,
+				RequestTimestamp:  req.RequestTimestamp,
+				CreatedAt:         time.Now(),
+			}
+			s.violationRepo.Create(ctx, violation)
+		}
+	}
+
+	reason := ""
+	if !allowed {
+		reason = fmt.Sprintf("blocked due to %d security violations", len(violations))
+	}
+
+	return &domain.A2ASecurityCheckResult{
+		Allowed:    allowed,
+		Violations: violations,
+		Reason:     reason,
+		Mode:       settings.EnforcementMode,
+	}, nil
+}
+
+// GetSecurityViolations returns security violations for an organization
+func (s *A2AService) GetSecurityViolations(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ASecurityViolation, error) {
+	return s.violationRepo.GetByOrganization(ctx, orgID, limit, offset)
+}
+
+// GetSecurityViolationsByType returns security violations filtered by type
+func (s *A2AService) GetSecurityViolationsByType(ctx context.Context, orgID uuid.UUID, violationType domain.A2AViolationType, limit, offset int) ([]*domain.A2ASecurityViolation, error) {
+	return s.violationRepo.GetByType(ctx, orgID, violationType, limit, offset)
+}
+
+// GetViolationStats returns violation counts for an organization
+func (s *A2AService) GetViolationStats(ctx context.Context, orgID uuid.UUID, since time.Time) (map[domain.A2AViolationType]int, int, error) {
+	total, err := s.violationRepo.CountByOrganization(ctx, orgID, since)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	stats := make(map[domain.A2AViolationType]int)
+	violationTypes := []domain.A2AViolationType{
+		domain.A2AViolationLowTrust,
+		domain.A2AViolationUnverifiedSkill,
+		domain.A2AViolationUnsignedRequest,
+		domain.A2AViolationNonceInvalid,
+		domain.A2AViolationAgentBlocked,
+		domain.A2AViolationRateLimited,
+		domain.A2AViolationPolicyDenied,
+		domain.A2AViolationRevokedAgent,
+	}
+
+	for _, vt := range violationTypes {
+		count, _ := s.violationRepo.CountByType(ctx, orgID, vt, since)
+		if count > 0 {
+			stats[vt] = count
+		}
+	}
+
+	return stats, total, nil
 }
 
 // ============================================================================

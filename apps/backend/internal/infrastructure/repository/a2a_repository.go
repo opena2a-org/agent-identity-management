@@ -2409,3 +2409,234 @@ func (r *A2ARevokedAgentRepository) Reinstate(ctx context.Context, agentID uuid.
 	_, err := r.db.ExecContext(ctx, `DELETE FROM a2a_revoked_agents WHERE agent_id = $1`, agentID)
 	return err
 }
+
+// ============================================================================
+// A2A Security Settings Repository
+// ============================================================================
+
+type A2ASecuritySettingsRepository struct {
+	db *sql.DB
+}
+
+func NewA2ASecuritySettingsRepository(db *sql.DB) *A2ASecuritySettingsRepository {
+	return &A2ASecuritySettingsRepository{db: db}
+}
+
+func (r *A2ASecuritySettingsRepository) Create(ctx context.Context, s *domain.A2ASecuritySettings) error {
+	allowedJSON, _ := json.Marshal(s.AllowedAgentIDs)
+	blockedJSON, _ := json.Marshal(s.BlockedAgentIDs)
+
+	query := `INSERT INTO a2a_security_settings (
+		id, organization_id, enforcement_mode, require_verified_skills,
+		min_trust_score, min_attestation_count, require_request_signing,
+		require_nonce_validation, nonce_validity_seconds, allowed_agent_ids,
+		blocked_agent_ids, max_requests_per_minute, max_requests_per_hour,
+		created_by, updated_by, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
+
+	_, err := r.db.ExecContext(ctx, query,
+		s.ID, s.OrganizationID, s.EnforcementMode, s.RequireVerifiedSkills,
+		s.MinTrustScore, s.MinAttestationCount, s.RequireRequestSigning,
+		s.RequireNonceValidation, s.NonceValiditySeconds, allowedJSON,
+		blockedJSON, s.MaxRequestsPerMinute, s.MaxRequestsPerHour,
+		s.CreatedBy, s.UpdatedBy, s.CreatedAt, s.UpdatedAt)
+	return err
+}
+
+func (r *A2ASecuritySettingsRepository) GetByOrganization(ctx context.Context, orgID uuid.UUID) (*domain.A2ASecuritySettings, error) {
+	query := `SELECT id, organization_id, enforcement_mode, require_verified_skills,
+		min_trust_score, min_attestation_count, require_request_signing,
+		require_nonce_validation, nonce_validity_seconds, allowed_agent_ids,
+		blocked_agent_ids, max_requests_per_minute, max_requests_per_hour,
+		created_by, updated_by, created_at, updated_at
+		FROM a2a_security_settings WHERE organization_id = $1`
+
+	s := &domain.A2ASecuritySettings{}
+	var allowedJSON, blockedJSON []byte
+	var createdBy, updatedBy sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, orgID).Scan(
+		&s.ID, &s.OrganizationID, &s.EnforcementMode, &s.RequireVerifiedSkills,
+		&s.MinTrustScore, &s.MinAttestationCount, &s.RequireRequestSigning,
+		&s.RequireNonceValidation, &s.NonceValiditySeconds, &allowedJSON,
+		&blockedJSON, &s.MaxRequestsPerMinute, &s.MaxRequestsPerHour,
+		&createdBy, &updatedBy, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	json.Unmarshal(allowedJSON, &s.AllowedAgentIDs)
+	json.Unmarshal(blockedJSON, &s.BlockedAgentIDs)
+	if createdBy.Valid {
+		id, _ := uuid.Parse(createdBy.String)
+		s.CreatedBy = &id
+	}
+	if updatedBy.Valid {
+		id, _ := uuid.Parse(updatedBy.String)
+		s.UpdatedBy = &id
+	}
+	return s, nil
+}
+
+func (r *A2ASecuritySettingsRepository) Update(ctx context.Context, s *domain.A2ASecuritySettings) error {
+	allowedJSON, _ := json.Marshal(s.AllowedAgentIDs)
+	blockedJSON, _ := json.Marshal(s.BlockedAgentIDs)
+
+	query := `UPDATE a2a_security_settings SET
+		enforcement_mode = $1, require_verified_skills = $2, min_trust_score = $3,
+		min_attestation_count = $4, require_request_signing = $5,
+		require_nonce_validation = $6, nonce_validity_seconds = $7,
+		allowed_agent_ids = $8, blocked_agent_ids = $9,
+		max_requests_per_minute = $10, max_requests_per_hour = $11,
+		updated_by = $12, updated_at = NOW()
+		WHERE organization_id = $13`
+
+	_, err := r.db.ExecContext(ctx, query,
+		s.EnforcementMode, s.RequireVerifiedSkills, s.MinTrustScore,
+		s.MinAttestationCount, s.RequireRequestSigning,
+		s.RequireNonceValidation, s.NonceValiditySeconds,
+		allowedJSON, blockedJSON,
+		s.MaxRequestsPerMinute, s.MaxRequestsPerHour,
+		s.UpdatedBy, s.OrganizationID)
+	return err
+}
+
+func (r *A2ASecuritySettingsRepository) Delete(ctx context.Context, orgID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM a2a_security_settings WHERE organization_id = $1`, orgID)
+	return err
+}
+
+// ============================================================================
+// A2A Security Violations Repository
+// ============================================================================
+
+type A2ASecurityViolationRepository struct {
+	db *sql.DB
+}
+
+func NewA2ASecurityViolationRepository(db *sql.DB) *A2ASecurityViolationRepository {
+	return &A2ASecurityViolationRepository{db: db}
+}
+
+func (r *A2ASecurityViolationRepository) Create(ctx context.Context, v *domain.A2ASecurityViolation) error {
+	detailsJSON, _ := json.Marshal(v.ViolationDetails)
+
+	query := `INSERT INTO a2a_security_violations (
+		id, organization_id, requesting_agent_id, target_agent_id, skill_id,
+		task_id, violation_type, violation_details, policy_id, action_taken,
+		request_signature, request_nonce, request_timestamp, created_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+
+	_, err := r.db.ExecContext(ctx, query,
+		v.ID, v.OrganizationID, v.RequestingAgentID, v.TargetAgentID, v.SkillID,
+		v.TaskID, v.ViolationType, detailsJSON, v.PolicyID, v.ActionTaken,
+		v.RequestSignature, v.RequestNonce, v.RequestTimestamp, v.CreatedAt)
+	return err
+}
+
+func (r *A2ASecurityViolationRepository) GetByOrganization(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ASecurityViolation, error) {
+	query := `SELECT id, organization_id, requesting_agent_id, target_agent_id, skill_id,
+		task_id, violation_type, violation_details, policy_id, action_taken,
+		request_signature, request_nonce, request_timestamp, created_at
+		FROM a2a_security_violations WHERE organization_id = $1
+		ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+
+	return r.queryViolations(ctx, query, orgID, limit, offset)
+}
+
+func (r *A2ASecurityViolationRepository) GetByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.A2ASecurityViolation, error) {
+	query := `SELECT id, organization_id, requesting_agent_id, target_agent_id, skill_id,
+		task_id, violation_type, violation_details, policy_id, action_taken,
+		request_signature, request_nonce, request_timestamp, created_at
+		FROM a2a_security_violations WHERE requesting_agent_id = $1
+		ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+
+	return r.queryViolations(ctx, query, agentID, limit, offset)
+}
+
+func (r *A2ASecurityViolationRepository) GetByType(ctx context.Context, orgID uuid.UUID, violationType domain.A2AViolationType, limit, offset int) ([]*domain.A2ASecurityViolation, error) {
+	query := `SELECT id, organization_id, requesting_agent_id, target_agent_id, skill_id,
+		task_id, violation_type, violation_details, policy_id, action_taken,
+		request_signature, request_nonce, request_timestamp, created_at
+		FROM a2a_security_violations WHERE organization_id = $1 AND violation_type = $2
+		ORDER BY created_at DESC LIMIT $3 OFFSET $4`
+
+	rows, err := r.db.QueryContext(ctx, query, orgID, violationType, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanViolations(rows)
+}
+
+func (r *A2ASecurityViolationRepository) queryViolations(ctx context.Context, query string, args ...interface{}) ([]*domain.A2ASecurityViolation, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanViolations(rows)
+}
+
+func (r *A2ASecurityViolationRepository) scanViolations(rows *sql.Rows) ([]*domain.A2ASecurityViolation, error) {
+	var list []*domain.A2ASecurityViolation
+	for rows.Next() {
+		v := &domain.A2ASecurityViolation{}
+		var detailsJSON []byte
+		var reqAgentID, targetAgentID, taskID, policyID sql.NullString
+		var reqSig, reqNonce sql.NullString
+		var reqTimestamp sql.NullTime
+
+		err := rows.Scan(&v.ID, &v.OrganizationID, &reqAgentID, &targetAgentID, &v.SkillID,
+			&taskID, &v.ViolationType, &detailsJSON, &policyID, &v.ActionTaken,
+			&reqSig, &reqNonce, &reqTimestamp, &v.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		json.Unmarshal(detailsJSON, &v.ViolationDetails)
+		if reqAgentID.Valid {
+			id, _ := uuid.Parse(reqAgentID.String)
+			v.RequestingAgentID = &id
+		}
+		if targetAgentID.Valid {
+			id, _ := uuid.Parse(targetAgentID.String)
+			v.TargetAgentID = &id
+		}
+		if taskID.Valid {
+			id, _ := uuid.Parse(taskID.String)
+			v.TaskID = &id
+		}
+		if policyID.Valid {
+			id, _ := uuid.Parse(policyID.String)
+			v.PolicyID = &id
+		}
+		if reqSig.Valid {
+			v.RequestSignature = reqSig.String
+		}
+		if reqNonce.Valid {
+			v.RequestNonce = reqNonce.String
+		}
+		if reqTimestamp.Valid {
+			v.RequestTimestamp = &reqTimestamp.Time
+		}
+		list = append(list, v)
+	}
+	return list, nil
+}
+
+func (r *A2ASecurityViolationRepository) CountByOrganization(ctx context.Context, orgID uuid.UUID, since time.Time) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM a2a_security_violations WHERE organization_id = $1 AND created_at >= $2`,
+		orgID, since).Scan(&count)
+	return count, err
+}
+
+func (r *A2ASecurityViolationRepository) CountByType(ctx context.Context, orgID uuid.UUID, violationType domain.A2AViolationType, since time.Time) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM a2a_security_violations WHERE organization_id = $1 AND violation_type = $2 AND created_at >= $3`,
+		orgID, violationType, since).Scan(&count)
+	return count, err
+}

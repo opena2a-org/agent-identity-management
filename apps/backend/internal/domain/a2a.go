@@ -153,6 +153,11 @@ type A2ASkill struct {
 	FailureCount    int `json:"failureCount"`
 	AvgDurationMs   int `json:"avgDurationMs,omitempty"`
 
+	// Verification status (from multi-agent consensus)
+	IsVerified       bool       `json:"isVerified"`
+	VerifiedAt       *time.Time `json:"verifiedAt,omitempty"`
+	AttestationCount int        `json:"attestationCount"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -616,4 +621,138 @@ type A2ARevokedAgentRepository interface {
 	GetByAgentID(ctx context.Context, agentID uuid.UUID) (*A2ARevokedAgent, error)
 	List(ctx context.Context, limit, offset int) ([]*A2ARevokedAgent, error)
 	Reinstate(ctx context.Context, agentID uuid.UUID) error
+}
+
+// ============================================================================
+// A2A Security Settings (Monitor/Strict enforcement modes)
+// ============================================================================
+
+// A2AEnforcementMode defines the security enforcement behavior
+type A2AEnforcementMode string
+
+const (
+	// A2AEnforcementMonitor logs violations but allows requests
+	A2AEnforcementMonitor A2AEnforcementMode = "monitor"
+	// A2AEnforcementStrict blocks requests that violate policy
+	A2AEnforcementStrict A2AEnforcementMode = "strict"
+)
+
+// A2ASecuritySettings defines organization-level A2A security configuration
+type A2ASecuritySettings struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organizationId"`
+
+	// Enforcement mode
+	EnforcementMode A2AEnforcementMode `json:"enforcementMode"`
+
+	// Trust requirements
+	RequireVerifiedSkills bool    `json:"requireVerifiedSkills"`
+	MinTrustScore         float64 `json:"minTrustScore"`
+	MinAttestationCount   int     `json:"minAttestationCount"`
+
+	// Request signing
+	RequireRequestSigning  bool `json:"requireRequestSigning"`
+	RequireNonceValidation bool `json:"requireNonceValidation"`
+	NonceValiditySeconds   int  `json:"nonceValiditySeconds"`
+
+	// Agent restrictions
+	AllowedAgentIDs []uuid.UUID `json:"allowedAgentIds,omitempty"`
+	BlockedAgentIDs []uuid.UUID `json:"blockedAgentIds,omitempty"`
+
+	// Rate limiting
+	MaxRequestsPerMinute int `json:"maxRequestsPerMinute"`
+	MaxRequestsPerHour   int `json:"maxRequestsPerHour"`
+
+	// Audit
+	CreatedBy *uuid.UUID `json:"createdBy,omitempty"`
+	UpdatedBy *uuid.UUID `json:"updatedBy,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+}
+
+// A2AViolationType defines the type of security violation
+type A2AViolationType string
+
+const (
+	A2AViolationLowTrust        A2AViolationType = "LOW_TRUST"
+	A2AViolationUnverifiedSkill A2AViolationType = "UNVERIFIED_SKILL"
+	A2AViolationUnsignedRequest A2AViolationType = "UNSIGNED_REQUEST"
+	A2AViolationNonceInvalid    A2AViolationType = "NONCE_INVALID"
+	A2AViolationAgentBlocked    A2AViolationType = "AGENT_BLOCKED"
+	A2AViolationRateLimited     A2AViolationType = "RATE_LIMITED"
+	A2AViolationPolicyDenied    A2AViolationType = "POLICY_DENIED"
+	A2AViolationRevokedAgent    A2AViolationType = "REVOKED_AGENT"
+)
+
+// A2ASecurityAction defines the action taken for a violation
+type A2ASecurityAction string
+
+const (
+	A2ASecurityActionLogged  A2ASecurityAction = "LOGGED"  // Monitor mode
+	A2ASecurityActionBlocked A2ASecurityAction = "BLOCKED" // Strict mode
+)
+
+// A2ASecurityViolation represents a recorded policy violation
+type A2ASecurityViolation struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organizationId"`
+
+	// Request details
+	RequestingAgentID *uuid.UUID `json:"requestingAgentId,omitempty"`
+	TargetAgentID     *uuid.UUID `json:"targetAgentId,omitempty"`
+	SkillID           string     `json:"skillId,omitempty"`
+	TaskID            *uuid.UUID `json:"taskId,omitempty"`
+
+	// Violation details
+	ViolationType    A2AViolationType       `json:"violationType"`
+	ViolationDetails map[string]interface{} `json:"violationDetails,omitempty"`
+	PolicyID         *uuid.UUID             `json:"policyId,omitempty"`
+
+	// Action taken
+	ActionTaken A2ASecurityAction `json:"actionTaken"`
+
+	// Request context
+	RequestSignature  string     `json:"requestSignature,omitempty"`
+	RequestNonce      string     `json:"requestNonce,omitempty"`
+	RequestTimestamp  *time.Time `json:"requestTimestamp,omitempty"`
+
+	// Metadata
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// A2ASecurityCheckRequest represents a request to check A2A security
+type A2ASecurityCheckRequest struct {
+	RequestingAgentID uuid.UUID  `json:"requestingAgentId"`
+	TargetAgentID     uuid.UUID  `json:"targetAgentId"`
+	SkillID           string     `json:"skillId,omitempty"`
+	TaskID            *uuid.UUID `json:"taskId,omitempty"`
+	RequestSignature  string     `json:"requestSignature,omitempty"`
+	RequestNonce      string     `json:"requestNonce,omitempty"`
+	RequestTimestamp  *time.Time `json:"requestTimestamp,omitempty"`
+}
+
+// A2ASecurityCheckResult represents the result of a security check
+type A2ASecurityCheckResult struct {
+	Allowed    bool               `json:"allowed"`
+	Violations []A2AViolationType `json:"violations,omitempty"`
+	Reason     string             `json:"reason,omitempty"`
+	Mode       A2AEnforcementMode `json:"mode"`
+}
+
+// A2ASecuritySettingsRepository defines operations for security settings
+type A2ASecuritySettingsRepository interface {
+	Create(ctx context.Context, settings *A2ASecuritySettings) error
+	GetByOrganization(ctx context.Context, orgID uuid.UUID) (*A2ASecuritySettings, error)
+	Update(ctx context.Context, settings *A2ASecuritySettings) error
+	Delete(ctx context.Context, orgID uuid.UUID) error
+}
+
+// A2ASecurityViolationRepository defines operations for security violations
+type A2ASecurityViolationRepository interface {
+	Create(ctx context.Context, violation *A2ASecurityViolation) error
+	GetByOrganization(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2ASecurityViolation, error)
+	GetByAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*A2ASecurityViolation, error)
+	GetByType(ctx context.Context, orgID uuid.UUID, violationType A2AViolationType, limit, offset int) ([]*A2ASecurityViolation, error)
+	CountByOrganization(ctx context.Context, orgID uuid.UUID, since time.Time) (int, error)
+	CountByType(ctx context.Context, orgID uuid.UUID, violationType A2AViolationType, since time.Time) (int, error)
 }
