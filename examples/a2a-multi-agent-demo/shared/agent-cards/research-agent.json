@@ -1,0 +1,32 @@
+{
+  "name": "research-agent",
+  "displayName": "Research Agent",
+  "description": "Gathers information from various sources and collaborates with analysis agents",
+  "version": "1.0.0",
+  "url": "http://localhost:8082",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "authentication": {
+    "schemes": ["bearer"]
+  },
+  "skills": [
+    {
+      "id": "web-research",
+      "name": "Web Research",
+      "description": "Gather information from web sources on specified topics",
+      "tags": ["research", "web", "data-gathering"],
+      "inputModes": ["text"],
+      "outputModes": ["text", "data"]
+    },
+    {
+      "id": "document-reading",
+      "name": "Document Reading",
+      "description": "Extract and process content from documents",
+      "tags": ["documents", "extraction", "reading"],
+      "inputModes": ["file", "text"],
+      "outputModes": ["text", "data"]
+    }
+  ]
+}
