@@ -17,6 +17,39 @@ public class A2APeerTrust {
     @JsonProperty("id")
     private String id;
 
+    // Backend field names (primary)
+    @JsonProperty("agentId")
+    private String agentId;
+
+    @JsonProperty("peerAgentId")
+    private String peerAgentId;
+
+    @JsonProperty("peerTrustScore")
+    private Double peerTrustScore;
+
+    @JsonProperty("successRate")
+    private Double successRate;
+
+    // Interaction stats from backend
+    @JsonProperty("tasksInitiated")
+    private int tasksInitiated;
+
+    @JsonProperty("tasksInitiatedCompleted")
+    private int tasksInitiatedCompleted;
+
+    @JsonProperty("tasksReceived")
+    private int tasksReceived;
+
+    @JsonProperty("tasksReceivedCompleted")
+    private int tasksReceivedCompleted;
+
+    @JsonProperty("firstInteractionAt")
+    private Instant firstInteractionAt;
+
+    @JsonProperty("lastInteractionAt")
+    private Instant lastInteractionAt;
+
+    // Legacy SDK field names (for compatibility)
     @JsonProperty("sourceAgentId")
     private String sourceAgentId;
 
@@ -58,10 +91,46 @@ public class A2APeerTrust {
         return new Builder();
     }
 
-    // Getters
+    // Getters - prefer backend fields, fall back to legacy
     public String getId() { return id; }
-    public String getSourceAgentId() { return sourceAgentId; }
-    public String getTargetAgentId() { return targetAgentId; }
+
+    /**
+     * Get the agent ID. Uses backend field 'agentId' or legacy 'sourceAgentId'.
+     */
+    public String getAgentId() {
+        return agentId != null ? agentId : sourceAgentId;
+    }
+
+    /**
+     * Get the peer agent ID. Uses backend field 'peerAgentId' or legacy 'targetAgentId'.
+     */
+    public String getPeerAgentId() {
+        return peerAgentId != null ? peerAgentId : targetAgentId;
+    }
+
+    /**
+     * Get the peer trust score. Uses backend field 'peerTrustScore' or legacy nested 'trustScore'.
+     */
+    public Double getPeerTrustScore() {
+        if (peerTrustScore != null) {
+            return peerTrustScore;
+        }
+        return trustScore != null ? trustScore.getScore() : null;
+    }
+
+    public Double getSuccessRate() { return successRate; }
+    public int getTasksInitiated() { return tasksInitiated; }
+    public int getTasksInitiatedCompleted() { return tasksInitiatedCompleted; }
+    public int getTasksReceived() { return tasksReceived; }
+    public int getTasksReceivedCompleted() { return tasksReceivedCompleted; }
+    public Instant getFirstInteractionAt() { return firstInteractionAt; }
+    public Instant getLastInteractionAt() { return lastInteractionAt; }
+
+    // Legacy getters (deprecated, use getAgentId/getPeerAgentId instead)
+    @Deprecated
+    public String getSourceAgentId() { return getAgentId(); }
+    @Deprecated
+    public String getTargetAgentId() { return getPeerAgentId(); }
     public TrustLevel getTrustLevel() { return trustLevel; }
     public A2ATrustScore getTrustScore() { return trustScore; }
     public boolean isVerified() { return verified; }
@@ -74,6 +143,17 @@ public class A2APeerTrust {
 
     // Setters for Jackson
     public void setId(String id) { this.id = id; }
+    public void setAgentId(String agentId) { this.agentId = agentId; }
+    public void setPeerAgentId(String peerAgentId) { this.peerAgentId = peerAgentId; }
+    public void setPeerTrustScore(Double peerTrustScore) { this.peerTrustScore = peerTrustScore; }
+    public void setSuccessRate(Double successRate) { this.successRate = successRate; }
+    public void setTasksInitiated(int tasksInitiated) { this.tasksInitiated = tasksInitiated; }
+    public void setTasksInitiatedCompleted(int tasksInitiatedCompleted) { this.tasksInitiatedCompleted = tasksInitiatedCompleted; }
+    public void setTasksReceived(int tasksReceived) { this.tasksReceived = tasksReceived; }
+    public void setTasksReceivedCompleted(int tasksReceivedCompleted) { this.tasksReceivedCompleted = tasksReceivedCompleted; }
+    public void setFirstInteractionAt(Instant firstInteractionAt) { this.firstInteractionAt = firstInteractionAt; }
+    public void setLastInteractionAt(Instant lastInteractionAt) { this.lastInteractionAt = lastInteractionAt; }
+    // Legacy setters
     public void setSourceAgentId(String sourceAgentId) { this.sourceAgentId = sourceAgentId; }
     public void setTargetAgentId(String targetAgentId) { this.targetAgentId = targetAgentId; }
     public void setTrustLevel(TrustLevel trustLevel) { this.trustLevel = trustLevel; }

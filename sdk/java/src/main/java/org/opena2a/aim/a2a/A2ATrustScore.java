@@ -16,6 +16,11 @@ public class A2ATrustScore {
     @JsonProperty("id")
     private String id;
 
+    // Backend field: agent this score belongs to
+    @JsonProperty("agentId")
+    private String agentId;
+
+    // Legacy SDK fields
     @JsonProperty("evaluatorAgentId")
     private String evaluatorAgentId;
 
@@ -25,10 +30,40 @@ public class A2ATrustScore {
     @JsonProperty("score")
     private double score;
 
-    // Backend returns a2aTrustScore in some responses
+    // Backend returns a2aTrustScore in responses
     @JsonProperty("a2aTrustScore")
     private Double a2aTrustScoreFromBackend;
 
+    // Backend task statistics
+    @JsonProperty("totalTasksAsClient")
+    private int totalTasksAsClient;
+
+    @JsonProperty("totalTasksAsRemote")
+    private int totalTasksAsRemote;
+
+    @JsonProperty("tasksCompleted")
+    private int tasksCompleted;
+
+    @JsonProperty("tasksFailed")
+    private int tasksFailed;
+
+    @JsonProperty("tasksCancelled")
+    private int tasksCancelled;
+
+    // Backend peer trust metrics
+    @JsonProperty("peerTrustAverage")
+    private Double peerTrustAverage;
+
+    @JsonProperty("uniquePeersCount")
+    private int uniquePeersCount;
+
+    @JsonProperty("computedAt")
+    private Instant computedAt;
+
+    @JsonProperty("dataPoints")
+    private int dataPoints;
+
+    // Legacy SDK fields
     @JsonProperty("confidence")
     private double confidence;
 
@@ -63,6 +98,14 @@ public class A2ATrustScore {
 
     // Getters
     public String getId() { return id; }
+
+    /**
+     * Get the agent ID. Uses backend 'agentId' or legacy 'subjectAgentId'.
+     */
+    public String getAgentId() {
+        return agentId != null ? agentId : subjectAgentId;
+    }
+
     public String getEvaluatorAgentId() { return evaluatorAgentId; }
     public String getSubjectAgentId() { return subjectAgentId; }
 
@@ -76,6 +119,19 @@ public class A2ATrustScore {
         }
         return score;
     }
+
+    // Backend task statistics
+    public int getTotalTasksAsClient() { return totalTasksAsClient; }
+    public int getTotalTasksAsRemote() { return totalTasksAsRemote; }
+    public int getTasksCompleted() { return tasksCompleted; }
+    public int getTasksFailed() { return tasksFailed; }
+    public int getTasksCancelled() { return tasksCancelled; }
+    public Double getPeerTrustAverage() { return peerTrustAverage; }
+    public int getUniquePeersCount() { return uniquePeersCount; }
+    public Instant getComputedAt() { return computedAt; }
+    public int getDataPoints() { return dataPoints; }
+
+    // Legacy SDK fields
     public double getConfidence() { return confidence; }
     public int getInteractionCount() { return interactionCount; }
     public int getSuccessfulInteractions() { return successfulInteractions; }
@@ -87,9 +143,22 @@ public class A2ATrustScore {
 
     // Setters for Jackson
     public void setId(String id) { this.id = id; }
+    public void setAgentId(String agentId) { this.agentId = agentId; }
     public void setEvaluatorAgentId(String evaluatorAgentId) { this.evaluatorAgentId = evaluatorAgentId; }
     public void setSubjectAgentId(String subjectAgentId) { this.subjectAgentId = subjectAgentId; }
     public void setScore(double score) { this.score = score; }
+    public void setA2aTrustScoreFromBackend(Double a2aTrustScore) { this.a2aTrustScoreFromBackend = a2aTrustScore; }
+    // Backend task statistics setters
+    public void setTotalTasksAsClient(int totalTasksAsClient) { this.totalTasksAsClient = totalTasksAsClient; }
+    public void setTotalTasksAsRemote(int totalTasksAsRemote) { this.totalTasksAsRemote = totalTasksAsRemote; }
+    public void setTasksCompleted(int tasksCompleted) { this.tasksCompleted = tasksCompleted; }
+    public void setTasksFailed(int tasksFailed) { this.tasksFailed = tasksFailed; }
+    public void setTasksCancelled(int tasksCancelled) { this.tasksCancelled = tasksCancelled; }
+    public void setPeerTrustAverage(Double peerTrustAverage) { this.peerTrustAverage = peerTrustAverage; }
+    public void setUniquePeersCount(int uniquePeersCount) { this.uniquePeersCount = uniquePeersCount; }
+    public void setComputedAt(Instant computedAt) { this.computedAt = computedAt; }
+    public void setDataPoints(int dataPoints) { this.dataPoints = dataPoints; }
+    // Legacy SDK setters
     public void setConfidence(double confidence) { this.confidence = confidence; }
     public void setInteractionCount(int interactionCount) { this.interactionCount = interactionCount; }
     public void setSuccessfulInteractions(int successfulInteractions) { this.successfulInteractions = successfulInteractions; }

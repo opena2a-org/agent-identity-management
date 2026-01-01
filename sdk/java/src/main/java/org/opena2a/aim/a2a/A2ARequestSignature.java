@@ -16,8 +16,12 @@ public class A2ARequestSignature {
     @JsonProperty("signature")
     private String signature;
 
-    @JsonProperty("timestamp")
+    // Backend returns timestamp as Unix epoch (long), but we expose as Instant
     private Instant timestamp;
+
+    // For JSON deserialization of numeric timestamp from backend
+    @JsonProperty("timestamp")
+    private Long timestampEpoch;
 
     @JsonProperty("nonce")
     private String nonce;
@@ -55,7 +59,31 @@ public class A2ARequestSignature {
 
     // Getters
     public String getSignature() { return signature; }
-    public Instant getTimestamp() { return timestamp; }
+
+    /**
+     * Get timestamp as Instant. Handles both Instant and epoch formats from backend.
+     */
+    public Instant getTimestamp() {
+        if (timestamp != null) {
+            return timestamp;
+        }
+        if (timestampEpoch != null) {
+            // Backend returns Unix epoch in seconds
+            return Instant.ofEpochSecond(timestampEpoch);
+        }
+        return null;
+    }
+
+    /**
+     * Get raw epoch timestamp if available.
+     */
+    public Long getTimestampEpoch() {
+        if (timestampEpoch != null) {
+            return timestampEpoch;
+        }
+        return timestamp != null ? timestamp.getEpochSecond() : null;
+    }
+
     public String getNonce() { return nonce; }
     public String getAlgorithm() { return algorithm; }
     public String getAgentId() { return agentId; }
