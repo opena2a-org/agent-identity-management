@@ -22,10 +22,10 @@
         <!-- AIM SDK -->
         <dependency>
             <groupId>org.opena2a</groupId>
-            <artifactId>aim-sdk-java</artifactId>
+            <artifactId>aim-sdk</artifactId>
             <version>1.0.0</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/../../../sdk/java/target/aim-sdk-java-1.0.0.jar</systemPath>
+            <systemPath>${project.basedir}/../../../sdk/java/target/aim-sdk-1.0.0.jar</systemPath>
         </dependency>
 
         <!-- JSON Processing -->

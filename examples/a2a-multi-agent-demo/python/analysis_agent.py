@@ -92,7 +92,11 @@ class AnalysisAgent:
         try:
             # Register skills
             for skill in self.SKILLS:
-                self.a2a.register_skill(skill)
+                self.a2a.register_skill(
+                    name=skill['id'],
+                    description=skill['description'],
+                    tags=skill.get('tags')
+                )
                 print(f"  - Registered skill: {skill['name']}")
 
             # Get the registered card

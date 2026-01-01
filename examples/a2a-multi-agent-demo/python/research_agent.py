@@ -96,7 +96,11 @@ class ResearchAgent:
             ]
 
             for skill in skills:
-                self.a2a.register_skill(skill)
+                self.a2a.register_skill(
+                    name=skill['id'],
+                    description=skill['description'],
+                    tags=skill.get('tags')
+                )
                 print(f"  - Registered skill: {skill['name']}")
 
             card = self.a2a.get_agent_card()
