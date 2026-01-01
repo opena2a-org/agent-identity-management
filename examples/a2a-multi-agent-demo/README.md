@@ -1,6 +1,6 @@
 # A2A Multi-Agent Collaboration Demo
 
-This demo showcases Agent-to-Agent (A2A) collaboration between a **Research Agent** and an **Analysis Agent**, demonstrating all A2A protocol features across Python, TypeScript, and Java SDKs.
+This demo showcases Agent-to-Agent (A2A) collaboration between a **Research Agent** and an **Analysis Agent**, demonstrating all A2A protocol features across Python and Java SDKs.
 
 ## Scenario
 
@@ -44,18 +44,6 @@ pip install -r requirements.txt
 python run_demo.py
 ```
 
-### TypeScript
-
-```bash
-cd typescript
-
-# Install dependencies
-npm install
-
-# Run demo
-npm run demo
-```
-
 ### Java
 
 ```bash
@@ -84,13 +72,6 @@ a2a-multi-agent-demo/
 │   ├── analysis_agent.py          # Analysis Agent implementation
 │   ├── research_agent.py          # Research Agent implementation
 │   └── run_demo.py                # Demo orchestrator
-├── typescript/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── analysis-agent.ts
-│       ├── research-agent.ts
-│       └── run-demo.ts
 └── java/
     ├── pom.xml
     └── src/main/java/org/opena2a/demo/
@@ -194,9 +175,6 @@ Build the SDK first:
 ```bash
 # Python
 cd sdk/python && pip install -e .
-
-# TypeScript
-cd sdk/typescript && npm install && npm run build
 
 # Java
 cd sdk/java && mvn package -DskipTests
