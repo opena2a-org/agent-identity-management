@@ -59,7 +59,10 @@ setup(
         ],
         "rich": [
             "rich>=13.0.0",  # Beautiful terminal output (Stripe-style formatting)
-        ]
+        ],
+        "pqc": [
+            "liboqs-python>=0.9.0",  # Post-quantum cryptography (ML-DSA/Dilithium)
+        ],
     },
     keywords="aim agent identity management verification security cryptography ed25519",
     project_urls={

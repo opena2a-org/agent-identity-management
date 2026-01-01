@@ -37,6 +37,10 @@ type MockAgentServiceImpl struct {
 	HasCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
 	UpdateLastActiveFunc            func(ctx context.Context, agentID uuid.UUID) error
 	DetectMCPServersFromConfigFunc  func(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
+	// PQC methods
+	UpdateAgentPQCKeyFunc           func(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error
+	RotateAgentPQCKeyFunc           func(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error
+	SetAgentHybridModeFunc          func(ctx context.Context, agentID uuid.UUID, enabled bool) error
 }
 
 func (m *MockAgentServiceImpl) CreateAgent(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error) {
@@ -184,6 +188,27 @@ func (m *MockAgentServiceImpl) DetectMCPServersFromConfig(ctx context.Context, a
 		return m.DetectMCPServersFromConfigFunc(ctx, agentID, req, mcpService, orgID, userID)
 	}
 	return &application.DetectMCPServersResult{}, nil
+}
+
+func (m *MockAgentServiceImpl) UpdateAgentPQCKey(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error {
+	if m.UpdateAgentPQCKeyFunc != nil {
+		return m.UpdateAgentPQCKeyFunc(ctx, agentID, pqcPublicKey, algorithm, hybridMode)
+	}
+	return nil
+}
+
+func (m *MockAgentServiceImpl) RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error {
+	if m.RotateAgentPQCKeyFunc != nil {
+		return m.RotateAgentPQCKeyFunc(ctx, agentID, newPQCPublicKey, algorithm)
+	}
+	return nil
+}
+
+func (m *MockAgentServiceImpl) SetAgentHybridMode(ctx context.Context, agentID uuid.UUID, enabled bool) error {
+	if m.SetAgentHybridModeFunc != nil {
+		return m.SetAgentHybridModeFunc(ctx, agentID, enabled)
+	}
+	return nil
 }
 
 // MockMCPServiceImpl implements MCPServicer interface

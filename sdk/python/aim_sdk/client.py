@@ -2662,6 +2662,272 @@ class AIMClient:
         """Context manager exit."""
         self.close()
 
+    # =========================================================================
+    # POST-QUANTUM CRYPTOGRAPHY (PQC) METHODS
+    # =========================================================================
+
+    def register_pqc_key(
+        self,
+        pqc_public_key: str,
+        algorithm: str = "ML-DSA-65",
+        enable_hybrid_mode: bool = True,
+        agent_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Register a post-quantum cryptographic (PQC) public key for the agent.
+
+        This enables post-quantum authentication using ML-DSA (NIST FIPS 204)
+        digital signatures. When hybrid mode is enabled (recommended), both
+        Ed25519 AND ML-DSA signatures are required for authentication.
+
+        Args:
+            pqc_public_key: Base64-encoded ML-DSA public key
+            algorithm: ML-DSA variant (ML-DSA-44, ML-DSA-65, ML-DSA-87)
+                       Default is ML-DSA-65 (NIST Level 3, recommended)
+            enable_hybrid_mode: If True, require BOTH Ed25519 and ML-DSA
+                               signatures for authentication (defense-in-depth)
+            agent_id: Agent ID to update (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - success: bool
+            - pqcKeyAlgorithm: str
+            - hybridModeEnabled: bool
+            - message: str
+
+        Example:
+            from aim_sdk.crypto import generate_mldsa_keypair, Algorithm
+
+            # Generate ML-DSA-65 keypair
+            keypair = generate_mldsa_keypair(Algorithm.MLDSA_65)
+
+            # Register the public key with hybrid mode
+            result = client.register_pqc_key(
+                pqc_public_key=keypair.public_key_base64(),
+                algorithm="ML-DSA-65",
+                enable_hybrid_mode=True
+            )
+
+        Raises:
+            ConfigurationError: If PQC key format is invalid
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        # Validate algorithm
+        valid_algorithms = ["ML-DSA-44", "ML-DSA-65", "ML-DSA-87"]
+        if algorithm not in valid_algorithms:
+            raise ConfigurationError(
+                f"Invalid PQC algorithm: {algorithm}. "
+                f"Valid options: {', '.join(valid_algorithms)}"
+            )
+
+        try:
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/agents/{target_agent_id}/pqc-key",
+                data={
+                    "pqcPublicKey": pqc_public_key,
+                    "algorithm": algorithm,
+                    "enableHybridMode": enable_hybrid_mode,
+                }
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to register PQC key: {e}")
+
+    def rotate_pqc_key(
+        self,
+        new_pqc_public_key: str,
+        algorithm: str = "ML-DSA-65",
+        agent_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Rotate the post-quantum cryptographic key for the agent.
+
+        Key rotation is a security best practice. This method replaces the
+        existing PQC public key with a new one while maintaining hybrid mode
+        settings.
+
+        Args:
+            new_pqc_public_key: Base64-encoded new ML-DSA public key
+            algorithm: ML-DSA variant (must match the new key type)
+            agent_id: Agent ID to update (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - success: bool
+            - pqcKeyAlgorithm: str
+            - message: str
+
+        Example:
+            from aim_sdk.crypto import generate_mldsa_keypair, Algorithm
+
+            # Generate new ML-DSA keypair for rotation
+            new_keypair = generate_mldsa_keypair(Algorithm.MLDSA_65)
+
+            # Rotate to the new key
+            result = client.rotate_pqc_key(
+                new_pqc_public_key=new_keypair.public_key_base64(),
+                algorithm="ML-DSA-65"
+            )
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            result = self._make_request(
+                method="PUT",
+                endpoint=f"/api/v1/agents/{target_agent_id}/pqc-key",
+                data={
+                    "newPqcPublicKey": new_pqc_public_key,
+                    "algorithm": algorithm,
+                }
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to rotate PQC key: {e}")
+
+    def set_hybrid_mode(
+        self,
+        enabled: bool,
+        agent_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Enable or disable hybrid authentication mode.
+
+        Hybrid mode requires BOTH Ed25519 AND ML-DSA signatures for
+        authentication, providing defense-in-depth during the quantum
+        cryptographic transition period.
+
+        WARNING: Disabling hybrid mode reduces security. Only disable if
+        you have a specific compatibility requirement.
+
+        Args:
+            enabled: True to enable hybrid mode, False to disable
+            agent_id: Agent ID to update (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - success: bool
+            - hybridModeEnabled: bool
+            - message: str
+
+        Example:
+            # Enable hybrid mode (recommended)
+            result = client.set_hybrid_mode(enabled=True)
+
+            # Disable hybrid mode (not recommended)
+            result = client.set_hybrid_mode(enabled=False)
+
+        Raises:
+            AuthenticationError: If authentication fails
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            result = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/agents/{target_agent_id}/hybrid-mode",
+                data={"enabled": enabled}
+            )
+            return result
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to set hybrid mode: {e}")
+
+    def get_pqc_key_info(
+        self,
+        agent_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Get the PQC key information for an agent.
+
+        Returns the agent's current PQC public key, algorithm, and
+        hybrid mode status. Does NOT return private keys.
+
+        Args:
+            agent_id: Agent ID to query (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - agentId: str
+            - pqcPublicKey: str (base64-encoded, may be empty)
+            - pqcKeyAlgorithm: str (may be empty)
+            - hybridModeEnabled: bool
+            - ed25519PublicKey: str (base64-encoded)
+            - effectiveAlgorithm: str (Ed25519, ML-DSA-65, or Ed25519+ML-DSA-65)
+
+        Example:
+            info = client.get_pqc_key_info()
+            if info["hybridModeEnabled"]:
+                print("Hybrid PQC authentication is enabled")
+
+        Raises:
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            result = self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents/{target_agent_id}/pqc-key"
+            )
+            return result
+
+        except Exception as e:
+            raise VerificationError(f"Failed to get PQC key info: {e}")
+
+    def get_supported_algorithms(self) -> Dict:
+        """
+        Get the list of cryptographic algorithms supported by the server.
+
+        Returns information about all supported signature algorithms
+        including classical (Ed25519), post-quantum (ML-DSA), and
+        hybrid variants.
+
+        Returns:
+            Dict containing:
+            - algorithms: List of algorithm info dicts with:
+              - name: str (algorithm name)
+              - type: str (classical, post_quantum, or hybrid)
+              - securityLevel: int (NIST security level)
+              - publicKeySize: int (bytes)
+              - signatureSize: int (bytes)
+              - recommended: bool
+
+        Example:
+            algos = client.get_supported_algorithms()
+            for algo in algos["algorithms"]:
+                if algo["recommended"]:
+                    print(f"Recommended: {algo['name']}")
+
+        Raises:
+            VerificationError: If request fails
+        """
+        try:
+            result = self._make_request(
+                method="GET",
+                endpoint="/api/v1/crypto/algorithms"
+            )
+            return result
+
+        except Exception as e:
+            raise VerificationError(f"Failed to get supported algorithms: {e}")
+
 
 # ============================================================================
 # ONE-LINE AGENT REGISTRATION - Enterprise security simplified
