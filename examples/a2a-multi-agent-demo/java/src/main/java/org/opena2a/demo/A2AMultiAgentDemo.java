@@ -2,6 +2,7 @@ package org.opena2a.demo;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.opena2a.aim.a2a.A2AAgentCard;
 
 import java.io.*;
 import java.lang.reflect.Type;
@@ -60,9 +61,9 @@ public class A2AMultiAgentDemo {
         analysisAgent.registerAgentCard();
 
         System.out.println("\nAnalysis Agent ready with " + AnalysisAgent.SKILLS.size() + " skills:");
-        for (Map<String, Object> skill : AnalysisAgent.SKILLS) {
-            String desc = (String) skill.get("description");
-            System.out.println("  - " + skill.get("name") + ": " + desc.substring(0, Math.min(50, desc.length())) + "...");
+        for (A2AAgentCard.Skill skill : AnalysisAgent.SKILLS) {
+            String desc = skill.getDescription();
+            System.out.println("  - " + skill.getName() + ": " + desc.substring(0, Math.min(50, desc.length())) + "...");
         }
 
         // =========================================================================
@@ -99,7 +100,7 @@ public class A2AMultiAgentDemo {
         // =========================================================================
         printStep(4, "TRUST SCORE MANAGEMENT");
 
-        researchAgent.getTrustScore(null);
+        researchAgent.getTrustScore();
         researchAgent.getPeerTrust(targetAgentId);
 
         // =========================================================================
@@ -269,7 +270,7 @@ public class A2AMultiAgentDemo {
         System.out.println("\n  Results:");
         System.out.println("    - Analysis Agent ID: " + analysisAgent.getAgentId().substring(0, 16) + "...");
         System.out.println("    - Research Agent ID: " + researchAgent.getAgentId().substring(0, 16) + "...");
-        System.out.println("    - Skills Registered: " + (AnalysisAgent.SKILLS.size() + 2));
+        System.out.println("    - Skills Registered: " + (AnalysisAgent.SKILLS.size() + ResearchAgent.SKILLS.size()));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> sentiment = (Map<String, Object>) results.get("sentiment");

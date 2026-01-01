@@ -2,7 +2,7 @@ package org.opena2a.demo;
 
 import org.opena2a.aim.client.AIMClient;
 import org.opena2a.aim.a2a.A2AClient;
-import org.opena2a.aim.client.AgentType;
+import org.opena2a.aim.a2a.A2AAgentCard;
 
 import java.util.*;
 
@@ -17,32 +17,35 @@ import java.util.*;
  */
 public class AnalysisAgent {
 
-    public static final List<Map<String, Object>> SKILLS = List.of(
-            Map.of(
-                    "id", "sentiment-analysis",
-                    "name", "Sentiment Analysis",
-                    "description", "Analyze sentiment of text data, returning positive/negative/neutral classification",
-                    "tags", List.of("nlp", "sentiment", "text-analysis", "customer-feedback"),
-                    "inputModes", List.of("text"),
-                    "outputModes", List.of("text")
-            ),
-            Map.of(
-                    "id", "summarization",
-                    "name", "Text Summarization",
-                    "description", "Summarize long text documents into concise summaries",
-                    "tags", List.of("nlp", "summarization", "text", "content"),
-                    "inputModes", List.of("text"),
-                    "outputModes", List.of("text")
-            ),
-            Map.of(
-                    "id", "trend-detection",
-                    "name", "Trend Detection",
-                    "description", "Detect trends and patterns in time-series data",
-                    "tags", List.of("analytics", "trends", "data-analysis", "forecasting"),
-                    "inputModes", List.of("data"),
-                    "outputModes", List.of("data", "text")
-            )
-    );
+    public static final List<A2AAgentCard.Skill> SKILLS;
+
+    static {
+        var sentimentSkill = new A2AAgentCard.Skill();
+        sentimentSkill.setId("sentiment-analysis");
+        sentimentSkill.setName("Sentiment Analysis");
+        sentimentSkill.setDescription("Analyze sentiment of text data, returning positive/negative/neutral classification");
+        sentimentSkill.setTags(List.of("nlp", "sentiment", "text-analysis", "customer-feedback"));
+        sentimentSkill.setInputModes(List.of("text"));
+        sentimentSkill.setOutputModes(List.of("text"));
+
+        var summarizationSkill = new A2AAgentCard.Skill();
+        summarizationSkill.setId("summarization");
+        summarizationSkill.setName("Text Summarization");
+        summarizationSkill.setDescription("Summarize long text documents into concise summaries");
+        summarizationSkill.setTags(List.of("nlp", "summarization", "text", "content"));
+        summarizationSkill.setInputModes(List.of("text"));
+        summarizationSkill.setOutputModes(List.of("text"));
+
+        var trendSkill = new A2AAgentCard.Skill();
+        trendSkill.setId("trend-detection");
+        trendSkill.setName("Trend Detection");
+        trendSkill.setDescription("Detect trends and patterns in time-series data");
+        trendSkill.setTags(List.of("analytics", "trends", "data-analysis", "forecasting"));
+        trendSkill.setInputModes(List.of("data"));
+        trendSkill.setOutputModes(List.of("data", "text"));
+
+        SKILLS = List.of(sentimentSkill, summarizationSkill, trendSkill);
+    }
 
     private static final List<String> POSITIVE_WORDS = List.of(
             "excellent", "great", "amazing", "good", "outstanding", "recommend", "happy", "love"
@@ -53,22 +56,14 @@ public class AnalysisAgent {
     );
 
     private final String agentName = "analysis-agent";
-    private final AIMClient aimClient;
-    private final A2AClient a2a;
+    private AIMClient aimClient;
+    private A2AClient a2a;
     private String agentId;
 
+    private final String aimUrl;
+
     public AnalysisAgent(String aimUrl) {
-        System.out.println("[Analysis Agent] Registering with AIM...");
-
-        // SDK handles auth automatically via bundled credentials
-        this.aimClient = new AIMClient.Builder()
-                .agentName(agentName)
-                .aimUrl(aimUrl != null ? aimUrl : "http://localhost:8080")
-                .agentType(AgentType.AI_AGENT)
-                .description("Analysis agent providing sentiment analysis, summarization, and trend detection")
-                .build();
-
-        this.a2a = new A2AClient(aimClient);
+        this.aimUrl = aimUrl;
     }
 
     public AnalysisAgent() {
@@ -76,8 +71,13 @@ public class AnalysisAgent {
     }
 
     public void initialize() throws Exception {
-        aimClient.register();
+        System.out.println("[Analysis Agent] Registering with AIM...");
+
+        // SDK handles auth and registration automatically via bundled credentials
+        this.aimClient = AIMClient.secure(agentName);
+        this.a2a = new A2AClient(aimClient);
         this.agentId = aimClient.getAgentId();
+
         System.out.println("[Analysis Agent] Registered with ID: " + agentId.substring(0, 8) + "...");
     }
 
@@ -85,16 +85,16 @@ public class AnalysisAgent {
         return agentId;
     }
 
-    public Map<String, Object> registerAgentCard() {
+    public A2AAgentCard registerAgentCard() {
         System.out.println("[Analysis Agent] Registering Agent Card with " + SKILLS.size() + " skills...");
 
         try {
-            for (Map<String, Object> skill : SKILLS) {
+            for (A2AAgentCard.Skill skill : SKILLS) {
                 a2a.registerSkill(skill);
-                System.out.println("  - Registered skill: " + skill.get("name"));
+                System.out.println("  - Registered skill: " + skill.getName());
             }
 
-            Map<String, Object> card = a2a.getAgentCard();
+            A2AAgentCard card = a2a.getAgentCard(agentId);
             System.out.println("[Analysis Agent] Agent Card registered successfully");
             return card;
         } catch (Exception e) {
@@ -108,20 +108,23 @@ public class AnalysisAgent {
             long timestamp,
             String nonce,
             String signature,
-            String requestHash
+            String publicKey,
+            String method,
+            String path,
+            String body
     ) {
         System.out.println("[Analysis Agent] Verifying request from " + agentId.substring(0, 8) + "...");
 
         try {
-            Map<String, Object> params = Map.of(
-                    "agentId", agentId,
-                    "timestamp", timestamp,
-                    "nonce", nonce,
-                    "signature", signature,
-                    "requestHash", requestHash
+            Map<String, Object> result = a2a.verifyRequest(
+                    signature,
+                    publicKey,
+                    timestamp,
+                    nonce,
+                    method,
+                    path,
+                    body
             );
-
-            Map<String, Object> result = a2a.verifyRequest(params);
 
             if (Boolean.TRUE.equals(result.get("valid"))) {
                 System.out.println("[Analysis Agent] Request verified! Agent: " + result.get("agentName"));
@@ -254,14 +257,14 @@ public class AnalysisAgent {
         );
     }
 
-    public List<Map<String, Object>> getSkills() {
+    public List<A2AAgentCard.Skill> getSkills() {
         return SKILLS;
     }
 
     public double getTrustScore() {
         try {
-            var score = a2a.getA2ATrustScore(null);
-            return score.getA2aTrustScore();
+            var score = a2a.getTrustScore(agentId);
+            return score.getScore();
         } catch (Exception e) {
             return 0.0;
         }

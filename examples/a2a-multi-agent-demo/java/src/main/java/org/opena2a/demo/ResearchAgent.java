@@ -1,10 +1,18 @@
 package org.opena2a.demo;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.opena2a.aim.client.AIMClient;
 import org.opena2a.aim.a2a.A2AClient;
+import org.opena2a.aim.a2a.A2AAgentCard;
 import org.opena2a.aim.a2a.A2ATrustScore;
-import org.opena2a.aim.client.AgentType;
+import org.opena2a.aim.a2a.A2APeerTrust;
+import org.opena2a.aim.a2a.A2ASecurityCheckResult;
+import org.opena2a.aim.a2a.A2AConsent;
+import org.opena2a.aim.a2a.A2ARequestSignature;
+import org.opena2a.aim.a2a.A2AConsensusResult;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -21,42 +29,38 @@ import java.util.*;
  */
 public class ResearchAgent {
 
-    private static final List<Map<String, Object>> SKILLS = List.of(
-            Map.of(
-                    "id", "web-research",
-                    "name", "Web Research",
-                    "description", "Gather information from web sources on specified topics",
-                    "tags", List.of("research", "web", "data-gathering"),
-                    "inputModes", List.of("text"),
-                    "outputModes", List.of("text", "data")
-            ),
-            Map.of(
-                    "id", "document-reading",
-                    "name", "Document Reading",
-                    "description", "Extract and process content from documents",
-                    "tags", List.of("documents", "extraction", "reading"),
-                    "inputModes", List.of("file", "text"),
-                    "outputModes", List.of("text", "data")
-            )
-    );
+    public static final List<A2AAgentCard.Skill> SKILLS;
+
+    static {
+        var webResearchSkill = new A2AAgentCard.Skill();
+        webResearchSkill.setId("web-research");
+        webResearchSkill.setName("Web Research");
+        webResearchSkill.setDescription("Gather information from web sources on specified topics");
+        webResearchSkill.setTags(List.of("research", "web", "data-gathering"));
+        webResearchSkill.setInputModes(List.of("text"));
+        webResearchSkill.setOutputModes(List.of("text", "data"));
+
+        var documentReadingSkill = new A2AAgentCard.Skill();
+        documentReadingSkill.setId("document-reading");
+        documentReadingSkill.setName("Document Reading");
+        documentReadingSkill.setDescription("Extract and process content from documents");
+        documentReadingSkill.setTags(List.of("documents", "extraction", "reading"));
+        documentReadingSkill.setInputModes(List.of("file", "text"));
+        documentReadingSkill.setOutputModes(List.of("text", "data"));
+
+        SKILLS = List.of(webResearchSkill, documentReadingSkill);
+    }
 
     private final String agentName = "research-agent";
-    private final AIMClient aimClient;
-    private final A2AClient a2a;
+    private AIMClient aimClient;
+    private A2AClient a2a;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private String agentId;
 
+    private final String aimUrl;
+
     public ResearchAgent(String aimUrl) {
-        System.out.println("[Research Agent] Registering with AIM...");
-
-        // SDK handles auth automatically via bundled credentials
-        this.aimClient = new AIMClient.Builder()
-                .agentName(agentName)
-                .aimUrl(aimUrl != null ? aimUrl : "http://localhost:8080")
-                .agentType(AgentType.AI_AGENT)
-                .description("Research agent that gathers information and collaborates with analysis agents")
-                .build();
-
-        this.a2a = new A2AClient(aimClient);
+        this.aimUrl = aimUrl;
     }
 
     public ResearchAgent() {
@@ -64,8 +68,13 @@ public class ResearchAgent {
     }
 
     public void initialize() throws Exception {
-        aimClient.register();
+        System.out.println("[Research Agent] Registering with AIM...");
+
+        // SDK handles auth and registration automatically via bundled credentials
+        this.aimClient = AIMClient.secure(agentName);
+        this.a2a = new A2AClient(aimClient);
         this.agentId = aimClient.getAgentId();
+
         System.out.println("[Research Agent] Registered with ID: " + agentId.substring(0, 8) + "...");
     }
 
@@ -73,16 +82,16 @@ public class ResearchAgent {
         return agentId;
     }
 
-    public Map<String, Object> registerAgentCard() {
+    public A2AAgentCard registerAgentCard() {
         System.out.println("[Research Agent] Registering Agent Card...");
 
         try {
-            for (Map<String, Object> skill : SKILLS) {
+            for (A2AAgentCard.Skill skill : SKILLS) {
                 a2a.registerSkill(skill);
-                System.out.println("  - Registered skill: " + skill.get("name"));
+                System.out.println("  - Registered skill: " + skill.getName());
             }
 
-            Map<String, Object> card = a2a.getAgentCard();
+            A2AAgentCard card = a2a.getAgentCard(agentId);
             System.out.println("[Research Agent] Agent Card registered successfully");
             return card;
         } catch (Exception e) {
@@ -120,30 +129,31 @@ public class ResearchAgent {
         }
     }
 
-    public Map<String, Object> checkSecurityPolicies(String targetAgentId, String skillId) {
+    public A2ASecurityCheckResult checkSecurityPolicies(String targetAgentId, String skillId) {
         System.out.println("\n[Research Agent] Checking security policies...");
         System.out.println("[Research Agent] Target: " + targetAgentId.substring(0, 8) + "...");
         System.out.println("[Research Agent] Skill: " + skillId);
 
         try {
-            Map<String, Object> result = a2a.checkSecurity(targetAgentId, skillId);
+            A2ASecurityCheckResult result = a2a.checkSecurity(targetAgentId, skillId);
 
-            if (Boolean.TRUE.equals(result.get("allowed"))) {
+            if (result.isAllowed()) {
                 System.out.println("[Research Agent] Security check PASSED");
-                System.out.println("[Research Agent] Enforcement mode: " + result.getOrDefault("enforcementMode", "unknown"));
+                System.out.println("[Research Agent] Enforcement mode: " +
+                        (result.getEnforcementMode() != null ? result.getEnforcementMode() : "unknown"));
             } else {
                 System.out.println("[Research Agent] Security check FAILED");
-                @SuppressWarnings("unchecked")
-                List<Map<String, String>> violations = (List<Map<String, String>>) result.getOrDefault("violations", List.of());
-                for (Map<String, String> v : violations) {
-                    System.out.println("  - " + v.get("type") + ": " + v.get("message"));
+                if (result.getViolations() != null) {
+                    for (var v : result.getViolations()) {
+                        System.out.println("  - " + v.getType() + ": " + v.getMessage());
+                    }
                 }
             }
 
             return result;
         } catch (Exception e) {
             System.out.println("[Research Agent] Security check error: " + e.getMessage());
-            return Map.of("allowed", true, "note", "Security check unavailable");
+            return null;
         }
     }
 
@@ -159,23 +169,26 @@ public class ResearchAgent {
         System.out.println("[Research Agent] Data types: " + String.join(", ", dataTypes));
 
         try {
-            boolean hasConsent = a2a.checkConsent(userId, recipientAgentId, "data_sharing");
+            // Check if consent already exists
+            Map<String, Object> consentCheck = a2a.checkConsent(userId, recipientAgentId, purpose, dataTypes.get(0));
 
-            if (hasConsent) {
+            if (Boolean.TRUE.equals(consentCheck.get("hasConsent"))) {
                 System.out.println("[Research Agent] Consent already exists");
                 return true;
             }
 
-            var consent = a2a.recordConsent(
+            // Record new consent (expires in 24 hours)
+            Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
+            A2AConsent consent = a2a.recordConsent(
                     userId,
                     recipientAgentId,
-                    List.of("data_sharing", "analysis"),
                     purpose,
                     dataTypes,
-                    24
+                    "consent",
+                    expiresAt
             );
 
-            System.out.println("[Research Agent] Consent recorded: " + consent.getConsentId());
+            System.out.println("[Research Agent] Consent recorded: " + consent.getId());
             return true;
         } catch (Exception e) {
             System.out.println("[Research Agent] Consent error: " + e.getMessage());
@@ -194,9 +207,11 @@ public class ResearchAgent {
 
         // Sign the request
         try {
-            var signature = a2a.signRequest("POST", "/skills/" + skillId + "/invoke", data);
+            String jsonBody = objectMapper.writeValueAsString(data);
+            A2ARequestSignature signature = a2a.signRequest("POST", "/skills/" + skillId + "/invoke", jsonBody);
             System.out.println("[Research Agent] Request signed at: " + signature.getTimestamp());
-            System.out.println("[Research Agent] Nonce: " + signature.getNonce().substring(0, 16) + "...");
+            String nonce = signature.getNonce();
+            System.out.println("[Research Agent] Nonce: " + (nonce != null && nonce.length() > 16 ? nonce.substring(0, 16) + "..." : nonce));
         } catch (Exception e) {
             System.out.println("[Research Agent] Signing note: " + e.getMessage());
         }
@@ -205,8 +220,8 @@ public class ResearchAgent {
         String taskId = null;
         try {
             String externalTaskId = "demo-" + UUID.randomUUID().toString().substring(0, 8);
-            var task = a2a.logTask(externalTaskId, targetAgentId, skillId);
-            taskId = task.getId() != null ? task.getId() : task.getTaskId();
+            Map<String, Object> task = a2a.logTask(targetAgentId, externalTaskId, skillId, "SUBMITTED");
+            taskId = (String) task.getOrDefault("id", task.get("taskId"));
             System.out.println("[Research Agent] Task logged: " + taskId);
         } catch (Exception e) {
             System.out.println("[Research Agent] Task logging note: " + e.getMessage());
@@ -229,7 +244,7 @@ public class ResearchAgent {
         System.out.println("[Research Agent] Result: " + result);
 
         // Update task state
-        if (taskId != null) {
+        if (taskId != null && !taskId.startsWith("local-")) {
             try {
                 a2a.updateTaskState(taskId, "COMPLETED");
                 System.out.println("[Research Agent] Task marked COMPLETED");
@@ -264,10 +279,10 @@ public class ResearchAgent {
 
             // Check consensus status
             try {
-                var consensus = a2a.getConsensusStatus(targetAgentId, skillId);
-                System.out.println("[Research Agent] Skill verified: " + consensus.getOrDefault("isVerified", false));
-                System.out.println("[Research Agent] Attestation count: " + consensus.getOrDefault("attestationCount", 0));
-                System.out.println("[Research Agent] Unique attesters: " + consensus.getOrDefault("uniqueAttesters", 0));
+                A2AConsensusResult consensus = a2a.getConsensusStatus(targetAgentId, skillId);
+                System.out.println("[Research Agent] Skill verified: " + consensus.isVerified());
+                System.out.println("[Research Agent] Attestation count: " + consensus.getAttestationCount());
+                System.out.println("[Research Agent] Unique attesters: " + consensus.getUniqueAttesters());
             } catch (Exception e) {
                 System.out.println("[Research Agent] Consensus check note: " + e.getMessage());
             }
@@ -279,19 +294,14 @@ public class ResearchAgent {
         }
     }
 
-    public A2ATrustScore getTrustScore(String agentId) {
-        String target = agentId != null ? agentId : this.agentId;
-        String targetLabel = target.equals(this.agentId) ? "self" : target.substring(0, 8) + "...";
-
-        System.out.println("\n[Research Agent] Getting trust score for " + targetLabel + "...");
+    public A2ATrustScore getTrustScore() {
+        System.out.println("\n[Research Agent] Getting trust score for self...");
 
         try {
-            A2ATrustScore score = a2a.getA2ATrustScore(agentId);
-            System.out.printf("[Research Agent] Trust score: %.2f%n", score.getA2aTrustScore());
-            System.out.println("[Research Agent] Peer trust avg: " +
-                    (score.getPeerTrustAverage() != null ? score.getPeerTrustAverage() : "N/A"));
-            System.out.println("[Research Agent] Tasks completed: " +
-                    (score.getTasksCompleted() != null ? score.getTasksCompleted() : 0));
+            A2ATrustScore score = a2a.getTrustScore(agentId);
+            System.out.printf("[Research Agent] Trust score: %.2f%n", score.getScore());
+            System.out.printf("[Research Agent] Success rate: %.2f%%%n", score.getSuccessRate());
+            System.out.println("[Research Agent] Interaction count: " + score.getInteractionCount());
             return score;
         } catch (Exception e) {
             System.out.println("[Research Agent] Trust score note: " + e.getMessage());
@@ -299,19 +309,20 @@ public class ResearchAgent {
         }
     }
 
-    public Map<String, Object> getPeerTrust(String peerAgentId) {
+    public A2APeerTrust getPeerTrust(String peerAgentId) {
         System.out.println("\n[Research Agent] Getting peer trust with " + peerAgentId.substring(0, 8) + "...");
 
         try {
-            var trust = a2a.getPeerTrust(peerAgentId);
-            System.out.printf("[Research Agent] Peer trust score: %.2f%n",
-                    trust.getPeerTrustScore() != null ? trust.getPeerTrustScore() : 0.0);
-            System.out.println("[Research Agent] Success rate: " +
-                    (trust.getSuccessRate() != null ? trust.getSuccessRate() : "N/A"));
-            return Map.of(
-                    "peerTrustScore", trust.getPeerTrustScore(),
-                    "successRate", trust.getSuccessRate()
-            );
+            A2APeerTrust trust = a2a.getPeerTrust(peerAgentId);
+            A2ATrustScore trustScore = trust.getTrustScore();
+            if (trustScore != null) {
+                System.out.printf("[Research Agent] Peer trust score: %.2f%n", trustScore.getScore());
+                System.out.printf("[Research Agent] Success rate: %.2f%%%n", trustScore.getSuccessRate());
+            } else {
+                System.out.println("[Research Agent] Peer trust score: N/A (no score yet)");
+            }
+            System.out.println("[Research Agent] Trust level: " + trust.getTrustLevel());
+            return trust;
         } catch (Exception e) {
             System.out.println("[Research Agent] Peer trust note: " + e.getMessage());
             return null;
