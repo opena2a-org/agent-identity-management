@@ -938,8 +938,27 @@ public class A2AClient {
 
             String response = post(A2A_BASE_PATH + "/discovery/route", objectMapper.writeValueAsString(body));
             JsonNode root = objectMapper.readTree(response);
-            JsonNode agentsNode = root.has("agents") ? root.get("agents") : root;
-            return objectMapper.convertValue(agentsNode, new TypeReference<List<Map<String, Object>>>() {});
+
+            // Handle different response formats:
+            // 1. {"agents": [...]} - array of agents
+            // 2. {"agent": {...}, "alternatives": N} - single best agent
+            // 3. [...] - direct array
+            if (root.has("agents") && root.get("agents").isArray()) {
+                return objectMapper.convertValue(root.get("agents"), new TypeReference<List<Map<String, Object>>>() {});
+            } else if (root.has("agent") && root.get("agent").isObject()) {
+                // Wrap single agent in a list
+                List<Map<String, Object>> result = new java.util.ArrayList<>();
+                Map<String, Object> agent = objectMapper.convertValue(root.get("agent"), new TypeReference<Map<String, Object>>() {});
+                if (agent != null && !agent.isEmpty()) {
+                    result.add(agent);
+                }
+                return result;
+            } else if (root.isArray()) {
+                return objectMapper.convertValue(root, new TypeReference<List<Map<String, Object>>>() {});
+            } else {
+                // Empty result
+                return new java.util.ArrayList<>();
+            }
         } catch (Exception e) {
             throw new A2AException("Failed to route intent: " + e.getMessage(), e);
         }
