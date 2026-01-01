@@ -20,7 +20,7 @@ from datetime import datetime
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../sdk/python'))
 
-from aim_sdk import AIMClient
+from aim_sdk import register_agent
 from aim_sdk.a2a import A2AClient, A2ATrustScore
 
 
@@ -51,11 +51,12 @@ class ResearchAgent:
 
         print(f"[Research Agent] Registering with AIM...")
 
-        # Initialize AIM client
-        self.aim_client = AIMClient(
-            agent_name=self.agent_name,
+        # Register agent and get AIM client
+        self.aim_client = register_agent(
+            name=self.agent_name,
             aim_url=aim_url,
             api_key=api_key,
+            display_name="Research Agent",
             agent_type="ai_agent",
             description="Research agent that gathers information and collaborates with analysis agents"
         )

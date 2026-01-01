@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../sdk/python'))
 
-from aim_sdk import AIMClient
+from aim_sdk import register_agent
 from aim_sdk.a2a import A2AClient
 
 
@@ -66,11 +66,12 @@ class AnalysisAgent:
 
         print(f"[Analysis Agent] Registering with AIM...")
 
-        # Initialize AIM client
-        self.aim_client = AIMClient(
-            agent_name=self.agent_name,
+        # Register agent and get AIM client
+        self.aim_client = register_agent(
+            name=self.agent_name,
             aim_url=aim_url,
             api_key=api_key,
+            display_name="Analysis Agent",
             agent_type="ai_agent",
             description="Analysis agent providing sentiment analysis, summarization, and trend detection"
         )
