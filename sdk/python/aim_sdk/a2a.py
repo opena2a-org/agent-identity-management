@@ -184,8 +184,17 @@ class A2AClient:
         headers = {}
 
         if auth:
-            # Use AIM client's authentication
-            if self.aim_client.signing_key and self.aim_client.public_key:
+            # Use AIM client's authentication - try OAuth first, then signing key, then API key
+            access_token = None
+            if hasattr(self.aim_client, 'oauth_token_manager') and self.aim_client.oauth_token_manager:
+                try:
+                    access_token = self.aim_client.oauth_token_manager.get_access_token()
+                except Exception:
+                    pass
+
+            if access_token:
+                headers['Authorization'] = f'Bearer {access_token}'
+            elif self.aim_client.signing_key and self.aim_client.public_key:
                 timestamp = str(int(time.time()))
                 message_parts = [method.upper(), endpoint, timestamp]
                 if data:
@@ -332,6 +341,7 @@ class A2AClient:
             "POST",
             "/api/v1/a2a/attestations",
             data={
+                "attestingAgentId": self.agent_id,
                 "attestedAgentId": target_agent_id,
                 "skillId": skill_id,
                 "attestationType": attestation_type,
@@ -1396,6 +1406,7 @@ class A2AClient:
             ... )
         """
         data: Dict[str, Any] = {
+            "agentId": self.agent_id,
             "name": name,
             "description": description,
         }

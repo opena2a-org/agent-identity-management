@@ -3430,14 +3430,18 @@ def register_agent(
                     trust_score=existing_creds.get('trust_score', 0.85)
                 )
 
-                # Create OAuth token manager if tokens are in credentials
+                # Create OAuth token manager - prefer SDK credentials (which have refresh_token)
+                # over agent credentials (which typically don't)
                 token_manager = None
-                if "refresh_token" in existing_creds or "access_token" in existing_creds:
-                    # Create a temporary credentials file for the token manager
+                sdk_creds_for_oauth = load_sdk_credentials()
+                if sdk_creds_for_oauth and "refreshToken" in sdk_creds_for_oauth:
+                    # Use SDK credentials for OAuth (auto-refresh support)
+                    token_manager = OAuthTokenManager()
+                elif "refresh_token" in existing_creds or "access_token" in existing_creds:
+                    # Fallback: use tokens from agent credentials if present
                     from pathlib import Path
                     temp_creds_path = Path.home() / ".aim" / f"temp_{name}_creds.json"
                     token_manager = OAuthTokenManager(str(temp_creds_path))
-                    # Directly set the credentials with OAuth tokens
                     token_manager.credentials = existing_creds
                     token_manager.access_token = existing_creds.get("access_token")
 

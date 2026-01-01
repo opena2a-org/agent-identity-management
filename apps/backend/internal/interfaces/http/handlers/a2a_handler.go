@@ -440,9 +440,30 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		// Internal format - use directly
 		req.ExternalTaskID = sdkReq.ExternalTaskID
 		req.ContextID = sdkReq.ContextID
-		req.ClientAgentID = sdkReq.ClientAgentID
 		req.RemoteAgentID = sdkReq.RemoteAgentID
 		req.SkillID = sdkReq.SkillID
+
+		// Try clientAgentId as string first (SDK format), then UUID field
+		if sdkReq.SdkClientAgent != "" {
+			clientAgentID, err := uuid.Parse(sdkReq.SdkClientAgent)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid client agent ID",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		} else if sdkReq.ClientAgentID != uuid.Nil {
+			req.ClientAgentID = sdkReq.ClientAgentID
+		} else {
+			// Fallback to context
+			clientAgentID, err := h.getAgentIDFromContext(c)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Client agent ID required",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		}
 	}
 
 	task, err := h.a2aService.LogA2ATask(c.Context(), req)
