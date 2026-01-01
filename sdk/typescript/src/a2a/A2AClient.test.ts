@@ -219,6 +219,51 @@ describe('A2AClient', () => {
         expect.objectContaining({ method: 'GET' })
       );
     });
+
+    it('should get peer trust for specific agent', async () => {
+      const mockPeerTrust: A2APeerTrust = {
+        peerId: 'peer-agent-123',
+        peerName: 'Peer Agent',
+        trustScore: 0.85,
+        interactionCount: 25,
+      };
+
+      setMockResponse(mockPeerTrust);
+
+      const result = await client.getPeerTrust('peer-agent-123');
+
+      expect(result).toEqual(mockPeerTrust);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/agents/test-agent-id/peers/peer-agent-123/trust',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('should compute trust score', async () => {
+      const mockScore: A2ATrustScore = {
+        id: 'score-123',
+        evaluatorAgentId: 'test-agent-id',
+        subjectAgentId: 'test-agent-id',
+        score: 0.92,
+        confidence: 0.95,
+        interactionCount: 150,
+        successfulInteractions: 145,
+        failedInteractions: 5,
+      };
+
+      setMockResponse(mockScore);
+
+      const result = await client.computeTrustScore();
+
+      expect(result).toEqual(mockScore);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/agents/test-agent-id/trust-score/compute',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
   });
 
   // ==================== Consent Management Tests ====================
@@ -390,6 +435,98 @@ describe('A2AClient', () => {
       expect(result.allowed).toBe(false);
       expect(result.violations).toHaveLength(1);
       expect(result.violations[0].type).toBe('LOW_TRUST_SCORE');
+    });
+  });
+
+  // ==================== Skill Operations Tests ====================
+
+  describe('Skill Operations', () => {
+    it('should get skills for a specific agent', async () => {
+      const mockSkills = [
+        { id: 'skill-1', name: 'Code Analysis', description: 'Analyzes code quality' },
+        { id: 'skill-2', name: 'Data Transform', description: 'Transforms data formats' },
+      ];
+
+      setMockResponse({ skills: mockSkills });
+
+      const result = await client.getSkills('target-agent-id');
+
+      expect(result).toEqual(mockSkills);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/agents/target-agent-id/skills',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('should search skills across all agents', async () => {
+      const mockSkills = [
+        { id: 'skill-1', name: 'Code Review', agentId: 'agent-1', score: 0.95 },
+        { id: 'skill-2', name: 'Code Analysis', agentId: 'agent-2', score: 0.88 },
+      ];
+
+      setMockResponse({ skills: mockSkills });
+
+      const result = await client.searchSkills('code analysis', 10);
+
+      expect(result).toEqual(mockSkills);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/skills/search?q=code%20analysis&limit=10',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('should search skills with default limit', async () => {
+      setMockResponse({ skills: [] });
+
+      await client.searchSkills('data transform');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/skills/search?q=data%20transform&limit=20',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+  });
+
+  // ==================== Task Operations Tests ====================
+
+  describe('Task Operations', () => {
+    it('should update task state', async () => {
+      setMockResponse({ updated: true });
+
+      const result = await client.updateTaskState('task-123', 'COMPLETED');
+
+      expect(result.updated).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/tasks/task-123/state',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ state: 'COMPLETED' }),
+        })
+      );
+    });
+
+    it('should update task state with error details', async () => {
+      setMockResponse({ updated: true });
+
+      const result = await client.updateTaskState(
+        'task-123',
+        'FAILED',
+        'TIMEOUT',
+        'Request timed out after 30s'
+      );
+
+      expect(result.updated).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/tasks/task-123/state',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            state: 'FAILED',
+            errorCode: 'TIMEOUT',
+            errorMessage: 'Request timed out after 30s',
+          }),
+        })
+      );
     });
   });
 

@@ -724,6 +724,32 @@ class A2AClient:
             }
         )
 
+    def get_task_history(
+        self,
+        target_agent_id: str,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get task history for interactions with a target agent.
+
+        Args:
+            target_agent_id: ID of the target agent
+            limit: Maximum number of results
+
+        Returns:
+            List of task entries
+
+        Example:
+            >>> history = a2a.get_task_history("other-agent-id", limit=10)
+            >>> for task in history:
+            ...     print(f"{task['taskId']}: {task['status']}")
+        """
+        response = self._make_request(
+            "GET",
+            f"/api/v1/a2a/tasks/{target_agent_id}?limit={limit}"
+        )
+        return response.get("tasks", [])
+
     # =========================================================================
     # Consent Management
     # =========================================================================

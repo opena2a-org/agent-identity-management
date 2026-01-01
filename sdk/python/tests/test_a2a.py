@@ -604,6 +604,69 @@ class TestA2AClient:
         mock_request.assert_called_once()
 
     @patch.object(A2AClient, '_make_request')
+    def test_update_task_state_with_error(self, mock_request, a2a_client):
+        """Test updating task state with error details."""
+        mock_request.return_value = {"success": True}
+
+        result = a2a_client.update_task_state(
+            "task-123", "FAILED",
+            error_code="TIMEOUT",
+            error_message="Request timed out"
+        )
+
+        assert result["success"] is True
+        mock_request.assert_called_with(
+            "PUT",
+            "/api/v1/a2a/tasks/task-123/state",
+            data={
+                "state": "FAILED",
+                "errorCode": "TIMEOUT",
+                "errorMessage": "Request timed out"
+            }
+        )
+
+    @patch.object(A2AClient, '_make_request')
+    def test_get_task_history(self, mock_request, a2a_client):
+        """Test getting task history."""
+        mock_request.return_value = {
+            "tasks": [
+                {"taskId": "task-1", "status": "COMPLETED"},
+                {"taskId": "task-2", "status": "FAILED"},
+            ]
+        }
+
+        result = a2a_client.get_task_history("target-agent-123", limit=10)
+
+        assert len(result) == 2
+        assert result[0]["taskId"] == "task-1"
+        mock_request.assert_called_with(
+            "GET",
+            "/api/v1/a2a/tasks/target-agent-123?limit=10"
+        )
+
+    @patch.object(A2AClient, '_make_request')
+    def test_compute_a2a_trust_score(self, mock_request, a2a_client):
+        """Test computing A2A trust score."""
+        mock_request.return_value = {
+            "a2aTrustScore": 0.92,
+            "peerTrustAverage": 0.88,
+            "uniquePeersCount": 15,
+            "tasksCompleted": 120,
+            "tasksFailed": 5,
+            "computedAt": "2024-01-15T10:30:00Z",
+        }
+
+        score = a2a_client.compute_a2a_trust_score()
+
+        assert isinstance(score, A2ATrustScore)
+        assert score.a2a_trust_score == 0.92
+        assert score.unique_peers_count == 15
+        mock_request.assert_called_with(
+            "POST",
+            "/api/v1/a2a/agents/test-agent-123/trust-score/compute"
+        )
+
+    @patch.object(A2AClient, '_make_request')
     def test_record_consent(self, mock_request, a2a_client):
         """Test recording consent."""
         mock_request.return_value = {

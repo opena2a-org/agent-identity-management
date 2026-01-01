@@ -541,6 +541,39 @@ public class A2AClient {
         }
     }
 
+    /**
+     * Get trust relationship with a specific peer agent.
+     *
+     * @param peerAgentId The peer agent ID
+     * @return The peer trust relationship
+     * @throws A2AException if retrieval fails
+     */
+    public A2APeerTrust getPeerTrust(String peerAgentId) throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/agents/" + aimClient.getAgentId() +
+                                  "/peers/" + peerAgentId + "/trust");
+            return objectMapper.readValue(response, A2APeerTrust.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to get peer trust: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Compute and update the A2A trust score for this agent.
+     *
+     * @return The computed trust score
+     * @throws A2AException if computation fails
+     */
+    public A2ATrustScore computeTrustScore() throws A2AException {
+        try {
+            String response = post(A2A_BASE_PATH + "/agents/" + aimClient.getAgentId() +
+                                   "/trust-score/compute", "{}");
+            return objectMapper.readValue(response, A2ATrustScore.class);
+        } catch (Exception e) {
+            throw new A2AException("Failed to compute trust score: " + e.getMessage(), e);
+        }
+    }
+
     // ==================== Consent Management (GDPR/PSD2) ====================
 
     /**
@@ -714,6 +747,48 @@ public class A2AClient {
         }
     }
 
+    /**
+     * Update the state of an A2A task.
+     *
+     * @param taskId Task ID to update
+     * @param state New state (SUBMITTED, WORKING, INPUT_NEEDED, COMPLETED, FAILED, CANCELLED)
+     * @param errorCode Optional error code if failed
+     * @param errorMessage Optional error message if failed
+     * @return Update confirmation
+     * @throws A2AException if update fails
+     */
+    public Map<String, Object> updateTaskState(String taskId, String state, String errorCode, String errorMessage)
+            throws A2AException {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("state", state);
+            if (errorCode != null && !errorCode.isEmpty()) {
+                body.put("errorCode", errorCode);
+            }
+            if (errorMessage != null && !errorMessage.isEmpty()) {
+                body.put("errorMessage", errorMessage);
+            }
+
+            String response = put(A2A_BASE_PATH + "/tasks/" + taskId + "/state",
+                                  objectMapper.writeValueAsString(body));
+            return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to update task state: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Update the state of an A2A task (without error details).
+     *
+     * @param taskId Task ID to update
+     * @param state New state
+     * @return Update confirmation
+     * @throws A2AException if update fails
+     */
+    public Map<String, Object> updateTaskState(String taskId, String state) throws A2AException {
+        return updateTaskState(taskId, state, null, null);
+    }
+
     // ==================== Skill Operations ====================
 
     /**
@@ -747,6 +822,54 @@ public class A2AClient {
         } catch (Exception e) {
             throw new A2AException("Failed to list skills: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Get skills for a specific agent.
+     *
+     * @param agentId The agent ID to get skills for
+     * @return List of skills for the agent
+     * @throws A2AException if retrieval fails
+     */
+    public List<A2AAgentCard.Skill> getSkills(String agentId) throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/agents/" + agentId + "/skills");
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode skillsNode = root.has("skills") ? root.get("skills") : root;
+            return objectMapper.convertValue(skillsNode, new TypeReference<List<A2AAgentCard.Skill>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to get skills for agent: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Search for skills across all agents.
+     *
+     * @param query Search query
+     * @param limit Maximum number of results
+     * @return List of matching skills
+     * @throws A2AException if search fails
+     */
+    public List<Map<String, Object>> searchSkills(String query, int limit) throws A2AException {
+        try {
+            String response = get(A2A_BASE_PATH + "/skills/search?q=" + query + "&limit=" + limit);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode skillsNode = root.has("skills") ? root.get("skills") : root;
+            return objectMapper.convertValue(skillsNode, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new A2AException("Failed to search skills: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Search for skills with default limit.
+     *
+     * @param query Search query
+     * @return List of matching skills
+     * @throws A2AException if search fails
+     */
+    public List<Map<String, Object>> searchSkills(String query) throws A2AException {
+        return searchSkills(query, 20);
     }
 
     /**

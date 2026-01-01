@@ -338,6 +338,25 @@ export class A2AClient {
     return response.peers ?? [];
   }
 
+  /**
+   * Get trust relationship with a specific peer agent.
+   */
+  async getPeerTrust(peerAgentId: string): Promise<A2APeerTrust> {
+    return this.get<A2APeerTrust>(
+      `${A2A_BASE_PATH}/agents/${this.getAgentId()}/peers/${peerAgentId}/trust`
+    );
+  }
+
+  /**
+   * Compute and update the A2A trust score for this agent.
+   */
+  async computeTrustScore(): Promise<A2ATrustScore> {
+    return this.post<A2ATrustScore>(
+      `${A2A_BASE_PATH}/agents/${this.getAgentId()}/trust-score/compute`,
+      {}
+    );
+  }
+
   // ==================== Consent Management (GDPR/PSD2) ====================
 
   /**
@@ -462,6 +481,30 @@ export class A2AClient {
     return response.tasks ?? [];
   }
 
+  /**
+   * Update the state of an A2A task.
+   *
+   * @param taskId - Task ID to update
+   * @param state - New state (SUBMITTED, WORKING, INPUT_NEEDED, COMPLETED, FAILED, CANCELLED)
+   * @param errorCode - Optional error code if failed
+   * @param errorMessage - Optional error message if failed
+   */
+  async updateTaskState(
+    taskId: string,
+    state: string,
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<{ updated: boolean }> {
+    const body: Record<string, string> = { state };
+    if (errorCode) {
+      body.errorCode = errorCode;
+    }
+    if (errorMessage) {
+      body.errorMessage = errorMessage;
+    }
+    return this.put<{ updated: boolean }>(`${A2A_BASE_PATH}/tasks/${taskId}/state`, body);
+  }
+
   // ==================== Skill Operations ====================
 
   /**
@@ -476,6 +519,26 @@ export class A2AClient {
    */
   async listSkills(): Promise<A2ASkill[]> {
     const response = await this.get<{ skills: A2ASkill[] }>(`${A2A_BASE_PATH}/skills`);
+    return response.skills ?? [];
+  }
+
+  /**
+   * Get skills for a specific agent.
+   */
+  async getSkills(agentId: string): Promise<A2ASkill[]> {
+    const response = await this.get<{ skills: A2ASkill[] }>(
+      `${A2A_BASE_PATH}/agents/${agentId}/skills`
+    );
+    return response.skills ?? [];
+  }
+
+  /**
+   * Search for skills across all agents.
+   */
+  async searchSkills(query: string, limit = 20): Promise<Array<Record<string, unknown>>> {
+    const response = await this.get<{ skills: Array<Record<string, unknown>> }>(
+      `${A2A_BASE_PATH}/skills/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
     return response.skills ?? [];
   }
 
