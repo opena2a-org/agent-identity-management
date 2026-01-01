@@ -422,6 +422,46 @@ export class A2AClient {
     });
   }
 
+  // ==================== Task Logging ====================
+
+  /**
+   * Log an A2A task for audit trail.
+   *
+   * @param targetAgentId - ID of the target agent
+   * @param taskId - External task ID
+   * @param taskType - Type of task
+   * @param status - Task status (SUBMITTED, WORKING, COMPLETED, FAILED)
+   */
+  async logTask(
+    targetAgentId: string,
+    taskId: string,
+    taskType: string,
+    status: string
+  ): Promise<{ id: string; createdAt: string }> {
+    return this.post<{ id: string; createdAt: string }>(`${A2A_BASE_PATH}/tasks`, {
+      targetAgentId,
+      taskId,
+      taskType,
+      status,
+    });
+  }
+
+  /**
+   * Get task history for interactions with a target agent.
+   *
+   * @param targetAgentId - ID of the target agent
+   * @param limit - Maximum number of results
+   */
+  async getTaskHistory(
+    targetAgentId: string,
+    limit = 50
+  ): Promise<Array<{ id: string; taskId: string; taskType: string; status: string; createdAt: string }>> {
+    const response = await this.get<{ tasks: Array<{ id: string; taskId: string; taskType: string; status: string; createdAt: string }> }>(
+      `${A2A_BASE_PATH}/tasks/${targetAgentId}?limit=${limit}`
+    );
+    return response.tasks ?? [];
+  }
+
   // ==================== Skill Operations ====================
 
   /**

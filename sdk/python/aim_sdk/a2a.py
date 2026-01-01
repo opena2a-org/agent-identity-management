@@ -1072,6 +1072,430 @@ class A2AClient:
 
         return self._make_request("POST", "/api/v1/a2a/policies/evaluate", data=data)
 
+    # =========================================================================
+    # Agent Card List & Update Operations
+    # =========================================================================
+
+    def list_agent_cards(self, limit: int = 100, offset: int = 0) -> List[A2AAgentCard]:
+        """
+        List all registered A2A agent cards.
+
+        Args:
+            limit: Maximum number of results
+            offset: Pagination offset
+
+        Returns:
+            List of A2AAgentCard objects
+
+        Example:
+            >>> cards = a2a.list_agent_cards(limit=10)
+            >>> for card in cards:
+            ...     print(f"{card.name}: {card.card_url}")
+        """
+        response = self._make_request(
+            "GET",
+            f"/api/v1/a2a/cards?limit={limit}&offset={offset}"
+        )
+        return [
+            A2AAgentCard(
+                card_id=c.get("id", ""),
+                agent_id=c.get("agentId", ""),
+                card_url=c.get("cardUrl", ""),
+                name=c.get("name", ""),
+                description=c.get("description", ""),
+                version=c.get("version", "1.0.0"),
+                skills=c.get("skills", []),
+                attestation_expires=_parse_datetime(c.get("attestationExpires")),
+                aim_extensions=c.get("aimExtensions"),
+            )
+            for c in response.get("cards", [])
+        ]
+
+    def update_agent_card(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        version: Optional[str] = None,
+        skills: Optional[List[Dict[str, Any]]] = None
+    ) -> A2AAgentCard:
+        """
+        Update the current agent's A2A card.
+
+        Args:
+            name: New name for the agent
+            description: New description
+            version: New version string
+            skills: Updated list of skills
+
+        Returns:
+            Updated A2AAgentCard
+
+        Example:
+            >>> card = a2a.update_agent_card(
+            ...     name="My Updated Agent",
+            ...     description="Now with more capabilities"
+            ... )
+        """
+        data: Dict[str, Any] = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if version is not None:
+            data["version"] = version
+        if skills is not None:
+            data["skills"] = skills
+
+        response = self._make_request(
+            "PUT",
+            f"/api/v1/a2a/cards/{self.agent_id}",
+            data=data
+        )
+
+        return A2AAgentCard(
+            card_id=response.get("id", ""),
+            agent_id=response.get("agentId", self.agent_id),
+            card_url=response.get("cardUrl", ""),
+            name=response.get("name", ""),
+            description=response.get("description", ""),
+            version=response.get("version", "1.0.0"),
+            skills=response.get("skills", []),
+            attestation_expires=_parse_datetime(response.get("attestationExpires")),
+            aim_extensions=response.get("aimExtensions"),
+        )
+
+    # =========================================================================
+    # Extended Trust Score Operations
+    # =========================================================================
+
+    def update_trust_score(
+        self,
+        target_agent_id: str,
+        score: float,
+        confidence: float,
+        factors: Optional[Dict[str, float]] = None
+    ) -> A2ATrustScore:
+        """
+        Update the trust score for a target agent.
+
+        Args:
+            target_agent_id: ID of the agent to update trust for
+            score: New trust score (0.0-1.0)
+            confidence: Confidence in the score (0.0-1.0)
+            factors: Optional breakdown of trust factors
+
+        Returns:
+            Updated A2ATrustScore
+
+        Example:
+            >>> score = a2a.update_trust_score(
+            ...     target_agent_id="other-agent",
+            ...     score=0.85,
+            ...     confidence=0.9
+            ... )
+        """
+        data = {
+            "score": score,
+            "confidence": confidence,
+        }
+        if factors:
+            data["factors"] = factors
+
+        response = self._make_request(
+            "PUT",
+            f"/api/v1/a2a/trust/{target_agent_id}",
+            data=data
+        )
+
+        return A2ATrustScore(
+            agent_id=target_agent_id,
+            a2a_trust_score=response.get("a2aTrustScore", score),
+            peer_trust_average=response.get("peerTrustAverage"),
+            unique_peers_count=response.get("uniquePeersCount", 0),
+            tasks_completed=response.get("tasksCompleted", 0),
+            tasks_failed=response.get("tasksFailed", 0),
+            computed_at=_parse_datetime(response.get("computedAt")),
+        )
+
+    def record_successful_interaction(
+        self,
+        target_agent_id: str,
+        task_type: str,
+        duration_ms: int
+    ) -> A2ATrustScore:
+        """
+        Record a successful interaction with another agent.
+
+        This updates the trust score based on successful task completion.
+
+        Args:
+            target_agent_id: ID of the agent interacted with
+            task_type: Type of task completed
+            duration_ms: Duration of the task in milliseconds
+
+        Returns:
+            Updated A2ATrustScore
+
+        Example:
+            >>> score = a2a.record_successful_interaction(
+            ...     target_agent_id="other-agent",
+            ...     task_type="data_analysis",
+            ...     duration_ms=5000
+            ... )
+        """
+        response = self._make_request(
+            "POST",
+            f"/api/v1/a2a/trust/{target_agent_id}/interaction",
+            data={
+                "success": True,
+                "taskType": task_type,
+                "durationMs": duration_ms,
+            }
+        )
+
+        return A2ATrustScore(
+            agent_id=target_agent_id,
+            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            peer_trust_average=response.get("peerTrustAverage"),
+            unique_peers_count=response.get("uniquePeersCount", 0),
+            tasks_completed=response.get("tasksCompleted", 0),
+            tasks_failed=response.get("tasksFailed", 0),
+            computed_at=_parse_datetime(response.get("computedAt")),
+        )
+
+    def record_failed_interaction(
+        self,
+        target_agent_id: str,
+        task_type: str,
+        error_reason: str
+    ) -> A2ATrustScore:
+        """
+        Record a failed interaction with another agent.
+
+        This updates the trust score based on task failure.
+
+        Args:
+            target_agent_id: ID of the agent interacted with
+            task_type: Type of task that failed
+            error_reason: Reason for the failure
+
+        Returns:
+            Updated A2ATrustScore
+
+        Example:
+            >>> score = a2a.record_failed_interaction(
+            ...     target_agent_id="other-agent",
+            ...     task_type="data_analysis",
+            ...     error_reason="Timeout exceeded"
+            ... )
+        """
+        response = self._make_request(
+            "POST",
+            f"/api/v1/a2a/trust/{target_agent_id}/interaction",
+            data={
+                "success": False,
+                "taskType": task_type,
+                "errorReason": error_reason,
+            }
+        )
+
+        return A2ATrustScore(
+            agent_id=target_agent_id,
+            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            peer_trust_average=response.get("peerTrustAverage"),
+            unique_peers_count=response.get("uniquePeersCount", 0),
+            tasks_completed=response.get("tasksCompleted", 0),
+            tasks_failed=response.get("tasksFailed", 0),
+            computed_at=_parse_datetime(response.get("computedAt")),
+        )
+
+    def list_peer_trusts(self) -> List[A2APeerTrust]:
+        """
+        List all peer trust relationships for the current agent.
+
+        Returns:
+            List of A2APeerTrust relationships
+
+        Example:
+            >>> peers = a2a.list_peer_trusts()
+            >>> for peer in peers:
+            ...     print(f"{peer.peer_agent_id}: {peer.peer_trust_score}")
+        """
+        response = self._make_request("GET", "/api/v1/a2a/peers")
+
+        return [
+            A2APeerTrust(
+                agent_id=self.agent_id,
+                peer_agent_id=p.get("peerAgentId", ""),
+                peer_trust_score=p.get("peerTrustScore", 0.0),
+                success_rate=p.get("successRate"),
+                tasks_initiated=p.get("tasksInitiated", 0),
+                tasks_received=p.get("tasksReceived", 0),
+                first_interaction_at=_parse_datetime(p.get("firstInteractionAt")),
+                last_interaction_at=_parse_datetime(p.get("lastInteractionAt")),
+            )
+            for p in response.get("peers", [])
+        ]
+
+    # =========================================================================
+    # Skill Registration & Management
+    # =========================================================================
+
+    def register_skill(
+        self,
+        name: str,
+        description: str,
+        input_schema: Optional[Dict[str, Any]] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Register a new skill for the current agent.
+
+        Args:
+            name: Skill name
+            description: Skill description
+            input_schema: JSON schema for skill input
+            output_schema: JSON schema for skill output
+            tags: Optional tags for discovery
+
+        Returns:
+            Created skill details
+
+        Example:
+            >>> skill = a2a.register_skill(
+            ...     name="analyze_code",
+            ...     description="Analyzes code for quality issues",
+            ...     tags=["code", "analysis"]
+            ... )
+        """
+        data: Dict[str, Any] = {
+            "name": name,
+            "description": description,
+        }
+        if input_schema:
+            data["inputSchema"] = input_schema
+        if output_schema:
+            data["outputSchema"] = output_schema
+        if tags:
+            data["tags"] = tags
+
+        return self._make_request("POST", "/api/v1/a2a/skills", data=data)
+
+    def delete_skill(self, skill_id: str) -> Dict[str, Any]:
+        """
+        Delete a skill.
+
+        Args:
+            skill_id: ID of the skill to delete
+
+        Returns:
+            Deletion confirmation
+
+        Example:
+            >>> a2a.delete_skill("skill-123")
+        """
+        return self._make_request("DELETE", f"/api/v1/a2a/skills/{skill_id}")
+
+    def list_skills(self) -> List[Dict[str, Any]]:
+        """
+        List all skills for the current agent.
+
+        Returns:
+            List of skills
+
+        Example:
+            >>> skills = a2a.list_skills()
+            >>> for skill in skills:
+            ...     print(f"{skill['name']}: {skill['description']}")
+        """
+        response = self._make_request("GET", "/api/v1/a2a/skills")
+        return response.get("skills", [])
+
+    # =========================================================================
+    # Security Settings Update
+    # =========================================================================
+
+    def update_security_settings(
+        self,
+        organization_id: str,
+        enforcement_mode: Optional[str] = None,
+        require_signing: Optional[bool] = None,
+        min_trust_score: Optional[float] = None,
+        require_verified_skills: Optional[bool] = None,
+        allowed_agents: Optional[List[str]] = None,
+        blocked_agents: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Update A2A security settings for an organization.
+
+        Args:
+            organization_id: Organization ID
+            enforcement_mode: 'monitor' or 'strict'
+            require_signing: Require Ed25519 request signing
+            min_trust_score: Minimum trust score required (0.0-1.0)
+            require_verified_skills: Require skills to be verified
+            allowed_agents: List of allowed agent IDs (allowlist)
+            blocked_agents: List of blocked agent IDs (blocklist)
+
+        Returns:
+            Updated security settings
+
+        Example:
+            >>> settings = a2a.update_security_settings(
+            ...     organization_id="org-id",
+            ...     enforcement_mode="strict",
+            ...     min_trust_score=0.7
+            ... )
+        """
+        data: Dict[str, Any] = {}
+        if enforcement_mode is not None:
+            data["enforcementMode"] = enforcement_mode
+        if require_signing is not None:
+            data["requireSigning"] = require_signing
+        if min_trust_score is not None:
+            data["minTrustScore"] = min_trust_score
+        if require_verified_skills is not None:
+            data["requireVerifiedSkills"] = require_verified_skills
+        if allowed_agents is not None:
+            data["allowedAgents"] = allowed_agents
+        if blocked_agents is not None:
+            data["blockedAgents"] = blocked_agents
+
+        return self._make_request(
+            "PUT",
+            f"/api/v1/a2a/security/settings/{organization_id}",
+            data=data
+        )
+
+    # =========================================================================
+    # URL-Based Discovery
+    # =========================================================================
+
+    def discover_agent(self, agent_url: str) -> A2AAgentCard:
+        """
+        Discover and register an agent by URL.
+
+        Fetches the agent's .well-known/agent.json card and registers it.
+
+        Args:
+            agent_url: Base URL of the agent (e.g., "https://agent.example.com")
+
+        Returns:
+            Registered A2AAgentCard
+
+        Example:
+            >>> card = a2a.discover_agent("https://analysis-agent.example.com")
+            >>> print(f"Discovered: {card.name} with {len(card.skills)} skills")
+        """
+        # Construct the well-known agent card URL
+        if agent_url.endswith('/'):
+            card_url = f"{agent_url}.well-known/agent.json"
+        else:
+            card_url = f"{agent_url}/.well-known/agent.json"
+
+        return self.register_agent_card(card_url)
+
 
 class A2AError(Exception):
     """Exception raised for A2A protocol errors."""
