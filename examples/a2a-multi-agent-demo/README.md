@@ -26,8 +26,9 @@ The Research Agent discovers and collaborates with the Analysis Agent to:
 ## Prerequisites
 
 1. AIM backend running at `http://localhost:8080`
-2. Valid API key (set as `AIM_API_KEY` environment variable)
-3. SDK built for your language of choice
+2. SDK built for your language of choice
+
+> **Note**: The SDK handles authentication automatically via bundled credentials. No API key configuration required.
 
 ## Quick Start
 
@@ -40,7 +41,6 @@ cd python
 pip install -r requirements.txt
 
 # Run demo
-export AIM_API_KEY='your-api-key'
 python run_demo.py
 ```
 
@@ -53,7 +53,6 @@ cd typescript
 npm install
 
 # Run demo
-export AIM_API_KEY='your-api-key'
 npm run demo
 ```
 
@@ -66,7 +65,6 @@ cd java
 cd ../../../sdk/java && mvn package -DskipTests && cd ../../examples/a2a-multi-agent-demo/java
 
 # Run demo
-export AIM_API_KEY='your-api-key'
 mvn exec:java -Dexec.mainClass="org.opena2a.demo.A2AMultiAgentDemo"
 ```
 
@@ -182,16 +180,14 @@ The demo uses sample data from `shared/sample-data/research-data.json`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AIM_URL` | `http://localhost:8080/api` | AIM platform API URL |
-| `AIM_API_KEY` | (required) | API key for authentication |
+| `AIM_URL` | `http://localhost:8080` | AIM platform URL (optional) |
+
+> **Note**: Authentication is handled automatically by the SDK via bundled credentials. No API key environment variable needed.
 
 ## Troubleshooting
 
 ### Connection Refused
 Ensure the AIM backend is running at the configured URL.
-
-### Invalid API Key
-Verify your API key is correct and has appropriate permissions.
 
 ### SDK Not Found
 Build the SDK first:

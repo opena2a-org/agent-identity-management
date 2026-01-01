@@ -24,27 +24,19 @@ import java.util.*;
  * 7. Skill Attestation & Consensus
  *
  * Run with:
- *     export AIM_API_KEY='your-key'
  *     mvn exec:java -Dexec.mainClass="org.opena2a.demo.A2AMultiAgentDemo"
+ *
+ * The SDK handles authentication automatically via bundled credentials.
  */
 public class A2AMultiAgentDemo {
 
     private static final Gson gson = new Gson();
 
     public static void main(String[] args) {
-        String aimUrl = System.getenv().getOrDefault("AIM_URL", "http://localhost:8080/api");
-        String apiKey = System.getenv("AIM_API_KEY");
-
-        if (apiKey == null || apiKey.isEmpty()) {
-            System.err.println("Error: API key required. Set AIM_API_KEY environment variable");
-            System.err.println("\nUsage:");
-            System.err.println("  export AIM_API_KEY='your-api-key'");
-            System.err.println("  mvn exec:java -Dexec.mainClass=\"org.opena2a.demo.A2AMultiAgentDemo\"");
-            System.exit(1);
-        }
+        String aimUrl = System.getenv().getOrDefault("AIM_URL", "http://localhost:8080");
 
         try {
-            runDemo(aimUrl, apiKey);
+            runDemo(aimUrl);
         } catch (Exception e) {
             System.err.println("\nDemo error: " + e.getMessage());
             e.printStackTrace();
@@ -52,7 +44,7 @@ public class A2AMultiAgentDemo {
         }
     }
 
-    private static void runDemo(String aimUrl, String apiKey) throws Exception {
+    private static void runDemo(String aimUrl) throws Exception {
         printBanner();
 
         Map<String, Object> sampleData = loadSampleData();
@@ -63,7 +55,7 @@ public class A2AMultiAgentDemo {
         // =========================================================================
         printStep(1, "REGISTER ANALYSIS AGENT");
 
-        AnalysisAgent analysisAgent = new AnalysisAgent(aimUrl, apiKey);
+        AnalysisAgent analysisAgent = new AnalysisAgent(aimUrl);
         analysisAgent.initialize();
         analysisAgent.registerAgentCard();
 
@@ -78,7 +70,7 @@ public class A2AMultiAgentDemo {
         // =========================================================================
         printStep(2, "REGISTER RESEARCH AGENT");
 
-        ResearchAgent researchAgent = new ResearchAgent(aimUrl, apiKey);
+        ResearchAgent researchAgent = new ResearchAgent(aimUrl);
         researchAgent.initialize();
         researchAgent.registerAgentCard();
 

@@ -61,15 +61,12 @@ export class AnalysisAgent {
   private a2a!: A2AClient;
   public agentId: string = '';
 
-  constructor(
-    private readonly baseUrl: string,
-    private readonly apiKey: string
-  ) {
+  constructor(private readonly baseUrl?: string) {
     console.log('[Analysis Agent] Initializing...');
 
+    // SDK handles auth automatically via bundled credentials
     this.aimClient = new AIMClient({
-      baseUrl,
-      apiKey,
+      baseUrl: baseUrl || 'http://localhost:8080',
     });
   }
 

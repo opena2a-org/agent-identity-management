@@ -53,24 +53,21 @@ class AnalysisAgent:
         }
     ]
 
-    def __init__(self, aim_url: str, api_key: str):
+    def __init__(self, aim_url: str = None):
         """
         Initialize the Analysis Agent.
 
         Args:
-            aim_url: AIM platform URL
-            api_key: API key for authentication
+            aim_url: AIM platform URL (optional, auto-detected from SDK credentials)
         """
         self.agent_name = "analysis-agent"
-        self.aim_url = aim_url
 
         print(f"[Analysis Agent] Registering with AIM...")
 
-        # Register agent and get AIM client
+        # Register agent - SDK handles auth automatically
         self.aim_client = register_agent(
             name=self.agent_name,
             aim_url=aim_url,
-            api_key=api_key,
             display_name="Analysis Agent",
             agent_type="ai_agent",
             description="Analysis agent providing sentiment analysis, summarization, and trend detection"

@@ -6,8 +6,9 @@
  * using all A2A features.
  *
  * Run with:
- *     export AIM_API_KEY='your-key'
  *     npm run demo
+ *
+ * The SDK handles authentication automatically via bundled credentials.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -101,7 +102,7 @@ function printSummary(
   console.log('='.repeat(70) + '\n');
 }
 
-async function runDemo(baseUrl: string, apiKey: string): Promise<void> {
+async function runDemo(baseUrl: string): Promise<void> {
   printBanner();
 
   const sampleData = loadSampleData();
@@ -112,7 +113,7 @@ async function runDemo(baseUrl: string, apiKey: string): Promise<void> {
   // =========================================================================
   printStep(1, 'REGISTER ANALYSIS AGENT');
 
-  const analysisAgent = new AnalysisAgent(baseUrl, apiKey);
+  const analysisAgent = new AnalysisAgent(baseUrl);
   await analysisAgent.initialize();
   await analysisAgent.registerAgentCard();
 
@@ -126,7 +127,7 @@ async function runDemo(baseUrl: string, apiKey: string): Promise<void> {
   // =========================================================================
   printStep(2, 'REGISTER RESEARCH AGENT');
 
-  const researchAgent = new ResearchAgent(baseUrl, apiKey);
+  const researchAgent = new ResearchAgent(baseUrl);
   await researchAgent.initialize();
   await researchAgent.registerAgentCard();
 
@@ -257,18 +258,9 @@ async function runDemo(baseUrl: string, apiKey: string): Promise<void> {
 
 async function main(): Promise<void> {
   const baseUrl = process.env.AIM_URL || 'http://localhost:8080';
-  const apiKey = process.env.AIM_API_KEY || '';
-
-  if (!apiKey) {
-    console.error('Error: API key required. Set AIM_API_KEY environment variable');
-    console.error('\nUsage:');
-    console.error("  export AIM_API_KEY='your-api-key'");
-    console.error('  npm run demo');
-    process.exit(1);
-  }
 
   try {
-    await runDemo(baseUrl, apiKey);
+    await runDemo(baseUrl);
   } catch (e) {
     console.error(`\nDemo error: ${e}`);
     if (e instanceof Error) {

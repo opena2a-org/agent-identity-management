@@ -38,24 +38,21 @@ class ResearchAgent:
     7. Attest to skill quality
     """
 
-    def __init__(self, aim_url: str, api_key: str):
+    def __init__(self, aim_url: str = None):
         """
         Initialize the Research Agent.
 
         Args:
-            aim_url: AIM platform URL
-            api_key: API key for authentication
+            aim_url: AIM platform URL (optional, auto-detected from SDK credentials)
         """
         self.agent_name = "research-agent"
-        self.aim_url = aim_url
 
         print(f"[Research Agent] Registering with AIM...")
 
-        # Register agent and get AIM client
+        # Register agent - SDK handles auth automatically
         self.aim_client = register_agent(
             name=self.agent_name,
             aim_url=aim_url,
-            api_key=api_key,
             display_name="Research Agent",
             agent_type="ai_agent",
             description="Research agent that gathers information and collaborates with analysis agents"

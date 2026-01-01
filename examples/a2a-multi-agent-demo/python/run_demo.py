@@ -13,8 +13,9 @@ using all A2A features:
 7. Skill Attestation & Consensus
 
 Run with:
-    export AIM_API_KEY='your-key'
-    python run_demo.py [--aim-url http://localhost:8080/api]
+    python run_demo.py [--aim-url http://localhost:8080]
+
+The SDK handles authentication automatically via bundled credentials.
 """
 import os
 import sys
@@ -107,13 +108,12 @@ def print_summary(
     print("=" * 70 + "\n")
 
 
-def run_demo(aim_url: str, api_key: str):
+def run_demo(aim_url: str):
     """
     Run the full A2A collaboration demo.
 
     Args:
-        aim_url: AIM platform URL
-        api_key: API key for authentication
+        aim_url: AIM platform URL (SDK handles auth automatically)
     """
     print_banner()
 
@@ -126,7 +126,7 @@ def run_demo(aim_url: str, api_key: str):
     # =========================================================================
     print_step(1, "REGISTER ANALYSIS AGENT")
 
-    analysis_agent = AnalysisAgent(aim_url=aim_url, api_key=api_key)
+    analysis_agent = AnalysisAgent(aim_url=aim_url)
     analysis_card = analysis_agent.register_agent_card()
 
     print(f"\nAnalysis Agent ready with {len(analysis_agent.SKILLS)} skills:")
@@ -138,7 +138,7 @@ def run_demo(aim_url: str, api_key: str):
     # =========================================================================
     print_step(2, "REGISTER RESEARCH AGENT")
 
-    research_agent = ResearchAgent(aim_url=aim_url, api_key=api_key)
+    research_agent = ResearchAgent(aim_url=aim_url)
     research_card = research_agent.register_agent_card()
 
     # =========================================================================
@@ -282,26 +282,14 @@ def main():
     )
     parser.add_argument(
         '--aim-url',
-        default=os.environ.get('AIM_URL', 'http://localhost:8080/api'),
-        help='AIM platform URL (default: http://localhost:8080/api)'
-    )
-    parser.add_argument(
-        '--api-key',
-        default=os.environ.get('AIM_API_KEY', ''),
-        help='API key for authentication (or set AIM_API_KEY env var)'
+        default=os.environ.get('AIM_URL', 'http://localhost:8080'),
+        help='AIM platform URL (default: http://localhost:8080)'
     )
 
     args = parser.parse_args()
 
-    if not args.api_key:
-        print("Error: API key required. Set AIM_API_KEY or use --api-key")
-        print("\nUsage:")
-        print("  export AIM_API_KEY='your-api-key'")
-        print("  python run_demo.py")
-        sys.exit(1)
-
     try:
-        run_demo(aim_url=args.aim_url, api_key=args.api_key)
+        run_demo(aim_url=args.aim_url)
     except KeyboardInterrupt:
         print("\n\nDemo interrupted by user.")
         sys.exit(0)

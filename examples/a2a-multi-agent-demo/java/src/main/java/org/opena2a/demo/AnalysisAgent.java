@@ -57,18 +57,22 @@ public class AnalysisAgent {
     private final A2AClient a2a;
     private String agentId;
 
-    public AnalysisAgent(String aimUrl, String apiKey) {
+    public AnalysisAgent(String aimUrl) {
         System.out.println("[Analysis Agent] Registering with AIM...");
 
+        // SDK handles auth automatically via bundled credentials
         this.aimClient = new AIMClient.Builder()
                 .agentName(agentName)
-                .aimUrl(aimUrl)
-                .apiKey(apiKey)
+                .aimUrl(aimUrl != null ? aimUrl : "http://localhost:8080")
                 .agentType(AgentType.AI_AGENT)
                 .description("Analysis agent providing sentiment analysis, summarization, and trend detection")
                 .build();
 
         this.a2a = new A2AClient(aimClient);
+    }
+
+    public AnalysisAgent() {
+        this(null);
     }
 
     public void initialize() throws Exception {

@@ -45,18 +45,22 @@ public class ResearchAgent {
     private final A2AClient a2a;
     private String agentId;
 
-    public ResearchAgent(String aimUrl, String apiKey) {
+    public ResearchAgent(String aimUrl) {
         System.out.println("[Research Agent] Registering with AIM...");
 
+        // SDK handles auth automatically via bundled credentials
         this.aimClient = new AIMClient.Builder()
                 .agentName(agentName)
-                .aimUrl(aimUrl)
-                .apiKey(apiKey)
+                .aimUrl(aimUrl != null ? aimUrl : "http://localhost:8080")
                 .agentType(AgentType.AI_AGENT)
                 .description("Research agent that gathers information and collaborates with analysis agents")
                 .build();
 
         this.a2a = new A2AClient(aimClient);
+    }
+
+    public ResearchAgent() {
+        this(null);
     }
 
     public void initialize() throws Exception {
