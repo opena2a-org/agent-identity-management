@@ -25,6 +25,10 @@ public class A2ATrustScore {
     @JsonProperty("score")
     private double score;
 
+    // Backend returns a2aTrustScore in some responses
+    @JsonProperty("a2aTrustScore")
+    private Double a2aTrustScoreFromBackend;
+
     @JsonProperty("confidence")
     private double confidence;
 
@@ -61,7 +65,17 @@ public class A2ATrustScore {
     public String getId() { return id; }
     public String getEvaluatorAgentId() { return evaluatorAgentId; }
     public String getSubjectAgentId() { return subjectAgentId; }
-    public double getScore() { return score; }
+
+    /**
+     * Get the trust score. Handles both 'score' and 'a2aTrustScore' backend responses.
+     */
+    public double getScore() {
+        // If score is 0 but a2aTrustScore was provided, use that
+        if (score == 0.0 && a2aTrustScoreFromBackend != null) {
+            return a2aTrustScoreFromBackend;
+        }
+        return score;
+    }
     public double getConfidence() { return confidence; }
     public int getInteractionCount() { return interactionCount; }
     public int getSuccessfulInteractions() { return successfulInteractions; }

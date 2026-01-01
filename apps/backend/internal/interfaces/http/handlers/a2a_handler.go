@@ -1262,6 +1262,7 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 
 // GetTrustScoreAlt handles trust score with agent ID in path (SDK compatibility)
 // GET /api/v1/a2a/trust/:id
+// Auto-computes trust score if none exists or score is zero
 func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1270,11 +1271,20 @@ func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 		})
 	}
 
+	// First try to get existing trust score
 	score, err := h.a2aService.GetA2ATrustScore(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+	if err != nil || score == nil || score.A2ATrustScore == nil || *score.A2ATrustScore == 0 {
+		// Auto-compute if no score exists or score is zero
+		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
+		if computeErr != nil {
+			// If computation fails, return zero score with message
+			return c.JSON(fiber.Map{
+				"agentId": agentID,
+				"score":   0.0,
+				"message": "Could not compute trust score: " + computeErr.Error(),
+			})
+		}
+		return c.JSON(computedScore)
 	}
 
 	return c.JSON(score)
