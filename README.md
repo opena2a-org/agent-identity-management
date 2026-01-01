@@ -140,6 +140,8 @@ Centralized security operations with smart scoring and real-time threat visibili
 Every agent gets a cryptographically verifiable identity that cannot be forged.
 
 - **Ed25519 Key Pairs** — Industry-standard cryptographic signing
+- **Post-Quantum Cryptography (PQC)** — ML-DSA (NIST FIPS 204) for quantum-resistant signatures
+- **Hybrid Mode** — Ed25519+ML-DSA for defense-in-depth during cryptographic transition
 - **Challenge-Response Verification** — Prove agent identity on every request
 - **Status Tracking** — Active, pending, suspended, revoked states
 - **Metadata & Versioning** — Track agent versions, repositories, documentation
@@ -177,6 +179,16 @@ Monitor your entire MCP ecosystem with comprehensive supply chain visibility.
 - **Capability Drift Alerts** — Automatic detection when MCP server tools change unexpectedly
 - **Auto-Attestation** — SDK automatically creates attestations on first tool use
 - **Server Dependencies** — Track which agents depend on which MCP servers
+
+### Agent-to-Agent (A2A) Communication
+
+Secure multi-agent systems with visibility into agent collaboration patterns.
+
+- **Connection Declaration** — Agents declare which services and agents they communicate with
+- **Multi-Agent Patterns** — Support for orchestrator/worker, peer-to-peer, and hub-and-spoke topologies
+- **Dependency Graphs** — Visualize agent-to-agent and agent-to-MCP relationships
+- **Framework Integration** — Works with CrewAI, AutoGen, LangGraph, and other multi-agent frameworks
+- **Trust Propagation** — Understand trust implications across agent networks
 
 ### Trust Scoring Algorithm
 
@@ -339,7 +351,8 @@ Watch the dashboard update in real-time as your agent registers and performs act
 
 | SDK | Language | Installation | Features |
 |-----|----------|--------------|----------|
-| **Python SDK** | Python 3.8+ | `pip install aim-sdk` | Decorators, auto-detection, MCP integration |
+| **Python SDK** | Python 3.8+ | `pip install aim-sdk` | Decorators, auto-detection, MCP integration, PQC support |
+| **TypeScript SDK** | Node.js 18+ | `npm install @opena2a/aim-sdk` | Full PQC support, async/await, type-safe |
 | **Java SDK** | Java 17+ | Maven/Gradle | LangChain4j integration, Spring AI, enterprise security |
 
 ### Enterprise Security Features (Java SDK)
@@ -541,6 +554,8 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 | [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) | Secure your first agent (2 min) |
 | [API Quickstart](https://opena2a.org/docs/tutorials/api-quickstart) | REST API examples with curl (3 min) |
 | [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) | Connect and verify MCP servers (3 min) |
+| [Post-Quantum Cryptography](docs/guides/PQC.md) | ML-DSA signatures and hybrid mode |
+| [Agent-to-Agent Communication](docs/guides/A2A.md) | Multi-agent patterns and supply chain |
 | [SDK Test Plan](docs/SDK_TEST_PLAN.md) | Comprehensive SDK validation and test coverage |
 | [Security Assessment](https://opena2a.org/docs/security-assessment) | Threat model and security controls |
 | [Full Documentation](https://opena2a.org/docs) | Complete guides and API reference |
@@ -565,10 +580,12 @@ See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for detailed in
 - [x] ABOM (Agent Bill of Materials) generation for supply chain compliance
 - [x] Agent tags and metadata support
 - [x] OAuth integration (Google, Microsoft, Okta)
+- [x] **Post-Quantum Cryptography (PQC)** — ML-DSA (NIST FIPS 204) signatures with hybrid Ed25519+ML-DSA mode
+- [x] **Agent-to-Agent (A2A) Communication** — Multi-agent connection tracking and supply chain visibility
+- [x] **TypeScript SDK** with PQC support
 
 ### Future
 
-- [ ] TypeScript/Node.js SDK
 - [ ] GitHub Copilot integration
 - [ ] GraphQL API
 - [ ] CLI tool for automation
