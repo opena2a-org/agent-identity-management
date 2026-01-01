@@ -1349,9 +1349,20 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// SDK Compatibility Routes (alternative paths that SDKs expect)
 	a2a.Post("/sign", h.A2A.SignRequestAlt)
+	a2a.Post("/verify", h.A2A.VerifyRequest)                                   // SDK verify request endpoint
 	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
+	a2a.Put("/trust/:id", h.A2A.UpdateTrustScore)                              // SDK update trust score
+	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction)                // SDK record interaction
 	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
+	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                        // Java SDK expects POST
+	a2a.Get("/cards", h.A2A.ListAgentCards)                                    // SDK list agent cards
+	a2a.Post("/cards", h.A2A.RegisterAgentCardAlt)                             // Java SDK expects POST /cards
 	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                  // SDK calls /cards/:id instead of /agents/:id/card
+	a2a.Put("/cards/:id", h.A2A.UpdateAgentCard)                               // SDK update agent card
+	a2a.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)           // Java SDK expects /cards/:id/attestation
+	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                    // SDK list peer trusts
+	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                               // SDK delete skill
+	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)               // SDK get security violations
 	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
 
 	// A2A Maintenance (admin only)
