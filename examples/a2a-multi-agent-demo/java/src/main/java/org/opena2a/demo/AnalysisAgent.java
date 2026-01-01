@@ -1,8 +1,8 @@
 package org.opena2a.demo;
 
-import org.opena2a.aim.AIMClient;
+import org.opena2a.aim.client.AIMClient;
 import org.opena2a.aim.a2a.A2AClient;
-import org.opena2a.aim.AgentType;
+import org.opena2a.aim.client.AgentType;
 
 import java.util.*;
 
