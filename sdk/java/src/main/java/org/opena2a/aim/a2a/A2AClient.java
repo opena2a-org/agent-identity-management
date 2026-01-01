@@ -182,6 +182,7 @@ public class A2AClient {
                                             Map<String, Object> evidence) throws A2AException {
         try {
             ObjectNode body = objectMapper.createObjectNode();
+            body.put("attestingAgentId", aimClient.getAgentId()); // Include attesting agent ID
             body.put("attestedAgentId", targetAgentId);
             body.put("skillId", skillId);
             body.put("attestationType", attestationType);
@@ -318,6 +319,7 @@ public class A2AClient {
     public A2ARequestSignature signRequest(String method, String path, String body) throws A2AException {
         try {
             ObjectNode reqBody = objectMapper.createObjectNode();
+            reqBody.put("agentId", aimClient.getAgentId());
             reqBody.put("method", method);
             reqBody.put("path", path);
             if (body != null && !body.isEmpty()) {
@@ -594,12 +596,20 @@ public class A2AClient {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("userId", userId);
-            body.put("targetAgentId", targetAgentId);
+            body.put("grantorAgentId", aimClient.getAgentId()); // Current agent is the grantor
+            body.put("recipientAgentId", targetAgentId);
             body.put("purpose", purpose);
             body.set("dataTypes", objectMapper.valueToTree(dataTypes));
-            body.put("legalBasis", legalBasis);
+            body.set("scope", objectMapper.valueToTree(dataTypes)); // Backend uses scope as well
+            // Map legalBasis to valid consent method (explicit_click, api, delegated, inherited)
+            String consentMethod = mapToValidConsentMethod(legalBasis);
+            body.put("consentMethod", consentMethod);
+            // Store original legalBasis in evidence field
+            body.put("evidence", "legalBasis: " + legalBasis);
             if (expiresAt != null) {
-                body.put("expiresAt", expiresAt.toString());
+                // Convert to hours from now
+                long hoursUntilExpiry = java.time.Duration.between(Instant.now(), expiresAt).toHours();
+                body.put("expiresInHours", (int) Math.max(1, hoursUntilExpiry));
             }
 
             String response = post(A2A_BASE_PATH + "/consent", objectMapper.writeValueAsString(body));
@@ -607,6 +617,19 @@ public class A2AClient {
         } catch (Exception e) {
             throw new A2AException("Failed to record consent: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Map a legal basis string to a valid consent method.
+     * Valid methods: explicit_click, api, delegated, inherited
+     */
+    private String mapToValidConsentMethod(String legalBasis) {
+        if (legalBasis == null) return "api";
+        String lower = legalBasis.toLowerCase();
+        if (lower.contains("explicit") || lower.contains("click")) return "explicit_click";
+        if (lower.contains("delegat")) return "delegated";
+        if (lower.contains("inherit")) return "inherited";
+        return "api"; // Default to API consent for programmatic calls
     }
 
     /**
@@ -622,8 +645,11 @@ public class A2AClient {
     public Map<String, Object> checkConsent(String userId, String targetAgentId,
                                              String purpose, String dataType) throws A2AException {
         try {
-            String query = String.format("userId=%s&targetAgentId=%s&purpose=%s&dataType=%s",
-                    userId, targetAgentId, purpose, dataType);
+            // Backend expects: userId, grantorAgentId, recipientAgentId, scope
+            // Grantor is the current agent, recipient is the target agent
+            String query = String.format(
+                    "userId=%s&grantorAgentId=%s&recipientAgentId=%s&scope=%s",
+                    userId, aimClient.getAgentId(), targetAgentId, purpose);
             String response = get(A2A_BASE_PATH + "/consent/check?" + query);
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
@@ -716,6 +742,7 @@ public class A2AClient {
             throws A2AException {
         try {
             ObjectNode body = objectMapper.createObjectNode();
+            body.put("clientAgentId", aimClient.getAgentId()); // Include client agent ID
             body.put("targetAgentId", targetAgentId);
             body.put("taskId", taskId);
             body.put("taskType", taskType);
@@ -800,6 +827,10 @@ public class A2AClient {
      */
     public A2AAgentCard.Skill registerSkill(A2AAgentCard.Skill skill) throws A2AException {
         try {
+            // Ensure the skill has the current agent's ID
+            if (skill.getAgentId() == null || skill.getAgentId().isEmpty()) {
+                skill.setAgentId(aimClient.getAgentId());
+            }
             String response = post(A2A_BASE_PATH + "/skills", objectMapper.writeValueAsString(skill));
             return objectMapper.readValue(response, A2AAgentCard.Skill.class);
         } catch (Exception e) {
@@ -966,6 +997,7 @@ public class A2AClient {
     public A2ASecurityCheckResult checkSecurity(String targetAgentId, String skillId) throws A2AException {
         try {
             ObjectNode body = objectMapper.createObjectNode();
+            body.put("requestingAgentId", aimClient.getAgentId());
             body.put("targetAgentId", targetAgentId);
             if (skillId != null && !skillId.isEmpty()) {
                 body.put("skillId", skillId);

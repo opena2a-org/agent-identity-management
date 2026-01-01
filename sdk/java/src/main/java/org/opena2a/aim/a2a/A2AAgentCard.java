@@ -174,6 +174,9 @@ public class A2AAgentCard {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Skill {
+        @JsonProperty("agentId")
+        private String agentId;
+
         @JsonProperty("id")
         private String id;
 
@@ -197,6 +200,8 @@ public class A2AAgentCard {
 
         public Skill() {}
 
+        public String getAgentId() { return agentId; }
+        public void setAgentId(String agentId) { this.agentId = agentId; }
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
         public String getName() { return name; }

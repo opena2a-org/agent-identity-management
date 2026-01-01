@@ -230,26 +230,50 @@ func (s *A2AService) GetAgentCard(ctx context.Context, agentID uuid.UUID) (*doma
 }
 
 // GetEnhancedAgentCard returns the agent card with AIM extensions
+// If no stored card exists, it dynamically builds one from the agent and its registered skills
 func (s *A2AService) GetEnhancedAgentCard(ctx context.Context, agentID uuid.UUID) (*domain.A2AAgentCardParsed, error) {
-	// Get the card
-	card, err := s.cardRepo.GetByAgentID(ctx, agentID)
-	if err != nil {
-		return nil, err
-	}
-	if card == nil {
-		return nil, fmt.Errorf("agent card not found")
-	}
-
-	// Parse the base card
-	var parsed domain.A2AAgentCardParsed
-	if err := json.Unmarshal(card.CardData, &parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse card data: %w", err)
-	}
-
-	// Get the agent for additional info
+	// Get the agent first - required for building the card
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil || agent == nil {
-		return &parsed, nil // Return without AIM extension
+		return nil, fmt.Errorf("agent not found")
+	}
+
+	// Try to get stored card
+	card, _ := s.cardRepo.GetByAgentID(ctx, agentID)
+
+	var parsed domain.A2AAgentCardParsed
+
+	if card != nil && len(card.CardData) > 0 {
+		// Parse the stored card
+		if err := json.Unmarshal(card.CardData, &parsed); err != nil {
+			return nil, fmt.Errorf("failed to parse card data: %w", err)
+		}
+	} else {
+		// Build card dynamically from agent and registered skills
+		parsed = domain.A2AAgentCardParsed{
+			Name:               agent.Name,
+			Description:        agent.Description,
+			URL:                fmt.Sprintf("/api/v1/a2a/agents/%s", agentID),
+			Version:            "1.0.0",
+			DefaultInputModes:  []string{"text"},
+			DefaultOutputModes: []string{"text"},
+		}
+
+		// Get registered skills for this agent
+		skills, _ := s.skillRepo.GetByAgentID(ctx, agentID)
+		if len(skills) > 0 {
+			parsed.Skills = make([]domain.A2ASkillDefinition, 0, len(skills))
+			for _, skill := range skills {
+				parsed.Skills = append(parsed.Skills, domain.A2ASkillDefinition{
+					ID:          skill.SkillID,
+					Name:        skill.Name,
+					Description: skill.Description,
+					Tags:        skill.Tags,
+					InputModes:  skill.InputModes,
+					OutputModes: skill.OutputModes,
+				})
+			}
+		}
 	}
 
 	// Get A2A trust score
@@ -263,7 +287,7 @@ func (s *A2AService) GetEnhancedAgentCard(ctx context.Context, agentID uuid.UUID
 		Capabilities: agent.Capabilities,
 	}
 
-	if card.AttestationSignature != "" {
+	if card != nil && card.AttestationSignature != "" {
 		parsed.AIM.Attestation = &domain.A2AAttestation{
 			Signature: card.AttestationSignature,
 			IssuedAt:  timeValue(card.AttestationIssuedAt),
@@ -337,8 +361,24 @@ func (s *A2AService) SignA2ARequest(
 		return nil, fmt.Errorf("agent not found")
 	}
 
+	// Auto-generate keys if agent doesn't have a server-side private key
+	// This happens when agents were registered with SDK-provided public keys
 	if agent.EncryptedPrivateKey == nil || *agent.EncryptedPrivateKey == "" {
-		return nil, fmt.Errorf("agent has no private key")
+		keyPair, err := crypto.GenerateEd25519KeyPair()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate keys: %w", err)
+		}
+		encodedKeys := crypto.EncodeKeyPair(keyPair)
+
+		encPrivKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
+		}
+		agent.EncryptedPrivateKey = &encPrivKey
+		agent.PublicKey = &encodedKeys.PublicKeyBase64
+		if err := s.agentRepo.Update(agent); err != nil {
+			return nil, fmt.Errorf("failed to update agent keys: %w", err)
+		}
 	}
 
 	// Decrypt private key
@@ -808,6 +848,31 @@ func (s *A2AService) EvaluateA2APolicy(ctx context.Context, req EvaluateA2APolic
 // Skill Operations
 // ============================================================================
 
+// RegisterSkill registers a skill directly for an agent
+func (s *A2AService) RegisterSkill(ctx context.Context, skill *domain.A2ASkill) error {
+	// Check if agent exists
+	agent, err := s.agentRepo.GetByID(skill.AgentID)
+	if err != nil || agent == nil {
+		return fmt.Errorf("agent not found")
+	}
+
+	// Check if skill already exists
+	existing, _ := s.skillRepo.GetBySkillID(ctx, skill.AgentID, skill.SkillID)
+	if existing != nil {
+		// Update existing skill
+		existing.Name = skill.Name
+		existing.Description = skill.Description
+		existing.Tags = skill.Tags
+		existing.InputModes = skill.InputModes
+		existing.OutputModes = skill.OutputModes
+		existing.Examples = skill.Examples
+		return s.skillRepo.Update(ctx, existing)
+	}
+
+	// Create new skill
+	return s.skillRepo.Create(ctx, skill)
+}
+
 // GetAgentSkills returns all skills for an agent
 func (s *A2AService) GetAgentSkills(ctx context.Context, agentID uuid.UUID) ([]*domain.A2ASkill, error) {
 	return s.skillRepo.GetByAgentID(ctx, agentID)
@@ -998,6 +1063,78 @@ func (s *A2AService) ReinstateAgent(ctx context.Context, agentID uuid.UUID) erro
 // GetAgentAttestations returns attestations for an agent
 func (s *A2AService) GetAgentAttestations(ctx context.Context, agentID uuid.UUID, skillID string) ([]*domain.A2AAgentAttestation, error) {
 	return s.attestationRepo.GetByAttestedAgent(ctx, agentID, skillID)
+}
+
+// AttestSkillRequest is the request to manually attest a skill
+type AttestSkillRequest struct {
+	AttestingAgentID uuid.UUID              `json:"attestingAgentId"`
+	AttestedAgentID  uuid.UUID              `json:"attestedAgentId"`
+	SkillID          string                 `json:"skillId"`
+	AttestationType  string                 `json:"attestationType"`
+	Confidence       float64                `json:"confidence"`
+	Evidence         map[string]interface{} `json:"evidence"`
+}
+
+// AttestSkill creates a manual attestation for another agent's skill
+func (s *A2AService) AttestSkill(ctx context.Context, req AttestSkillRequest) (*domain.A2AAgentAttestation, error) {
+	// Validate attesting agent exists and has sufficient trust
+	attestingAgent, err := s.agentRepo.GetByID(req.AttestingAgentID)
+	if err != nil || attestingAgent == nil {
+		return nil, fmt.Errorf("attesting agent not found")
+	}
+	if attestingAgent.TrustScore < DefaultMinTrustForA2AAttestation {
+		return nil, fmt.Errorf("attesting agent trust score too low: %.2f < %.2f", attestingAgent.TrustScore, DefaultMinTrustForA2AAttestation)
+	}
+
+	// Validate attested agent exists
+	attestedAgent, err := s.agentRepo.GetByID(req.AttestedAgentID)
+	if err != nil || attestedAgent == nil {
+		return nil, fmt.Errorf("attested agent not found")
+	}
+
+	// Check if attested agent is revoked
+	revoked, _ := s.revokedRepo.IsRevoked(ctx, req.AttestedAgentID)
+	if revoked {
+		return nil, fmt.Errorf("cannot attest revoked agent")
+	}
+
+	// Serialize evidence
+	var evidenceJSON []byte
+	if req.Evidence != nil {
+		evidenceJSON, _ = json.Marshal(req.Evidence)
+	}
+
+	// Create attestation
+	attestation := &domain.A2AAgentAttestation{
+		AttestingAgentID:   req.AttestingAgentID,
+		AttestedAgentID:    req.AttestedAgentID,
+		SkillID:            req.SkillID,
+		TaskCompleted:      true, // Manual attestation assumes verified
+		AttesterTrustScore: attestingAgent.TrustScore,
+		ExpiresAt:          time.Now().Add(time.Duration(DefaultAttestationValidityDays) * 24 * time.Hour),
+	}
+
+	// Store attestation type and evidence in notes (if field exists) or ignore
+	_ = evidenceJSON // Would be used if schema supports it
+
+	// Sign attestation
+	signature, err := s.signAttestation(ctx, req.AttestingAgentID, attestation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign attestation: %w", err)
+	}
+	attestation.AttestationSignature = signature
+
+	// Save attestation
+	if err := s.attestationRepo.Create(ctx, attestation); err != nil {
+		return nil, fmt.Errorf("failed to save attestation: %w", err)
+	}
+
+	// Check consensus and possibly verify skill
+	if req.SkillID != "" {
+		s.checkAndApplyA2AConsensus(ctx, req.AttestedAgentID, req.SkillID)
+	}
+
+	return attestation, nil
 }
 
 // GetConsensusStatus returns the consensus verification status for a skill

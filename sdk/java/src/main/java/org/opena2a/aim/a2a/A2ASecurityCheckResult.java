@@ -1,7 +1,9 @@
 package org.opena2a.aim.a2a;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 import java.util.List;
 
@@ -66,6 +68,8 @@ public class A2ASecurityCheckResult {
 
     /**
      * A detected security violation.
+     * Supports deserialization from both string values (e.g., "UNSIGNED_REQUEST")
+     * and object values with type/message/severity fields.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Violation {
@@ -80,6 +84,14 @@ public class A2ASecurityCheckResult {
 
         // Default constructor for Jackson
         public Violation() {}
+
+        // String constructor for when backend returns simple string violations
+        @JsonCreator
+        public Violation(String type) {
+            this.type = type;
+            this.message = type.replace("_", " ").toLowerCase();
+            this.severity = "warning";
+        }
 
         // Getters
         public String getType() { return type; }

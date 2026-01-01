@@ -1334,6 +1334,26 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// A2A Policy Evaluation
 	a2a.Post("/policies/evaluate", h.A2A.EvaluatePolicy)
 
+	// A2A Skill Registration (SDK compatibility)
+	a2a.Post("/skills", h.A2A.RegisterSkill)
+
+	// A2A Attestations
+	a2a.Post("/attestations", h.A2A.AttestSkill)
+	a2a.Get("/attestations/:agentId/:skillId", h.A2A.GetSkillAttestations)
+	a2a.Get("/consensus/:agentId/:skillId", h.A2A.GetConsensusStatus)
+
+	// A2A Security Policy Enforcement
+	a2a.Post("/security/check", h.A2A.CheckSecurity)
+	a2a.Get("/security/settings", h.A2A.GetSecuritySettings)
+	a2a.Put("/security/settings", middleware.ManagerMiddleware(), h.A2A.UpdateSecuritySettings)
+
+	// SDK Compatibility Routes (alternative paths that SDKs expect)
+	a2a.Post("/sign", h.A2A.SignRequestAlt)
+	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
+	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
+	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                  // SDK calls /cards/:id instead of /agents/:id/card
+	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
+
 	// A2A Maintenance (admin only)
 	a2aAdmin := v1.Group("/a2a/maintenance")
 	a2aAdmin.Use(middleware.AuthMiddleware(jwtService))
