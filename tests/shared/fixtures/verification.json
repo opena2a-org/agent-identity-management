@@ -1,0 +1,65 @@
+{
+  "verifyActionRequest": {
+    "simple": {
+      "action": "db:read",
+      "resource": "users_table"
+    },
+    "withContext": {
+      "action": "api:call",
+      "resource": "external-api",
+      "resourceType": "http",
+      "context": {
+        "method": "POST",
+        "endpoint": "/data",
+        "ip": "192.168.1.100"
+      },
+      "riskLevel": "medium"
+    },
+    "highRisk": {
+      "action": "db:delete",
+      "resource": "critical_data",
+      "resourceType": "database",
+      "riskLevel": "critical"
+    }
+  },
+  "verifyActionResponse": {
+    "allowed": {
+      "verified": true,
+      "agentId": "agent-a1b2c3d4",
+      "agentName": "test-agent",
+      "trustScore": 0.85,
+      "riskLevel": "low",
+      "actionAllowed": true,
+      "timestamp": "2024-01-15T12:00:00Z",
+      "eventId": "evt-verification-123"
+    },
+    "denied": {
+      "verified": false,
+      "agentId": "agent-low-trust",
+      "agentName": "low-trust-agent",
+      "trustScore": 0.25,
+      "riskLevel": "high",
+      "actionAllowed": false,
+      "denialReason": "Trust score 0.25 below required 0.70 for high-risk action",
+      "timestamp": "2024-01-15T12:00:00Z",
+      "eventId": "evt-verification-456"
+    },
+    "deniedCritical": {
+      "verified": false,
+      "agentId": "agent-a1b2c3d4",
+      "agentName": "test-agent",
+      "trustScore": 0.85,
+      "riskLevel": "critical",
+      "actionAllowed": false,
+      "denialReason": "Critical actions require trust score >= 0.95",
+      "timestamp": "2024-01-15T12:00:00Z",
+      "eventId": "evt-verification-789"
+    }
+  },
+  "trustScoreThresholds": {
+    "low": 0.3,
+    "medium": 0.5,
+    "high": 0.7,
+    "critical": 0.95
+  }
+}

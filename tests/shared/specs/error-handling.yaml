@@ -1,0 +1,193 @@
+# AIM SDK Error Handling Specification
+# All SDKs must implement consistent error handling
+
+version: "1.0"
+description: "Error handling behaviors that must be consistent across all SDKs"
+
+errors:
+  # === Base Error ===
+  aim_error:
+    - id: aim_error_properties
+      description: "Base error has required properties"
+      properties:
+        - message: string
+        - code: string
+        - statusCode: number (optional)
+        - details: object (optional)
+      assertions:
+        - "Error extends base language Error class"
+        - "Error has stack trace"
+
+  # === Authentication Error ===
+  authentication_error:
+    - id: auth_error_defaults
+      description: "AuthenticationError has correct defaults"
+      assertions:
+        - "Default message is 'Authentication failed'"
+        - "Code is 'AUTHENTICATION_ERROR'"
+        - "Status code is 401"
+
+    - id: auth_error_custom_message
+      description: "AuthenticationError accepts custom message"
+      input:
+        message: "Token expired"
+      assertions:
+        - "Error message matches input"
+
+  # === Authorization Error ===
+  authorization_error:
+    - id: authz_error_defaults
+      description: "AuthorizationError has correct defaults"
+      assertions:
+        - "Default message is 'Authorization failed'"
+        - "Code is 'AUTHORIZATION_ERROR'"
+        - "Status code is 403"
+
+  # === Action Denied Error ===
+  action_denied_error:
+    - id: action_denied_properties
+      description: "ActionDeniedError includes action details"
+      input:
+        action: "db:delete"
+        reason: "Trust score too low"
+        trustScore: 0.35
+      assertions:
+        - "Error message includes action name"
+        - "Error message includes reason"
+        - "action property matches input"
+        - "reason property matches input"
+        - "trustScore property matches input"
+        - "Status code is 403"
+
+  # === Verification Error ===
+  verification_error:
+    - id: verification_error_defaults
+      description: "VerificationError has correct defaults"
+      assertions:
+        - "Default message is 'Verification failed'"
+        - "Code is 'VERIFICATION_ERROR'"
+        - "Status code is 400"
+
+  # === Configuration Error ===
+  configuration_error:
+    - id: config_error_properties
+      description: "ConfigurationError for invalid config"
+      input:
+        message: "Missing API key"
+      assertions:
+        - "Code is 'CONFIGURATION_ERROR'"
+        - "No status code (not HTTP related)"
+
+  # === Network Error ===
+  network_error:
+    - id: network_error_wraps_original
+      description: "NetworkError wraps original error"
+      input:
+        message: "Connection refused"
+        originalError: Error("ECONNREFUSED")
+      assertions:
+        - "Code is 'NETWORK_ERROR'"
+        - "originalError property preserves original"
+
+  # === Not Found Error ===
+  not_found_error:
+    - id: not_found_properties
+      description: "NotFoundError includes resource info"
+      input:
+        resourceType: "Agent"
+        resourceId: "agent-123"
+      assertions:
+        - "Message includes resource type and ID"
+        - "Code is 'NOT_FOUND'"
+        - "Status code is 404"
+        - "resourceType property matches input"
+        - "resourceId property matches input"
+
+  # === Rate Limit Error ===
+  rate_limit_error:
+    - id: rate_limit_properties
+      description: "RateLimitError includes rate info"
+      input:
+        retryAfter: 60
+        limit: 100
+        remaining: 0
+      assertions:
+        - "Code is 'RATE_LIMIT'"
+        - "Status code is 429"
+        - "retryAfter property matches input"
+        - "limit property matches input"
+        - "remaining property matches input"
+
+  # === API Error Parsing ===
+  parse_api_error:
+    - id: parse_401_response
+      description: "401 response parsed as AuthenticationError"
+      input:
+        statusCode: 401
+        body: { message: "Invalid credentials" }
+      assertions:
+        - "Returns AuthenticationError instance"
+        - "Message from body is used"
+
+    - id: parse_403_response
+      description: "403 response parsed as AuthorizationError"
+      input:
+        statusCode: 403
+        body: { message: "Access denied" }
+      assertions:
+        - "Returns AuthorizationError instance"
+
+    - id: parse_404_response
+      description: "404 response parsed as NotFoundError"
+      input:
+        statusCode: 404
+        body: { message: "Resource not found" }
+      assertions:
+        - "Returns NotFoundError instance"
+
+    - id: parse_429_response
+      description: "429 response parsed as RateLimitError"
+      input:
+        statusCode: 429
+        body:
+          message: "Too many requests"
+          retryAfter: 30
+          limit: 100
+          remaining: 0
+      assertions:
+        - "Returns RateLimitError instance"
+        - "retryAfter extracted from body"
+
+    - id: parse_unknown_response
+      description: "Unknown status parsed as generic AIMError"
+      input:
+        statusCode: 500
+        body: { message: "Internal error" }
+      assertions:
+        - "Returns AIMError instance"
+        - "Code is 'API_ERROR'"
+
+error_inheritance:
+  - id: all_errors_extend_base
+    description: "All errors extend base Error class"
+    assertions:
+      - "AuthenticationError instanceof Error"
+      - "AuthorizationError instanceof Error"
+      - "ActionDeniedError instanceof Error"
+      - "VerificationError instanceof Error"
+      - "ConfigurationError instanceof Error"
+      - "NetworkError instanceof Error"
+      - "NotFoundError instanceof Error"
+      - "RateLimitError instanceof Error"
+
+  - id: all_errors_extend_aim_error
+    description: "All specialized errors extend AIMError"
+    assertions:
+      - "AuthenticationError instanceof AIMError"
+      - "AuthorizationError instanceof AIMError"
+      - "ActionDeniedError instanceof AIMError"
+      - "VerificationError instanceof AIMError"
+      - "ConfigurationError instanceof AIMError"
+      - "NetworkError instanceof AIMError"
+      - "NotFoundError instanceof AIMError"
+      - "RateLimitError instanceof AIMError"

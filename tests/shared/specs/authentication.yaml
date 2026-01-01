@@ -1,0 +1,239 @@
+# Authentication Behavior Specification
+# OAuth and credential management behaviors
+
+version: "1.0"
+description: "Authentication behaviors that must be consistent across all SDKs"
+
+behaviors:
+  # === OAuth Token Management ===
+  oauth:
+    - id: oauth_token_acquisition
+      description: "Acquire OAuth token using client credentials"
+      preconditions:
+        - "Valid agent credentials configured"
+      assertions:
+        - "Token endpoint is called"
+        - "grant_type is 'client_credentials'"
+        - "client_assertion is JWT-like signed token"
+        - "Access token is returned"
+
+    - id: oauth_token_caching
+      description: "Tokens are cached and reused"
+      assertions:
+        - "First call acquires token"
+        - "Second call returns cached token"
+        - "Only one network request made"
+
+    - id: oauth_token_refresh
+      description: "Expired tokens are refreshed"
+      preconditions:
+        - "Cached token is expired"
+      assertions:
+        - "New token is acquired"
+        - "Cache is updated"
+
+    - id: oauth_concurrent_requests
+      description: "Concurrent requests share single token acquisition"
+      assertions:
+        - "Multiple concurrent getAccessToken() calls"
+        - "Only one token acquisition request made"
+        - "All callers receive same token"
+
+    - id: oauth_clear_token
+      description: "Clear cached token"
+      preconditions:
+        - "Token is cached"
+      actions:
+        - "Call clearToken()"
+      assertions:
+        - "hasValidToken() returns false"
+        - "Next getAccessToken() acquires new token"
+
+  # === Credential Loading ===
+  credentials:
+    - id: credentials_from_environment
+      description: "Load credentials from environment variables"
+      environment:
+        AIM_AGENT_ID: "agent-123"
+        AIM_PRIVATE_KEY: "base64-private-key"
+        AIM_PUBLIC_KEY: "base64-public-key"
+        AIM_ORGANIZATION_ID: "org-456"
+      assertions:
+        - "Credentials object is returned"
+        - "All fields are populated"
+
+    - id: credentials_env_missing
+      description: "Return null when env vars missing"
+      environment:
+        AIM_AGENT_ID: "agent-123"
+        # Other vars not set
+      assertions:
+        - "Returns null"
+
+    - id: credentials_from_file
+      description: "Load credentials from JSON file"
+      input:
+        filePath: "/path/to/credentials.json"
+        fileContent:
+          agentId: "agent-123"
+          privateKey: "base64-private-key"
+          publicKey: "base64-public-key"
+          organizationId: "org-456"
+      assertions:
+        - "Credentials object is returned"
+        - "All fields match file content"
+
+    - id: credentials_save_to_file
+      description: "Save credentials to JSON file"
+      input:
+        credentials:
+          agentId: "agent-123"
+          privateKey: "base64-private-key"
+          publicKey: "base64-public-key"
+          organizationId: "org-456"
+        filePath: "/path/to/save.json"
+      assertions:
+        - "File is created"
+        - "File permissions are restrictive (0600)"
+        - "Parent directory created if needed"
+
+  # === Credential Type Detection ===
+  credential_detection:
+    - id: detect_sdk_oauth
+      description: "Detect SDK OAuth credentials"
+      input:
+        data:
+          refreshToken: "refresh-token"
+          sdkTokenId: "sdk-123"
+      assertions:
+        - "Returns SDK_OAUTH type"
+
+    - id: detect_sdk_oauth_snake_case
+      description: "Detect SDK OAuth with snake_case"
+      input:
+        data:
+          refresh_token: "refresh-token"
+          sdk_token_id: "sdk-123"
+      assertions:
+        - "Returns SDK_OAUTH type"
+
+    - id: detect_agent_credentials
+      description: "Detect agent credentials"
+      input:
+        data:
+          agentId: "agent-123"
+          privateKey: "private-key"
+          publicKey: "public-key"
+      assertions:
+        - "Returns AGENT type"
+
+    - id: detect_unknown
+      description: "Unknown format returns UNKNOWN"
+      input:
+        data:
+          foo: "bar"
+      assertions:
+        - "Returns UNKNOWN type"
+
+  # === Agent Credential Management ===
+  agent_credentials:
+    - id: save_agent_credentials
+      description: "Save agent credentials by name"
+      input:
+        agentName: "my-agent"
+        credentials:
+          agentId: "agent-123"
+          privateKey: "key"
+      assertions:
+        - "File created at ~/.aim/agents/my-agent.json"
+        - "Returns true"
+
+    - id: load_agent_credentials
+      description: "Load agent credentials by name"
+      preconditions:
+        - "Agent credentials file exists"
+      input:
+        agentName: "my-agent"
+      assertions:
+        - "Returns credentials object"
+
+    - id: load_missing_credentials
+      description: "Loading missing agent returns null"
+      input:
+        agentName: "nonexistent"
+      assertions:
+        - "Returns null"
+
+    - id: list_agent_credentials
+      description: "List all saved agent credentials"
+      preconditions:
+        - "Multiple agent credential files exist"
+      assertions:
+        - "Returns array of agent info"
+        - "Each has 'name' property"
+
+    - id: delete_agent_credentials
+      description: "Delete agent credentials"
+      preconditions:
+        - "Agent credentials file exists"
+      input:
+        agentName: "to-delete"
+      assertions:
+        - "File is removed"
+        - "Returns true"
+
+    - id: delete_nonexistent
+      description: "Deleting nonexistent agent succeeds silently"
+      input:
+        agentName: "nonexistent"
+      assertions:
+        - "Returns true (no error)"
+
+cryptography:
+  ed25519:
+    - id: generate_key_pair
+      description: "Generate Ed25519 key pair"
+      assertions:
+        - "Private key is 32 bytes"
+        - "Public key is 32 bytes"
+        - "Keys are unique per generation"
+
+    - id: sign_and_verify
+      description: "Sign message and verify signature"
+      input:
+        message: "Hello, World!"
+      assertions:
+        - "Signature is 64 bytes"
+        - "Verification returns true"
+
+    - id: verify_wrong_key
+      description: "Verification fails with wrong public key"
+      assertions:
+        - "Verification returns false"
+
+    - id: verify_tampered_message
+      description: "Verification fails with tampered message"
+      assertions:
+        - "Verification returns false"
+
+    - id: base64_encoding
+      description: "Base64 encode/decode round-trip"
+      assertions:
+        - "Decoded data matches original"
+
+    - id: hex_encoding
+      description: "Hex encode/decode round-trip"
+      assertions:
+        - "Decoded data matches original"
+
+    - id: request_signature
+      description: "Create request signature"
+      input:
+        method: "POST"
+        path: "/api/v1/verify"
+        body: { action: "db:read" }
+      assertions:
+        - "Returns signature string"
+        - "Returns timestamp"
+        - "Different body produces different signature"
+        - "Different method produces different signature"
