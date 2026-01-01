@@ -271,6 +271,7 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 
 // GetA2ATrustScore returns the A2A-specific trust score for an agent
 // GET /api/v1/a2a/agents/:id/trust-score
+// Auto-computes trust score if none exists or score is zero
 func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -279,11 +280,20 @@ func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 		})
 	}
 
+	// First try to get existing trust score
 	score, err := h.a2aService.GetA2ATrustScore(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Trust score not found",
-		})
+	if err != nil || score == nil || score.A2ATrustScore == nil || *score.A2ATrustScore == 0 {
+		// Auto-compute if no score exists or score is zero
+		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
+		if computeErr != nil {
+			// If computation fails, return zero score with message
+			return c.JSON(fiber.Map{
+				"agentId": agentID,
+				"score":   0.0,
+				"message": "Could not compute trust score: " + computeErr.Error(),
+			})
+		}
+		return c.JSON(computedScore)
 	}
 
 	return c.JSON(score)
