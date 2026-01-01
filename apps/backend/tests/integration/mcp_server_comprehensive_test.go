@@ -23,9 +23,8 @@ func TestMCPServer_CreateWithAllFields(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-full-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create agent first (required for MCP server registration)
 	agentBody := map[string]interface{}{
@@ -78,9 +77,8 @@ func TestMCPServer_CreateMinimalFields(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-min-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server with minimal fields
 	uniqueURL := fmt.Sprintf("https://mcp-minimal-%d.example.com", time.Now().UnixNano())
@@ -115,9 +113,8 @@ func TestMCPServer_DuplicateURL_Returns409(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-dup-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create first MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-duplicate-test-%d.example.com", time.Now().UnixNano())
@@ -164,9 +161,8 @@ func TestMCPServer_GetByName(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-byname-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	serverName := fmt.Sprintf("Unique Name Server %d", time.Now().UnixNano())
@@ -205,9 +201,8 @@ func TestMCPServer_GetByName_NotFound(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-byname-nf-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Try to get non-existent server by name
 	path := "/api/v1/mcp-servers/by-name?name=NonExistentServer123"
@@ -227,9 +222,8 @@ func TestMCPServer_GetByName_MissingParam(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-byname-mp-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Try to get without name parameter
 	resp := tc.AssertStatusCode("GET", "/api/v1/mcp-servers/by-name", nil, userToken, 400)
@@ -252,9 +246,8 @@ func TestMCPServer_GetCapabilities(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-caps-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server with capabilities
 	uniqueURL := fmt.Sprintf("https://mcp-caps-%d.example.com", time.Now().UnixNano())
@@ -290,9 +283,8 @@ func TestMCPServer_DetectCapabilities(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-detect-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-detect-%d.example.com", time.Now().UnixNano())
@@ -331,9 +323,8 @@ func TestMCPServer_GetVerificationStatus(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-vstat-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-vstat-%d.example.com", time.Now().UnixNano())
@@ -370,9 +361,8 @@ func TestMCPServer_VerifyServer(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-verify-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server with verification URL
 	uniqueURL := fmt.Sprintf("https://mcp-verify-%d.example.com", time.Now().UnixNano())
@@ -412,9 +402,8 @@ func TestMCPServer_AddPublicKey(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-key-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-key-%d.example.com", time.Now().UnixNano())
@@ -459,9 +448,8 @@ func TestMCPServer_GetConnectedAgents(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-conn-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server first
 	uniqueURL := fmt.Sprintf("https://mcp-conn-%d.example.com", time.Now().UnixNano())
@@ -497,9 +485,8 @@ func TestMCPServer_GetAgents(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-agents-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	serverName := fmt.Sprintf("Agent Lookup Server %d", time.Now().UnixNano())
@@ -553,9 +540,8 @@ func TestMCPServer_GetVerificationEvents(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-vevents-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-vevents-%d.example.com", time.Now().UnixNano())
@@ -591,9 +577,8 @@ func TestMCPServer_GetVerificationEvents_Pagination(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-vepag-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-vepag-%d.example.com", time.Now().UnixNano())
@@ -633,9 +618,8 @@ func TestMCPServer_GetAuditLogs(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-audit-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-audit-%d.example.com", time.Now().UnixNano())
@@ -673,9 +657,8 @@ func TestMCPServer_GetAuditLogs_Pagination(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-audpag-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server
 	uniqueURL := fmt.Sprintf("https://mcp-audpag-%d.example.com", time.Now().UnixNano())
@@ -715,9 +698,8 @@ func TestMCPServer_VerifyCapability(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-vcap-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create MCP server with capabilities
 	uniqueURL := fmt.Sprintf("https://mcp-vcap-%d.example.com", time.Now().UnixNano())
@@ -847,9 +829,8 @@ func TestMCPServer_Search(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-search-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create a few MCP servers with distinctive names
 	uniquePrefix := fmt.Sprintf("SearchTest%d", time.Now().UnixNano())
@@ -887,9 +868,8 @@ func TestMCPServer_ListServers(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-list-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Create a few MCP servers
 	var serverIDs []string
@@ -936,9 +916,8 @@ func TestMCPServer_InvalidID(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-invalid-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Test with invalid UUID
 	invalidID := "not-a-valid-uuid"
@@ -969,9 +948,8 @@ func TestMCPServer_NonexistentID(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	email := fmt.Sprintf("mcp-nonexist-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	require.NoError(t, tc.LoginAsAdmin())
+	userToken := tc.AdminToken
 
 	// Test with valid UUID that doesn't exist
 	nonexistentID := "00000000-0000-0000-0000-000000000001"

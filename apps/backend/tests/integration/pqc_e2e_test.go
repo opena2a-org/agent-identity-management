@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,6 +78,7 @@ func TestPQCKeyRegistrationFlow(t *testing.T) {
 		"name":        fmt.Sprintf("pqc-test-agent-%d", time.Now().UnixNano()),
 		"displayName": "PQC Test Agent",
 		"description": "Test agent for PQC integration tests",
+		"agentType":   "ai_agent",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
 	require.NoError(t, err, "Should create agent")
@@ -91,7 +94,7 @@ func TestPQCKeyRegistrationFlow(t *testing.T) {
 	var keyInfo map[string]interface{}
 	require.NoError(t, json.Unmarshal(keyInfoResp, &keyInfo))
 
-	assert.Equal(t, "Ed25519", keyInfo["effectiveAlgorithm"], "Should use Ed25519 initially")
+	assert.Equal(t, "not_configured", keyInfo["pqcStatus"], "PQC should not be configured initially")
 	assert.False(t, keyInfo["hybridModeEnabled"].(bool), "Hybrid mode should be disabled")
 
 	// Generate ML-DSA-65 keypair
@@ -101,15 +104,15 @@ func TestPQCKeyRegistrationFlow(t *testing.T) {
 
 	// Register PQC key
 	registerResp, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-		"pqcPublicKey":     base64.StdEncoding.EncodeToString(mldsaPubKey.Bytes()),
-		"algorithm":        "ML-DSA-65",
-		"enableHybridMode": true,
+		"publicKey":    base64.StdEncoding.EncodeToString(mldsaPubKey.Bytes()),
+		"algorithm":    "ML-DSA-65",
+		"enableHybrid": true,
 	}, tc.AdminToken)
 	require.NoError(t, err, "Should register PQC key")
 
 	var registerResult map[string]interface{}
 	require.NoError(t, json.Unmarshal(registerResp, &registerResult))
-	assert.True(t, registerResult["success"].(bool), "PQC key registration should succeed")
+	assert.Equal(t, "PQC key registered successfully", registerResult["message"], "PQC key registration should succeed")
 
 	// Verify PQC key is now registered
 	keyInfoResp2, err := tc.Get(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), tc.AdminToken)
@@ -118,7 +121,7 @@ func TestPQCKeyRegistrationFlow(t *testing.T) {
 	var keyInfo2 map[string]interface{}
 	require.NoError(t, json.Unmarshal(keyInfoResp2, &keyInfo2))
 
-	assert.Equal(t, "Ed25519+ML-DSA-65", keyInfo2["effectiveAlgorithm"], "Should use hybrid mode")
+	assert.Equal(t, "hybrid_mode", keyInfo2["pqcStatus"], "Should be in hybrid mode")
 	assert.True(t, keyInfo2["hybridModeEnabled"].(bool), "Hybrid mode should be enabled")
 	assert.Equal(t, "ML-DSA-65", keyInfo2["pqcKeyAlgorithm"], "Should have ML-DSA-65 key")
 
@@ -148,6 +151,7 @@ func TestHybridModeToggle(t *testing.T) {
 		"name":        fmt.Sprintf("hybrid-toggle-agent-%d", time.Now().UnixNano()),
 		"displayName": "Hybrid Toggle Agent",
 		"description": "Test agent for hybrid mode toggle",
+		"agentType":   "ai_agent",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
 	require.NoError(t, err)
@@ -158,15 +162,15 @@ func TestHybridModeToggle(t *testing.T) {
 
 	// Register PQC key with hybrid mode enabled
 	_, err = tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-		"pqcPublicKey":     base64.StdEncoding.EncodeToString(mldsaPubKey.Bytes()),
-		"algorithm":        "ML-DSA-65",
-		"enableHybridMode": true,
+		"publicKey":    base64.StdEncoding.EncodeToString(mldsaPubKey.Bytes()),
+		"algorithm":    "ML-DSA-65",
+		"enableHybrid": true,
 	}, tc.AdminToken)
 	require.NoError(t, err)
 
 	// Disable hybrid mode
 	disableResp, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/hybrid-mode", agentID), map[string]interface{}{
-		"enabled": false,
+		"enable": false,
 	}, tc.AdminToken)
 	require.NoError(t, err)
 
@@ -174,17 +178,17 @@ func TestHybridModeToggle(t *testing.T) {
 	require.NoError(t, json.Unmarshal(disableResp, &disableResult))
 	assert.False(t, disableResult["hybridModeEnabled"].(bool), "Hybrid mode should be disabled")
 
-	// Verify effective algorithm changed
+	// Verify PQC status changed
 	keyInfoResp, err := tc.Get(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), tc.AdminToken)
 	require.NoError(t, err)
 
 	var keyInfo map[string]interface{}
 	require.NoError(t, json.Unmarshal(keyInfoResp, &keyInfo))
-	assert.Equal(t, "ML-DSA-65", keyInfo["effectiveAlgorithm"], "Should use ML-DSA-65 only")
+	assert.Equal(t, "pqc_only", keyInfo["pqcStatus"], "Should be pqc_only mode")
 
 	// Re-enable hybrid mode
 	enableResp, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/hybrid-mode", agentID), map[string]interface{}{
-		"enabled": true,
+		"enable": true,
 	}, tc.AdminToken)
 	require.NoError(t, err)
 
@@ -216,6 +220,7 @@ func TestPQCKeyRotation(t *testing.T) {
 		"name":        fmt.Sprintf("key-rotation-agent-%d", time.Now().UnixNano()),
 		"displayName": "Key Rotation Agent",
 		"description": "Test agent for key rotation",
+		"agentType":   "ai_agent",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
 	require.NoError(t, err)
@@ -226,9 +231,9 @@ func TestPQCKeyRotation(t *testing.T) {
 
 	// Register first PQC key
 	_, err = tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-		"pqcPublicKey":     base64.StdEncoding.EncodeToString(mldsaPubKey1.Bytes()),
-		"algorithm":        "ML-DSA-65",
-		"enableHybridMode": true,
+		"publicKey":    base64.StdEncoding.EncodeToString(mldsaPubKey1.Bytes()),
+		"algorithm":    "ML-DSA-65",
+		"enableHybrid": true,
 	}, tc.AdminToken)
 	require.NoError(t, err)
 
@@ -242,14 +247,14 @@ func TestPQCKeyRotation(t *testing.T) {
 
 	// Rotate to second PQC key
 	rotateResp, err := tc.Put(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-		"newPqcPublicKey": base64.StdEncoding.EncodeToString(mldsaPubKey2.Bytes()),
-		"algorithm":       "ML-DSA-65",
+		"newPublicKey": base64.StdEncoding.EncodeToString(mldsaPubKey2.Bytes()),
+		"algorithm":    "ML-DSA-65",
 	}, tc.AdminToken)
 	require.NoError(t, err)
 
 	var rotateResult map[string]interface{}
 	require.NoError(t, json.Unmarshal(rotateResp, &rotateResult))
-	assert.True(t, rotateResult["success"].(bool), "Key rotation should succeed")
+	assert.Equal(t, "PQC key rotated successfully", rotateResult["message"], "Key rotation should succeed")
 
 	// Verify key was rotated
 	keyInfo2Resp, err := tc.Get(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), tc.AdminToken)
@@ -278,16 +283,29 @@ func TestAllMLDSAVariants(t *testing.T) {
 			edPubKey, _, err := ed25519.GenerateKey(rand.Reader)
 			require.NoError(t, err)
 
-			// Generate ML-DSA key (using ML-DSA-65 for all variants in test)
-			// In real implementation, would use variant-specific generators
-			mldsaPubKey, _, err := mldsa65.GenerateKey(rand.Reader)
-			require.NoError(t, err)
+			// Generate ML-DSA key with variant-specific generator
+			var mldsaPubKeyBytes []byte
+			switch variant {
+			case "ML-DSA-44":
+				pubKey, _, err := mldsa44.GenerateKey(rand.Reader)
+				require.NoError(t, err)
+				mldsaPubKeyBytes = pubKey.Bytes()
+			case "ML-DSA-65":
+				pubKey, _, err := mldsa65.GenerateKey(rand.Reader)
+				require.NoError(t, err)
+				mldsaPubKeyBytes = pubKey.Bytes()
+			case "ML-DSA-87":
+				pubKey, _, err := mldsa87.GenerateKey(rand.Reader)
+				require.NoError(t, err)
+				mldsaPubKeyBytes = pubKey.Bytes()
+			}
 
 			// Create agent
 			agentResp, err := tc.Post("/api/v1/agents", map[string]interface{}{
 				"name":        fmt.Sprintf("variant-test-%s-%d", variant, time.Now().UnixNano()),
 				"displayName": fmt.Sprintf("Variant Test %s", variant),
 				"description": fmt.Sprintf("Test agent for %s", variant),
+				"agentType":   "ai_agent",
 				"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 			}, tc.AdminToken)
 			require.NoError(t, err)
@@ -298,15 +316,15 @@ func TestAllMLDSAVariants(t *testing.T) {
 
 			// Register PQC key with specific variant
 			registerResp, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-				"pqcPublicKey":     base64.StdEncoding.EncodeToString(mldsaPubKey.Bytes()),
-				"algorithm":        variant,
-				"enableHybridMode": true,
+				"publicKey":    base64.StdEncoding.EncodeToString(mldsaPubKeyBytes),
+				"algorithm":    variant,
+				"enableHybrid": true,
 			}, tc.AdminToken)
 			require.NoError(t, err, "Should register %s key", variant)
 
 			var result map[string]interface{}
 			require.NoError(t, json.Unmarshal(registerResp, &result))
-			assert.True(t, result["success"].(bool), "%s key registration should succeed", variant)
+			assert.Equal(t, "PQC key registered successfully", result["message"], "%s key registration should succeed", variant)
 
 			t.Logf("Successfully registered %s key for agent %s", variant, agentID)
 		})
@@ -330,6 +348,7 @@ func TestBackwardCompatibility(t *testing.T) {
 		"name":        fmt.Sprintf("ed25519-only-agent-%d", time.Now().UnixNano()),
 		"displayName": "Ed25519 Only Agent",
 		"description": "Test agent for backward compatibility",
+		"agentType":   "ai_agent",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
 	require.NoError(t, err, "Should create Ed25519-only agent")
@@ -345,9 +364,9 @@ func TestBackwardCompatibility(t *testing.T) {
 	var keyInfo map[string]interface{}
 	require.NoError(t, json.Unmarshal(keyInfoResp, &keyInfo))
 
-	assert.Equal(t, "Ed25519", keyInfo["effectiveAlgorithm"], "Should default to Ed25519")
+	assert.Equal(t, "not_configured", keyInfo["pqcStatus"], "PQC should not be configured")
 	assert.False(t, keyInfo["hybridModeEnabled"].(bool), "Hybrid mode should be disabled")
-	assert.Empty(t, keyInfo["pqcPublicKey"], "Should have no PQC key")
+	assert.Nil(t, keyInfo["pqcPublicKey"], "Should have no PQC key")
 
 	t.Logf("Backward compatibility verified: Ed25519-only agent %s works correctly", agentID)
 }
@@ -369,6 +388,7 @@ func TestInvalidPQCKeyRejection(t *testing.T) {
 		"name":        fmt.Sprintf("invalid-key-test-%d", time.Now().UnixNano()),
 		"displayName": "Invalid Key Test Agent",
 		"description": "Test agent for invalid key rejection",
+		"agentType":   "ai_agent",
 		"publicKey":   base64.StdEncoding.EncodeToString(edPubKey),
 	}, tc.AdminToken)
 	require.NoError(t, err)
@@ -411,24 +431,15 @@ func TestInvalidPQCKeyRejection(t *testing.T) {
 
 	for _, tc2 := range testCases {
 		t.Run(tc2.name, func(t *testing.T) {
-			registerResp, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
-				"pqcPublicKey":     tc2.key,
-				"algorithm":        tc2.algorithm,
-				"enableHybridMode": true,
+			_, err := tc.Post(fmt.Sprintf("/api/v1/agents/%s/pqc-key", agentID), map[string]interface{}{
+				"publicKey":    tc2.key,
+				"algorithm":    tc2.algorithm,
+				"enableHybrid": true,
 			}, tc.AdminToken)
 
 			if tc2.wantError {
-				// The request might fail with error or return error in response
-				if err != nil {
-					// Expected: request failed
-					return
-				}
-				// Check response for error
-				var result map[string]interface{}
-				json.Unmarshal(registerResp, &result)
-				if success, ok := result["success"].(bool); ok {
-					assert.False(t, success, "Should reject invalid key: %s", tc2.name)
-				}
+				// The request should fail with error status code
+				require.Error(t, err, "Should reject invalid key: %s", tc2.name)
 			}
 		})
 	}

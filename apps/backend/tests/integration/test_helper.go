@@ -113,9 +113,10 @@ func (tc *TestContext) LoginAsAdmin() error {
 // CreateTestUser creates a test user and returns token
 func (tc *TestContext) CreateTestUser(email, password string) (string, error) {
 	body := map[string]interface{}{
-		"email":    email,
-		"password": password,
-		"name":     "Test User",
+		"email":     email,
+		"password":  password,
+		"firstName": "Test",
+		"lastName":  "User",
 	}
 
 	// Use public registration endpoint (doesn't require authentication)
