@@ -13,7 +13,7 @@ Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threa
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
 [![Java](https://img.shields.io/badge/Java-17+-ED8B00?logo=openjdk)](https://openjdk.org/)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 [📚 Documentation](https://opena2a.org/docs) • [📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
@@ -597,7 +597,7 @@ Good first issues: Check the issues labeled `good-first-issue`
 
 ## License
 
-AGPL-3.0 — See [LICENSE](LICENSE)
+Apache-2.0 — See [LICENSE](LICENSE)
 
 ---
 

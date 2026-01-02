@@ -290,4 +290,4 @@ Your contributions make AIM better for everyone. We appreciate your time and eff
 
 **Questions?** Open an issue or start a discussion. We're here to help!
 
-**License**: This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see [LICENSE](LICENSE) for details.
+**License**: This project is licensed under the Apache License 2.0 (Apache-2.0) - see [LICENSE](LICENSE) for details.
