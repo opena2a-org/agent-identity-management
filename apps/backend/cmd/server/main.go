@@ -40,8 +40,8 @@ import (
 // @contact.name OpenA2A Team
 // @contact.url https://opena2a.org
 // @contact.email info@opena2a.org
-// @license.name AGPL-3.0
-// @license.url https://www.gnu.org/licenses/agpl-3.0.html
+// @license.name Apache-2.0
+// @license.url https://www.apache.org/licenses/LICENSE-2.0
 // @host localhost:8080
 // @BasePath /api/v1
 func main() {

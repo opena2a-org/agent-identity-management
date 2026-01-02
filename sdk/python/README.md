@@ -575,4 +575,4 @@ print(aim_sdk.__version__)  # "1.14.0"
 
 ## License
 
-GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](../../LICENSE) for details
+Apache License 2.0 (Apache-2.0) - See [LICENSE](../../LICENSE) for details

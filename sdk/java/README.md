@@ -449,4 +449,4 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 
 ## License
 
-GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](../../LICENSE) for details
+Apache License 2.0 (Apache-2.0) - See [LICENSE](../../LICENSE) for details
