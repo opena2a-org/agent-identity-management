@@ -2981,7 +2981,6 @@ def register_agent(
     auto_detect_mcp: bool = False,  # Explicitly opt-in to scan user's Claude config for MCP servers
     force_new: bool = False,
     sdk_token_id: Optional[str] = None,
-    use_hybrid: bool = False,  # Use hybrid Ed25519+ML-DSA-65 post-quantum cryptography
     # Backward compatibility alias
     talks_to: Optional[list] = None,  # DEPRECATED: Use mcp_servers instead
 ) -> AIMClient:
@@ -3038,11 +3037,6 @@ def register_agent(
             Requires explicit opt-in for privacy - set to True to scan Claude config files.
         force_new: Force new registration even if credentials exist
         sdk_token_id: SDK token for usage tracking (auto-loaded if available)
-        use_hybrid: Use hybrid Ed25519+ML-DSA-65 post-quantum cryptography (default: False).
-            When enabled, generates both classical (Ed25519) and post-quantum (ML-DSA-65)
-            key pairs. The classical key is used for current backend compatibility, while
-            the full hybrid key pair is stored for future quantum resistance.
-            Requires liboqs-python for real ML-DSA-65; falls back to simulation otherwise.
         talks_to: DEPRECATED - Use mcp_servers instead (kept for backward compatibility)
 
     Security:
@@ -3380,8 +3374,7 @@ def register_agent(
                 registration_data=registration_data,
                 sdk_token_id=sdk_token_id,
                 mcp_server_names=mcp_server_names,
-                mcp_full_definitions=mcp_full_definitions,
-                use_hybrid=use_hybrid
+                mcp_full_definitions=mcp_full_definitions
             )
         else:
             # API Key Mode: Use public endpoint with API key header
@@ -3392,8 +3385,7 @@ def register_agent(
                 registration_data=registration_data,
                 sdk_token_id=sdk_token_id,
                 mcp_server_names=mcp_server_names,
-                mcp_full_definitions=mcp_full_definitions,
-                use_hybrid=use_hybrid
+                mcp_full_definitions=mcp_full_definitions
             )
 
     except requests.RequestException as e:
@@ -3409,27 +3401,17 @@ def _register_via_oauth(
     registration_data: Dict[str, Any],
     sdk_token_id: Optional[str],
     mcp_server_names: List[str],
-    mcp_full_definitions: List[Dict[str, Any]],
-    use_hybrid: bool = False
+    mcp_full_definitions: List[Dict[str, Any]]
 ) -> AIMClient:
     """Register agent using OAuth token from SDK credentials"""
-    # Generate keypair client-side (Ed25519 or Hybrid)
-    hybrid_credentials = None
+    # Generate Ed25519 keypair client-side (for OAuth mode)
+    
+    signing_key = SigningKey.generate()
+    private_key_bytes = bytes(signing_key) + bytes(signing_key.verify_key)  # 64 bytes (seed + public)
+    public_key_bytes = bytes(signing_key.verify_key)
 
-    if use_hybrid:
-        # Generate hybrid Ed25519+ML-DSA-65 keypair for post-quantum security
-        from .crypto.integration import generate_hybrid_credentials
-        hybrid_credentials = generate_hybrid_credentials()
-        public_key_b64 = hybrid_credentials.classical_public_key
-        private_key_b64 = hybrid_credentials.classical_private_key  # 64-byte Go format
-        console.info("Using hybrid Ed25519+ML-DSA-65 post-quantum cryptography")
-    else:
-        # Generate standard Ed25519 keypair
-        signing_key = SigningKey.generate()
-        private_key_bytes = bytes(signing_key) + bytes(signing_key.verify_key)  # 64 bytes (seed + public)
-        public_key_bytes = bytes(signing_key.verify_key)
-        private_key_b64 = base64.b64encode(private_key_bytes).decode('utf-8')
-        public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
+    private_key_b64 = base64.b64encode(private_key_bytes).decode('utf-8')
+    public_key_b64 = base64.b64encode(public_key_bytes).decode('utf-8')
 
     # Add public key to registration data (use camelCase)
     registration_data["publicKey"] = public_key_b64
@@ -3608,7 +3590,7 @@ def _register_via_oauth(
 
     # Add client-side generated private key to credentials (backend doesn't send it back)
     credentials["private_key"] = private_key_b64
-
+    
     # CRITICAL: Use the backend's public key (what's in database), not what we generated
     # The backend's public key is the source of truth since it's stored in the database
     backend_pub_key = credentials.get('public_key') or credentials.get('publicKey')
@@ -3617,19 +3599,8 @@ def _register_via_oauth(
     else:
         # Fallback: use generated key if backend didn't return one
         credentials["public_key"] = public_key_b64
-
+    
     credentials["aim_url"] = aim_url  # Ensure URL is in response
-
-    # Store hybrid credentials if enabled (for future PQC support)
-    if hybrid_credentials is not None:
-        credentials["is_hybrid"] = True
-        credentials["hybrid"] = {
-            "algorithm": hybrid_credentials.algorithm,
-            "classical_public": hybrid_credentials.classical_public_key,
-            "classical_private": hybrid_credentials.classical_private_key,
-            "pqc_public": hybrid_credentials.pqc_public_key,
-            "pqc_private": hybrid_credentials.pqc_private_key,
-        }
 
     # Add OAuth tokens to credentials so they can be used for future API calls
     if token_manager and token_manager.credentials:
@@ -3682,19 +3653,9 @@ def _register_via_api_key(
     registration_data: Dict[str, Any],
     sdk_token_id: Optional[str],
     mcp_server_names: List[str],
-    mcp_full_definitions: List[Dict[str, Any]],
-    use_hybrid: bool = False
+    mcp_full_definitions: List[Dict[str, Any]]
 ) -> AIMClient:
-    """Register agent using API key (manual mode)
-
-    Note: use_hybrid is accepted for API consistency but requires backend support.
-    API key mode uses backend-generated keys, so hybrid must be enabled server-side.
-    """
-    if use_hybrid:
-        console.warning(
-            "Hybrid crypto requested but API key mode uses backend-generated keys. "
-            "Hybrid support requires backend configuration."
-        )
+    """Register agent using API key (manual mode)"""
     # Call public registration endpoint
     url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
 
