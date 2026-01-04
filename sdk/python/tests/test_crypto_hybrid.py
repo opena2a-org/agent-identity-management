@@ -19,6 +19,7 @@ from aim_sdk.crypto import (
     HybridSigner,
     HybridVerifier,
 )
+from aim_sdk.crypto.mldsa import is_liboqs_available
 
 
 class TestEd25519Signer:
@@ -87,13 +88,15 @@ class TestEd25519Signer:
 
 
 class TestMLDSASigner:
-    """Tests for ML-DSA-65 signing (simulated mode)."""
+    """Tests for ML-DSA-65 signing."""
 
     def test_generate(self):
         """Test key generation."""
         signer = MLDSASigner.generate()
         assert signer.algorithm == Algorithm.MLDSA65
-        assert signer.is_simulated is True
+        # If liboqs is available, is_simulated is False (real PQC)
+        # Otherwise, is_simulated is True (placeholder)
+        assert signer.is_simulated == (not is_liboqs_available())
         assert len(signer.public_key_bytes()) == 1952
 
     def test_sign_and_verify(self):
@@ -131,7 +134,8 @@ class TestHybridSigner:
         """Test hybrid key generation."""
         signer = HybridSigner.generate()
         assert signer.algorithm == Algorithm.HYBRID
-        assert signer.is_simulated is True  # PQC component is simulated
+        # is_simulated reflects PQC component status
+        assert signer.is_simulated == (not is_liboqs_available())
 
     def test_key_pair(self):
         """Test hybrid key pair extraction."""
@@ -232,12 +236,12 @@ class TestHybridVerifier:
         sig = signer.sign(message)
 
         info = verifier.verify_with_info(message, sig)
-        # Classical verification should work with public key only
+        # Classical verification should always work with public key only
         assert info.classical_valid is True
-        # PQC verification requires private key in simulated mode
-        # (This is a known limitation of the placeholder implementation)
-        # In production with liboqs, pqc_valid would also be True
-        assert info.pqc_valid is False  # Expected in simulated mode
+        # PQC verification:
+        # - With liboqs: Works with public key only (pqc_valid = True)
+        # - Without liboqs: Requires private key (pqc_valid = False)
+        assert info.pqc_valid == is_liboqs_available()
 
     def test_verify_with_info_structure(self):
         """Test verification info structure."""
