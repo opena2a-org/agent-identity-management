@@ -1,0 +1,138 @@
+{
+  "apiErrors": {
+    "unauthorized": {
+      "status": 401,
+      "response": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or expired token"
+      }
+    },
+    "forbidden": {
+      "status": 403,
+      "response": {
+        "code": "FORBIDDEN",
+        "message": "Insufficient permissions for this action"
+      }
+    },
+    "notFound": {
+      "status": 404,
+      "response": {
+        "code": "NOT_FOUND",
+        "message": "Resource not found"
+      }
+    },
+    "conflict": {
+      "status": 409,
+      "response": {
+        "code": "CONFLICT",
+        "message": "Agent with this name already exists"
+      }
+    },
+    "validationError": {
+      "status": 400,
+      "response": {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid request body",
+        "details": {
+          "field": "name",
+          "reason": "Name is required"
+        }
+      }
+    },
+    "rateLimited": {
+      "status": 429,
+      "response": {
+        "code": "RATE_LIMITED",
+        "message": "Too many requests",
+        "retryAfter": 60
+      }
+    },
+    "serverError": {
+      "status": 500,
+      "response": {
+        "code": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred"
+      }
+    },
+    "serviceUnavailable": {
+      "status": 503,
+      "response": {
+        "code": "SERVICE_UNAVAILABLE",
+        "message": "Service temporarily unavailable"
+      }
+    }
+  },
+  "errorClasses": {
+    "AIMError": {
+      "defaults": {
+        "message": "An error occurred",
+        "code": "AIM_ERROR"
+      },
+      "properties": ["message", "code", "statusCode", "details"]
+    },
+    "AuthenticationError": {
+      "defaults": {
+        "code": "AUTHENTICATION_ERROR"
+      },
+      "inheritsFrom": "AIMError"
+    },
+    "AuthorizationError": {
+      "defaults": {
+        "code": "AUTHORIZATION_ERROR"
+      },
+      "inheritsFrom": "AIMError"
+    },
+    "ValidationError": {
+      "defaults": {
+        "code": "VALIDATION_ERROR"
+      },
+      "properties": ["field", "reason"],
+      "inheritsFrom": "AIMError"
+    },
+    "NotFoundError": {
+      "defaults": {
+        "code": "NOT_FOUND"
+      },
+      "inheritsFrom": "AIMError"
+    },
+    "ConflictError": {
+      "defaults": {
+        "code": "CONFLICT"
+      },
+      "inheritsFrom": "AIMError"
+    },
+    "RateLimitError": {
+      "defaults": {
+        "code": "RATE_LIMITED"
+      },
+      "properties": ["retryAfter"],
+      "inheritsFrom": "AIMError"
+    },
+    "NetworkError": {
+      "defaults": {
+        "code": "NETWORK_ERROR"
+      },
+      "inheritsFrom": "AIMError"
+    },
+    "ConfigurationError": {
+      "defaults": {
+        "code": "CONFIGURATION_ERROR"
+      },
+      "inheritsFrom": "AIMError"
+    }
+  },
+  "errorMapping": {
+    "httpToError": {
+      "400": "ValidationError",
+      "401": "AuthenticationError",
+      "403": "AuthorizationError",
+      "404": "NotFoundError",
+      "409": "ConflictError",
+      "429": "RateLimitError",
+      "500": "AIMError",
+      "502": "NetworkError",
+      "503": "NetworkError",
+      "504": "NetworkError"
+    }
+  }
+}

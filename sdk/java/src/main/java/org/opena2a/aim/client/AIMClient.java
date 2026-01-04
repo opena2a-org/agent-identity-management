@@ -11,6 +11,7 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters;
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
 import org.bouncycastle.crypto.signers.Ed25519Signer;
 import org.opena2a.aim.credentials.CredentialManager;
+import org.opena2a.aim.crypto.pqc.*;
 import org.opena2a.aim.exceptions.*;
 import org.opena2a.aim.exceptions.ConfigurationException;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
@@ -1909,6 +1910,17 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
+     * Gets the current access token.
+     * Ensures the token is valid before returning.
+     *
+     * @return the current access token
+     */
+    public String getAccessToken() {
+        ensureValidToken();
+        return accessToken;
+    }
+
+    /**
      * Gets the agent type.
      *
      * @return the agent type
@@ -2462,6 +2474,264 @@ public class AIMClient implements AutoCloseable {
             }
             return response.body() != null ? response.body().string() : "{\"success\": true}";
         }
+    }
+
+    // ========== Post-Quantum Cryptography (PQC) Methods ==========
+
+    /**
+     * Register a PQC public key for this agent.
+     * Enables post-quantum secure signing for action verification.
+     *
+     * @param pqcPublicKey Base64-encoded ML-DSA public key
+     * @param algorithm The ML-DSA algorithm variant (e.g., Algorithm.ML_DSA_65)
+     * @param enableHybridMode Enable hybrid Ed25519+ML-DSA mode
+     * @return Map containing registration result with pqcKeyAlgorithm and hybridModeEnabled
+     */
+    public Map<String, Object> registerPQCKey(String pqcPublicKey, Algorithm algorithm, boolean enableHybridMode) {
+        if (agentId == null) {
+            throw new AuthenticationException("Agent not registered. Call register() first.");
+        }
+
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("publicKey", pqcPublicKey);
+            body.put("algorithm", algorithm.getAlgorithmId());
+            body.put("enableHybrid", enableHybridMode);
+
+            String url = aimUrl + "/api/v1/agents/" + agentId + "/pqc-key";
+            RequestBody requestBody = RequestBody.create(body.toString(), JSON);
+            Request request = new Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .header("Content-Type", "application/json")
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    throw new AIMException("Failed to register PQC key: " + response.code() + " - " + errorBody,
+                            "PQC_REGISTER_FAILED", response.code());
+                }
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            }
+        } catch (IOException e) {
+            throw new AIMException("Failed to register PQC key: " + e.getMessage(), "NETWORK_ERROR", 0, e);
+        }
+    }
+
+    /**
+     * Register a PQC key using a HybridKeyPair.
+     *
+     * @param keyPair The hybrid key pair containing ML-DSA keys
+     * @param enableHybridMode Enable hybrid Ed25519+ML-DSA mode
+     * @return Map containing registration result
+     */
+    public Map<String, Object> registerPQCKey(HybridKeyPair keyPair, boolean enableHybridMode) {
+        return registerPQCKey(keyPair.getMldsaPublicKeyBase64(), keyPair.getMldsaVariant(), enableHybridMode);
+    }
+
+    /**
+     * Rotate the PQC key for this agent.
+     *
+     * @param newPqcPublicKey Base64-encoded new ML-DSA public key
+     * @param algorithm The ML-DSA algorithm variant
+     * @return Map containing rotation result
+     */
+    public Map<String, Object> rotatePQCKey(String newPqcPublicKey, Algorithm algorithm) {
+        if (agentId == null) {
+            throw new AuthenticationException("Agent not registered. Call register() first.");
+        }
+
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("newPublicKey", newPqcPublicKey);
+            body.put("algorithm", algorithm.getAlgorithmId());
+
+            String url = aimUrl + "/api/v1/agents/" + agentId + "/pqc-key";
+            RequestBody requestBody = RequestBody.create(body.toString(), JSON);
+            Request request = new Request.Builder()
+                    .url(url)
+                    .put(requestBody)
+                    .header("Content-Type", "application/json")
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    throw new AIMException("Failed to rotate PQC key: " + response.code() + " - " + errorBody,
+                            "PQC_ROTATE_FAILED", response.code());
+                }
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            }
+        } catch (IOException e) {
+            throw new AIMException("Failed to rotate PQC key: " + e.getMessage(), "NETWORK_ERROR", 0, e);
+        }
+    }
+
+    /**
+     * Enable or disable hybrid mode for this agent.
+     * Hybrid mode requires both Ed25519 and ML-DSA signatures.
+     *
+     * @param enabled Whether to enable hybrid mode
+     * @return Map containing the updated hybrid mode status
+     */
+    public Map<String, Object> setHybridMode(boolean enabled) {
+        if (agentId == null) {
+            throw new AuthenticationException("Agent not registered. Call register() first.");
+        }
+
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("enable", enabled);
+
+            String url = aimUrl + "/api/v1/agents/" + agentId + "/hybrid-mode";
+            RequestBody requestBody = RequestBody.create(body.toString(), JSON);
+            Request request = new Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .header("Content-Type", "application/json")
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    throw new AIMException("Failed to set hybrid mode: " + response.code() + " - " + errorBody,
+                            "HYBRID_MODE_FAILED", response.code());
+                }
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            }
+        } catch (IOException e) {
+            throw new AIMException("Failed to set hybrid mode: " + e.getMessage(), "NETWORK_ERROR", 0, e);
+        }
+    }
+
+    /**
+     * Get PQC key information for this agent.
+     *
+     * @return Map containing algorithm, hybridModeEnabled, and registeredAt
+     */
+    public Map<String, Object> getPQCKeyInfo() {
+        if (agentId == null) {
+            throw new AuthenticationException("Agent not registered. Call register() first.");
+        }
+
+        try {
+            String url = aimUrl + "/api/v1/agents/" + agentId + "/pqc-key";
+            Request request = new Request.Builder()
+                    .url(url)
+                    .get()
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    throw new AIMException("Failed to get PQC key info: " + response.code() + " - " + errorBody,
+                            "PQC_INFO_FAILED", response.code());
+                }
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            }
+        } catch (IOException e) {
+            throw new AIMException("Failed to get PQC key info: " + e.getMessage(), "NETWORK_ERROR", 0, e);
+        }
+    }
+
+    /**
+     * Get list of supported PQC algorithms from the server.
+     *
+     * @return List of algorithm info maps
+     */
+    public List<Map<String, Object>> getSupportedAlgorithms() {
+        try {
+            String url = aimUrl + "/api/v1/pqc/algorithms";
+            Request request = new Request.Builder()
+                    .url(url)
+                    .get()
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    throw new AIMException("Failed to get supported algorithms: " + response.code() + " - " + errorBody,
+                            "PQC_ALGORITHMS_FAILED", response.code());
+                }
+                String responseBody = response.body() != null ? response.body().string() : "[]";
+                return objectMapper.readValue(responseBody, new TypeReference<List<Map<String, Object>>>() {});
+            }
+        } catch (IOException e) {
+            throw new AIMException("Failed to get supported algorithms: " + e.getMessage(), "NETWORK_ERROR", 0, e);
+        }
+    }
+
+    /**
+     * Generate a new hybrid key pair locally.
+     * Does not register with the server - use registerPQCKey for that.
+     *
+     * @param variant The ML-DSA variant to use (defaults to ML-DSA-65)
+     * @return A new HybridKeyPair
+     */
+    public static HybridKeyPair generateHybridKeyPair(Algorithm variant) {
+        return PQCOperations.generateHybridKeyPair(variant);
+    }
+
+    /**
+     * Generate a new hybrid key pair locally with default ML-DSA-65.
+     *
+     * @return A new HybridKeyPair using ML-DSA-65
+     */
+    public static HybridKeyPair generateHybridKeyPair() {
+        return PQCOperations.generateHybridKeyPair(Algorithm.ED25519_ML_DSA_65);
+    }
+
+    /**
+     * Sign a message using hybrid Ed25519+ML-DSA.
+     *
+     * @param keys The hybrid key pair to sign with
+     * @param message The message bytes to sign
+     * @return A HybridSignature containing both signatures
+     */
+    public static HybridSignature hybridSign(HybridKeyPair keys, byte[] message) {
+        return PQCOperations.hybridSign(keys, message);
+    }
+
+    /**
+     * Verify a hybrid signature.
+     * BOTH Ed25519 and ML-DSA signatures must be valid.
+     *
+     * @param publicKey The hybrid public key
+     * @param message The original message bytes
+     * @param signature The hybrid signature to verify
+     * @return true if BOTH signatures are valid
+     */
+    public static boolean hybridVerify(HybridPublicKey publicKey, byte[] message, HybridSignature signature) {
+        return PQCOperations.hybridVerify(publicKey, message, signature);
+    }
+
+    /**
+     * Create request signature headers for hybrid mode.
+     * These headers are compatible with the AIM backend's PQC middleware.
+     *
+     * @param keys The hybrid key pair
+     * @param method HTTP method (GET, POST, etc.)
+     * @param path Request path
+     * @param body Request body (optional)
+     * @return Map of headers to add to the request
+     */
+    public static Map<String, String> createHybridRequestHeaders(
+            HybridKeyPair keys, String method, String path, String body) {
+        return PQCOperations.createHybridRequestHeaders(keys, method, path, body, null);
+    }
+
+    /**
+     * Check if PQC support is available (BouncyCastle with ML-DSA).
+     *
+     * @return true if PQC operations are available
+     */
+    public static boolean isPQCAvailable() {
+        return PQCOperations.isPQCAvailable();
     }
 
     @Override

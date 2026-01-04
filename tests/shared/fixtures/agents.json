@@ -1,0 +1,97 @@
+{
+  "registrationRequest": {
+    "minimal": {
+      "name": "test-agent"
+    },
+    "full": {
+      "name": "full-agent",
+      "displayName": "Full Test Agent",
+      "description": "A fully configured test agent",
+      "agentType": "claude",
+      "version": "1.0.0",
+      "capabilities": ["db:read", "db:write", "api:call"],
+      "talksTo": ["mcp-server-1", "mcp-server-2"],
+      "metadata": {
+        "environment": "test",
+        "team": "engineering"
+      }
+    }
+  },
+  "registrationResponse": {
+    "success": {
+      "agentId": "agent-a1b2c3d4",
+      "privateKey": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+      "publicKey": "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+      "organizationId": "org-x1y2z3",
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  },
+  "agent": {
+    "verified": {
+      "id": "agent-a1b2c3d4",
+      "name": "test-agent",
+      "displayName": "Test Agent",
+      "description": "A test agent for unit tests",
+      "agentType": "claude",
+      "version": "1.0.0",
+      "status": "verified",
+      "trustScore": 0.85,
+      "organizationId": "org-x1y2z3",
+      "capabilities": ["db:read", "api:call"],
+      "talksTo": [],
+      "publicKey": "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z",
+      "lastActive": "2024-01-15T12:00:00Z"
+    },
+    "pending": {
+      "id": "agent-pending-123",
+      "name": "pending-agent",
+      "displayName": "Pending Agent",
+      "agentType": "custom",
+      "version": "1.0.0",
+      "status": "pending",
+      "trustScore": 0.5,
+      "organizationId": "org-x1y2z3",
+      "capabilities": [],
+      "talksTo": [],
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    },
+    "lowTrust": {
+      "id": "agent-low-trust",
+      "name": "low-trust-agent",
+      "displayName": "Low Trust Agent",
+      "agentType": "custom",
+      "version": "1.0.0",
+      "status": "verified",
+      "trustScore": 0.25,
+      "organizationId": "org-x1y2z3",
+      "capabilities": ["db:read"],
+      "talksTo": [],
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  },
+  "credentials": {
+    "valid": {
+      "agentId": "agent-a1b2c3d4",
+      "privateKey": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+      "publicKey": "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+      "organizationId": "org-x1y2z3",
+      "createdAt": "2024-01-15T10:30:00Z"
+    },
+    "sdkOAuth": {
+      "refreshToken": "rt_abc123def456",
+      "sdkTokenId": "sdk-token-789",
+      "aimUrl": "https://aim.example.com",
+      "organizationId": "org-x1y2z3"
+    },
+    "sdkOAuthSnakeCase": {
+      "refresh_token": "rt_abc123def456",
+      "sdk_token_id": "sdk-token-789",
+      "aim_url": "https://aim.example.com",
+      "organization_id": "org-x1y2z3"
+    }
+  }
+}

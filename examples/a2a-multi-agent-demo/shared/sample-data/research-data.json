@@ -1,0 +1,38 @@
+{
+  "customerFeedback": [
+    {
+      "id": "fb-001",
+      "text": "This product exceeded my expectations! The quality is outstanding and delivery was fast.",
+      "source": "customer-survey",
+      "timestamp": "2025-01-01T10:30:00Z"
+    },
+    {
+      "id": "fb-002",
+      "text": "Decent product but shipping was slow. Customer service helped resolve the issue quickly.",
+      "source": "support-ticket",
+      "timestamp": "2025-01-01T11:45:00Z"
+    },
+    {
+      "id": "fb-003",
+      "text": "Not satisfied with the purchase. The product did not match the description. Will not buy again.",
+      "source": "review-site",
+      "timestamp": "2025-01-01T14:20:00Z"
+    },
+    {
+      "id": "fb-004",
+      "text": "Amazing experience! The team went above and beyond to help. Highly recommend to everyone.",
+      "source": "social-media",
+      "timestamp": "2025-01-01T16:00:00Z"
+    }
+  ],
+  "timeSeriesData": [
+    {"date": "2025-01-01", "metric": "sales", "value": 1000},
+    {"date": "2025-01-02", "metric": "sales", "value": 1200},
+    {"date": "2025-01-03", "metric": "sales", "value": 1350},
+    {"date": "2025-01-04", "metric": "sales", "value": 1500},
+    {"date": "2025-01-05", "metric": "sales", "value": 1420},
+    {"date": "2025-01-06", "metric": "sales", "value": 1650},
+    {"date": "2025-01-07", "metric": "sales", "value": 1800}
+  ],
+  "documentContent": "This quarterly report summarizes our company's performance over the past three months. Revenue increased by 25% compared to the previous quarter, driven primarily by strong sales in the enterprise segment. Customer satisfaction scores improved to 4.5 out of 5.0, reflecting our investments in product quality and customer support. Looking ahead, we plan to expand into two new markets and launch three new product lines."
+}

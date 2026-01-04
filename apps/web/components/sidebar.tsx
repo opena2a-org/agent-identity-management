@@ -26,6 +26,7 @@ import {
   Loader2,
   Search,
   GitBranch,
+  Link2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
@@ -72,6 +73,12 @@ const navigationBase: NavSection[] = [
         href: "/dashboard/mcp/supply-chain",
         icon: GitBranch,
         roles: ["admin", "manager"],
+      },
+      {
+        name: "A2A Protocol",
+        href: "/dashboard/a2a",
+        icon: Link2,
+        roles: ["admin", "manager", "member"],
       },
     ],
   },

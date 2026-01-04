@@ -38,6 +38,10 @@ type AgentServicer interface {
 	HasCapability(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
 	DetectMCPServersFromConfig(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
+	// PQC (Post-Quantum Cryptography) methods
+	UpdateAgentPQCKey(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error
+	RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error
+	SetAgentHybridMode(ctx context.Context, agentID uuid.UUID, enabled bool) error
 }
 
 // MCPServicer defines the methods from MCPService that handlers use
