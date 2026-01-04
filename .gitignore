@@ -47,6 +47,14 @@ yarn-error.log*
 vendor/
 tmp/
 
+# Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+*.iml
+
 # Database
 *.db
 *.sqlite
