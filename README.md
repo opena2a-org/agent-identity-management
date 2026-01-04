@@ -2,9 +2,11 @@
 
 # Agent Identity Management (AIM)
 
-**The open-source platform for securing AI agents in production.**
+**AIM is IAM for AI agents — cryptographic identity, access control, and accountability by default.**
 
 Stop prompt injection. Verify agent identity. Enforce capabilities. Detect threats in real-time.
+
+> IAM secures people. SPIFFE secures workloads. Sigstore secures software. **AIM secures AI agents.**
 
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
 [![Go Report Card](https://goreportcard.com/badge/github.com/opena2a-org/agent-identity-management/apps/backend)](https://goreportcard.com/report/github.com/opena2a-org/agent-identity-management/apps/backend)
