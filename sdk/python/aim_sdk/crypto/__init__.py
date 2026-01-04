@@ -31,6 +31,13 @@ from .rotation import (
     KeyRotationState,
     KeyRotationManager,
 )
+from .integration import (
+    HybridCredentials,
+    HybridKeyGenerator,
+    generate_hybrid_credentials,
+    upgrade_credentials_to_hybrid,
+    is_hybrid_credentials,
+)
 
 __all__ = [
     # Core types
@@ -60,4 +67,10 @@ __all__ = [
     "RotationRecord",
     "KeyRotationState",
     "KeyRotationManager",
+    # Integration
+    "HybridCredentials",
+    "HybridKeyGenerator",
+    "generate_hybrid_credentials",
+    "upgrade_credentials_to_hybrid",
+    "is_hybrid_credentials",
 ]
