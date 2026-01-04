@@ -1,23 +1,24 @@
 """
-ML-DSA-65 (Dilithium3) signing implementation.
-
-IMPORTANT: This is currently a placeholder/simulated implementation.
-For production use, integrate with liboqs-python or another NIST-approved
-ML-DSA-65 implementation.
+ML-DSA-65 (FIPS 204) signing implementation using liboqs.
 
 ML-DSA-65 is the NIST-standardized post-quantum signature algorithm
-(FIPS 204) designed to be secure against both classical and quantum computers.
+designed to be secure against both classical and quantum computers.
 
-Key sizes:
+Key sizes (FIPS 204):
 - Public key: 1952 bytes
 - Private key: 4032 bytes
 - Signature: 3309 bytes
+
+This implementation uses liboqs-python for real post-quantum cryptography.
+If liboqs is not available, it falls back to a simulated implementation
+for development purposes.
 """
 
 import base64
 import hashlib
 import os
-from typing import Tuple
+import warnings
+from typing import Tuple, Optional
 
 from .signer import Algorithm, Signer, Verifier, KeyPair
 
@@ -26,23 +27,40 @@ MLDSA_PUBLIC_KEY_SIZE = 1952
 MLDSA_PRIVATE_KEY_SIZE = 4032
 MLDSA_SIGNATURE_SIZE = 3309
 
+# Try to import liboqs
+_LIBOQS_AVAILABLE = False
+_oqs = None
+
+try:
+    import oqs as _oqs
+    # Verify ML-DSA-65 is available
+    if "ML-DSA-65" in _oqs.get_enabled_sig_mechanisms():
+        _LIBOQS_AVAILABLE = True
+except ImportError:
+    pass
+except Exception as e:
+    warnings.warn(f"liboqs available but ML-DSA-65 check failed: {e}")
+
+
+def is_liboqs_available() -> bool:
+    """Check if liboqs is available for real PQC operations."""
+    return _LIBOQS_AVAILABLE
+
 
 class MLDSASigner(Signer):
     """
-    ML-DSA-65 signer implementation.
+    ML-DSA-65 signer implementation using liboqs.
 
-    WARNING: This is a PLACEHOLDER implementation for development.
-    It uses deterministic simulation for consistency but does NOT
-    provide actual post-quantum security.
-
-    For production, replace with liboqs-python ML-DSA-65 implementation.
+    Uses real NIST-standardized ML-DSA-65 (FIPS 204) when liboqs is available.
+    Falls back to deterministic simulation if liboqs is not installed.
     """
 
     def __init__(
         self,
         public_key: bytes,
         private_key: bytes,
-        simulated: bool = True,
+        simulated: bool = False,
+        _oqs_signer: Optional[object] = None,
     ):
         """
         Initialize ML-DSA signer.
@@ -51,6 +69,7 @@ class MLDSASigner(Signer):
             public_key: Public key bytes (1952 bytes)
             private_key: Private key bytes (4032 bytes)
             simulated: Whether this is a simulated implementation
+            _oqs_signer: Internal liboqs Signature object (for signing)
         """
         if len(public_key) != MLDSA_PUBLIC_KEY_SIZE:
             raise ValueError(
@@ -66,20 +85,45 @@ class MLDSASigner(Signer):
         self._public_key = public_key
         self._private_key = private_key
         self._simulated = simulated
+        self._oqs_signer = _oqs_signer
 
     @classmethod
     def generate(cls) -> "MLDSASigner":
         """
         Generate a new ML-DSA-65 key pair.
 
+        Uses liboqs for real PQC if available, otherwise falls back to simulation.
+
         Returns:
             New MLDSASigner with generated keys
-
-        Note:
-            This generates SIMULATED keys for development.
-            Production should use liboqs-python.
         """
-        # Generate deterministic placeholder keys from random seed
+        if _LIBOQS_AVAILABLE:
+            return cls._generate_real()
+        else:
+            return cls._generate_simulated()
+
+    @classmethod
+    def _generate_real(cls) -> "MLDSASigner":
+        """Generate real ML-DSA-65 keys using liboqs."""
+        signer = _oqs.Signature("ML-DSA-65")
+        public_key = signer.generate_keypair()
+        private_key = signer.export_secret_key()
+
+        return cls(
+            public_key=public_key,
+            private_key=private_key,
+            simulated=False,
+            _oqs_signer=signer,
+        )
+
+    @classmethod
+    def _generate_simulated(cls) -> "MLDSASigner":
+        """Generate simulated ML-DSA-65 keys for development."""
+        warnings.warn(
+            "liboqs not available - using simulated ML-DSA-65. "
+            "Install liboqs-python for real post-quantum security.",
+            UserWarning,
+        )
         seed = os.urandom(32)
         public_key, private_key = cls._simulate_keygen(seed)
         return cls(public_key, private_key, simulated=True)
@@ -98,7 +142,21 @@ class MLDSASigner(Signer):
         """
         public_key = base64.b64decode(public_key_b64)
         private_key = base64.b64decode(private_key_b64)
-        return cls(public_key, private_key, simulated=True)
+
+        # If liboqs is available, create an oqs signer with these keys
+        oqs_signer = None
+        simulated = True
+
+        if _LIBOQS_AVAILABLE:
+            try:
+                # Create signer and import the secret key
+                oqs_signer = _oqs.Signature("ML-DSA-65", private_key)
+                simulated = False
+            except Exception:
+                # Fall back to simulated mode
+                pass
+
+        return cls(public_key, private_key, simulated=simulated, _oqs_signer=oqs_signer)
 
     @classmethod
     def _simulate_keygen(cls, seed: bytes) -> Tuple[bytes, bytes]:
@@ -107,7 +165,6 @@ class MLDSASigner(Signer):
 
         This creates deterministic placeholder keys for development.
         """
-        # Expand seed to required sizes using SHAKE256
         hasher = hashlib.shake_256()
         hasher.update(b"MLDSA65-KEYGEN-SIMULATION-" + seed)
         key_material = hasher.digest(MLDSA_PUBLIC_KEY_SIZE + MLDSA_PRIVATE_KEY_SIZE)
@@ -155,12 +212,18 @@ class MLDSASigner(Signer):
         """
         Sign message and return raw signature bytes.
 
-        PLACEHOLDER: Uses deterministic simulation for development.
+        Uses liboqs for real signatures if available.
         """
-        # Simulate ML-DSA signature using SHAKE256
+        if self._oqs_signer is not None:
+            return self._oqs_signer.sign(message)
+        else:
+            return self._sign_simulated(message)
+
+    def _sign_simulated(self, message: bytes) -> bytes:
+        """Simulated signing using SHAKE256."""
         hasher = hashlib.shake_256()
         hasher.update(b"MLDSA65-SIGN-SIMULATION-")
-        hasher.update(self._private_key[:64])  # Use first 64 bytes of private key
+        hasher.update(self._private_key[:64])
         hasher.update(message)
         return hasher.digest(MLDSA_SIGNATURE_SIZE)
 
@@ -176,24 +239,34 @@ class MLDSASigner(Signer):
         """
         Verify raw signature bytes.
 
-        PLACEHOLDER: Uses deterministic simulation for development.
+        Uses liboqs for real verification if available.
         """
         if len(signature) != MLDSA_SIGNATURE_SIZE:
             return False
 
-        # Re-compute expected signature
-        expected = self.sign_bytes(message)
-        return signature == expected
+        if _LIBOQS_AVAILABLE:
+            try:
+                verifier = _oqs.Signature("ML-DSA-65")
+                return verifier.verify(message, signature, self._public_key)
+            except Exception:
+                pass
+
+        # Simulated verification (requires private key)
+        if self._simulated:
+            expected = self._sign_simulated(message)
+            return signature == expected
+
+        return False
 
 
 class MLDSAVerifier(Verifier):
     """
     ML-DSA-65 verifier (public key only).
 
-    WARNING: This is a PLACEHOLDER implementation.
+    Uses real NIST-standardized ML-DSA-65 verification when liboqs is available.
     """
 
-    def __init__(self, public_key: bytes, simulated: bool = True):
+    def __init__(self, public_key: bytes, simulated: bool = False):
         """
         Initialize ML-DSA verifier.
 
@@ -221,7 +294,8 @@ class MLDSAVerifier(Verifier):
             MLDSAVerifier instance
         """
         public_key = base64.b64decode(public_key_b64)
-        return cls(public_key, simulated=True)
+        simulated = not _LIBOQS_AVAILABLE
+        return cls(public_key, simulated=simulated)
 
     @property
     def algorithm(self) -> Algorithm:
@@ -244,17 +318,19 @@ class MLDSAVerifier(Verifier):
         """
         Verify raw signature bytes.
 
-        PLACEHOLDER: Verification requires corresponding private key
-        in simulation mode, which we don't have access to.
-        This always returns False for pure public-key verification
-        in simulated mode.
-
-        Production implementation with liboqs would verify correctly.
+        Uses liboqs for real verification if available.
+        In simulated mode without liboqs, verification always fails
+        since it requires the private key.
         """
         if len(signature) != MLDSA_SIGNATURE_SIZE:
             return False
 
-        # In simulated mode, we cannot verify without private key
-        # This is a known limitation of the placeholder
-        # Real ML-DSA can verify with just public key
-        return False  # Placeholder - production would verify correctly
+        if _LIBOQS_AVAILABLE:
+            try:
+                verifier = _oqs.Signature("ML-DSA-65")
+                return verifier.verify(message, signature, self._public_key)
+            except Exception:
+                return False
+
+        # Simulated mode cannot verify without private key
+        return False

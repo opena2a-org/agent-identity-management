@@ -21,8 +21,16 @@ from .signer import (
     decode_hybrid_signature,
 )
 from .ed25519 import Ed25519Signer, Ed25519Verifier
-from .mldsa import MLDSASigner, MLDSAVerifier
+from .mldsa import MLDSASigner, MLDSAVerifier, is_liboqs_available
 from .hybrid import HybridSigner, HybridVerifier
+from .rotation import (
+    RotationPhase,
+    RotationStatus,
+    KeyVersion,
+    RotationRecord,
+    KeyRotationState,
+    KeyRotationManager,
+)
 
 __all__ = [
     # Core types
@@ -41,7 +49,15 @@ __all__ = [
     # ML-DSA (PQC)
     "MLDSASigner",
     "MLDSAVerifier",
+    "is_liboqs_available",
     # Hybrid
     "HybridSigner",
     "HybridVerifier",
+    # Key Rotation
+    "RotationPhase",
+    "RotationStatus",
+    "KeyVersion",
+    "RotationRecord",
+    "KeyRotationState",
+    "KeyRotationManager",
 ]
