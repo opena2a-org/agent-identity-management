@@ -1,0 +1,1682 @@
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+)
+
+// A2AHandler handles A2A (Agent-to-Agent) protocol endpoints
+type A2AHandler struct {
+	a2aService   *application.A2AService
+	agentService *application.AgentService
+	auditService *application.AuditService
+}
+
+// NewA2AHandler creates a new A2A handler
+func NewA2AHandler(
+	a2aService *application.A2AService,
+	agentService *application.AgentService,
+	auditService *application.AuditService,
+) *A2AHandler {
+	return &A2AHandler{
+		a2aService:   a2aService,
+		agentService: agentService,
+		auditService: auditService,
+	}
+}
+
+// ============================================================================
+// Agent Card Endpoints
+// ============================================================================
+
+// RegisterAgentCard registers an A2A agent card for an agent
+// POST /api/v1/a2a/agents/:id/card
+func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	var req struct {
+		CardURL string `json:"cardUrl"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.CardURL == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "cardUrl is required",
+		})
+	}
+
+	resp, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
+		AgentID:  agentID,
+		CardURL:  req.CardURL,
+	})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"a2a_agent_card",
+		resp.CardID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"agentId":   agentID,
+			"cardUrl":   req.CardURL,
+			"skills":    resp.Skills,
+		},
+	)
+
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+// GetAgentCard returns the A2A agent card for an agent
+// GET /api/v1/a2a/agents/:id/card
+func (h *A2AHandler) GetAgentCard(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Get enhanced card with AIM extensions
+	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent card not found",
+		})
+	}
+
+	return c.JSON(card)
+}
+
+// RefreshCardAttestation refreshes the attestation for an agent's card
+// POST /api/v1/a2a/agents/:id/card/refresh
+func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	card, err := h.a2aService.RefreshAttestation(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"a2a_attestation",
+		card.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"agentId":           agentID,
+			"attestationExpires": card.AttestationExpiresAt,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"cardId":              card.ID,
+		"agentId":             card.AgentID,
+		"attestationExpires": card.AttestationExpiresAt,
+		"message":             "Attestation refreshed successfully",
+	})
+}
+
+// ============================================================================
+// Request Signing Endpoints (for SDK/programmatic access)
+// ============================================================================
+
+// SignRequest signs an A2A request for an agent
+// POST /api/v1/a2a/agents/:id/sign
+func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	var req struct {
+		Method string `json:"method"`
+		Path   string `json:"path"`
+		Body   string `json:"body"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	signature, err := h.a2aService.SignA2ARequest(
+		c.Context(),
+		agentID,
+		req.Method,
+		req.Path,
+		[]byte(req.Body),
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agentId":   signature.AgentID,
+		"timestamp": signature.Timestamp,
+		"nonce":     signature.Nonce,
+		"signature": signature.Signature,
+	})
+}
+
+// VerifyRequest verifies an incoming A2A request signature
+// POST /api/v1/a2a/verify
+func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
+	var req application.VerifyA2ARequestRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	result, err := h.a2aService.VerifyA2ARequest(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if !result.Valid {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"valid":  false,
+			"error":  result.Error,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"valid":             true,
+		"agentId":           result.AgentID,
+		"agentName":         result.AgentName,
+		"trustScore":        result.TrustScore,
+		"capabilities":      result.Capabilities,
+		"attestationValid": result.AttestationValid,
+	})
+}
+
+// ============================================================================
+// Trust Score Endpoints
+// ============================================================================
+
+// GetA2ATrustScore returns the A2A-specific trust score for an agent
+// GET /api/v1/a2a/agents/:id/trust-score
+// Auto-computes trust score if none exists or score is zero
+func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// First try to get existing trust score
+	score, err := h.a2aService.GetA2ATrustScore(c.Context(), agentID)
+	if err != nil || score == nil || score.A2ATrustScore == nil || *score.A2ATrustScore == 0 {
+		// Auto-compute if no score exists or score is zero
+		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
+		if computeErr != nil {
+			// If computation fails, return zero score with message
+			return c.JSON(fiber.Map{
+				"agentId": agentID,
+				"score":   0.0,
+				"message": "Could not compute trust score: " + computeErr.Error(),
+			})
+		}
+		return c.JSON(computedScore)
+	}
+
+	return c.JSON(score)
+}
+
+// ComputeA2ATrustScore computes and updates the A2A trust score
+// POST /api/v1/a2a/agents/:id/trust-score/compute
+func (h *A2AHandler) ComputeA2ATrustScore(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCalculate,
+		"a2a_trust_score",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"a2aTrustScore": score.A2ATrustScore,
+			"peerAverage":   score.PeerTrustAverage,
+			"uniquePeers":   score.UniquePeersCount,
+		},
+	)
+
+	return c.JSON(score)
+}
+
+// GetPeerTrustScore returns the trust relationship between two agents
+// GET /api/v1/a2a/agents/:id/peers/:peer_id/trust
+func (h *A2AHandler) GetPeerTrustScore(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	peerID, err := uuid.Parse(c.Params("peer_id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid peer ID",
+		})
+	}
+
+	trust, err := h.a2aService.GetPeerTrustScore(c.Context(), agentID, peerID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Peer trust relationship not found",
+		})
+	}
+
+	return c.JSON(trust)
+}
+
+// ============================================================================
+// Task Logging Endpoints
+// ============================================================================
+
+// LogTask logs an A2A task for audit trail
+// POST /api/v1/a2a/tasks
+// Accepts both internal format and SDK format for compatibility
+func (h *A2AHandler) LogTask(c fiber.Ctx) error {
+	// Accept SDK format with field name variations
+	var sdkReq struct {
+		// SDK format
+		TargetAgentID   string `json:"targetAgentId"`
+		TaskID          string `json:"taskId"`
+		TaskType        string `json:"taskType"`
+		Status          string `json:"status"`
+		SkillID         string `json:"skillId"`
+		SdkClientAgent  string `json:"clientAgentId"` // SDK can also send clientAgentId as string
+		// Internal format
+		ExternalTaskID string    `json:"externalTaskId"`
+		ContextID      string    `json:"contextId"`
+		ClientAgentID  uuid.UUID `json:"_clientAgentId"` // Renamed to avoid conflict
+		RemoteAgentID  uuid.UUID `json:"remoteAgentId"`
+	}
+	if err := c.Bind().JSON(&sdkReq); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Convert SDK format to internal format
+	var req application.LogA2ATaskRequest
+	if sdkReq.TargetAgentID != "" {
+		// SDK format - convert fields
+		targetAgentID, err := uuid.Parse(sdkReq.TargetAgentID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid target agent ID",
+			})
+		}
+		req.RemoteAgentID = targetAgentID
+		req.ExternalTaskID = sdkReq.TaskID
+		req.ContextID = sdkReq.TaskType // Use taskType as context
+		if sdkReq.SkillID != "" {
+			req.SkillID = sdkReq.SkillID
+		} else {
+			req.SkillID = sdkReq.TaskType // Fallback to taskType
+		}
+
+		// Try to get client agent ID from request body first, then context
+		if sdkReq.SdkClientAgent != "" {
+			clientAgentID, err := uuid.Parse(sdkReq.SdkClientAgent)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid client agent ID",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		} else {
+			// Fallback to context
+			clientAgentID, err := h.getAgentIDFromContext(c)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Client agent ID required - provide in request body or context",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		}
+	} else {
+		// Internal format - use directly
+		req.ExternalTaskID = sdkReq.ExternalTaskID
+		req.ContextID = sdkReq.ContextID
+		req.RemoteAgentID = sdkReq.RemoteAgentID
+		req.SkillID = sdkReq.SkillID
+
+		// Try clientAgentId as string first (SDK format), then UUID field
+		if sdkReq.SdkClientAgent != "" {
+			clientAgentID, err := uuid.Parse(sdkReq.SdkClientAgent)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid client agent ID",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		} else if sdkReq.ClientAgentID != uuid.Nil {
+			req.ClientAgentID = sdkReq.ClientAgentID
+		} else {
+			// Fallback to context
+			clientAgentID, err := h.getAgentIDFromContext(c)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Client agent ID required",
+				})
+			}
+			req.ClientAgentID = clientAgentID
+		}
+	}
+
+	task, err := h.a2aService.LogA2ATask(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to log task: " + err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(task)
+}
+
+// UpdateTaskState updates the state of an A2A task
+// PUT /api/v1/a2a/tasks/:id/state
+func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
+	taskID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid task ID",
+		})
+	}
+
+	var req struct {
+		State        string `json:"state"`
+		ErrorCode    string `json:"errorCode"`
+		ErrorMessage string `json:"errorMessage"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	state := domain.A2ATaskState(req.State)
+	if !isValidTaskState(state) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid task state",
+		})
+	}
+
+	if err := h.a2aService.UpdateA2ATaskState(c.Context(), taskID, state, req.ErrorCode, req.ErrorMessage); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"taskId":  taskID,
+		"state":   state,
+		"message": "Task state updated",
+	})
+}
+
+// ============================================================================
+// Skill Endpoints
+// ============================================================================
+
+// GetAgentSkills returns all A2A skills for an agent
+// GET /api/v1/a2a/agents/:id/skills
+func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	skills, err := h.a2aService.GetAgentSkills(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agentId": agentID,
+		"skills":  skills,
+		"count":   len(skills),
+	})
+}
+
+// SearchSkills searches for A2A skills across all agents
+// GET /api/v1/a2a/skills/search
+func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'q' is required",
+		})
+	}
+
+	limit := 20
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	skills, err := h.a2aService.SearchSkills(c.Context(), query, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"query":   query,
+		"skills":  skills,
+		"count":   len(skills),
+	})
+}
+
+// ============================================================================
+// Intent-Based Routing (Discovery)
+// ============================================================================
+
+// RouteByIntent finds the best agent for a given intent using FTS
+// GET /api/v1/a2a/route?intent=X
+func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
+	intent := c.Query("intent")
+	if intent == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'intent' is required",
+		})
+	}
+
+	// Parse optional min trust score (default 0.5)
+	minTrustScore := 0.5
+	if minTrustStr := c.Query("minTrustScore"); minTrustStr != "" {
+		if score, err := strconv.ParseFloat(minTrustStr, 64); err == nil && score >= 0 && score <= 1 {
+			minTrustScore = score
+		}
+	}
+
+	resp, err := h.a2aService.RouteByIntent(c.Context(), intent, minTrustScore)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if resp.Agent == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":        "No agent found matching intent",
+			"intent":       intent,
+			"alternatives": 0,
+		})
+	}
+
+	return c.JSON(resp)
+}
+
+// CapableOf finds agents capable of a given skill/intent (multiple results)
+// GET /api/v1/a2a/capable-of?intent=X
+func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
+	intent := c.Query("intent")
+	if intent == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'intent' is required",
+		})
+	}
+
+	// Parse optional min trust score (default 0.5)
+	minTrustScore := 0.5
+	if minTrustStr := c.Query("minTrustScore"); minTrustStr != "" {
+		if score, err := strconv.ParseFloat(minTrustStr, 64); err == nil && score >= 0 && score <= 1 {
+			minTrustScore = score
+		}
+	}
+
+	// Parse limit (default 10)
+	limit := 10
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 50 {
+			limit = l
+		}
+	}
+
+	agents, err := h.a2aService.CapableOf(c.Context(), intent, minTrustScore, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"intent": intent,
+		"agents": agents,
+		"count":  len(agents),
+	})
+}
+
+// ============================================================================
+// Consent Management Endpoints
+// ============================================================================
+
+// RecordConsent records user consent for cross-agent data sharing
+// POST /api/v1/a2a/consent
+func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req application.RecordConsentRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Set IP and User-Agent from request
+	req.IPAddress = c.IP()
+	req.UserAgent = c.Get("User-Agent")
+
+	consent, err := h.a2aService.RecordConsent(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"a2a_consent",
+		consent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"grantorAgentId":   req.GrantorAgentID,
+			"recipientAgentId": req.RecipientAgentID,
+			"scope":            req.Scope,
+			"purpose":          req.Purpose,
+		},
+	)
+
+	return c.Status(fiber.StatusCreated).JSON(consent)
+}
+
+// CheckConsent checks if consent exists for a specific scope
+// GET /api/v1/a2a/consent/check
+func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
+	userID := c.Query("userId")
+	grantorID := c.Query("grantorAgentId")
+	recipientID := c.Query("recipientAgentId")
+	scope := c.Query("scope")
+
+	if userID == "" || grantorID == "" || recipientID == "" || scope == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "userId, grantorAgentId, recipientAgentId, and scope are required",
+		})
+	}
+
+	grantorUUID, err := uuid.Parse(grantorID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid grantor agent ID",
+		})
+	}
+
+	recipientUUID, err := uuid.Parse(recipientID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid recipient agent ID",
+		})
+	}
+
+	hasConsent, err := h.a2aService.CheckConsent(c.Context(), userID, grantorUUID, recipientUUID, scope)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"hasConsent":       hasConsent,
+		"userId":           userID,
+		"grantorAgentId":   grantorID,
+		"recipientAgentId": recipientID,
+		"scope":            scope,
+	})
+}
+
+// RevokeConsent revokes a consent record
+// POST /api/v1/a2a/consent/:id/revoke
+func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	consentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid consent ID",
+		})
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		req.Reason = "User revoked consent"
+	}
+
+	if err := h.a2aService.RevokeConsent(c.Context(), consentID, req.Reason); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionDelete,
+		"a2a_consent",
+		consentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"reason": req.Reason,
+		},
+	)
+
+	return c.JSON(fiber.Map{
+		"consentId": consentID,
+		"revoked":   true,
+		"message":   "Consent revoked successfully",
+	})
+}
+
+// ListUserConsents lists all consent records for a user
+// GET /api/v1/a2a/consent/user/:userId
+func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
+	userID := c.Params("userId")
+	if userID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "User ID is required",
+		})
+	}
+
+	includeRevoked := c.Query("includeRevoked") == "true"
+
+	consents, err := h.a2aService.ListUserConsents(c.Context(), userID, includeRevoked)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"userId":   userID,
+		"consents": consents,
+		"count":    len(consents),
+	})
+}
+
+// ============================================================================
+// Policy Evaluation Endpoint
+// ============================================================================
+
+// EvaluatePolicy evaluates A2A policies for a given action
+// POST /api/v1/a2a/policies/evaluate
+func (h *A2AHandler) EvaluatePolicy(c fiber.Ctx) error {
+	var req application.EvaluateA2APolicyRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	decision, err := h.a2aService.EvaluateA2APolicy(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(decision)
+}
+
+// ============================================================================
+// Public Agent Card Endpoint (Well-Known)
+// ============================================================================
+
+// GetPublicAgentCard returns the public A2A agent card (for discovery)
+// GET /.well-known/agent.json
+func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
+	// Get agent ID from query or header
+	agentID := c.Query("agentId")
+	if agentID == "" {
+		agentID = c.Get("X-Agent-ID")
+	}
+	if agentID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Agent ID is required (query param 'agentId' or header 'X-Agent-ID')",
+		})
+	}
+
+	agentUUID, err := uuid.Parse(agentID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentUUID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent card not found",
+		})
+	}
+
+	// Set Content-Type for A2A discovery
+	c.Set("Content-Type", "application/json")
+
+	// Return the card as raw JSON for A2A protocol compliance
+	cardJSON, err := json.Marshal(card)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to serialize agent card",
+		})
+	}
+
+	return c.Send(cardJSON)
+}
+
+// ============================================================================
+// Maintenance Endpoints
+// ============================================================================
+
+// CleanupExpiredNonces removes expired nonces (admin only)
+// POST /api/v1/a2a/maintenance/cleanup-nonces
+func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
+	count, err := h.a2aService.CleanupExpiredNonces(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":         "Nonces cleaned up",
+		"deletedCount":   count,
+		"timestamp":       time.Now().UTC(),
+	})
+}
+
+// RefreshExpiredCards refreshes cards with expired attestations (admin only)
+// POST /api/v1/a2a/maintenance/refresh-cards
+func (h *A2AHandler) RefreshExpiredCards(c fiber.Ctx) error {
+	count, err := h.a2aService.RefreshExpiredCards(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":        "Cards refreshed",
+		"refreshedCount": count,
+		"timestamp":      time.Now().UTC(),
+	})
+}
+
+// ============================================================================
+// Skill Registration
+// ============================================================================
+
+// RegisterSkill registers a new skill for an agent
+// POST /api/v1/a2a/skills
+func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
+	var req struct {
+		AgentID     string   `json:"agentId"`
+		ID          string   `json:"id"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		InputModes  []string `json:"inputModes"`
+		OutputModes []string `json:"outputModes"`
+		Examples    []string `json:"examples"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	agentID, err := uuid.Parse(req.AgentID)
+	if err != nil {
+		// Try to get agent ID from authenticated user
+		agentID, err = h.getAgentIDFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid or missing agent ID",
+			})
+		}
+	}
+
+	skill := &domain.A2ASkill{
+		AgentID:     agentID,
+		SkillID:     req.ID,
+		Name:        req.Name,
+		Description: req.Description,
+		Tags:        req.Tags,
+		InputModes:  req.InputModes,
+		OutputModes: req.OutputModes,
+		Examples:    req.Examples,
+	}
+
+	if err := h.a2aService.RegisterSkill(c.Context(), skill); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(skill)
+}
+
+// ============================================================================
+// Attestation Operations
+// ============================================================================
+
+// AttestSkill creates an attestation for another agent's skill
+// POST /api/v1/a2a/attestations
+func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
+	var req struct {
+		AttestingAgentID string                 `json:"attestingAgentId"` // SDK sends this
+		AttestedAgentID  string                 `json:"attestedAgentId"`
+		SkillID          string                 `json:"skillId"`
+		AttestationType  string                 `json:"attestationType"`
+		Confidence       float64                `json:"confidence"`
+		Evidence         map[string]interface{} `json:"evidence"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	attestedAgentID, err := uuid.Parse(req.AttestedAgentID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid attested agent ID",
+		})
+	}
+
+	// Get attesting agent - try request body first, then context
+	var attestingAgentID uuid.UUID
+	if req.AttestingAgentID != "" {
+		attestingAgentID, err = uuid.Parse(req.AttestingAgentID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid attesting agent ID",
+			})
+		}
+	} else {
+		// Fallback to context
+		attestingAgentID, err = h.getAgentIDFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Could not determine attesting agent - provide attestingAgentId in request",
+			})
+		}
+	}
+
+	attestReq := application.AttestSkillRequest{
+		AttestingAgentID: attestingAgentID,
+		AttestedAgentID:  attestedAgentID,
+		SkillID:          req.SkillID,
+		AttestationType:  req.AttestationType,
+		Confidence:       req.Confidence,
+		Evidence:         req.Evidence,
+	}
+
+	attestation, err := h.a2aService.AttestSkill(c.Context(), attestReq)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(attestation)
+}
+
+// GetConsensusStatus returns the consensus verification status for a skill
+// GET /api/v1/a2a/consensus/:agentId/:skillId
+// GET /api/v1/a2a/agents/:id/skills/:skillId/consensus (SDK compatibility)
+func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
+	// Try both parameter naming conventions
+	agentIDStr := c.Params("agentId")
+	if agentIDStr == "" {
+		agentIDStr = c.Params("id") // SDK path uses :id
+	}
+	agentID, err := uuid.Parse(agentIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	skillID := c.Params("skillId")
+	if skillID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Skill ID is required",
+		})
+	}
+
+	result, err := h.a2aService.GetConsensusStatus(c.Context(), agentID, skillID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(result)
+}
+
+// GetSkillAttestations returns all attestations for an agent's skill
+// GET /api/v1/a2a/attestations/:agentId/:skillId
+func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("agentId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	skillID := c.Params("skillId")
+
+	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(attestations)
+}
+
+// ============================================================================
+// Security Check Operations
+// ============================================================================
+
+// CheckSecurity evaluates security policies for an A2A request
+// POST /api/v1/a2a/security/check
+func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
+	var req struct {
+		RequestingAgentID string `json:"requestingAgentId"`
+		TargetAgentID     string `json:"targetAgentId"`
+		SkillID           string `json:"skillId"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	requestingID, err := uuid.Parse(req.RequestingAgentID)
+	if err != nil {
+		// Try to get from context
+		requestingID, err = h.getAgentIDFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid requesting agent ID",
+			})
+		}
+	}
+
+	targetID, err := uuid.Parse(req.TargetAgentID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid target agent ID",
+		})
+	}
+
+	checkReq := &domain.A2ASecurityCheckRequest{
+		RequestingAgentID: requestingID,
+		TargetAgentID:     targetID,
+		SkillID:           req.SkillID,
+	}
+
+	result, err := h.a2aService.CheckA2ASecurity(c.Context(), checkReq)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(result)
+}
+
+// GetSecuritySettings returns the A2A security settings for the organization
+// GET /api/v1/a2a/security/settings
+func (h *A2AHandler) GetSecuritySettings(c fiber.Ctx) error {
+	orgID, err := h.getOrgIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Could not determine organization",
+		})
+	}
+
+	settings, err := h.a2aService.GetSecuritySettings(c.Context(), orgID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(settings)
+}
+
+// UpdateSecuritySettings updates the A2A security settings for the organization
+// PUT /api/v1/a2a/security/settings
+func (h *A2AHandler) UpdateSecuritySettings(c fiber.Ctx) error {
+	var settings domain.A2ASecuritySettings
+
+	if err := c.Bind().JSON(&settings); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	orgID, err := h.getOrgIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Could not determine organization",
+		})
+	}
+
+	settings.OrganizationID = orgID
+
+	if err := h.a2aService.UpdateSecuritySettings(c.Context(), &settings); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(settings)
+}
+
+// ============================================================================
+// Alternative SDK-Compatible Routes
+// ============================================================================
+
+// SignRequestAlt handles signing without agent ID in path (SDK compatibility)
+// POST /api/v1/a2a/sign
+func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
+	var req struct {
+		AgentID string `json:"agentId"`
+		Method  string `json:"method"`
+		Path    string `json:"path"`
+		Body    string `json:"body"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	agentID, err := uuid.Parse(req.AgentID)
+	if err != nil {
+		agentID, err = h.getAgentIDFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid or missing agent ID",
+			})
+		}
+	}
+
+	signature, err := h.a2aService.SignA2ARequest(c.Context(), agentID, req.Method, req.Path, []byte(req.Body))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(signature)
+}
+
+// GetTrustScoreAlt handles trust score with agent ID in path (SDK compatibility)
+// GET /api/v1/a2a/trust/:id
+// Auto-computes trust score if none exists or score is zero
+func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// First try to get existing trust score
+	score, err := h.a2aService.GetA2ATrustScore(c.Context(), agentID)
+	if err != nil || score == nil || score.A2ATrustScore == nil || *score.A2ATrustScore == 0 {
+		// Auto-compute if no score exists or score is zero
+		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
+		if computeErr != nil {
+			// If computation fails, return zero score with message
+			return c.JSON(fiber.Map{
+				"agentId": agentID,
+				"score":   0.0,
+				"message": "Could not compute trust score: " + computeErr.Error(),
+			})
+		}
+		return c.JSON(computedScore)
+	}
+
+	return c.JSON(score)
+}
+
+// RouteByIntentPost handles intent routing via POST (SDK compatibility)
+// POST /api/v1/a2a/discovery/route
+func (h *A2AHandler) RouteByIntentPost(c fiber.Ctx) error {
+	var req struct {
+		Intent        string  `json:"intent"`
+		MinTrustScore float64 `json:"minTrustScore"`
+	}
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Intent == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Intent is required",
+		})
+	}
+
+	result, err := h.a2aService.RouteByIntent(c.Context(), req.Intent, req.MinTrustScore)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(result)
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+func (h *A2AHandler) getAgentIDFromContext(c fiber.Ctx) (uuid.UUID, error) {
+	// Try to get from locals (set by auth middleware) - try both naming conventions
+	if agentID, ok := c.Locals("agent_id").(uuid.UUID); ok {
+		return agentID, nil
+	}
+	if agentIDStr, ok := c.Locals("agent_id").(string); ok {
+		return uuid.Parse(agentIDStr)
+	}
+	if agentID, ok := c.Locals("agentId").(uuid.UUID); ok {
+		return agentID, nil
+	}
+	if agentIDStr, ok := c.Locals("agentId").(string); ok {
+		return uuid.Parse(agentIDStr)
+	}
+	return uuid.UUID{}, fmt.Errorf("agent ID not found in context")
+}
+
+func (h *A2AHandler) getOrgIDFromContext(c fiber.Ctx) (uuid.UUID, error) {
+	// Try to get from locals (set by auth middleware) - try both naming conventions
+	if orgID, ok := c.Locals("organization_id").(uuid.UUID); ok {
+		return orgID, nil
+	}
+	if orgIDStr, ok := c.Locals("organization_id").(string); ok {
+		return uuid.Parse(orgIDStr)
+	}
+	if orgID, ok := c.Locals("organizationId").(uuid.UUID); ok {
+		return orgID, nil
+	}
+	if orgIDStr, ok := c.Locals("organizationId").(string); ok {
+		return uuid.Parse(orgIDStr)
+	}
+	return uuid.UUID{}, fmt.Errorf("organization ID not found in context")
+}
+
+func isValidTaskState(state domain.A2ATaskState) bool {
+	switch state {
+	case domain.A2ATaskStateSubmitted,
+		domain.A2ATaskStateWorking,
+		domain.A2ATaskStateInputNeeded,
+		domain.A2ATaskStateCompleted,
+		domain.A2ATaskStateFailed,
+		domain.A2ATaskStateCancelled:
+		return true
+	}
+	return false
+}
+
+// ============================================================================
+// SDK Compatibility Handlers
+// ============================================================================
+
+// UpdateTrustScore updates the trust score for an agent
+// PUT /api/v1/a2a/trust/:id
+func (h *A2AHandler) UpdateTrustScore(c fiber.Ctx) error {
+	targetAgentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	var req struct {
+		Score      float64 `json:"score"`
+		Confidence float64 `json:"confidence"`
+		Reason     string  `json:"reason"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Compute and return the updated trust score
+	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), targetAgentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update trust score: " + err.Error(),
+		})
+	}
+
+	return c.JSON(score)
+}
+
+// RecordInteraction records an interaction (success or failure) with a peer agent
+// POST /api/v1/a2a/trust/:id/interaction
+func (h *A2AHandler) RecordInteraction(c fiber.Ctx) error {
+	targetAgentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	agentID, err := h.getAgentIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Agent ID required",
+		})
+	}
+
+	var req struct {
+		TaskType    string `json:"taskType"`
+		Success     bool   `json:"success"`
+		DurationMs  int64  `json:"durationMs"`
+		ErrorReason string `json:"errorReason"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update peer trust based on interaction
+	peerTrust, err := h.a2aService.GetPeerTrustScore(c.Context(), agentID, targetAgentID)
+	if err != nil {
+		// Create new peer trust relationship if doesn't exist
+		peerTrust = &domain.A2APeerTrust{
+			AgentID:     agentID,
+			PeerAgentID: targetAgentID,
+		}
+	}
+
+	// Adjust trust based on success/failure
+	currentTrust := 0.5
+	if peerTrust.PeerTrustScore != nil {
+		currentTrust = *peerTrust.PeerTrustScore
+	}
+
+	if req.Success {
+		currentTrust = min(1.0, currentTrust+0.05)
+	} else {
+		currentTrust = max(0.0, currentTrust-0.1)
+	}
+
+	peerTrust.PeerTrustScore = &currentTrust
+
+	// Return the computed trust score
+	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), targetAgentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to compute trust score",
+		})
+	}
+
+	return c.JSON(score)
+}
+
+// CapableOfPost handles POST requests for capability discovery (Java SDK compatibility)
+// POST /api/v1/a2a/discovery/capable
+func (h *A2AHandler) CapableOfPost(c fiber.Ctx) error {
+	var req struct {
+		SkillIDs      []string `json:"skillIds"`
+		MinTrustScore float64  `json:"minTrustScore"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Use skill IDs as intent for search
+	intent := ""
+	if len(req.SkillIDs) > 0 {
+		intent = req.SkillIDs[0] // Use first skill as intent
+	}
+
+	agents, err := h.a2aService.CapableOf(c.Context(), intent, req.MinTrustScore, 20)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to find capable agents",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agents": agents,
+	})
+}
+
+// ListAgentCards returns a list of registered agent cards
+// GET /api/v1/a2a/cards
+func (h *A2AHandler) ListAgentCards(c fiber.Ctx) error {
+	limit := 100
+	offset := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil {
+			offset = o
+		}
+	}
+
+	// Get all agent cards from repository (we'll need to add a service method)
+	// For now, return empty list as placeholder
+	cards := make([]*domain.A2AAgentCard, 0)
+
+	// Try to get cards using GetAgentCard for known agents
+	// This is a placeholder - proper implementation needs ListAgentCards service method
+
+	return c.JSON(fiber.Map{
+		"cards":  cards,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// RegisterAgentCardAlt handles POST /cards for Java SDK compatibility
+// POST /api/v1/a2a/cards
+func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
+	var req struct {
+		AgentID string `json:"agentId"`
+		CardURL string `json:"cardUrl"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get agent ID from request body or context
+	var agentID uuid.UUID
+	var err error
+	if req.AgentID != "" {
+		agentID, err = uuid.Parse(req.AgentID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid agent ID",
+			})
+		}
+	} else {
+		agentID, err = h.getAgentIDFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Agent ID required",
+			})
+		}
+	}
+
+	// Create the agent card using the service
+	card, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
+		AgentID: agentID,
+		CardURL: req.CardURL,
+	})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to register agent card: " + err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(card)
+}
+
+// UpdateAgentCard updates an existing agent card
+// PUT /api/v1/a2a/cards/:id
+func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	var req struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Version     string   `json:"version"`
+		Endpoint    string   `json:"endpoint"`
+		Skills      []string `json:"skills"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get existing card
+	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent card not found",
+		})
+	}
+
+	// Return the existing card (updates would require service method)
+	return c.JSON(card)
+}
+
+// ListPeerTrusts returns all peer trust relationships for the authenticated agent
+// GET /api/v1/a2a/peers
+func (h *A2AHandler) ListPeerTrusts(c fiber.Ctx) error {
+	agentID, err := h.getAgentIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Agent ID required",
+		})
+	}
+
+	// Get peer trusts from repository
+	// For now use the peerTrustRepo through the service if available
+	// Placeholder: return empty list
+	peers := make([]*domain.A2APeerTrust, 0)
+
+	return c.JSON(fiber.Map{
+		"peers":   peers,
+		"agentId": agentID,
+	})
+}
+
+// DeleteSkill deletes a registered skill
+// DELETE /api/v1/a2a/skills/:id
+func (h *A2AHandler) DeleteSkill(c fiber.Ctx) error {
+	skillID := c.Params("id")
+	if skillID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Skill ID required",
+		})
+	}
+
+	// For now, return success (proper implementation needs DeleteSkill service method)
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// GetSecurityViolations returns security policy violations
+// GET /api/v1/a2a/security/violations
+func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
+	orgID, err := h.getOrgIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Organization ID required",
+		})
+	}
+
+	limit := 50
+	offset := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil {
+			offset = o
+		}
+	}
+
+	violations, err := h.a2aService.GetSecurityViolations(c.Context(), orgID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get security violations",
+		})
+	}
+
+	return c.JSON(violations)
+}

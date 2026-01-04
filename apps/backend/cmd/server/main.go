@@ -265,7 +265,7 @@ func main() {
 	// These routes use Ed25519 agent authentication for SDK/programmatic access
 	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
 	sdkAPI := app.Group("/api/v1/sdk-api")
-	sdkAPI.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Validates agent signatures, passes through JWT
+	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent)) // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
 	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
@@ -391,6 +391,19 @@ type Repositories struct {
 	CapabilityRequest  domain.CapabilityRequestRepository // ✅ For capability expansion approval workflow
 	AuthFailure        *repository.AuthFailureRepository  // ✅ For failed authentication monitoring
 	DataTransfer       *repository.DataTransferRepository // ✅ For data exfiltration detection
+	// A2A (Agent-to-Agent) protocol repositories
+	A2AAgentCard    *repository.A2AAgentCardRepository
+	A2ASkill        *repository.A2ASkillRepository
+	A2ATask         *repository.A2ATaskRepository
+	A2APeerTrust    *repository.A2APeerTrustRepository
+	A2AConsent      *repository.A2AConsentRepository
+	A2ATrustScore   *repository.A2ATrustScoreRepository
+	A2ARequestNonce   *repository.A2ARequestNonceRepository
+	A2APolicy         *repository.A2APolicyRepository
+	A2AAttestation        *repository.A2AAgentAttestationRepository
+	A2ARevokedAgent       *repository.A2ARevokedAgentRepository
+	A2ASecuritySettings   *repository.A2ASecuritySettingsRepository
+	A2ASecurityViolation  *repository.A2ASecurityViolationRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -423,6 +436,19 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		CapabilityRequest:  repository.NewCapabilityRequestRepository(dbx), // ✅ For capability expansion approval workflow
 		AuthFailure:        repository.NewAuthFailureRepository(db),        // ✅ For failed authentication monitoring
 		DataTransfer:       repository.NewDataTransferRepository(db),       // ✅ For data exfiltration detection
+		// A2A (Agent-to-Agent) protocol repositories
+		A2AAgentCard:    repository.NewA2AAgentCardRepository(db),
+		A2ASkill:        repository.NewA2ASkillRepository(db),
+		A2ATask:         repository.NewA2ATaskRepository(db),
+		A2APeerTrust:    repository.NewA2APeerTrustRepository(db),
+		A2AConsent:      repository.NewA2AConsentRepository(db),
+		A2ATrustScore:   repository.NewA2ATrustScoreRepository(db),
+		A2ARequestNonce:   repository.NewA2ARequestNonceRepository(db),
+		A2APolicy:         repository.NewA2APolicyRepository(db),
+		A2AAttestation:        repository.NewA2AAgentAttestationRepository(db),
+		A2ARevokedAgent:       repository.NewA2ARevokedAgentRepository(db),
+		A2ASecuritySettings:   repository.NewA2ASecuritySettingsRepository(db),
+		A2ASecurityViolation:  repository.NewA2ASecurityViolationRepository(db),
 	}, oauthRepo
 }
 
@@ -449,6 +475,7 @@ type Services struct {
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
+	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -634,6 +661,24 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,     // ✅ NEW: Inject agent repository to fetch agent data
 	)
 
+	// ✅ Initialize A2A (Agent-to-Agent) protocol service
+	a2aService := application.NewA2AService(
+		repos.A2AAgentCard,
+		repos.A2ASkill,
+		repos.A2ATask,
+		repos.A2APeerTrust,
+		repos.A2AConsent,
+		repos.A2ATrustScore,
+		repos.A2ARequestNonce,
+		repos.A2APolicy,
+		repos.A2AAttestation,
+		repos.A2ARevokedAgent,
+		repos.A2ASecuritySettings,
+		repos.A2ASecurityViolation,
+		repos.Agent,
+		keyVault,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -657,6 +702,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
+		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
 	}, keyVault
 }
 
@@ -688,6 +734,7 @@ type Handlers struct {
 	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
+	A2A                *handlers.A2AHandler                // ✅ For A2A (Agent-to-Agent) protocol
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -839,6 +886,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			repos.MCPServer,
 			repos.MCPCapability,
 		),
+		A2A: handlers.NewA2AHandler(
+			services.A2A,
+			services.Agent,
+			services.Audit,
+		),
 	}
 }
 
@@ -919,7 +971,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
 	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Try Ed25519 first (for SDK agents)
+	detection.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Try Ed25519/ML-DSA/hybrid first (for SDK agents)
 	detection.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
@@ -931,7 +983,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
 	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
-	agents.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Then try Ed25519 (for SDK agents)
+	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
@@ -970,6 +1022,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)   // Get agent's key vault info (public key, expiration, rotation status)
 	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
 	agents.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
+	// Post-Quantum Cryptography (PQC) endpoints
+	agents.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                  // Get agent's PQC key vault info
+	agents.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)  // Register PQC public key
+	agents.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)     // Rotate PQC key
+	agents.Post("/:id/hybrid-mode", middleware.MemberMiddleware(), h.Agent.SetHybridMode) // Enable/disable hybrid mode
+
+	// Cryptographic algorithms info (public)
+	crypto := v1.Group("/crypto")
+	crypto.Get("/algorithms", h.Agent.GetSupportedAlgorithms) // List supported algorithms (Ed25519, ML-DSA, hybrid)
 
 	// API keys routes (authentication required)
 	apiKeys := v1.Group("/api-keys")
@@ -1076,7 +1137,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// CRITICAL: These MUST be registered BEFORE JWT-protected routes to avoid middleware conflicts
 	// These endpoints use Ed25519 authentication (agent-to-backend) instead of JWT (user-to-backend)
 	mcpServersAgentAuth := v1.Group("/mcp-servers")
-	mcpServersAgentAuth.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Ed25519 signature verification
+	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent)) // PQC signature verification (Ed25519, ML-DSA, or hybrid)
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
 	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)  // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
 	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                  // ✅ Submit agent attestation (Ed25519 signed, with challenge)
@@ -1221,6 +1282,95 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToMCPServer)
 	mcpServers.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromMCPServer)
 	mcpServers.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForMCPServer)
+
+	// ============================================================================
+	// A2A (Agent-to-Agent) Protocol Routes
+	// Google A2A protocol implementation with AIM security enhancements
+	// ============================================================================
+
+	// Public A2A discovery endpoint (no auth required)
+	// /.well-known/agent.json - Standard A2A agent card discovery
+	v1.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
+
+	// A2A signature verification (no auth - validates incoming A2A requests)
+	v1.Post("/a2a/verify", h.A2A.VerifyRequest)
+
+	// A2A routes (JWT authenticated - web UI)
+	a2a := v1.Group("/a2a")
+	a2a.Use(middleware.AuthMiddleware(jwtService))
+	a2a.Use(middleware.RateLimitMiddleware())
+
+	// Agent Card management
+	a2a.Post("/agents/:id/card", middleware.MemberMiddleware(), h.A2A.RegisterAgentCard)
+	a2a.Get("/agents/:id/card", h.A2A.GetAgentCard)
+	a2a.Post("/agents/:id/card/refresh", middleware.MemberMiddleware(), h.A2A.RefreshCardAttestation)
+
+	// Request signing (SDK/programmatic)
+	a2a.Post("/agents/:id/sign", h.A2A.SignRequest)
+
+	// A2A Trust Scores
+	a2a.Get("/agents/:id/trust-score", h.A2A.GetA2ATrustScore)
+	a2a.Post("/agents/:id/trust-score/compute", middleware.ManagerMiddleware(), h.A2A.ComputeA2ATrustScore)
+	a2a.Get("/agents/:id/peers/:peer_id/trust", h.A2A.GetPeerTrustScore)
+
+	// A2A Skills
+	a2a.Get("/agents/:id/skills", h.A2A.GetAgentSkills)
+	a2a.Get("/skills/search", h.A2A.SearchSkills)
+
+	// A2A Intent-Based Discovery
+	a2a.Get("/route", h.A2A.RouteByIntent)
+	a2a.Get("/capable-of", h.A2A.CapableOf)
+
+	// A2A Tasks (audit trail)
+	a2a.Post("/tasks", h.A2A.LogTask)
+	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)
+
+	// A2A Consent Management (GDPR/PSD2 compliance)
+	a2a.Post("/consent", h.A2A.RecordConsent)
+	a2a.Get("/consent/check", h.A2A.CheckConsent)
+	a2a.Post("/consent/:id/revoke", h.A2A.RevokeConsent)
+	a2a.Get("/consent/user/:userId", h.A2A.ListUserConsents)
+
+	// A2A Policy Evaluation
+	a2a.Post("/policies/evaluate", h.A2A.EvaluatePolicy)
+
+	// A2A Skill Registration (SDK compatibility)
+	a2a.Post("/skills", h.A2A.RegisterSkill)
+
+	// A2A Attestations
+	a2a.Post("/attestations", h.A2A.AttestSkill)
+	a2a.Get("/attestations/:agentId/:skillId", h.A2A.GetSkillAttestations)
+	a2a.Get("/consensus/:agentId/:skillId", h.A2A.GetConsensusStatus)
+
+	// A2A Security Policy Enforcement
+	a2a.Post("/security/check", h.A2A.CheckSecurity)
+	a2a.Get("/security/settings", h.A2A.GetSecuritySettings)
+	a2a.Put("/security/settings", middleware.ManagerMiddleware(), h.A2A.UpdateSecuritySettings)
+
+	// SDK Compatibility Routes (alternative paths that SDKs expect)
+	a2a.Post("/sign", h.A2A.SignRequestAlt)
+	a2a.Post("/verify", h.A2A.VerifyRequest)                                   // SDK verify request endpoint
+	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
+	a2a.Put("/trust/:id", h.A2A.UpdateTrustScore)                              // SDK update trust score
+	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction)                // SDK record interaction
+	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
+	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                        // Java SDK expects POST
+	a2a.Get("/cards", h.A2A.ListAgentCards)                                    // SDK list agent cards
+	a2a.Post("/cards", h.A2A.RegisterAgentCardAlt)                             // Java SDK expects POST /cards
+	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                  // SDK calls /cards/:id instead of /agents/:id/card
+	a2a.Put("/cards/:id", h.A2A.UpdateAgentCard)                               // SDK update agent card
+	a2a.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)           // Java SDK expects /cards/:id/attestation
+	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                    // SDK list peer trusts
+	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                               // SDK delete skill
+	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)               // SDK get security violations
+	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
+
+	// A2A Maintenance (admin only)
+	a2aAdmin := v1.Group("/a2a/maintenance")
+	a2aAdmin.Use(middleware.AuthMiddleware(jwtService))
+	a2aAdmin.Use(middleware.AdminMiddleware())
+	a2aAdmin.Post("/cleanup-nonces", h.A2A.CleanupExpiredNonces)
+	a2aAdmin.Post("/refresh-cards", h.A2A.RefreshExpiredCards)
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {

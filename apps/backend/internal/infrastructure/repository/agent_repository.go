@@ -60,8 +60,9 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		                    trust_score, talks_to, capabilities, metadata,
 		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
+		                    pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled, pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
 		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
 	`
 
 	now := time.Now()
@@ -123,13 +124,19 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.KeyRotationGraceUntil,
 		agent.PreviousPublicKey,
 		agent.RotationCount,
+		agent.PQCPublicKey,
+		agent.PQCKeyAlgorithm,
+		agent.HybridModeEnabled,
+		agent.PQCKeyCreatedAt,
+		agent.PQCKeyExpiresAt,
+		agent.PreviousPQCPublicKey,
 		agent.CreatedAt,
 		agent.UpdatedAt,
 		agent.CreatedBy,
 		agent.CreatedByName,
 		agent.CreatedByEmail,
 		agent.CreatedBySDKTokenID,
-		agent.CreatedByAPIKeyID, // ✅ API key tracking for revocation
+		agent.CreatedByAPIKeyID,
 	)
 
 	return err
@@ -142,6 +149,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
 		       trust_score, verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
+		       pqc_public_key, pqc_key_algorithm, COALESCE(hybrid_mode_enabled, false), pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
 		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
@@ -165,6 +173,11 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var keyExpiresAt sql.NullTime
 	var keyRotationGraceUntil sql.NullTime
 	var previousPublicKey sql.NullString
+	var pqcPublicKey sql.NullString
+	var pqcKeyAlgorithm sql.NullString
+	var pqcKeyCreatedAt sql.NullTime
+	var pqcKeyExpiresAt sql.NullTime
+	var previousPQCPublicKey sql.NullString
 	var createdBySDKTokenID sql.NullString
 	var createdByAPIKeyID sql.NullString
 	var updatedBy sql.NullString
@@ -198,6 +211,12 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&keyRotationGraceUntil,
 		&previousPublicKey,
 		&agent.RotationCount,
+		&pqcPublicKey,
+		&pqcKeyAlgorithm,
+		&agent.HybridModeEnabled,
+		&pqcKeyCreatedAt,
+		&pqcKeyExpiresAt,
+		&previousPQCPublicKey,
 		&agent.CreatedByName,
 		&agent.CreatedByEmail,
 		&createdBySDKTokenID,
@@ -252,6 +271,21 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 	if previousPublicKey.Valid {
 		agent.PreviousPublicKey = &previousPublicKey.String
+	}
+	if pqcPublicKey.Valid {
+		agent.PQCPublicKey = &pqcPublicKey.String
+	}
+	if pqcKeyAlgorithm.Valid {
+		agent.PQCKeyAlgorithm = &pqcKeyAlgorithm.String
+	}
+	if pqcKeyCreatedAt.Valid {
+		agent.PQCKeyCreatedAt = &pqcKeyCreatedAt.Time
+	}
+	if pqcKeyExpiresAt.Valid {
+		agent.PQCKeyExpiresAt = &pqcKeyExpiresAt.Time
+	}
+	if previousPQCPublicKey.Valid {
+		agent.PreviousPQCPublicKey = &previousPQCPublicKey.String
 	}
 	if createdBySDKTokenID.Valid {
 		sdkTokenID, _ := uuid.Parse(createdBySDKTokenID.String)
@@ -398,8 +432,10 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		    documentation_url = $11, trust_score = $12, verified_at = $13,
 		    talks_to = $14, capabilities = $15, metadata = $16, updated_at = $17,
 		    key_created_at = $18, key_expires_at = $19, key_rotation_grace_until = $20,
-		    previous_public_key = $21, rotation_count = $22
-		WHERE id = $23
+		    previous_public_key = $21, rotation_count = $22,
+		    pqc_public_key = $23, pqc_key_algorithm = $24, hybrid_mode_enabled = $25,
+		    pqc_key_created_at = $26, pqc_key_expires_at = $27, previous_pqc_public_key = $28
+		WHERE id = $29
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -448,6 +484,12 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.KeyRotationGraceUntil,
 		agent.PreviousPublicKey,
 		agent.RotationCount,
+		agent.PQCPublicKey,
+		agent.PQCKeyAlgorithm,
+		agent.HybridModeEnabled,
+		agent.PQCKeyCreatedAt,
+		agent.PQCKeyExpiresAt,
+		agent.PreviousPQCPublicKey,
 		agent.ID,
 	)
 

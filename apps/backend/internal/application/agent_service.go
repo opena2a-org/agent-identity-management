@@ -1883,6 +1883,66 @@ func (s *AgentService) UpdateLastActive(ctx context.Context, agentID uuid.UUID) 
 	return s.agentRepo.UpdateLastActive(ctx, agentID)
 }
 
+// UpdateAgentPQCKey updates an agent's PQC key information
+func (s *AgentService) UpdateAgentPQCKey(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error {
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	now := time.Now()
+	agent.PQCPublicKey = &pqcPublicKey
+	agent.PQCKeyAlgorithm = &algorithm
+	agent.PQCKeyCreatedAt = &now
+	agent.HybridModeEnabled = hybridMode
+	agent.UpdatedAt = now
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to update agent PQC key: %w", err)
+	}
+
+	return nil
+}
+
+// RotateAgentPQCKey rotates an agent's PQC key, storing the previous key for grace period
+func (s *AgentService) RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error {
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	now := time.Now()
+	// Store previous key for grace period verification
+	agent.PreviousPQCPublicKey = agent.PQCPublicKey
+	agent.PQCPublicKey = &newPQCPublicKey
+	agent.PQCKeyAlgorithm = &algorithm
+	agent.PQCKeyCreatedAt = &now
+	agent.UpdatedAt = now
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to rotate agent PQC key: %w", err)
+	}
+
+	return nil
+}
+
+// SetAgentHybridMode enables or disables hybrid authentication mode for an agent
+func (s *AgentService) SetAgentHybridMode(ctx context.Context, agentID uuid.UUID, enabled bool) error {
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	agent.HybridModeEnabled = enabled
+	agent.UpdatedAt = time.Now()
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to update agent hybrid mode: %w", err)
+	}
+
+	return nil
+}
+
 // calculateViolationSeverity determines the severity level for a capability violation
 func (s *AgentService) calculateViolationSeverity(agent *domain.Agent, isBlocked bool) string {
 	// Base severity on trust score and whether action was blocked

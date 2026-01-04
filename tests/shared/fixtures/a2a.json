@@ -1,0 +1,251 @@
+{
+  "agentCard": {
+    "published": {
+      "id": "card-123",
+      "agentId": "agent-a1b2c3d4",
+      "name": "data-analyst",
+      "displayName": "Data Analyst Agent",
+      "description": "An agent that analyzes data",
+      "url": "https://agent.example.com",
+      "cardUrl": "https://agent.example.com/.well-known/agent.json",
+      "version": "1.0.0",
+      "capabilities": ["data-analysis", "reporting"],
+      "skills": [
+        {
+          "id": "skill-analysis",
+          "name": "Data Analysis",
+          "description": "Analyzes data sets and provides insights",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "data": { "type": "array" },
+              "format": { "type": "string" }
+            }
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "insights": { "type": "array" },
+              "summary": { "type": "string" }
+            }
+          },
+          "isVerified": true,
+          "attestationCount": 5
+        }
+      ],
+      "publicKey": "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+      "aimAttestation": {
+        "agentId": "agent-a1b2c3d4",
+        "attestedAt": "2024-01-15T10:00:00Z",
+        "expiresAt": "2025-01-15T10:00:00Z",
+        "trustScore": 0.92,
+        "signature": "c2lnbmF0dXJlLWJhc2U2NC1kYXRh",
+        "attestationType": "full"
+      },
+      "createdAt": "2024-01-15T10:00:00Z",
+      "updatedAt": "2024-01-15T10:00:00Z"
+    }
+  },
+  "skill": {
+    "basic": {
+      "id": "skill-summarize",
+      "name": "Text Summarization",
+      "description": "Summarizes long text into key points"
+    },
+    "withSchema": {
+      "id": "skill-translate",
+      "name": "Translation",
+      "description": "Translates text between languages",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "sourceLang": { "type": "string" },
+          "targetLang": { "type": "string" }
+        },
+        "required": ["text", "targetLang"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "translatedText": { "type": "string" },
+          "confidence": { "type": "number" }
+        }
+      },
+      "examples": [
+        {
+          "name": "English to Spanish",
+          "input": {
+            "text": "Hello, world!",
+            "targetLang": "es"
+          },
+          "output": {
+            "translatedText": "¡Hola, mundo!",
+            "confidence": 0.98
+          }
+        }
+      ],
+      "tags": ["translation", "nlp", "multilingual"]
+    }
+  },
+  "peerTrust": {
+    "trusted": {
+      "peerId": "peer-agent-123",
+      "peerName": "Trusted Peer Agent",
+      "trustScore": 0.92,
+      "interactionCount": 150,
+      "lastInteraction": "2024-01-15T11:30:00Z"
+    },
+    "new": {
+      "peerId": "peer-agent-new",
+      "peerName": "New Peer Agent",
+      "trustScore": 0.5,
+      "interactionCount": 2,
+      "lastInteraction": "2024-01-15T10:00:00Z"
+    }
+  },
+  "trustScore": {
+    "high": {
+      "evaluatorAgentId": "agent-evaluator",
+      "subjectAgentId": "agent-subject",
+      "score": 0.88,
+      "confidence": 0.95,
+      "interactionCount": 200,
+      "successfulInteractions": 190,
+      "failedInteractions": 10,
+      "lastInteractionAt": "2024-01-15T12:00:00Z",
+      "factors": {
+        "reliability": 0.95,
+        "accuracy": 0.88,
+        "responseTime": 0.82
+      }
+    }
+  },
+  "consent": {
+    "active": {
+      "id": "consent-abc123",
+      "userId": "user-456",
+      "grantorAgentId": "agent-grantor",
+      "recipientAgentId": "agent-recipient",
+      "scope": ["read:profile", "read:transactions"],
+      "purpose": "Financial analysis and reporting",
+      "dataTypes": ["personal_info", "transaction_history"],
+      "consentMethod": "explicit",
+      "status": "active",
+      "grantedAt": "2024-01-15T09:00:00Z",
+      "expiresAt": "2025-01-15T09:00:00Z"
+    },
+    "revoked": {
+      "id": "consent-def456",
+      "userId": "user-789",
+      "grantorAgentId": "agent-grantor",
+      "recipientAgentId": "agent-recipient",
+      "scope": ["write:data"],
+      "purpose": "Data synchronization",
+      "dataTypes": ["user_data"],
+      "consentMethod": "explicit",
+      "status": "revoked",
+      "grantedAt": "2024-01-01T09:00:00Z",
+      "revokedAt": "2024-01-10T15:00:00Z"
+    }
+  },
+  "securityCheck": {
+    "allowed": {
+      "allowed": true,
+      "enforcementMode": "strict",
+      "violations": [],
+      "targetAgentId": "target-agent-123"
+    },
+    "deniedLowTrust": {
+      "allowed": false,
+      "enforcementMode": "strict",
+      "violations": [
+        {
+          "type": "TRUST_SCORE_TOO_LOW",
+          "message": "Requester trust score 0.35 below minimum 0.70",
+          "severity": "high"
+        }
+      ],
+      "denialReason": "Trust score below minimum threshold",
+      "targetAgentId": "target-agent-123",
+      "requesterTrustScore": 0.35
+    },
+    "monitorMode": {
+      "allowed": true,
+      "enforcementMode": "monitor",
+      "violations": [
+        {
+          "type": "UNVERIFIED_SKILL",
+          "message": "Skill 'data-export' is not verified",
+          "severity": "medium"
+        }
+      ],
+      "targetAgentId": "target-agent-123",
+      "skillId": "data-export"
+    }
+  },
+  "securitySettings": {
+    "default": {
+      "organizationId": "org-x1y2z3",
+      "enforcementMode": "strict",
+      "requireVerifiedSkills": true,
+      "minTrustScore": 0.7,
+      "requireSignedRequests": true,
+      "requireNonceValidation": true,
+      "maxTimestampAge": 300000,
+      "blockedAgentIds": [],
+      "allowedAgentIds": []
+    },
+    "relaxed": {
+      "organizationId": "org-x1y2z3",
+      "enforcementMode": "monitor",
+      "requireVerifiedSkills": false,
+      "minTrustScore": 0.3,
+      "requireSignedRequests": false,
+      "requireNonceValidation": false,
+      "maxTimestampAge": 600000,
+      "blockedAgentIds": [],
+      "allowedAgentIds": []
+    }
+  },
+  "attestation": {
+    "skillVerification": {
+      "id": "attest-123",
+      "attestingAgentId": "agent-attester",
+      "attestingAgentName": "Trusted Attester",
+      "attestedAgentId": "agent-attested",
+      "skillId": "skill-analysis",
+      "attestationType": "SKILL_VERIFICATION",
+      "confidence": 0.92,
+      "evidence": {
+        "testsPassed": 15,
+        "testsTotal": 16,
+        "sampleSize": 100
+      },
+      "signature": "YXR0ZXN0YXRpb24tc2lnbmF0dXJl",
+      "isRevoked": false,
+      "createdAt": "2024-01-15T10:00:00Z",
+      "expiresAt": "2025-01-15T10:00:00Z"
+    }
+  },
+  "consensus": {
+    "verified": {
+      "skillId": "skill-analysis",
+      "agentId": "agent-a1b2c3d4",
+      "attestationCount": 5,
+      "uniqueAttesters": 5,
+      "uniqueOwners": 3,
+      "confidenceScore": 85.5,
+      "isVerified": true
+    },
+    "notVerified": {
+      "skillId": "skill-new",
+      "agentId": "agent-a1b2c3d4",
+      "attestationCount": 1,
+      "uniqueAttesters": 1,
+      "uniqueOwners": 1,
+      "confidenceScore": 40.0,
+      "isVerified": false
+    }
+  }
+}

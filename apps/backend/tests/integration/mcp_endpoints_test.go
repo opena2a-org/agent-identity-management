@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,12 +17,11 @@ func TestMCPServerEndpoints(t *testing.T) {
 
 	tc := NewTestContext(t)
 
-	// Wait for backend and login
+	// Wait for backend and login as admin
 	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	email := fmt.Sprintf("mcp-test-%d@example.com", time.Now().Unix())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
-	require.NoError(t, err)
+	userToken := tc.AdminToken
 
 	var createdServerID string
 	var createdAgentID string

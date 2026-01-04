@@ -108,6 +108,18 @@ from .security_logging import (
     SecurityEventType,
 )
 
+# A2A (Agent-to-Agent) protocol support
+from .a2a import (
+    A2AClient,
+    A2AAgentCard,
+    A2ARequestSignature,
+    A2ATrustScore,
+    A2APeerTrust,
+    A2AConsent,
+    A2AError,
+    create_a2a_client_from_env,
+)
+
 # Read version from VERSION file (single source of truth)
 # Supports both development (file in parent dir) and installed package scenarios
 import os as _os
@@ -168,4 +180,13 @@ __all__ = [
     "CredEventType",
     "MCPEventType",
     "SecurityEventType",
+    # A2A (Agent-to-Agent) protocol support
+    "A2AClient",
+    "A2AAgentCard",
+    "A2ARequestSignature",
+    "A2ATrustScore",
+    "A2APeerTrust",
+    "A2AConsent",
+    "A2AError",
+    "create_a2a_client_from_env",
 ]

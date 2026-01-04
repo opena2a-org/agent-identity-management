@@ -1,0 +1,195 @@
+# AIM SDK Client Behavior Specification
+# All SDKs must implement tests for these behaviors
+
+version: "1.0"
+description: "Core AIM client behaviors that must be consistent across all SDKs"
+
+behaviors:
+  # === Constructor & Configuration ===
+  constructor:
+    - id: constructor_default_values
+      description: "Client should initialize with sensible defaults"
+      assertions:
+        - "Client instance is created without errors"
+        - "isAuthenticated() returns false"
+        - "Default base URL is used if not specified"
+
+    - id: constructor_custom_base_url
+      description: "Client should accept custom base URL"
+      input:
+        baseUrl: "https://custom.aim.example.com"
+      assertions:
+        - "Client uses provided base URL for requests"
+
+    - id: constructor_api_key
+      description: "Client should accept API key"
+      input:
+        apiKey: "test-api-key-123"
+      assertions:
+        - "Client stores API key for authentication"
+
+    - id: constructor_organization_id
+      description: "Client should accept organization ID"
+      input:
+        organizationId: "org-123"
+      assertions:
+        - "Client uses organization ID in requests"
+
+    - id: constructor_from_environment
+      description: "Client should read config from environment variables"
+      environment:
+        AIM_BASE_URL: "https://env.aim.example.com"
+        AIM_ORGANIZATION_ID: "env-org-123"
+        AIM_API_KEY: "env-api-key"
+      assertions:
+        - "Client uses environment values when no config provided"
+
+    - id: constructor_custom_timeout
+      description: "Client should accept custom timeout"
+      input:
+        timeout: 60000
+      assertions:
+        - "Client uses custom timeout for requests"
+
+  # === Authentication State ===
+  authentication:
+    - id: auth_starts_unauthenticated
+      description: "Client should start in unauthenticated state"
+      assertions:
+        - "isAuthenticated() returns false"
+        - "getCredentials() returns null"
+        - "getAgent() returns null"
+
+    - id: auth_set_credentials
+      description: "Setting credentials should authenticate client"
+      input:
+        credentials:
+          agentId: "agent-123"
+          privateKey: "base64-private-key"
+          publicKey: "base64-public-key"
+          organizationId: "org-456"
+      assertions:
+        - "isAuthenticated() returns true"
+        - "getCredentials() returns credentials object"
+
+    - id: auth_logout_clears_credentials
+      description: "Logout should clear credentials"
+      preconditions:
+        - "Client has credentials set"
+      actions:
+        - "Call logout()"
+      assertions:
+        - "isAuthenticated() returns false"
+        - "getCredentials() returns null"
+
+  # === Agent Registration ===
+  registration:
+    - id: register_agent_basic
+      description: "Register agent with minimal options"
+      input:
+        name: "test-agent"
+      assertions:
+        - "Returns agent credentials"
+        - "Client becomes authenticated"
+
+    - id: register_agent_full_options
+      description: "Register agent with all options"
+      input:
+        name: "full-agent"
+        displayName: "Full Test Agent"
+        description: "A fully configured agent"
+        agentType: "claude"
+        version: "1.0.0"
+        capabilities: ["db:read", "api:call"]
+      assertions:
+        - "Returns agent with all specified properties"
+
+    - id: register_agent_requires_api_key
+      description: "Registration should require API key"
+      preconditions:
+        - "Client has no API key"
+      assertions:
+        - "Throws AuthenticationError"
+
+  # === Action Verification ===
+  verification:
+    - id: verify_action_requires_auth
+      description: "Verification requires authentication"
+      preconditions:
+        - "Client is not authenticated"
+      input:
+        action: "db:read"
+        resource: "users_table"
+      assertions:
+        - "Throws AuthenticationError"
+
+    - id: verify_action_allowed
+      description: "Verify allowed action returns success"
+      preconditions:
+        - "Client is authenticated"
+        - "Agent has sufficient trust score"
+      input:
+        action: "db:read"
+        resource: "users_table"
+      assertions:
+        - "Returns VerificationResult"
+        - "result.verified is true"
+        - "result.actionAllowed is true"
+
+    - id: verify_action_denied
+      description: "Verify denied action returns denial"
+      preconditions:
+        - "Client is authenticated"
+        - "Agent trust score is below threshold"
+      input:
+        action: "db:delete"
+        resource: "critical_data"
+      assertions:
+        - "Throws ActionDeniedError"
+        - "Error includes action name"
+        - "Error includes denial reason"
+
+  # === Trust Score ===
+  trust_score:
+    - id: trust_score_unauthenticated
+      description: "Trust score is 0 when not authenticated"
+      preconditions:
+        - "Client is not authenticated"
+      assertions:
+        - "getTrustScore() returns 0"
+
+    - id: trust_score_authenticated
+      description: "Trust score reflects agent's score"
+      preconditions:
+        - "Client is authenticated"
+      assertions:
+        - "getTrustScore() returns value between 0 and 1"
+
+  # === Agent Update ===
+  agent_update:
+    - id: update_agent_requires_auth
+      description: "Agent update requires authentication"
+      preconditions:
+        - "Client is not authenticated"
+      assertions:
+        - "Throws AuthenticationError"
+
+    - id: update_agent_success
+      description: "Successfully update agent properties"
+      preconditions:
+        - "Client is authenticated"
+      input:
+        displayName: "Updated Name"
+      assertions:
+        - "Agent properties are updated"
+
+  # === Capabilities ===
+  capabilities:
+    - id: report_capabilities_requires_auth
+      description: "Reporting capabilities requires authentication"
+      preconditions:
+        - "Client is not authenticated"
+      input:
+        capabilities: ["db:read", "api:call"]
+      assertions:
+        - "Throws AuthenticationError"

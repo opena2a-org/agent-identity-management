@@ -1,0 +1,47 @@
+{
+  "name": "analysis-agent",
+  "displayName": "Analysis Agent",
+  "description": "Provides data analysis skills including sentiment analysis, summarization, and trend detection",
+  "version": "1.0.0",
+  "url": "http://localhost:8081",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "authentication": {
+    "schemes": ["bearer"]
+  },
+  "skills": [
+    {
+      "id": "sentiment-analysis",
+      "name": "Sentiment Analysis",
+      "description": "Analyze sentiment of text data, returning positive/negative/neutral classification with confidence scores",
+      "tags": ["nlp", "sentiment", "text-analysis", "customer-feedback"],
+      "inputModes": ["text"],
+      "outputModes": ["text"],
+      "examples": [
+        {
+          "name": "Analyze feedback",
+          "input": {"text": "Great product, highly recommend!"},
+          "output": {"sentiment": "positive", "confidence": 0.95}
+        }
+      ]
+    },
+    {
+      "id": "summarization",
+      "name": "Text Summarization",
+      "description": "Summarize long text documents into concise summaries preserving key information",
+      "tags": ["nlp", "summarization", "text", "content"],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    },
+    {
+      "id": "trend-detection",
+      "name": "Trend Detection",
+      "description": "Detect trends and patterns in time-series data",
+      "tags": ["analytics", "trends", "data-analysis", "forecasting"],
+      "inputModes": ["data"],
+      "outputModes": ["data", "text"]
+    }
+  ]
+}

@@ -1,0 +1,267 @@
+# A2A Protocol Behavior Specification
+# Agent-to-Agent communication behaviors
+
+version: "1.0"
+description: "A2A protocol behaviors that must be consistent across all SDKs"
+
+behaviors:
+  # === A2A Client Construction ===
+  a2a_client:
+    - id: a2a_client_construction
+      description: "A2A client requires AIM client"
+      input:
+        aimClient: AIMClient
+      assertions:
+        - "A2A client is created"
+        - "A2A client has reference to AIM client"
+
+  # === Agent Card ===
+  agent_card:
+    - id: publish_agent_card
+      description: "Publish agent card"
+      preconditions:
+        - "AIM client is authenticated"
+      input:
+        url: "https://agent.example.com"
+        skills:
+          - id: "data-analysis"
+            name: "Data Analysis"
+            description: "Analyzes data sets"
+      assertions:
+        - "Returns published agent card"
+        - "Card includes cardUrl"
+
+    - id: get_agent_card
+      description: "Retrieve agent card by URL"
+      input:
+        cardUrl: "https://agent.example.com/.well-known/agent.json"
+      assertions:
+        - "Returns A2AAgentCard object"
+        - "Card has required fields"
+
+    - id: update_agent_card
+      description: "Update existing agent card"
+      preconditions:
+        - "Agent card already published"
+      input:
+        skills:
+          - id: "new-skill"
+            name: "New Skill"
+            description: "Added capability"
+      assertions:
+        - "Card is updated"
+        - "New skill is included"
+
+  # === Skills ===
+  skills:
+    - id: list_skills
+      description: "List agent's skills"
+      assertions:
+        - "Returns array of A2ASkill objects"
+
+    - id: add_skill
+      description: "Add new skill to agent"
+      input:
+        skill:
+          id: "summarization"
+          name: "Text Summarization"
+          description: "Summarizes text content"
+      assertions:
+        - "Skill is added"
+        - "Skill appears in list"
+
+    - id: remove_skill
+      description: "Remove skill from agent"
+      input:
+        skillId: "summarization"
+      assertions:
+        - "Skill is removed"
+        - "Skill no longer in list"
+
+  # === Peer Trust ===
+  peer_trust:
+    - id: get_peer_trust
+      description: "Get trust score for peer agent"
+      input:
+        peerId: "peer-agent-123"
+      assertions:
+        - "Returns A2APeerTrust object"
+        - "Has trustScore property"
+
+    - id: list_trusted_peers
+      description: "List all trusted peer agents"
+      assertions:
+        - "Returns array of A2APeerTrust"
+
+    - id: update_peer_trust
+      description: "Update trust score for peer"
+      input:
+        peerId: "peer-agent-123"
+        trustScore: 0.85
+        interactionCount: 10
+      assertions:
+        - "Trust score is updated"
+
+  # === Consent Management ===
+  consent:
+    - id: grant_consent
+      description: "Grant consent to another agent"
+      input:
+        recipientAgentId: "recipient-agent"
+        scope: ["read:profile", "write:data"]
+        purpose: "Data sharing"
+        dataTypes: ["personal_info"]
+      assertions:
+        - "Returns A2AConsent object"
+        - "Status is 'active'"
+
+    - id: revoke_consent
+      description: "Revoke previously granted consent"
+      input:
+        consentId: "consent-123"
+      assertions:
+        - "Consent status is 'revoked'"
+        - "revokedAt is set"
+
+    - id: list_consents
+      description: "List all consents"
+      assertions:
+        - "Returns array of A2AConsent"
+
+    - id: check_consent
+      description: "Check if consent exists for action"
+      input:
+        agentId: "other-agent"
+        scope: "read:profile"
+      assertions:
+        - "Returns boolean"
+
+  # === Security ===
+  security:
+    - id: check_security
+      description: "Check security for agent request"
+      input:
+        targetAgentId: "target-agent"
+        skillId: "some-skill"
+      assertions:
+        - "Returns A2ASecurityCheckResult"
+        - "Has 'allowed' boolean"
+        - "Has 'violations' array"
+
+    - id: get_security_settings
+      description: "Get organization security settings"
+      assertions:
+        - "Returns A2ASecuritySettings"
+        - "Has enforcementMode"
+        - "Has minTrustScore"
+
+    - id: update_security_settings
+      description: "Update security settings"
+      input:
+        minTrustScore: 0.7
+        requireVerifiedSkills: true
+      assertions:
+        - "Settings are updated"
+
+  # === Skill Attestation ===
+  attestation:
+    - id: attest_skill
+      description: "Attest another agent's skill"
+      input:
+        attestedAgentId: "other-agent"
+        skillId: "verified-skill"
+        attestationType: "SKILL_VERIFICATION"
+        confidence: 0.9
+      assertions:
+        - "Returns A2ASkillAttestation"
+        - "Has signature"
+
+    - id: get_attestations
+      description: "Get attestations for a skill"
+      input:
+        agentId: "some-agent"
+        skillId: "some-skill"
+      assertions:
+        - "Returns array of attestations"
+
+    - id: get_consensus
+      description: "Get consensus result for skill"
+      input:
+        agentId: "some-agent"
+        skillId: "some-skill"
+      assertions:
+        - "Returns A2AConsensusResult"
+        - "Has isVerified boolean"
+        - "Has attestationCount"
+
+  # === Discovery ===
+  discovery:
+    - id: find_capable_agents
+      description: "Find agents with specific capabilities"
+      input:
+        capability: "data-analysis"
+      assertions:
+        - "Returns array of CapableAgent"
+        - "Each has matchingSkills"
+
+    - id: discover_agents
+      description: "Discover agents in network"
+      assertions:
+        - "Returns array of agent cards"
+
+type_validation:
+  a2a_agent_card:
+    required_fields:
+      - agentId: string
+      - name: string
+      - url: string
+      - cardUrl: string
+      - version: string
+      - skills: array
+    optional_fields:
+      - id: string
+      - displayName: string
+      - description: string
+      - capabilities: array
+      - publicKey: string
+      - aimAttestation: object
+
+  a2a_skill:
+    required_fields:
+      - id: string
+      - name: string
+      - description: string
+    optional_fields:
+      - inputSchema: object
+      - outputSchema: object
+      - examples: array
+      - tags: array
+      - isVerified: boolean
+      - attestationCount: number
+
+  a2a_consent:
+    required_fields:
+      - id: string
+      - userId: string
+      - grantorAgentId: string
+      - recipientAgentId: string
+      - scope: array
+      - purpose: string
+      - dataTypes: array
+      - consentMethod: string
+      - status: enum[active, revoked, expired]
+      - grantedAt: string
+    optional_fields:
+      - expiresAt: string
+      - revokedAt: string
+
+  a2a_security_check_result:
+    required_fields:
+      - allowed: boolean
+      - enforcementMode: enum[monitor, strict]
+      - violations: array
+      - targetAgentId: string
+    optional_fields:
+      - denialReason: string
+      - skillId: string
+      - requesterTrustScore: number

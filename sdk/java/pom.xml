@@ -44,7 +44,7 @@
         <jackson.version>2.16.1</jackson.version>
         <okhttp.version>4.12.0</okhttp.version>
         <slf4j.version>2.0.11</slf4j.version>
-        <bouncycastle.version>1.77</bouncycastle.version>
+        <bouncycastle.version>1.79</bouncycastle.version>
         <junit.version>5.10.1</junit.version>
         <aspectj.version>1.9.21</aspectj.version>
     </properties>
