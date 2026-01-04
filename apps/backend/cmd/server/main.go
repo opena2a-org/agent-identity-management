@@ -265,7 +265,7 @@ func main() {
 	// These routes use Ed25519 agent authentication for SDK/programmatic access
 	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
 	sdkAPI := app.Group("/api/v1/sdk-api")
-	sdkAPI.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Validates agent signatures, passes through JWT
+	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent)) // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
 	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
@@ -971,7 +971,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
 	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Try Ed25519 first (for SDK agents)
+	detection.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Try Ed25519/ML-DSA/hybrid first (for SDK agents)
 	detection.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
@@ -983,7 +983,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
 	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
-	agents.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // ✅ Then try Ed25519 (for SDK agents)
+	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
@@ -1137,7 +1137,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// CRITICAL: These MUST be registered BEFORE JWT-protected routes to avoid middleware conflicts
 	// These endpoints use Ed25519 authentication (agent-to-backend) instead of JWT (user-to-backend)
 	mcpServersAgentAuth := v1.Group("/mcp-servers")
-	mcpServersAgentAuth.Use(middleware.Ed25519AgentMiddleware(services.Agent)) // Ed25519 signature verification
+	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent)) // PQC signature verification (Ed25519, ML-DSA, or hybrid)
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
 	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)  // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
 	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                  // ✅ Submit agent attestation (Ed25519 signed, with challenge)
