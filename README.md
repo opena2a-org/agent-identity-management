@@ -354,7 +354,7 @@ Watch the dashboard update in real-time as your agent registers and performs act
 | SDK | Language | Installation | Features |
 |-----|----------|--------------|----------|
 | **Python SDK** | Python 3.8+ | `pip install aim-sdk` | Decorators, auto-detection, MCP integration, PQC support |
-| **TypeScript SDK** | Node.js 18+ | `npm install @opena2a/aim-sdk` | Full PQC support, async/await, type-safe |
+| **TypeScript SDK** coming soon| Node.js 18+ | `npm install @opena2a/aim-sdk` | Full PQC support, async/await, type-safe |
 | **Java SDK** | Java 17+ | Maven/Gradle | LangChain4j integration, Spring AI, enterprise security |
 
 ### Enterprise Security Features (Java SDK)
