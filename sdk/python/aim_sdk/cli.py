@@ -2,7 +2,7 @@
 AIM SDK Command Line Interface.
 
 Provides commands for authenticating and managing the SDK:
-- login: Authenticate with AIM server and save credentials
+- login: Authenticate with AIM server via browser (opens automatically)
 - logout: Revoke credentials and clear local storage
 - status: Check current authentication status
 - version: Show SDK version
@@ -15,9 +15,13 @@ Usage:
 """
 
 import argparse
-import getpass
 import sys
 import os
+import webbrowser
+import threading
+import socket
+import urllib.parse
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 import requests
@@ -51,130 +55,219 @@ def print_banner():
 """)
 
 
+def find_free_port():
+    """Find a free port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+    return port
+
+
+class CallbackHandler(BaseHTTPRequestHandler):
+    """HTTP handler for OAuth callback."""
+
+    credentials = None
+    error = None
+
+    def log_message(self, format, *args):
+        """Suppress HTTP logs."""
+        pass
+
+    def do_GET(self):
+        """Handle callback with tokens."""
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        if parsed.path == '/callback':
+            # Extract tokens from query params
+            access_token = params.get('accessToken', [None])[0]
+            refresh_token = params.get('refreshToken', [None])[0]
+            user_email = params.get('email', [None])[0]
+            user_id = params.get('userId', [None])[0]
+            org_id = params.get('organizationId', [None])[0]
+            error = params.get('error', [None])[0]
+
+            if error:
+                CallbackHandler.error = error
+                self._send_error_page(error)
+            elif access_token and refresh_token:
+                CallbackHandler.credentials = {
+                    'accessToken': access_token,
+                    'refreshToken': refresh_token,
+                    'userEmail': user_email,
+                    'userId': user_id,
+                    'organizationId': org_id,
+                }
+                self._send_success_page()
+            else:
+                CallbackHandler.error = "Missing tokens in callback"
+                self._send_error_page("Authentication failed - missing tokens")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _send_success_page(self):
+        """Send success HTML page."""
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>AIM SDK - Login Successful</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               display: flex; justify-content: center; align-items: center; height: 100vh;
+               margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background: white; padding: 40px 60px; border-radius: 16px; text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { color: #22c55e; margin-bottom: 10px; }
+        p { color: #666; margin: 10px 0; }
+        .check { font-size: 64px; margin-bottom: 20px; }
+        code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="check">✅</div>
+        <h1>Login Successful!</h1>
+        <p>You can close this tab and return to your terminal.</p>
+        <p style="margin-top: 20px; color: #888; font-size: 14px;">
+            Credentials saved. Run <code>aim-sdk status</code> to verify.
+        </p>
+    </div>
+</body>
+</html>"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+    def _send_error_page(self, error):
+        """Send error HTML page."""
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>AIM SDK - Login Failed</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               display: flex; justify-content: center; align-items: center; height: 100vh;
+               margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }}
+        .card {{ background: white; padding: 40px 60px; border-radius: 16px; text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3); }}
+        h1 {{ color: #ef4444; margin-bottom: 10px; }}
+        p {{ color: #666; margin: 10px 0; }}
+        .icon {{ font-size: 64px; margin-bottom: 20px; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">❌</div>
+        <h1>Login Failed</h1>
+        <p>{error}</p>
+        <p style="margin-top: 20px; color: #888; font-size: 14px;">
+            Please try again with <code>aim-sdk login</code>
+        </p>
+    </div>
+</body>
+</html>"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+
 def login(args):
-    """Login to AIM server and save credentials."""
+    """Login to AIM server via browser."""
     from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
 
     aim_url = args.url.rstrip('/')
 
     print_banner()
-    print(f"Connecting to: {aim_url}")
+    print(f"Server: {aim_url}")
     print()
 
     # Check if already logged in
     existing_creds = load_sdk_credentials()
-    if existing_creds:
+    if existing_creds and not args.force:
         existing_url = existing_creds.get('aimUrl') or existing_creds.get('aim_url', '')
-        if existing_url and not args.force:
-            print(f"Already authenticated to: {existing_url}")
+        user_email = existing_creds.get('userEmail', 'Unknown')
+        if existing_url:
+            print(f"Already authenticated as: {user_email}")
+            print(f"Server: {existing_url}")
             print()
-            response = input("Do you want to re-authenticate? [y/N]: ").strip().lower()
+            response = input("Re-authenticate? [y/N]: ").strip().lower()
             if response != 'y':
                 print("Login cancelled.")
                 return 0
             print()
 
-    # Get credentials
-    print("Enter your AIM credentials:")
-    email = input("  Email: ").strip()
-    if not email:
-        print("Error: Email is required")
-        return 1
+    # Start local callback server
+    port = find_free_port()
+    callback_url = f"http://localhost:{port}/callback"
 
-    password = getpass.getpass("  Password: ")
-    if not password:
-        print("Error: Password is required")
-        return 1
+    # Reset handler state
+    CallbackHandler.credentials = None
+    CallbackHandler.error = None
 
+    server = HTTPServer(('localhost', port), CallbackHandler)
+    server.timeout = 120  # 2 minute timeout
+
+    # Build login URL with callback
+    login_url = f"{aim_url}/cli-auth?callback={urllib.parse.quote(callback_url)}"
+
+    print("Opening browser for authentication...")
     print()
-    print("Authenticating...")
+    print(f"If the browser doesn't open, visit:")
+    print(f"  {login_url}")
+    print()
+    print("Waiting for authentication...")
 
-    # Call login endpoint
+    # Open browser
+    webbrowser.open(login_url)
+
+    # Wait for callback (with timeout)
     try:
-        response = requests.post(
-            f"{aim_url}/api/v1/public/login",
-            json={"email": email, "password": password},
-            timeout=30
-        )
+        while CallbackHandler.credentials is None and CallbackHandler.error is None:
+            server.handle_request()
+    except KeyboardInterrupt:
+        print("\n\nLogin cancelled.")
+        return 1
+    finally:
+        server.server_close()
 
-        if response.status_code == 401:
-            print("❌ Authentication failed: Invalid email or password")
-            return 1
+    if CallbackHandler.error:
+        print(f"\n❌ Authentication failed: {CallbackHandler.error}")
+        return 1
 
-        if response.status_code != 200:
-            error_msg = "Unknown error"
-            try:
-                error_data = response.json()
-                error_msg = error_data.get('error', error_msg)
-            except Exception:
-                error_msg = response.text
-            print(f"❌ Authentication failed: {error_msg}")
-            return 1
+    if not CallbackHandler.credentials:
+        print("\n❌ Authentication failed: No credentials received")
+        return 1
 
-        data = response.json()
+    # Save credentials
+    credentials = {
+        'aimUrl': aim_url,
+        'refreshToken': CallbackHandler.credentials.get('refreshToken'),
+        'accessToken': CallbackHandler.credentials.get('accessToken'),
+        'userId': CallbackHandler.credentials.get('userId'),
+        'userEmail': CallbackHandler.credentials.get('userEmail'),
+        'organizationId': CallbackHandler.credentials.get('organizationId'),
+    }
 
-        if not data.get('success'):
-            if not data.get('isApproved'):
-                print("❌ Your account is pending admin approval.")
-                print("   Please wait for an administrator to approve your registration.")
-                return 1
-            print(f"❌ Authentication failed: {data.get('message', 'Unknown error')}")
-            return 1
-
-        # Check if password change is required
-        if data.get('requiresPasswordChange'):
-            print("⚠️  Password change required.")
-            print(f"   Please visit {aim_url} to change your password, then try again.")
-            return 1
-
-        access_token = data.get('accessToken')
-        refresh_token = data.get('refreshToken')
-        user = data.get('user', {})
-
-        if not access_token or not refresh_token:
-            print("❌ Authentication failed: No tokens received")
-            return 1
-
-        # Save credentials
-        credentials = {
-            'aimUrl': aim_url,
-            'refreshToken': refresh_token,
-            'accessToken': access_token,
-            'userId': user.get('id'),
-            'userEmail': user.get('email'),
-            'organizationId': user.get('organizationId'),
-        }
-
-        if save_sdk_credentials(credentials):
-            print()
-            print("✅ Successfully authenticated!")
-            print()
-            print(f"   User: {user.get('email', 'Unknown')}")
-            print(f"   Server: {aim_url}")
-            print(f"   Credentials saved to: {AIM_DIR}/sdk_credentials.json")
-            print()
-            print("You can now use the AIM SDK:")
-            print()
-            print("   from aim_sdk import secure")
-            print("   agent = secure('my-agent', capabilities=['db:read'])")
-            print()
-            return 0
-        else:
-            print("❌ Failed to save credentials")
-            return 1
-
-    except requests.exceptions.ConnectionError:
-        print(f"❌ Connection failed: Could not connect to {aim_url}")
+    if save_sdk_credentials(credentials):
         print()
-        print("   Make sure the AIM server is running and accessible.")
-        if aim_url == DEFAULT_AIM_URL:
-            print("   For self-hosted AIM, use: aim-sdk login --url http://localhost:8080")
-        return 1
-    except requests.exceptions.Timeout:
-        print(f"❌ Connection timeout: Server at {aim_url} did not respond")
-        return 1
-    except Exception as e:
-        print(f"❌ Error: {e}")
+        print("✅ Successfully authenticated!")
+        print()
+        print(f"   User: {credentials.get('userEmail', 'Unknown')}")
+        print(f"   Server: {aim_url}")
+        print(f"   Credentials saved to: {AIM_DIR}/sdk_credentials.json")
+        print()
+        print("You can now use the AIM SDK:")
+        print()
+        print("   from aim_sdk import secure")
+        print("   agent = secure('my-agent', capabilities=['db:read'])")
+        print()
+        return 0
+    else:
+        print("❌ Failed to save credentials")
         return 1
 
 
