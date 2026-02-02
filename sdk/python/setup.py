@@ -70,4 +70,9 @@ setup(
         "Source": "https://github.com/opena2a-org/agent-identity-management",
         "Documentation": "https://opena2a.org/docs/aim",
     },
+    entry_points={
+        "console_scripts": [
+            "aim-sdk=aim_sdk.cli:main",
+        ],
+    },
 )
