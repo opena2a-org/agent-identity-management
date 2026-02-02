@@ -12,14 +12,21 @@ Usage:
     aim-sdk login --url http://localhost:8080  # Login to self-hosted
     aim-sdk logout                   # Clear credentials
     aim-sdk status                   # Check authentication status
+
+Security Design:
+- Uses POST for token delivery (not URL params) to prevent token leakage
+- State parameter prevents CSRF attacks
+- CORS restricted to known origins
+- Tokens never appear in URLs or browser history
 """
 
 import argparse
 import sys
 import os
 import webbrowser
-import threading
 import socket
+import secrets
+import json
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -44,6 +51,15 @@ __version__ = _get_version()
 # Default AIM Cloud URL
 DEFAULT_AIM_URL = "https://aim.opena2a.org"
 
+# Allowed origins for CORS (where the auth page can be hosted)
+ALLOWED_ORIGINS = [
+    "https://opena2a.org",
+    "https://www.opena2a.org",
+    "https://aim.opena2a.org",
+    "http://localhost:3000",  # Local development
+    "http://127.0.0.1:3000",
+]
+
 
 def print_banner():
     """Print AIM SDK banner."""
@@ -64,48 +80,131 @@ def find_free_port():
     return port
 
 
-class CallbackHandler(BaseHTTPRequestHandler):
-    """HTTP handler for OAuth callback."""
+class SecureCallbackHandler(BaseHTTPRequestHandler):
+    """
+    Secure HTTP handler for OAuth callback.
+
+    Security features:
+    - Accepts tokens via POST body (not URL params)
+    - Validates state parameter to prevent CSRF
+    - Strict CORS policy
+    - Tokens never logged or exposed in URLs
+    """
 
     credentials = None
     error = None
+    expected_state = None
+    allowed_origin = None
 
     def log_message(self, format, *args):
-        """Suppress HTTP logs."""
+        """Suppress HTTP logs to prevent token leakage."""
         pass
 
-    def do_GET(self):
-        """Handle callback with tokens."""
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
+    def _send_cors_headers(self, origin: str = None):
+        """Send CORS headers for allowed origins."""
+        if origin and origin in ALLOWED_ORIGINS:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.send_header('Access-Control-Max-Age', '86400')
+            SecureCallbackHandler.allowed_origin = origin
 
-        if parsed.path == '/callback':
-            # Extract tokens from query params
-            access_token = params.get('accessToken', [None])[0]
-            refresh_token = params.get('refreshToken', [None])[0]
-            user_email = params.get('email', [None])[0]
-            user_id = params.get('userId', [None])[0]
-            org_id = params.get('organizationId', [None])[0]
-            error = params.get('error', [None])[0]
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        origin = self.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS:
+            self.send_response(200)
+            self._send_cors_headers(origin)
+            self.end_headers()
+        else:
+            self.send_response(403)
+            self.end_headers()
 
-            if error:
-                CallbackHandler.error = error
-                self._send_error_page(error)
-            elif access_token and refresh_token:
-                CallbackHandler.credentials = {
+    def do_POST(self):
+        """
+        Handle token delivery via POST.
+
+        Security: Tokens sent in POST body, not URL.
+        """
+        origin = self.headers.get('Origin', '')
+
+        # Validate origin
+        if origin and origin not in ALLOWED_ORIGINS:
+            self.send_response(403)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': 'Origin not allowed'}).encode())
+            return
+
+        if self.path == '/callback':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body.decode('utf-8'))
+
+                # Validate state parameter (CSRF protection)
+                received_state = data.get('state')
+                if not received_state or received_state != SecureCallbackHandler.expected_state:
+                    SecureCallbackHandler.error = "Invalid state parameter - possible CSRF attack"
+                    self._send_json_response(400, {'error': 'Invalid state'}, origin)
+                    return
+
+                # Check for error
+                if data.get('error'):
+                    SecureCallbackHandler.error = data.get('error')
+                    self._send_json_response(200, {'received': True}, origin)
+                    return
+
+                # Extract and validate tokens
+                access_token = data.get('accessToken')
+                refresh_token = data.get('refreshToken')
+
+                if not access_token or not refresh_token:
+                    SecureCallbackHandler.error = "Missing tokens"
+                    self._send_json_response(400, {'error': 'Missing tokens'}, origin)
+                    return
+
+                # Store credentials (never log tokens)
+                SecureCallbackHandler.credentials = {
                     'accessToken': access_token,
                     'refreshToken': refresh_token,
-                    'userEmail': user_email,
-                    'userId': user_id,
-                    'organizationId': org_id,
+                    'userEmail': data.get('email'),
+                    'userId': data.get('userId'),
+                    'organizationId': data.get('organizationId'),
                 }
-                self._send_success_page()
-            else:
-                CallbackHandler.error = "Missing tokens in callback"
-                self._send_error_page("Authentication failed - missing tokens")
+
+                self._send_json_response(200, {'success': True}, origin)
+
+            except json.JSONDecodeError:
+                self._send_json_response(400, {'error': 'Invalid JSON'}, origin)
+            except Exception as e:
+                # Don't expose internal errors
+                self._send_json_response(500, {'error': 'Internal error'}, origin)
         else:
             self.send_response(404)
             self.end_headers()
+
+    def do_GET(self):
+        """Handle GET requests - only for success/error pages."""
+        parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == '/success':
+            self._send_success_page()
+        elif parsed.path == '/error':
+            params = urllib.parse.parse_qs(parsed.query)
+            error_msg = params.get('message', ['Authentication failed'])[0]
+            self._send_error_page(error_msg)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _send_json_response(self, status: int, data: dict, origin: str = None):
+        """Send JSON response with CORS headers."""
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self._send_cors_headers(origin)
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
 
     def _send_success_page(self):
         """Send success HTML page."""
@@ -141,8 +240,10 @@ class CallbackHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode())
 
-    def _send_error_page(self, error):
+    def _send_error_page(self, error: str):
         """Send error HTML page."""
+        # Sanitize error message to prevent XSS
+        safe_error = error.replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -156,13 +257,14 @@ class CallbackHandler(BaseHTTPRequestHandler):
         h1 {{ color: #ef4444; margin-bottom: 10px; }}
         p {{ color: #666; margin: 10px 0; }}
         .icon {{ font-size: 64px; margin-bottom: 20px; }}
+        code {{ background: #f3f4f6; padding: 2px 8px; border-radius: 4px; }}
     </style>
 </head>
 <body>
     <div class="card">
         <div class="icon">❌</div>
         <h1>Login Failed</h1>
-        <p>{error}</p>
+        <p>{safe_error}</p>
         <p style="margin-top: 20px; color: #888; font-size: 14px;">
             Please try again with <code>aim-sdk login</code>
         </p>
@@ -176,7 +278,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
 
 
 def login(args):
-    """Login to AIM server via browser."""
+    """Login to AIM server via browser with secure token exchange."""
     from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
 
     aim_url = args.url.rstrip('/')
@@ -200,33 +302,42 @@ def login(args):
                 return 0
             print()
 
+    # Generate cryptographically secure state parameter (CSRF protection)
+    state = secrets.token_urlsafe(32)
+
     # Start local callback server
     port = find_free_port()
     callback_url = f"http://localhost:{port}/callback"
 
     # Reset handler state
-    CallbackHandler.credentials = None
-    CallbackHandler.error = None
+    SecureCallbackHandler.credentials = None
+    SecureCallbackHandler.error = None
+    SecureCallbackHandler.expected_state = state
+    SecureCallbackHandler.allowed_origin = None
 
-    server = HTTPServer(('localhost', port), CallbackHandler)
+    server = HTTPServer(('localhost', port), SecureCallbackHandler)
     server.timeout = 120  # 2 minute timeout
 
-    # Build login URL with callback
-    login_url = f"{aim_url}/cli-auth?callback={urllib.parse.quote(callback_url)}"
+    # Build login URL with callback and state
+    params = urllib.parse.urlencode({
+        'callback': callback_url,
+        'state': state,
+    })
+    login_url = f"{aim_url}/cli-auth?{params}"
 
     print("Opening browser for authentication...")
     print()
     print(f"If the browser doesn't open, visit:")
     print(f"  {login_url}")
     print()
-    print("Waiting for authentication...")
+    print("Waiting for authentication... (Ctrl+C to cancel)")
 
     # Open browser
     webbrowser.open(login_url)
 
     # Wait for callback (with timeout)
     try:
-        while CallbackHandler.credentials is None and CallbackHandler.error is None:
+        while SecureCallbackHandler.credentials is None and SecureCallbackHandler.error is None:
             server.handle_request()
     except KeyboardInterrupt:
         print("\n\nLogin cancelled.")
@@ -234,22 +345,22 @@ def login(args):
     finally:
         server.server_close()
 
-    if CallbackHandler.error:
-        print(f"\n❌ Authentication failed: {CallbackHandler.error}")
+    if SecureCallbackHandler.error:
+        print(f"\n❌ Authentication failed: {SecureCallbackHandler.error}")
         return 1
 
-    if not CallbackHandler.credentials:
+    if not SecureCallbackHandler.credentials:
         print("\n❌ Authentication failed: No credentials received")
         return 1
 
     # Save credentials
     credentials = {
         'aimUrl': aim_url,
-        'refreshToken': CallbackHandler.credentials.get('refreshToken'),
-        'accessToken': CallbackHandler.credentials.get('accessToken'),
-        'userId': CallbackHandler.credentials.get('userId'),
-        'userEmail': CallbackHandler.credentials.get('userEmail'),
-        'organizationId': CallbackHandler.credentials.get('organizationId'),
+        'refreshToken': SecureCallbackHandler.credentials.get('refreshToken'),
+        'accessToken': SecureCallbackHandler.credentials.get('accessToken'),
+        'userId': SecureCallbackHandler.credentials.get('userId'),
+        'userEmail': SecureCallbackHandler.credentials.get('userEmail'),
+        'organizationId': SecureCallbackHandler.credentials.get('organizationId'),
     }
 
     if save_sdk_credentials(credentials):
