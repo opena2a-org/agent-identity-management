@@ -179,17 +179,17 @@ AIM uses **direct observation** — not proxies. Agents report actions explicitl
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  YOUR AGENT                                                  │
+│  YOUR AGENT                                                 │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │ @agent.perform_action(capability="db:read")            │ │
 │  │ def get_data():                                        │ │
 │  │     return database.query()  ─────────────────────────────► Target
 │  └────────────────────────────────────────────────────────┘ │  (Direct)
-│                    │                                         │
-│                    │ Reports action                          │
-│                    ▼                                         │
-│              AIM Backend                                     │
-│         (Verify + Log + Enforce)                             │
+│                    │                                        │
+│                    │ Reports action                         │
+│                    ▼                                        │
+│              AIM Backend                                    │
+│         (Verify + Log + Enforce)                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
