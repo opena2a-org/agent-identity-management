@@ -4,8 +4,19 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// SECURITY: Known development-only secrets that must never be used in production
+// These are the default values in docker-compose.yml for easy local development
+var insecureDevSecrets = []string{
+	"dev-only-jwt-secret-do-not-use-in-production-abc123",
+	"dev-only-keyvault-key-do-not-use-in-prod==",
+	"pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=",      // Legacy default
+	"YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=",      // Legacy default
+	"aim-super-secret-jwt-key-2025-development",          // Local .env default
+}
 
 // Config holds all configuration for the application
 type Config struct {
@@ -128,7 +139,33 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Print security warnings (non-blocking)
+	config.printSecurityWarnings()
+
 	return config, nil
+}
+
+// printSecurityWarnings logs warnings for potentially insecure configurations
+// These don't block startup but alert operators to review their settings
+func (c *Config) printSecurityWarnings() {
+	if c.Server.Environment != "production" {
+		return
+	}
+
+	// Warn about SSL mode for remote databases
+	isLocalDB := strings.Contains(c.Database.Host, "localhost") ||
+		strings.Contains(c.Database.Host, "127.0.0.1") ||
+		c.Database.Host == "postgres" // Docker service name
+
+	if !isLocalDB && c.Database.SSLMode == "disable" {
+		fmt.Print(`
+⚠️  SECURITY WARNING: Database SSL is disabled for remote connection
+    POSTGRES_SSL_MODE=disable with remote host may expose data in transit.
+    Consider setting POSTGRES_SSL_MODE=require for production.
+    (This is a warning, not an error - some setups use VPC/network encryption)
+
+`)
+	}
 }
 
 // Validate validates the configuration
@@ -141,8 +178,79 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
 	}
 
+	// SECURITY: Block production deployment with development secrets
+	if c.Server.Environment == "production" {
+		if err := c.validateProductionSecrets(); err != nil {
+			return err
+		}
+	}
+
 	// OAuth providers are now optional since we support email/password authentication
 	// Validation removed - OAuth configuration is checked at runtime when needed
+
+	return nil
+}
+
+// validateProductionSecrets ensures no development secrets are used in production
+func (c *Config) validateProductionSecrets() error {
+	// Check JWT_SECRET
+	for _, insecure := range insecureDevSecrets {
+		if c.JWT.Secret == insecure {
+			return fmt.Errorf(`
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    🚨 SECURITY ERROR: INSECURE SECRETS 🚨                   ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  You are running in PRODUCTION mode with DEVELOPMENT secrets!              ║
+║  This is a critical security vulnerability.                                ║
+║                                                                            ║
+║  To fix this, generate secure secrets:                                     ║
+║                                                                            ║
+║    JWT_SECRET:                                                             ║
+║      openssl rand -hex 32                                                  ║
+║                                                                            ║
+║    KEYVAULT_MASTER_KEY:                                                    ║
+║      openssl rand -base64 32                                               ║
+║                                                                            ║
+║  Then set them in your environment or .env file.                           ║
+║                                                                            ║
+║  For local development, use ENVIRONMENT=development                        ║
+╚════════════════════════════════════════════════════════════════════════════╝`)
+		}
+	}
+
+	// Check KEYVAULT_MASTER_KEY
+	keyvaultKey := os.Getenv("KEYVAULT_MASTER_KEY")
+	for _, insecure := range insecureDevSecrets {
+		if keyvaultKey == insecure {
+			return fmt.Errorf(`
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    🚨 SECURITY ERROR: INSECURE SECRETS 🚨                   ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  KEYVAULT_MASTER_KEY is using a development default!                       ║
+║  This would allow attackers to decrypt all stored private keys.            ║
+║                                                                            ║
+║  Generate a secure key:                                                    ║
+║      openssl rand -base64 32                                               ║
+║                                                                            ║
+║  For local development, use ENVIRONMENT=development                        ║
+╚════════════════════════════════════════════════════════════════════════════╝`)
+		}
+	}
+
+	// Check for weak POSTGRES_PASSWORD in production
+	if c.Database.Password == "postgres" || c.Database.Password == "" {
+		if !strings.Contains(c.Database.Host, "localhost") && !strings.Contains(c.Database.Host, "127.0.0.1") {
+			return fmt.Errorf(`
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    🚨 SECURITY ERROR: WEAK DATABASE PASSWORD 🚨             ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  POSTGRES_PASSWORD is using a weak or default value in production!         ║
+║                                                                            ║
+║  Generate a secure password:                                               ║
+║      openssl rand -base64 24                                               ║
+╚════════════════════════════════════════════════════════════════════════════╝`)
+		}
+	}
 
 	return nil
 }
