@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -100,11 +98,11 @@ func (h *SecurityHandler) getCapabilityService() CapabilityServicer {
 func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePagination(c)
 
 	secSvc := h.getSecurityService()
-	threats, err := secSvc.GetThreats(c.Context(), orgID, limit, offset)
+	threats, err := secSvc.GetThreats(c.Context(), orgID, p.Limit, p.Offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security threats",
@@ -114,8 +112,8 @@ func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"threats": threats,
 		"total":   len(threats),
-		"limit":   limit,
-		"offset":  offset,
+		"limit":   p.Limit,
+		"offset":  p.Offset,
 	})
 }
 
@@ -132,11 +130,11 @@ func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
 func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePagination(c)
 
 	secSvc := h.getSecurityService()
-	anomalies, err := secSvc.GetAnomalies(c.Context(), orgID, limit, offset)
+	anomalies, err := secSvc.GetAnomalies(c.Context(), orgID, p.Limit, p.Offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch anomalies",
@@ -146,8 +144,8 @@ func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"anomalies": anomalies,
 		"total":     len(anomalies),
-		"limit":     limit,
-		"offset":    offset,
+		"limit":     p.Limit,
+		"offset":    p.Offset,
 	})
 }
 
@@ -287,11 +285,11 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePaginationWithDefaults(c, 20, 100)
 
 	alertSvc := h.getAlertService()
-	alerts, total, err := alertSvc.GetAlerts(c.Context(), orgID, "", "", limit, offset)
+	alerts, total, err := alertSvc.GetAlerts(c.Context(), orgID, "", "", p.Limit, p.Offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch security alerts",
@@ -310,11 +308,11 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"alerts":              alerts,
 		"total":               total,
-		"allCount":           allCount,
-		"acknowledgedCount":  acknowledgedCount,
+		"allCount":            allCount,
+		"acknowledgedCount":   acknowledgedCount,
 		"unacknowledgedCount": unacknowledgedCount,
-		"limit":               limit,
-		"offset":              offset,
+		"limit":               p.Limit,
+		"offset":              p.Offset,
 	})
 }
 
@@ -332,15 +330,15 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 func (h *SecurityHandler) GetViolations(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
 
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePagination(c)
 
 	capSvc := h.getCapabilityService()
 	violations, total, err := capSvc.GetViolationsByOrganization(
 		c.Context(),
 		orgID,
-		limit,
-		offset,
+		p.Limit,
+		p.Offset,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -351,7 +349,7 @@ func (h *SecurityHandler) GetViolations(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"violations": violations,
 		"total":      total,
-		"limit":      limit,
-		"offset":     offset,
+		"limit":      p.Limit,
+		"offset":     p.Offset,
 	})
 }

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -504,16 +503,17 @@ func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	framework := c.Query("framework", "")
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePagination(c)
 
 	compSvc := h.getComplianceService()
 	evidence, err := compSvc.ListEvidence(
 		c.Context(),
 		orgID,
 		framework,
-		limit,
-		offset,
+		p.Limit,
+		p.Offset,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -534,8 +534,8 @@ func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
 		c.Get("User-Agent"),
 		map[string]interface{}{
 			"framework": framework,
-			"limit":     limit,
-			"offset":    offset,
+			"limit":     p.Limit,
+			"offset":    p.Offset,
 		},
 	)
 

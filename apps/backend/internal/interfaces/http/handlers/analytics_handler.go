@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -167,11 +166,8 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	var periodLabel string
 	
 	if daysStr != "" {
-		// Use days parameter
-		days, err := strconv.Atoi(daysStr)
-		if err != nil {
-			days = 30
-		}
+		// SECURITY: Validate days parameter to prevent DoS (max 365 days)
+		days := ParseDays(c, "days", 30, 365)
 		startTime = time.Now().AddDate(0, 0, -days)
 		periodLabel = fmt.Sprintf("Last %d days", days)
 	} else {
@@ -273,15 +269,16 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 	}
 	
 	// Support both days and weeks parameters for backward compatibility
+	// SECURITY: Validate time range parameters to prevent DoS
 	period := c.Query("period", "weeks")
-	weeks := 4
-	days := 30
-	
+	var weeks, days int
+
 	if period == "weeks" {
-		weeks, _ = strconv.Atoi(c.Query("weeks", "4"))
+		weeks = ParseWeeks(c, "weeks", 4, 52)
+		days = weeks * 7
 	} else {
-		days, _ = strconv.Atoi(c.Query("days", "30"))
-		weeks = days / 7 // Convert days to weeks
+		days = ParseDays(c, "days", 30, 365)
+		weeks = days / 7
 		if weeks == 0 {
 			weeks = 1
 		}
@@ -638,7 +635,9 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 			"error": "Invalid organization ID type in context",
 		})
 	}
-	months, _ := strconv.Atoi(c.Query("months", "6"))
+
+	// SECURITY: Validate months parameter to prevent DoS (max 24 months)
+	months := ParseMonths(c, "months", 6, 24)
 
 	// Fetch agents
 	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
@@ -1008,8 +1007,9 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			"error": "Unauthorized",
 		})
 	}
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	// SECURITY: Validate pagination to prevent DoS
+	p := ParsePagination(c)
 
 	// Query real activity events from multiple sources using UNION ALL
 	// This combines verification events (for agents and MCP servers), capability violations, and agent status changes
@@ -1121,7 +1121,7 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 	var rows *sql.Rows
 	var err error
 	if h.db != nil {
-		rows, err = h.db.Query(query, orgID, limit, offset)
+		rows, err = h.db.Query(query, orgID, p.Limit, p.Offset)
 	}
 	if h.db == nil || err != nil {
 		// Fallback: return empty activities if tables don't exist or no DB
@@ -1138,8 +1138,8 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 				"successRate":     0.0,
 			},
 			"total":  0,
-			"limit":  limit,
-			"offset": offset,
+			"limit":  p.Limit,
+			"offset": p.Offset,
 			"note":   "Activity data unavailable: " + errMsg,
 		})
 	}
@@ -1222,8 +1222,8 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			"successRate":     successRate,
 		},
 		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"limit":  p.Limit,
+		"offset": p.Offset,
 	})
 }
 
@@ -1421,12 +1421,8 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		})
 	}
 
-	// Get days parameter (default 7 days)
-	daysStr := c.Query("days", "7")
-	days, err := strconv.Atoi(daysStr)
-	if err != nil || days <= 0 {
-		days = 7
-	}
+	// SECURITY: Validate days parameter to prevent DoS (max 365 days)
+	days := ParseDays(c, "days", 7, 365)
 
 	startTime := time.Now().AddDate(0, 0, -days)
 
@@ -1438,8 +1434,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		WHERE organization_id = $1 AND created_at >= $2
 	`
 	if h.db != nil {
-		err = h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount)
-		if err != nil {
+		if err := h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount); err != nil {
 			log.Printf("❌ Error fetching verification count: %v", err)
 			verificationCount = 0
 		}
@@ -1454,8 +1449,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		WHERE ms.organization_id = $1 AND ma.created_at >= $2
 	`
 	if h.db != nil {
-		err = h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount)
-		if err != nil {
+		if err := h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount); err != nil {
 			log.Printf("❌ Error fetching attestation count: %v", err)
 			attestationCount = 0
 		}
