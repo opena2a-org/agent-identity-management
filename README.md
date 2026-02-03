@@ -2,7 +2,9 @@
 
 # Agent Identity Management (AIM)
 
-**IAM for AI agents — cryptographic identity, access control, and accountability.**
+**The open-source NHI platform for AI agents — cryptographic identity, governance, and access control by default.**
+
+> Enterprises manage millions of non-human identities. AI agents are the fastest-growing — and least-governed — category. AIM fixes that.
 
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -62,6 +64,7 @@ That's it. Your agent now has:
 | Prompt injection | Agent tricked into unauthorized actions | Capability enforcement blocks it |
 | No visibility | What are your agents doing? | Complete audit trail |
 | MCP supply chain | Unknown servers, no verification | MCP attestation + drift detection |
+| NHI governance gap | No inventory, no ownership, no lifecycle for agent identities | Full NHI governance — ownership, lifecycle automation, compliance reporting |
 
 ---
 
@@ -129,6 +132,20 @@ Sensitive operations require admin approval:
 
 </details>
 
+<details>
+<summary><strong>NHI Governance</strong></summary>
+
+Manage AI agents as first-class non-human identities:
+
+- **Ownership Attribution** — Every agent linked to a human owner and team
+- **Lifecycle Management** — Active, inactive, suspended, revoked states with automated transitions
+- **Shadow Agent Discovery** — Find unregistered agents across your environment
+- **Orphan Detection** — Alert when agent owners leave the organization
+- **ABOM Generation** — Agent Bill of Materials for compliance (CycloneDX export)
+- **Compliance Reports** — NHI inventory exports for SOC 2, HIPAA, GDPR, ISO 27001
+
+</details>
+
 ---
 
 ## SDKs
@@ -175,7 +192,7 @@ User user = agent.performAction("db:read", "users", () -> {
 
 ## Architecture
 
-AIM uses **direct observation** — not proxies. Agents report actions explicitly via SDK decorators while communicating directly with target systems.
+AIM uses **direct observation** — not proxies. Unlike traditional NHI platforms that discover service accounts through API integrations, AIM governs AI agents natively. Agents report actions explicitly via SDK decorators while communicating directly with target systems.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
