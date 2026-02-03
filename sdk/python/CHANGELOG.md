@@ -10,7 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planned
 - JavaScript/TypeScript SDK
 - GraphQL API support
-- CLI tool for automation
+
+## [1.21.0] - 2026-02-03
+
+### Changed
+- **CLI Authentication**: Replaced password prompt with OAuth 2.0 + PKCE browser flow
+  - `aim-sdk login` now opens browser for secure authentication (Google, etc.)
+  - Uses PKCE (Proof Key for Code Exchange) per RFC 8252 - same as AWS CLI
+  - No more password prompts or browser permission dialogs
+  - Browser redirects directly to localhost - seamless experience
+
+### Security
+- PKCE prevents authorization code interception attacks
+- State parameter prevents CSRF attacks
+- Authorization codes are one-time use with 5-minute TTL
 
 ## [1.8.0] - 2025-12-10
 
