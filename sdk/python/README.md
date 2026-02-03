@@ -66,9 +66,10 @@ python -c "from aim_sdk import secure; agent = secure('my-agent')"
 ```
 
 The `aim-sdk login` command will:
-- Prompt for your email and password
-- Authenticate with the AIM server
+- Open your browser for secure OAuth authentication (Google, etc.)
+- Use PKCE (Proof Key for Code Exchange) for security - same as AWS CLI
 - Save credentials to `~/.aim/sdk_credentials.json`
+- No password prompts or browser permission dialogs
 
 ### Option B: Download from Dashboard
 
@@ -518,7 +519,7 @@ sdk/python/
 ├── demos/                # Demo projects
 ├── README.md             # This file
 ├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.17.0)
+├── VERSION               # Current SDK version (1.21.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -577,7 +578,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.17.0
+**Current Version**: 1.21.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -586,7 +587,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.17.0"
+print(aim_sdk.__version__)  # "1.21.0"
 ```
 
 **See Also**:
