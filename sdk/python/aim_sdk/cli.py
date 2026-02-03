@@ -56,6 +56,8 @@ ALLOWED_ORIGINS = [
     "https://opena2a.org",
     "https://www.opena2a.org",
     "https://aim.opena2a.org",
+    "https://aim.csnp.org",  # Community AIM dashboard
+    "https://community.opena2a.org",  # Community frontend
     "http://localhost:3000",  # Local development
     "http://127.0.0.1:3000",
 ]
@@ -319,17 +321,12 @@ def login(args):
     server.timeout = 120  # 2 minute timeout
 
     # Build login URL with callback and state
+    # Redirect directly to AIM dashboard login page
     params = urllib.parse.urlencode({
-        'callback': callback_url,
-        'state': state,
+        'cli_callback': callback_url,
+        'cli_state': state,
     })
-    # CLI auth page is on the main website, not the AIM dashboard
-    if aim_url == 'https://aim.opena2a.org':
-        auth_base_url = 'https://opena2a.org'
-    else:
-        # For self-hosted, assume auth page is on same domain
-        auth_base_url = aim_url
-    login_url = f"{auth_base_url}/cli-auth?{params}"
+    login_url = f"{aim_url}/auth/login?{params}"
 
     print("Opening browser for authentication...")
     print()
