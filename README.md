@@ -4,7 +4,7 @@
 
 **The open-source NHI platform for AI agents — cryptographic identity, governance, and access control by default.**
 
-> Enterprises manage millions of non-human identities. AI agents are the fastest-growing — and least-governed — category. AIM fixes that.
+> Enterprises manage millions of non-human identities (NHI). AI agents are the fastest-growing — and least-governed — category. AIM fixes that.
 
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
