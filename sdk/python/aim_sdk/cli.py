@@ -2,7 +2,7 @@
 AIM SDK Command Line Interface.
 
 Provides commands for authenticating and managing the SDK:
-- login: Authenticate with AIM server via browser (opens automatically)
+- login: Authenticate with AIM server via browser (OAuth 2.0 + PKCE)
 - logout: Revoke credentials and clear local storage
 - status: Check current authentication status
 - version: Show SDK version
@@ -13,11 +13,11 @@ Usage:
     aim-sdk logout                   # Clear credentials
     aim-sdk status                   # Check authentication status
 
-Security Design:
-- Uses POST for token delivery (not URL params) to prevent token leakage
+Security Design (RFC 8252 - OAuth for Native Apps):
+- Uses Authorization Code flow with PKCE (Proof Key for Code Exchange)
+- Browser redirects directly to localhost (no cross-origin requests)
+- Short-lived authorization code exchanged for tokens server-side
 - State parameter prevents CSRF attacks
-- CORS restricted to known origins
-- Tokens never appear in URLs or browser history
 """
 
 import argparse
@@ -26,6 +26,8 @@ import os
 import webbrowser
 import socket
 import secrets
+import hashlib
+import base64
 import json
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -51,17 +53,6 @@ __version__ = _get_version()
 # Default AIM Cloud URL
 DEFAULT_AIM_URL = "https://aim.opena2a.org"
 
-# Allowed origins for CORS (where the auth page can be hosted)
-ALLOWED_ORIGINS = [
-    "https://opena2a.org",
-    "https://www.opena2a.org",
-    "https://aim.opena2a.org",
-    "https://aim.csnp.org",  # Community AIM dashboard
-    "https://community.opena2a.org",  # Community frontend
-    "http://localhost:3000",  # Local development
-    "http://127.0.0.1:3000",
-]
-
 
 def print_banner():
     """Print AIM SDK banner."""
@@ -82,131 +73,71 @@ def find_free_port():
     return port
 
 
-class SecureCallbackHandler(BaseHTTPRequestHandler):
+def generate_pkce_pair():
     """
-    Secure HTTP handler for OAuth callback.
+    Generate PKCE code_verifier and code_challenge.
 
-    Security features:
-    - Accepts tokens via POST body (not URL params)
-    - Validates state parameter to prevent CSRF
-    - Strict CORS policy
-    - Tokens never logged or exposed in URLs
+    Returns:
+        tuple: (code_verifier, code_challenge)
+    """
+    # Generate a cryptographically random code_verifier (43-128 chars)
+    code_verifier = secrets.token_urlsafe(64)
+
+    # Generate code_challenge = BASE64URL(SHA256(code_verifier))
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode('ascii')).digest()
+    ).decode('ascii').rstrip('=')
+
+    return code_verifier, code_challenge
+
+
+class PKCECallbackHandler(BaseHTTPRequestHandler):
+    """
+    HTTP handler for OAuth PKCE callback.
+
+    Receives authorization code via redirect (not POST).
     """
 
-    credentials = None
+    authorization_code = None
     error = None
     expected_state = None
-    allowed_origin = None
 
     def log_message(self, format, *args):
-        """Suppress HTTP logs to prevent token leakage."""
+        """Suppress HTTP logs."""
         pass
 
-    def _send_cors_headers(self, origin: str = None):
-        """Send CORS headers for allowed origins."""
-        if origin and origin in ALLOWED_ORIGINS:
-            self.send_header('Access-Control-Allow-Origin', origin)
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-            self.send_header('Access-Control-Max-Age', '86400')
-            SecureCallbackHandler.allowed_origin = origin
-
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests."""
-        origin = self.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS:
-            self.send_response(200)
-            self._send_cors_headers(origin)
-            self.end_headers()
-        else:
-            self.send_response(403)
-            self.end_headers()
-
-    def do_POST(self):
-        """
-        Handle token delivery via POST.
-
-        Security: Tokens sent in POST body, not URL.
-        """
-        origin = self.headers.get('Origin', '')
-
-        # Validate origin
-        if origin and origin not in ALLOWED_ORIGINS:
-            self.send_response(403)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': 'Origin not allowed'}).encode())
-            return
-
-        if self.path == '/callback':
-            try:
-                content_length = int(self.headers.get('Content-Length', 0))
-                body = self.rfile.read(content_length)
-                data = json.loads(body.decode('utf-8'))
-
-                # Validate state parameter (CSRF protection)
-                received_state = data.get('state')
-                if not received_state or received_state != SecureCallbackHandler.expected_state:
-                    SecureCallbackHandler.error = "Invalid state parameter - possible CSRF attack"
-                    self._send_json_response(400, {'error': 'Invalid state'}, origin)
-                    return
-
-                # Check for error
-                if data.get('error'):
-                    SecureCallbackHandler.error = data.get('error')
-                    self._send_json_response(200, {'received': True}, origin)
-                    return
-
-                # Extract and validate tokens
-                access_token = data.get('accessToken')
-                refresh_token = data.get('refreshToken')
-
-                if not access_token or not refresh_token:
-                    SecureCallbackHandler.error = "Missing tokens"
-                    self._send_json_response(400, {'error': 'Missing tokens'}, origin)
-                    return
-
-                # Store credentials (never log tokens)
-                SecureCallbackHandler.credentials = {
-                    'accessToken': access_token,
-                    'refreshToken': refresh_token,
-                    'userEmail': data.get('email'),
-                    'userId': data.get('userId'),
-                    'organizationId': data.get('organizationId'),
-                }
-
-                self._send_json_response(200, {'success': True}, origin)
-
-            except json.JSONDecodeError:
-                self._send_json_response(400, {'error': 'Invalid JSON'}, origin)
-            except Exception as e:
-                # Don't expose internal errors
-                self._send_json_response(500, {'error': 'Internal error'}, origin)
-        else:
-            self.send_response(404)
-            self.end_headers()
-
     def do_GET(self):
-        """Handle GET requests - only for success/error pages."""
+        """Handle OAuth callback redirect."""
         parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
 
-        if parsed.path == '/success':
+        if parsed.path == '/callback':
+            # Check for error
+            if 'error' in params:
+                PKCECallbackHandler.error = params.get('error', ['Unknown error'])[0]
+                self._send_error_page(PKCECallbackHandler.error)
+                return
+
+            # Validate state (CSRF protection)
+            received_state = params.get('state', [None])[0]
+            if not received_state or received_state != PKCECallbackHandler.expected_state:
+                PKCECallbackHandler.error = "Invalid state parameter - possible CSRF attack"
+                self._send_error_page("Security validation failed")
+                return
+
+            # Extract authorization code
+            code = params.get('code', [None])[0]
+            if not code:
+                PKCECallbackHandler.error = "No authorization code received"
+                self._send_error_page("No authorization code received")
+                return
+
+            # Store code for exchange
+            PKCECallbackHandler.authorization_code = code
             self._send_success_page()
-        elif parsed.path == '/error':
-            params = urllib.parse.parse_qs(parsed.query)
-            error_msg = params.get('message', ['Authentication failed'])[0]
-            self._send_error_page(error_msg)
         else:
             self.send_response(404)
             self.end_headers()
-
-    def _send_json_response(self, status: int, data: dict, origin: str = None):
-        """Send JSON response with CORS headers."""
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self._send_cors_headers(origin)
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
 
     def _send_success_page(self):
         """Send success HTML page."""
@@ -244,7 +175,6 @@ class SecureCallbackHandler(BaseHTTPRequestHandler):
 
     def _send_error_page(self, error: str):
         """Send error HTML page."""
-        # Sanitize error message to prevent XSS
         safe_error = error.replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
         html = f"""<!DOCTYPE html>
 <html>
@@ -279,8 +209,45 @@ class SecureCallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode())
 
 
+def exchange_code_for_tokens(aim_url: str, code: str, code_verifier: str, redirect_uri: str):
+    """
+    Exchange authorization code for tokens using PKCE.
+
+    Args:
+        aim_url: AIM server URL
+        code: Authorization code from callback
+        code_verifier: PKCE code verifier
+        redirect_uri: The redirect URI used in authorization
+
+    Returns:
+        dict: Token response or None on error
+    """
+    token_url = f"{aim_url}/api/v1/auth/token"
+
+    try:
+        response = requests.post(
+            token_url,
+            json={
+                'grant_type': 'authorization_code',
+                'code': code,
+                'code_verifier': code_verifier,
+                'redirect_uri': redirect_uri,
+            },
+            headers={'Content-Type': 'application/json'},
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            error_data = response.json() if response.content else {}
+            return {'error': error_data.get('error', f'Token exchange failed: {response.status_code}')}
+    except requests.RequestException as e:
+        return {'error': f'Network error: {str(e)}'}
+
+
 def login(args):
-    """Login to AIM server via browser with secure token exchange."""
+    """Login to AIM server via browser with OAuth 2.0 + PKCE."""
     from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
 
     aim_url = args.url.rstrip('/')
@@ -304,27 +271,31 @@ def login(args):
                 return 0
             print()
 
-    # Generate cryptographically secure state parameter (CSRF protection)
+    # Generate PKCE pair
+    code_verifier, code_challenge = generate_pkce_pair()
+
+    # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
 
     # Start local callback server
     port = find_free_port()
-    callback_url = f"http://localhost:{port}/callback"
+    redirect_uri = f"http://localhost:{port}/callback"
 
     # Reset handler state
-    SecureCallbackHandler.credentials = None
-    SecureCallbackHandler.error = None
-    SecureCallbackHandler.expected_state = state
-    SecureCallbackHandler.allowed_origin = None
+    PKCECallbackHandler.authorization_code = None
+    PKCECallbackHandler.error = None
+    PKCECallbackHandler.expected_state = state
 
-    server = HTTPServer(('localhost', port), SecureCallbackHandler)
+    server = HTTPServer(('localhost', port), PKCECallbackHandler)
     server.timeout = 120  # 2 minute timeout
 
-    # Build login URL with callback and state
-    # Redirect directly to AIM dashboard login page
+    # Build authorization URL with PKCE parameters
     params = urllib.parse.urlencode({
-        'cli_callback': callback_url,
-        'cli_state': state,
+        'response_type': 'code',
+        'redirect_uri': redirect_uri,
+        'state': state,
+        'code_challenge': code_challenge,
+        'code_challenge_method': 'S256',
     })
     login_url = f"{aim_url}/auth/login?{params}"
 
@@ -340,7 +311,7 @@ def login(args):
 
     # Wait for callback (with timeout)
     try:
-        while SecureCallbackHandler.credentials is None and SecureCallbackHandler.error is None:
+        while PKCECallbackHandler.authorization_code is None and PKCECallbackHandler.error is None:
             server.handle_request()
     except KeyboardInterrupt:
         print("\n\nLogin cancelled.")
@@ -348,22 +319,35 @@ def login(args):
     finally:
         server.server_close()
 
-    if SecureCallbackHandler.error:
-        print(f"\n❌ Authentication failed: {SecureCallbackHandler.error}")
+    if PKCECallbackHandler.error:
+        print(f"\n❌ Authentication failed: {PKCECallbackHandler.error}")
         return 1
 
-    if not SecureCallbackHandler.credentials:
-        print("\n❌ Authentication failed: No credentials received")
+    if not PKCECallbackHandler.authorization_code:
+        print("\n❌ Authentication failed: No authorization code received")
+        return 1
+
+    # Exchange authorization code for tokens
+    print("\nExchanging authorization code for tokens...")
+    token_response = exchange_code_for_tokens(
+        aim_url,
+        PKCECallbackHandler.authorization_code,
+        code_verifier,
+        redirect_uri,
+    )
+
+    if 'error' in token_response:
+        print(f"\n❌ Token exchange failed: {token_response['error']}")
         return 1
 
     # Save credentials
     credentials = {
         'aimUrl': aim_url,
-        'refreshToken': SecureCallbackHandler.credentials.get('refreshToken'),
-        'accessToken': SecureCallbackHandler.credentials.get('accessToken'),
-        'userId': SecureCallbackHandler.credentials.get('userId'),
-        'userEmail': SecureCallbackHandler.credentials.get('userEmail'),
-        'organizationId': SecureCallbackHandler.credentials.get('organizationId'),
+        'refreshToken': token_response.get('refresh_token'),
+        'accessToken': token_response.get('access_token'),
+        'userId': token_response.get('user_id'),
+        'userEmail': token_response.get('email'),
+        'organizationId': token_response.get('organization_id'),
     }
 
     if save_sdk_credentials(credentials):
@@ -398,27 +382,22 @@ def logout(args):
         if token_manager.has_credentials():
             token_manager.revoke_token()
     except Exception:
-        pass
+        pass  # Ignore revocation errors
 
     # Delete local credentials
-    creds_file = SDK_CREDENTIALS_FILE
+    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
     if creds_file.exists():
-        try:
-            creds_file.unlink()
-            print("✅ Credentials removed successfully")
-        except Exception as e:
-            print(f"⚠️  Failed to remove credentials file: {e}")
-            return 1
+        creds_file.unlink()
+        print("✅ Credentials cleared")
     else:
-        print("No credentials found - already logged out")
+        print("No credentials to clear")
 
     return 0
 
 
 def status(args):
-    """Check current authentication status."""
+    """Check authentication status."""
     from .credentials import load_sdk_credentials, AIM_DIR
-    from .oauth import OAuthTokenManager
 
     print("Checking authentication status...")
     print()
@@ -427,27 +406,42 @@ def status(args):
     if not creds:
         print("❌ Not authenticated")
         print()
-        print("   Run 'aim-sdk login' to authenticate")
+        print("Run 'aim-sdk login' to authenticate")
         return 1
 
     aim_url = creds.get('aimUrl') or creds.get('aim_url', 'Unknown')
     user_email = creds.get('userEmail', 'Unknown')
+    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
 
     print(f"   Server: {aim_url}")
     print(f"   User: {user_email}")
-    print(f"   Credentials: {AIM_DIR}/sdk_credentials.json")
+    print(f"   Credentials: {creds_file}")
     print()
 
-    # Try to validate token
-    try:
-        token_manager = OAuthTokenManager()
-        token = token_manager.get_access_token(suppress_errors=True)
-        if token:
-            print("✅ Authenticated (token valid)")
-        else:
-            print("⚠️  Token may be expired - will refresh on next SDK use")
-    except Exception:
-        print("⚠️  Could not validate token")
+    # Check token validity
+    access_token = creds.get('accessToken')
+    if access_token:
+        # Try to decode JWT to check expiry (without verification)
+        try:
+            import base64
+            parts = access_token.split('.')
+            if len(parts) == 3:
+                # Decode payload
+                payload = parts[1]
+                # Add padding if needed
+                payload += '=' * (4 - len(payload) % 4)
+                decoded = base64.urlsafe_b64decode(payload)
+                import json
+                data = json.loads(decoded)
+                exp = data.get('exp')
+                if exp:
+                    import time
+                    if exp > time.time():
+                        print("✅ Token is valid")
+                    else:
+                        print("⚠️  Token may be expired - will refresh on next SDK use")
+        except Exception:
+            print("⚠️  Could not verify token status")
 
     return 0
 
@@ -462,70 +456,41 @@ def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         prog='aim-sdk',
-        description='AIM SDK - Agent Identity Management for AI Agents',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  aim-sdk login                           Login to AIM Cloud (aim.opena2a.org)
-  aim-sdk login --url http://localhost:8080   Login to self-hosted AIM
-  aim-sdk logout                          Clear saved credentials
-  aim-sdk status                          Check authentication status
-
-For more information, visit: https://opena2a.org/docs
-        """
+        description='AIM SDK - Agent Identity Management CLI',
     )
-
-    parser.add_argument(
-        '--version', '-v',
-        action='version',
-        version=f'%(prog)s {__version__}'
-    )
-
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
 
     # Login command
-    login_parser = subparsers.add_parser(
-        'login',
-        help='Authenticate with AIM server'
-    )
+    login_parser = subparsers.add_parser('login', help='Login to AIM server')
     login_parser.add_argument(
-        '--url', '-u',
+        '--url',
         default=DEFAULT_AIM_URL,
-        help=f'AIM server URL (default: {DEFAULT_AIM_URL})'
+        help=f'AIM server URL (default: {DEFAULT_AIM_URL})',
     )
     login_parser.add_argument(
         '--force', '-f',
         action='store_true',
-        help='Force re-authentication without prompting'
+        help='Force re-authentication even if already logged in',
     )
     login_parser.set_defaults(func=login)
 
     # Logout command
-    logout_parser = subparsers.add_parser(
-        'logout',
-        help='Logout and clear credentials'
-    )
+    logout_parser = subparsers.add_parser('logout', help='Logout and clear credentials')
     logout_parser.set_defaults(func=logout)
 
     # Status command
-    status_parser = subparsers.add_parser(
-        'status',
-        help='Check authentication status'
-    )
+    status_parser = subparsers.add_parser('status', help='Check authentication status')
     status_parser.set_defaults(func=status)
 
-    # Version command (alternative to --version)
-    version_parser = subparsers.add_parser(
-        'version',
-        help='Show SDK version'
-    )
+    # Version command
+    version_parser = subparsers.add_parser('version', help='Show SDK version')
     version_parser.set_defaults(func=version_cmd)
 
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
-        return 0
+        return 1
 
     return args.func(args)
 
