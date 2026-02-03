@@ -323,7 +323,13 @@ def login(args):
         'callback': callback_url,
         'state': state,
     })
-    login_url = f"{aim_url}/cli-auth?{params}"
+    # CLI auth page is on the main website, not the AIM dashboard
+    if aim_url == 'https://aim.opena2a.org':
+        auth_base_url = 'https://opena2a.org'
+    else:
+        # For self-hosted, assume auth page is on same domain
+        auth_base_url = aim_url
+    login_url = f"{auth_base_url}/cli-auth?{params}"
 
     print("Opening browser for authentication...")
     print()
