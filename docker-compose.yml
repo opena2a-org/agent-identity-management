@@ -195,9 +195,11 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       # Security Configuration
-      # NOTE: For production, override these with your own secrets via .env file or environment
-      - JWT_SECRET=${JWT_SECRET:-pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=}
-      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=}
+      # WARNING: Default secrets are for LOCAL DEVELOPMENT ONLY
+      # For production: Generate your own with openssl rand -hex 32 (JWT) / openssl rand -base64 32 (KEYVAULT)
+      # The backend will refuse to start in production mode with default secrets
+      - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-dev-only-keyvault-key-do-not-use-in-prod==}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -207,8 +209,8 @@ services:
       # Frontend URL for CORS and links
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
-      # Environment
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
       - "8080:8080"
     depends_on:
