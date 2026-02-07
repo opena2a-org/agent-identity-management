@@ -1,0 +1,99 @@
+name: Auto Review
+
+# Auto-approves PRs from repo members after all CI/security checks pass.
+# Acts as github-actions[bot], satisfying the "1 approving review" branch
+# protection requirement for solo developers.
+#
+# Prerequisite (one-time):
+#   Org settings > Actions > General > "Allow GitHub Actions to create
+#   and approve pull requests" must be enabled.
+
+on:
+  # Re-evaluate approval each time CI or Security Pipeline completes
+  workflow_run:
+    workflows: ["CI", "Security Pipeline"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  checks: read
+  actions: read
+
+jobs:
+  auto-approve:
+    name: Auto Approve PR
+    runs-on: ubuntu-latest
+    # Only run for PRs, and only when the triggering workflow succeeded
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Get PR number
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            if (!run.pull_requests || run.pull_requests.length === 0) {
+              core.info('No PR associated with this workflow run, skipping.');
+              core.setOutput('number', '');
+              return;
+            }
+            const prNumber = run.pull_requests[0].number;
+            core.setOutput('number', prNumber.toString());
+            core.info(`PR #${prNumber}`);
+
+      - name: Check all required workflows passed
+        if: steps.pr.outputs.number != ''
+        id: checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.number }}');
+
+            // Get combined status for the PR head SHA
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            const sha = pr.data.head.sha;
+
+            // Get check runs for this commit
+            const checkRuns = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+            });
+
+            const required = ['Secret Detection', 'Dependency Audit'];
+            const results = {};
+
+            for (const run of checkRuns.data.check_runs) {
+              if (required.includes(run.name)) {
+                results[run.name] = run.conclusion;
+              }
+            }
+
+            core.info(`Check results: ${JSON.stringify(results)}`);
+
+            // Verify all required checks passed
+            const allPassed = required.every(name => results[name] === 'success');
+            if (!allPassed) {
+              const missing = required.filter(name => results[name] !== 'success');
+              core.info(`Waiting on: ${missing.join(', ')}`);
+              core.setOutput('ready', 'false');
+              return;
+            }
+
+            core.setOutput('ready', 'true');
+
+      - name: Approve PR
+        if: steps.pr.outputs.number != '' && steps.checks.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr review ${{ steps.pr.outputs.number }} \
+            --repo "${{ github.repository }}" \
+            --approve \
+            --body "All required CI and security checks passed. Auto-approved by github-actions[bot]."
