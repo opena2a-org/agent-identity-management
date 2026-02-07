@@ -72,7 +72,7 @@ func TestGetClientIP_WithTrustedProxy(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should use X-Real-IP when trusted proxy is configured with wildcard
+	// Should use X-Real-IP when direct connection IP matches a trusted proxy
 	assert.Equal(t, "203.0.113.50", capturedIP)
 }
 

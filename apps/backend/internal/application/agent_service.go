@@ -652,9 +652,9 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 
 // UpdateTrustScore manually updates an agent's trust score (admin override)
 func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, newScore float64) error {
-	// Validate score range (0.0 to 1.0 matching trust calculator output)
-	if newScore < 0.0 || newScore > 1.0 {
-		return fmt.Errorf("trust score must be between 0.0 and 1.0")
+	// Validate score range (0.0 to 100.0 matching trust calculator output and DB schema DECIMAL(5,2))
+	if newScore < 0.0 || newScore > 100.0 {
+		return fmt.Errorf("trust score must be between 0.0 and 100.0")
 	}
 
 	// Get agent to check previous score and for alert creation

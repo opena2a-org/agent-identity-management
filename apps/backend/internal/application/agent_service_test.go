@@ -321,7 +321,7 @@ func TestAgentService_UpdateTrustScore_InvalidScore(t *testing.T) {
 		score float64
 	}{
 		{"negative score", -0.1},
-		{"score too high", 10.0},
+		{"score too high", 100.1},
 	}
 
 	for _, tt := range tests {

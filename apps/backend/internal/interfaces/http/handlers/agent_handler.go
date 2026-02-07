@@ -1655,10 +1655,10 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 		})
 	}
 
-	// Validate score range (0.000 to 9.999 based on database schema)
-	if req.Score < 0.0 || req.Score > 9.999 {
+	// Validate score range (0-100 matching calculateInitialTrustScore and DB schema DECIMAL(5,2))
+	if req.Score < 0.0 || req.Score > 100.0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Trust score must be between 0.0 and 9.999",
+			"error": "Trust score must be between 0.0 and 100.0",
 		})
 	}
 

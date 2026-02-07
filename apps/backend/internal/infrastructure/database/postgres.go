@@ -29,7 +29,7 @@ func NewPostgresConfig() *PostgresConfig {
 		Database:        getEnvRequired("POSTGRES_DB"),
 		User:            getEnvRequired("POSTGRES_USER"),
 		Password:        getEnvRequired("POSTGRES_PASSWORD"),
-		SSLMode:         getEnv("POSTGRES_SSL_MODE", "prefer"),
+		SSLMode:         getEnv("POSTGRES_SSL_MODE", "require"),
 		MaxConnections:  100,
 		ConnMaxLifetime: 5 * time.Minute,
 	}
