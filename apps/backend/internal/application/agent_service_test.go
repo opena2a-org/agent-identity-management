@@ -321,7 +321,7 @@ func TestAgentService_UpdateTrustScore_InvalidScore(t *testing.T) {
 		score float64
 	}{
 		{"negative score", -0.1},
-		{"score too high", 10.0},
+		{"score too high", 100.1},
 	}
 
 	for _, tt := range tests {
@@ -2090,7 +2090,7 @@ func TestAgentService_UpdateAgentPublicKey_Success(t *testing.T) {
 	})).Return(nil)
 
 	ctx := context.Background()
-	err := service.UpdateAgentPublicKey(ctx, agent.ID, newPublicKey)
+	err := service.UpdateAgentPublicKey(ctx, agent.ID, newPublicKey, "")
 
 	assert.NoError(t, err)
 	mockAgentRepo.AssertExpectations(t)
@@ -2104,7 +2104,7 @@ func TestAgentService_UpdateAgentPublicKey_AgentNotFound(t *testing.T) {
 	mockAgentRepo.On("GetByID", agentID).Return(nil, errors.New("agent not found"))
 
 	ctx := context.Background()
-	err := service.UpdateAgentPublicKey(ctx, agentID, "new-key")
+	err := service.UpdateAgentPublicKey(ctx, agentID, "new-key", "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "agent not found")

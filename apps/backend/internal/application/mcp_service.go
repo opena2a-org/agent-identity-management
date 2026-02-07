@@ -15,6 +15,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	infracrypto "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 type MCPService struct {
@@ -443,6 +444,11 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	// Clean up URL (trim spaces that might have been entered in the form)
 	verificationURL := strings.TrimSpace(server.VerificationURL)
 
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(verificationURL); err != nil {
+		return fmt.Errorf("invalid MCP verification URL: %w", err)
+	}
+
 	// Step 3a: Send challenge to MCP server
 	challengeReq := map[string]string{
 		"challenge": challenge,
@@ -470,8 +476,8 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		return fmt.Errorf("MCP server verification endpoint returned non-200 status: %d", resp.StatusCode)
 	}
 
-	// Step 3b: Parse signed challenge response
-	respBody, err := io.ReadAll(resp.Body)
+	// Step 3b: Parse signed challenge response (limit to 64KB)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		return fmt.Errorf("failed to read verification response: %w", err)
 	}

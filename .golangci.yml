@@ -1,0 +1,80 @@
+# golangci-lint configuration for AIM
+# Security-focused linting with gosec in audit mode.
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Security
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+
+    # Code quality
+    - govet
+    - staticcheck
+    - unused
+    - typecheck
+
+  disable:
+    - errcheck    # Widespread unchecked returns — enable incrementally
+    - gosimple    # Stylistic suggestions (S1009, S1039) — not security-relevant
+    - ineffassign # Pre-existing ineffectual assignments — fix in code cleanup PR
+    - misspell    # Pre-existing misspellings — fix in code cleanup PR
+
+linters-settings:
+  gosec:
+    # Audit mode: report all issues without filtering
+    config:
+      global:
+        audit: true
+    excludes:
+      - G101  # Hardcoded credentials in tests
+      - G115  # Integer overflow int->int32 (low risk, noisy)
+      - G201  # SQL string formatting (pre-existing, uses parameterized queries)
+      - G402  # TLS MinVersion (SMTP email service, tracked separately)
+    severity: medium
+    confidence: medium
+
+  govet:
+    enable-all: false
+
+  misspell:
+    locale: US
+
+issues:
+  exclude-dirs:
+    - vendor
+    - testdata
+    - node_modules
+
+  exclude-rules:
+    # Allow unused params in interface implementations
+    - linters:
+        - unused
+      source: "^func \\(.*\\) "
+
+    # Relax security checks in test files
+    - path: _test\.go
+      linters:
+        - gosec
+        - bodyclose
+
+    # CLI entrypoints — interactive prompts, bootstrapping
+    - path: cmd/
+      linters:
+        - gosec
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    - format: colored-line-number
+  sort-results: true
+  sort-order:
+    - linter
+    - severity
+    - file

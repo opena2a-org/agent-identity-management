@@ -6,6 +6,9 @@
 
 > Enterprises manage millions of non-human identities (NHI). AI agents are the fastest-growing — and least-governed — category. AIM fixes that.
 
+[![Security Pipeline](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
+[![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
+[![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-blue)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/release.yml)
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)

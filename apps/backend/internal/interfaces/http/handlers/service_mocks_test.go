@@ -134,7 +134,7 @@ func (m *MockAgentServiceImpl) GetAgentCredentials(ctx context.Context, agentID 
 	return "mockPublicKey", "mockPrivateKey", nil
 }
 
-func (m *MockAgentServiceImpl) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string) error {
+func (m *MockAgentServiceImpl) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string, authMethod string) error {
 	if m.UpdateAgentPublicKeyFunc != nil {
 		return m.UpdateAgentPublicKeyFunc(ctx, agentID, publicKey)
 	}
@@ -643,6 +643,8 @@ type MockAdminServiceImpl struct {
 	UpdateEnforcementModeFunc  func(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error
 }
 
+// NOTE: Mock methods accept adminOrgID but delegate to original funcs that don't need it
+
 func (m *MockAdminServiceImpl) GetPendingUsers(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error) {
 	if m.GetPendingUsersFunc != nil {
 		return m.GetPendingUsersFunc(ctx, adminOrgID)
@@ -650,28 +652,28 @@ func (m *MockAdminServiceImpl) GetPendingUsers(ctx context.Context, adminOrgID u
 	return []*domain.User{}, nil
 }
 
-func (m *MockAdminServiceImpl) ApproveUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (m *MockAdminServiceImpl) ApproveUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	if m.ApproveUserFunc != nil {
 		return m.ApproveUserFunc(ctx, userID, adminID)
 	}
 	return nil
 }
 
-func (m *MockAdminServiceImpl) RejectUser(ctx context.Context, userID, adminID uuid.UUID, reason string) error {
+func (m *MockAdminServiceImpl) RejectUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID, reason string) error {
 	if m.RejectUserFunc != nil {
 		return m.RejectUserFunc(ctx, userID, adminID, reason)
 	}
 	return nil
 }
 
-func (m *MockAdminServiceImpl) ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (m *MockAdminServiceImpl) ActivateUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	if m.ActivateUserFunc != nil {
 		return m.ActivateUserFunc(ctx, userID, adminID)
 	}
 	return nil
 }
 
-func (m *MockAdminServiceImpl) PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (m *MockAdminServiceImpl) PermanentlyDeleteUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	if m.PermanentlyDeleteUserFunc != nil {
 		return m.PermanentlyDeleteUserFunc(ctx, userID, adminID)
 	}

@@ -17,8 +17,10 @@ VALUES (
 ON CONFLICT (domain) DO NOTHING;
 
 -- Create default admin user if it doesn't exist
--- Password: AIM2025!Secure
--- Bcrypt hash generated with cost=10
+-- SECURITY: Default password is randomly generated (see deployment docs).
+-- Admin MUST change password on first login (force_password_change=TRUE).
+-- For fresh deployments, set DEFAULT_ADMIN_PASSWORD env var or use the generated one.
+-- Bcrypt hash generated with cost=12
 INSERT INTO users (
     id,
     organization_id,
@@ -40,7 +42,7 @@ VALUES (
     'admin',
     'local',
     'admin@opena2a.org',
-    '$2a$10$yybTFh5z/GHzwIHl/bNotOCVU3L9IxS/A0ufCwLiPbhFp4/DiYtsu',  -- Password: AIM2025!Secure (MUST be changed on first login)
+    '$2b$12$EYtPexZSmNuHT/bzVhoLWOjNM9ZvdPbclV/f7KQx9otOde07.0WXG',  -- Random default password (MUST be changed on first login)
     'active',
     TRUE,
     TRUE  -- Admin MUST change password on first login

@@ -840,8 +840,8 @@ func TestAgentHandler_UpdateAgentTrustScore_InvalidScoreRange(t *testing.T) {
 		body string
 	}{
 		{"negative score", `{"score":-0.1,"reason":"test"}`},
-		{"score too high", `{"score":10.0,"reason":"test"}`},
-		{"score way too high", `{"score":100.0,"reason":"test"}`},
+		{"score too high", `{"score":100.1,"reason":"test"}`},
+		{"score way too high", `{"score":500.0,"reason":"test"}`},
 	}
 
 	for _, tt := range tests {

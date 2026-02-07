@@ -429,7 +429,7 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 	}
 
 	// Activate user using admin service
-	if err := h.getAdminService().ActivateUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().ActivateUser(c.Context(), targetUserID, adminID, orgID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -505,7 +505,7 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	userName := user.Name
 
 	// Permanently delete user using admin service
-	if err := h.getAdminService().PermanentlyDeleteUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().PermanentlyDeleteUser(c.Context(), targetUserID, adminID, orgID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -1299,7 +1299,7 @@ func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.getAdminService().ApproveUser(c.Context(), targetUserID, adminID); err != nil {
+	if err := h.getAdminService().ApproveUser(c.Context(), targetUserID, adminID, orgID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -1345,7 +1345,7 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 		req.Reason = ""
 	}
 
-	if err := h.getAdminService().RejectUser(c.Context(), targetUserID, adminID, req.Reason); err != nil {
+	if err := h.getAdminService().RejectUser(c.Context(), targetUserID, adminID, orgID, req.Reason); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})

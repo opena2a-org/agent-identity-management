@@ -30,7 +30,7 @@ type AgentServicer interface {
 	UpdateTrustScore(ctx context.Context, agentID uuid.UUID, newScore float64) error
 	RotateCredentials(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error)
 	GetAgentCredentials(ctx context.Context, agentID uuid.UUID) (publicKey, privateKey string, err error)
-	UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string) error
+	UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string, authMethod string) error
 	AddMCPServers(ctx context.Context, agentID uuid.UUID, mcpServerIdentifiers []string) (*domain.Agent, []string, error)
 	RemoveMCPServer(ctx context.Context, agentID uuid.UUID, mcpServerIdentifier string) (*domain.Agent, error)
 	VerifyCapability(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (allowed bool, reason string, auditID uuid.UUID, err error)
@@ -124,10 +124,10 @@ type AuthServicer interface {
 // AdminServicer defines the methods from AdminService that handlers use
 type AdminServicer interface {
 	GetPendingUsers(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error)
-	ApproveUser(ctx context.Context, userID, adminID uuid.UUID) error
-	RejectUser(ctx context.Context, userID, adminID uuid.UUID, reason string) error
-	ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error
-	PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error
+	ApproveUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error
+	RejectUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID, reason string) error
+	ActivateUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error
+	PermanentlyDeleteUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error
 	GetOrganizationSettings(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error)
 	GetEnforcementSettings(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error)
 	UpdateEnforcementMode(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error

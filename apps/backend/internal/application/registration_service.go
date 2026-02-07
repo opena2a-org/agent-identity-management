@@ -143,6 +143,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 			ApprovedBy:          nil, // System auto-approval (no reviewer)
 			ApprovedAt:          &now,
 			Status:              domain.UserStatusActive,
+			ForcePasswordChange: true, // SECURITY: Force password change to confirm account ownership
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}

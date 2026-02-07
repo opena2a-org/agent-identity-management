@@ -266,7 +266,7 @@ func TestAdminService_ApproveUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusPending)
 	userRepo.AddUser(user)
 
-	err := service.ApproveUser(ctx, user.ID, adminID)
+	err := service.ApproveUser(ctx, user.ID, adminID, user.OrganizationID)
 	require.NoError(t, err)
 
 	// Verify user was approved
@@ -288,7 +288,7 @@ func TestAdminService_ApproveUser_NotPending(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive) // Already active
 	userRepo.AddUser(user)
 
-	err := service.ApproveUser(ctx, user.ID, adminID)
+	err := service.ApproveUser(ctx, user.ID, adminID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not pending")
 }
@@ -299,7 +299,7 @@ func TestAdminService_ApproveUser_NotFound(t *testing.T) {
 	service := NewAdminService(userRepo, orgRepo)
 	ctx := context.Background()
 
-	err := service.ApproveUser(ctx, uuid.New(), uuid.New())
+	err := service.ApproveUser(ctx, uuid.New(), uuid.New(), uuid.New())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get user")
 }
@@ -316,7 +316,7 @@ func TestAdminService_RejectUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusPending)
 	userRepo.AddUser(user)
 
-	err := service.RejectUser(ctx, user.ID, adminID, "Does not meet requirements")
+	err := service.RejectUser(ctx, user.ID, adminID, user.OrganizationID, "Does not meet requirements")
 	require.NoError(t, err)
 
 	// Verify user was deleted
@@ -336,7 +336,7 @@ func TestAdminService_RejectUser_NotPending(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.RejectUser(ctx, user.ID, adminID, "reason")
+	err := service.RejectUser(ctx, user.ID, adminID, user.OrganizationID, "reason")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not pending")
 }
@@ -353,7 +353,7 @@ func TestAdminService_UpdateUserRole(t *testing.T) {
 	user.Role = domain.RoleMember
 	userRepo.AddUser(user)
 
-	err := service.UpdateUserRole(ctx, user.ID, domain.RoleAdmin)
+	err := service.UpdateUserRole(ctx, user.ID, user.OrganizationID, domain.RoleAdmin)
 	require.NoError(t, err)
 
 	updated, _ := userRepo.GetByID(user.ID)
@@ -371,7 +371,7 @@ func TestAdminService_UpdateUserRole_NotActive(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusSuspended)
 	userRepo.AddUser(user)
 
-	err := service.UpdateUserRole(ctx, user.ID, domain.RoleAdmin)
+	err := service.UpdateUserRole(ctx, user.ID, user.OrganizationID, domain.RoleAdmin)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "non-active user")
 }
@@ -388,7 +388,7 @@ func TestAdminService_SuspendUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.SuspendUser(ctx, user.ID, adminID)
+	err := service.SuspendUser(ctx, user.ID, adminID, user.OrganizationID)
 	require.NoError(t, err)
 
 	updated, _ := userRepo.GetByID(user.ID)
@@ -407,7 +407,7 @@ func TestAdminService_SuspendUser_AlreadySuspended(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusSuspended)
 	userRepo.AddUser(user)
 
-	err := service.SuspendUser(ctx, user.ID, adminID)
+	err := service.SuspendUser(ctx, user.ID, adminID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already suspended")
 }
@@ -424,7 +424,7 @@ func TestAdminService_ActivateUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusSuspended)
 	userRepo.AddUser(user)
 
-	err := service.ActivateUser(ctx, user.ID, adminID)
+	err := service.ActivateUser(ctx, user.ID, adminID, user.OrganizationID)
 	require.NoError(t, err)
 
 	updated, _ := userRepo.GetByID(user.ID)
@@ -444,7 +444,7 @@ func TestAdminService_ActivateUser_AlreadyActive(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.ActivateUser(ctx, user.ID, adminID)
+	err := service.ActivateUser(ctx, user.ID, adminID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already active")
 }
@@ -461,7 +461,7 @@ func TestAdminService_DeactivateUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.DeactivateUser(ctx, user.ID, adminID)
+	err := service.DeactivateUser(ctx, user.ID, adminID, user.OrganizationID)
 	require.NoError(t, err)
 
 	updated, _ := userRepo.GetByID(user.ID)
@@ -483,7 +483,7 @@ func TestAdminService_DeactivateUser_AlreadyDeactivated(t *testing.T) {
 	user.DeletedAt = &now
 	userRepo.AddUser(user)
 
-	err := service.DeactivateUser(ctx, user.ID, adminID)
+	err := service.DeactivateUser(ctx, user.ID, adminID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already deactivated")
 }
@@ -502,7 +502,7 @@ func TestAdminService_PermanentlyDeleteUser(t *testing.T) {
 	user.DeletedAt = &now // Already deactivated
 	userRepo.AddUser(user)
 
-	err := service.PermanentlyDeleteUser(ctx, user.ID, adminID)
+	err := service.PermanentlyDeleteUser(ctx, user.ID, adminID, user.OrganizationID)
 	require.NoError(t, err)
 
 	// Verify user was deleted
@@ -522,7 +522,7 @@ func TestAdminService_PermanentlyDeleteUser_SelfDeletion(t *testing.T) {
 	userRepo.AddUser(user)
 
 	// Try to delete self
-	err := service.PermanentlyDeleteUser(ctx, user.ID, user.ID)
+	err := service.PermanentlyDeleteUser(ctx, user.ID, user.ID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot delete your own account")
 }
@@ -539,7 +539,7 @@ func TestAdminService_PermanentlyDeleteUser_ActiveUser(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.PermanentlyDeleteUser(ctx, user.ID, adminID)
+	err := service.PermanentlyDeleteUser(ctx, user.ID, adminID, user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "should be deactivated first")
 }
@@ -682,7 +682,7 @@ func TestAdminService_ApproveUser_UpdateError(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusPending)
 	userRepo.AddUser(user)
 
-	err := service.ApproveUser(ctx, user.ID, uuid.New())
+	err := service.ApproveUser(ctx, user.ID, uuid.New(), user.OrganizationID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to approve user")
 }
@@ -698,7 +698,7 @@ func TestAdminService_UpdateUserRole_Error(t *testing.T) {
 	user := createAdminTestUser(orgID, domain.UserStatusActive)
 	userRepo.AddUser(user)
 
-	err := service.UpdateUserRole(ctx, user.ID, domain.RoleAdmin)
+	err := service.UpdateUserRole(ctx, user.ID, user.OrganizationID, domain.RoleAdmin)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to update user role")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 // A2A Configuration Constants
@@ -117,6 +118,12 @@ func NewA2AService(
 		keyVault:        keyVault,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// SECURITY: Disable redirect following to prevent SSRF bypass.
+			// An attacker could pass URL validation with a safe URL that redirects
+			// to an internal address (e.g., cloud metadata endpoint).
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}
 }
@@ -1390,6 +1397,11 @@ func (s *A2AService) RefreshExpiredCards(ctx context.Context) (int, error) {
 // ============================================================================
 
 func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(url); err != nil {
+		return nil, fmt.Errorf("invalid agent card URL: %w", err)
+	}
+
 	resp, err := s.httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
@@ -1400,7 +1412,8 @@ func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Limit response size to 1MB to prevent memory exhaustion
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -1409,30 +1422,26 @@ func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 }
 
 func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.RawMessage, expiresAt time.Time) (string, error) {
-	// Get server's signing key (would be from config in production)
-	// For now, use the agent's own key for self-attestation
-	if agent.EncryptedPrivateKey == nil {
-		return "", fmt.Errorf("agent has no private key for signing")
-	}
-
-	privateKeyB64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt private key: %w", err)
-	}
-	privateKey, err := base64.StdEncoding.DecodeString(privateKeyB64)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode private key: %w", err)
+	// SECURITY: Use the AIM server's signing key for attestation, NOT the agent's own key.
+	// Self-attestation provides no trust guarantee — an attacker controlling an agent
+	// could sign any card data. Server-signed attestation proves the AIM platform
+	// verified and approved this agent card.
+	serverPrivateKey := s.keyVault.GetServerSigningKey()
+	if serverPrivateKey == nil {
+		return "", fmt.Errorf("server signing key not configured — cannot issue attestation")
 	}
 
 	// Create attestation payload
 	attestPayload := struct {
 		CardHash  string    `json:"cardHash"`
 		AgentID   string    `json:"agentId"`
+		Issuer    string    `json:"issuer"`
 		IssuedAt  time.Time `json:"issuedAt"`
 		ExpiresAt time.Time `json:"expiresAt"`
 	}{
 		CardHash:  hex.EncodeToString(sha256Hash(cardData)),
 		AgentID:   agent.ID.String(),
+		Issuer:    "aim-server",
 		IssuedAt:  time.Now().UTC(),
 		ExpiresAt: expiresAt,
 	}
@@ -1440,7 +1449,7 @@ func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.Ra
 	payloadJSON, _ := json.Marshal(attestPayload)
 	payloadHash := sha256.Sum256(payloadJSON)
 
-	signature := ed25519.Sign(privateKey, payloadHash[:])
+	signature := ed25519.Sign(serverPrivateKey, payloadHash[:])
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 

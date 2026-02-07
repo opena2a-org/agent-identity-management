@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 // WebhookConfig holds webhook service configuration
@@ -71,6 +72,11 @@ type CreateWebhookRequest struct {
 
 // CreateWebhook creates a new webhook subscription
 func (s *WebhookService) CreateWebhook(ctx context.Context, req *CreateWebhookRequest, orgID, userID uuid.UUID) (*domain.Webhook, error) {
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(req.URL); err != nil {
+		return nil, fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
 	// Generate secret for webhook signature
 	secret, err := generateSecret()
 	if err != nil {
@@ -115,6 +121,11 @@ func (s *WebhookService) DeleteWebhook(ctx context.Context, id uuid.UUID) error 
 
 // UpdateWebhook updates an existing webhook
 func (s *WebhookService) UpdateWebhook(ctx context.Context, id uuid.UUID, req *CreateWebhookRequest) (*domain.Webhook, error) {
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(req.URL); err != nil {
+		return nil, fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
 	// Get existing webhook
 	webhook, err := s.webhookRepo.GetByID(id)
 	if err != nil {
