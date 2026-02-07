@@ -111,7 +111,7 @@ jobs:
             exit 1
           else
             echo "$REVIEW_TEXT" > /tmp/review_body.txt
-            VERDICT=$(grep -oP 'VERDICT:\s*\K\S+' /tmp/review_body.txt | head -1)
+            VERDICT=$(grep -oP 'VERDICT:\s*\K(APPROVE|REQUEST_CHANGES)' /tmp/review_body.txt | head -1)
             echo "${VERDICT:-APPROVE}" > /tmp/verdict.txt
           fi
 
