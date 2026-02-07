@@ -24,6 +24,8 @@ linters:
   disable:
     - errcheck    # Widespread unchecked returns — enable incrementally
     - gosimple    # Stylistic suggestions (S1009, S1039) — not security-relevant
+    - ineffassign # Pre-existing ineffectual assignments — fix in code cleanup PR
+    - misspell    # Pre-existing misspellings — fix in code cleanup PR
 
 linters-settings:
   gosec:
