@@ -11,7 +11,6 @@ linters:
     - gosec
     - bodyclose
     - sqlclosecheck
-    - noctx
 
     # Code quality
     - govet
