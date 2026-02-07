@@ -118,6 +118,12 @@ func NewA2AService(
 		keyVault:        keyVault,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// SECURITY: Disable redirect following to prevent SSRF bypass.
+			// An attacker could pass URL validation with a safe URL that redirects
+			// to an internal address (e.g., cloud metadata endpoint).
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}
 }

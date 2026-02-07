@@ -107,9 +107,8 @@ jobs:
 
           if [ -z "$REVIEW_TEXT" ]; then
             ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown API error"')
-            echo "API call failed: $ERROR"
-            echo "Review could not be completed: $ERROR" > /tmp/review_body.txt
-            echo "APPROVE" > /tmp/verdict.txt
+            echo "::error::Claude API call failed: $ERROR"
+            exit 1
           else
             echo "$REVIEW_TEXT" > /tmp/review_body.txt
             VERDICT=$(grep -oP 'VERDICT:\s*\K\S+' /tmp/review_body.txt | head -1)
