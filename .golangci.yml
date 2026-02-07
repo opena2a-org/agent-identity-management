@@ -20,7 +20,6 @@ linters:
     - ineffassign
     - typecheck
     - misspell
-    - goimports
 
   disable:
     # errcheck disabled — codebase has widespread unchecked returns.
