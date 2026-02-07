@@ -25,7 +25,7 @@ func TestPostgresConfig_NewPostgresConfig_WithEnvVars(t *testing.T) {
 	assert.Equal(t, "testdb", config.Database)
 	assert.Equal(t, "testuser", config.User)
 	assert.Equal(t, "testpass", config.Password)
-	assert.Equal(t, "prefer", config.SSLMode) // default
+	assert.Equal(t, "require", config.SSLMode) // default (secure for production)
 	assert.Equal(t, 100, config.MaxConnections)
 	assert.Equal(t, 5*time.Minute, config.ConnMaxLifetime)
 }
