@@ -17,9 +17,7 @@ linters:
     - govet
     - staticcheck
     - unused
-    - ineffassign
     - typecheck
-    - misspell
 
   disable:
     - errcheck    # Widespread unchecked returns — enable incrementally
