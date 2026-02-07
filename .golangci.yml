@@ -40,9 +40,7 @@ linters-settings:
     confidence: medium
 
   govet:
-    enable-all: true
-    disable:
-      - fieldalignment  # Too noisy for limited benefit
+    enable-all: false
 
   misspell:
     locale: US
