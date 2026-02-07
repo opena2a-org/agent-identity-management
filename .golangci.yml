@@ -1,0 +1,84 @@
+# golangci-lint configuration for AIM
+# Security-focused linting with gosec in audit mode.
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Security
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - noctx
+    - exportloopref
+
+    # Code quality
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - typecheck
+    - misspell
+    - goimports
+
+linters-settings:
+  gosec:
+    # Audit mode: report all issues without filtering
+    config:
+      global:
+        audit: true
+    excludes:
+      # Allow hardcoded credentials in tests
+      - G101
+    severity: medium
+    confidence: medium
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Too noisy for limited benefit
+
+  errcheck:
+    check-type-assertions: true
+
+  misspell:
+    locale: US
+
+issues:
+  exclude-dirs:
+    - vendor
+    - testdata
+    - node_modules
+
+  exclude-rules:
+    # Allow unused params in interface implementations
+    - linters:
+        - unused
+      source: "^func \\(.*\\) "
+
+    # Relax security checks in test files
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - bodyclose
+
+    # Allow unhandled errors in defer statements
+    - source: "defer "
+      linters:
+        - errcheck
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    - format: colored-line-number
+  sort-results: true
+  sort-order:
+    - linter
+    - severity
+    - file
