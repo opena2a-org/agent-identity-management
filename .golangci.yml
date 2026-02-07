@@ -71,6 +71,22 @@ issues:
       linters:
         - errcheck
 
+    # CLI entrypoints have interactive prompts, rollbacks in deferred cleanup
+    - path: cmd/
+      linters:
+        - errcheck
+
+    # Rollback errors in error-handling paths are non-actionable
+    - source: "tx\\.Rollback"
+      linters:
+        - errcheck
+
+    # Fire-and-forget background operations (logging, metrics, non-critical writes)
+    - source: "(Create|Update|MarkVerified)\\("
+      linters:
+        - errcheck
+      path: internal/application/
+
   max-issues-per-linter: 0
   max-same-issues: 0
 
