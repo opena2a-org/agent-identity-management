@@ -1,14 +1,5 @@
 name: PR Review
 
-# Intelligent code reviewer powered by Claude. Reads the PR diff, analyzes
-# for security issues, code quality, and correctness, then posts a review.
-# Approves if no blocking issues; requests changes if security concerns found.
-#
-# Prerequisites:
-#   1. ANTHROPIC_API_KEY secret set in repo settings
-#   2. Org settings > Actions > "Allow GitHub Actions to create and approve
-#      pull requests" enabled
-
 on:
   pull_request:
     branches: [main]
@@ -26,58 +17,40 @@ jobs:
   review:
     name: Claude Code Review
     runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Get PR diff and metadata
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the diff, truncate to ~120KB to stay within token limits
-          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr_diff.txt
+          gh pr diff "$PR_NUMBER" > /tmp/pr_diff.txt
+          gh pr diff "$PR_NUMBER" --name-only > /tmp/changed_files.txt
+          gh pr view "$PR_NUMBER" --json title -q '.title' > /tmp/pr_title.txt
+          gh pr view "$PR_NUMBER" --json body -q '.body' | head -c 2000 > /tmp/pr_body.txt
 
-          # Get changed file list for context
-          gh pr diff ${{ github.event.pull_request.number }} --name-only > /tmp/changed_files.txt
+          DIFF_BYTES=$(wc -c < /tmp/pr_diff.txt | tr -d ' ')
+          echo "$DIFF_BYTES" > /tmp/diff_size.txt
+          wc -l < /tmp/changed_files.txt | tr -d ' ' > /tmp/file_count.txt
 
-          DIFF_SIZE=$(wc -c < /tmp/pr_diff.txt)
-          FILE_COUNT=$(wc -l < /tmp/changed_files.txt)
-          echo "diff_size=$DIFF_SIZE" >> "$GITHUB_OUTPUT"
-          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
-
-          # Truncate if too large (120KB ~ 30K tokens)
-          if [ "$DIFF_SIZE" -gt 120000 ]; then
-            head -c 120000 /tmp/pr_diff.txt > /tmp/pr_diff_truncated.txt
-            echo -e "\n\n[DIFF TRUNCATED — original was ${DIFF_SIZE} bytes]" >> /tmp/pr_diff_truncated.txt
-            mv /tmp/pr_diff_truncated.txt /tmp/pr_diff.txt
+          if [ "$DIFF_BYTES" -gt 120000 ]; then
+            head -c 120000 /tmp/pr_diff.txt > /tmp/pr_diff_trunc.txt
+            printf '\n\n[DIFF TRUNCATED — original was %s bytes]\n' "$DIFF_BYTES" >> /tmp/pr_diff_trunc.txt
+            mv /tmp/pr_diff_trunc.txt /tmp/pr_diff.txt
           fi
 
-      - name: Get PR metadata
-        id: meta
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q '.title')
-          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body' | head -c 2000)
-          echo "pr_title=$PR_TITLE" >> "$GITHUB_OUTPUT"
-
-          # Write body to file to preserve newlines
-          echo "$PR_BODY" > /tmp/pr_body.txt
-
       - name: Run Claude review
-        id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          DIFF=$(cat /tmp/pr_diff.txt)
-          CHANGED_FILES=$(cat /tmp/changed_files.txt)
-          PR_BODY=$(cat /tmp/pr_body.txt)
-          PR_TITLE="${{ steps.meta.outputs.pr_title }}"
+          PR_TITLE=$(cat /tmp/pr_title.txt)
 
-          # Build the prompt as a JSON payload
-          PROMPT=$(cat <<'SYSTEM_END'
+          # Build system prompt
+          cat > /tmp/system_prompt.txt << 'SYSPROMPT'
           You are a senior security engineer reviewing a pull request for the Agent Identity Management (AIM) platform — an open-source non-human identity platform for AI agents.
 
           Tech stack: Go 1.23 backend (Fiber v3), Next.js frontend, PostgreSQL, post-quantum cryptography (ML-DSA via cloudflare/circl).
@@ -87,113 +60,84 @@ jobs:
           2. CORRECTNESS: Logic errors, race conditions, nil pointer dereferences, resource leaks, error handling gaps
           3. QUALITY: API contract changes, breaking changes, missing input validation at system boundaries
 
-          Do NOT flag:
-          - Style/formatting preferences
-          - Missing comments or documentation
-          - Test coverage (CI handles this)
-          - Pre-existing issues not introduced by this PR
+          Do NOT flag: style preferences, missing docs, test coverage, pre-existing issues.
 
-          Response format (strict — parseable):
-          ---
+          Response format (strict):
           VERDICT: APPROVE or REQUEST_CHANGES
-          SUMMARY: One paragraph summarizing the PR and your assessment.
+          SUMMARY: One paragraph.
           FINDINGS:
-          - [CRITICAL] path/to/file.go:123 — Description of the issue
-          - [HIGH] path/to/file.go:456 — Description of the issue
-          - [MEDIUM] path/to/file.go:789 — Description of the issue
-          ---
+          - [CRITICAL|HIGH|MEDIUM] path/file.go:line — Description
+          (omit FINDINGS section if none)
 
           Rules:
-          - VERDICT must be APPROVE if there are no CRITICAL or HIGH findings.
-          - Only use REQUEST_CHANGES for genuine security or correctness issues introduced in this PR.
-          - If the diff is only CI/config/docs changes, APPROVE with a brief summary.
-          - Keep findings actionable and specific. Reference exact file paths and line context.
-          - Maximum 10 findings. Focus on what matters most.
-          SYSTEM_END
-          )
+          - APPROVE if no CRITICAL or HIGH findings
+          - Only REQUEST_CHANGES for genuine security/correctness issues introduced in this PR
+          - CI/config/docs-only changes: always APPROVE
+          - Max 10 findings, most important first
+          SYSPROMPT
 
-          USER_MSG=$(cat <<EOF
-          PR #${{ github.event.pull_request.number }}: ${PR_TITLE}
+          # Build user message
+          {
+            printf 'PR #%s: %s\n\nDescription:\n' "$PR_NUMBER" "$PR_TITLE"
+            cat /tmp/pr_body.txt
+            printf '\n\nChanged files:\n'
+            cat /tmp/changed_files.txt
+            printf '\n\nDiff:\n'
+            cat /tmp/pr_diff.txt
+          } > /tmp/user_msg.txt
 
-          Description:
-          ${PR_BODY}
-
-          Changed files:
-          ${CHANGED_FILES}
-
-          Diff:
-          ${DIFF}
-          EOF
-          )
-
-          # Call Anthropic API
+          # Call Anthropic API via jq + curl
           RESPONSE=$(jq -n \
-            --arg system "$PROMPT" \
-            --arg user "$USER_MSG" \
+            --rawfile system /tmp/system_prompt.txt \
+            --rawfile user /tmp/user_msg.txt \
             '{
               model: "claude-sonnet-4-5-20250929",
               max_tokens: 4096,
-              messages: [{ role: "user", content: $user }],
-              system: $system
+              system: $system,
+              messages: [{ role: "user", content: $user }]
             }' | curl -s -X POST "https://api.anthropic.com/v1/messages" \
               -H "Content-Type: application/json" \
               -H "x-api-key: ${ANTHROPIC_API_KEY}" \
               -H "anthropic-version: 2023-06-01" \
-              -d @- \
-          )
+              -d @-)
 
-          # Extract the text response
+          # Extract response text
           REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
 
           if [ -z "$REVIEW_TEXT" ]; then
-            ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown error"')
-            echo "API error: $ERROR"
-            echo "review_body=Review could not be completed: ${ERROR}" >> "$GITHUB_OUTPUT"
-            echo "verdict=APPROVE" >> "$GITHUB_OUTPUT"
-            exit 0
+            ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown API error"')
+            echo "API call failed: $ERROR"
+            echo "Review could not be completed: $ERROR" > /tmp/review_body.txt
+            echo "APPROVE" > /tmp/verdict.txt
+          else
+            echo "$REVIEW_TEXT" > /tmp/review_body.txt
+            VERDICT=$(grep -oP 'VERDICT:\s*\K\S+' /tmp/review_body.txt | head -1)
+            echo "${VERDICT:-APPROVE}" > /tmp/verdict.txt
           fi
-
-          # Parse verdict
-          VERDICT=$(echo "$REVIEW_TEXT" | grep -oP 'VERDICT:\s*\K\S+' | head -1)
-          if [ -z "$VERDICT" ]; then
-            VERDICT="APPROVE"
-          fi
-
-          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-
-          # Write full review to file (handles multiline)
-          echo "$REVIEW_TEXT" > /tmp/review_body.txt
 
       - name: Post review
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERDICT="${{ steps.review.outputs.verdict }}"
-          REVIEW_BODY=$(cat /tmp/review_body.txt)
-          PR_NUMBER=${{ github.event.pull_request.number }}
+          VERDICT=$(cat /tmp/verdict.txt)
+          DIFF_SIZE=$(cat /tmp/diff_size.txt)
+          FILE_COUNT=$(cat /tmp/file_count.txt)
 
-          # Build the review body with header
-          FULL_BODY=$(cat <<EOF
-          ## Claude Code Review
+          {
+            echo "## Claude Code Review"
+            echo ""
+            cat /tmp/review_body.txt
+            echo ""
+            echo "---"
+            echo "*Reviewed ${FILE_COUNT} files changed (${DIFF_SIZE} bytes)*"
+          } > /tmp/full_review.txt
 
-          ${REVIEW_BODY}
-
-          ---
-          *Reviewed ${DIFF_FILES:-files} changed (${DIFF_SIZE:-?} bytes) with [Claude](https://anthropic.com)*
-          EOF
-          )
+          BODY=$(cat /tmp/full_review.txt)
 
           if [ "$VERDICT" = "REQUEST_CHANGES" ]; then
-            gh pr review "$PR_NUMBER" \
-              --request-changes \
-              --body "$FULL_BODY" 2>/dev/null || \
-            gh pr comment "$PR_NUMBER" --body "$FULL_BODY"
+            gh pr review "$PR_NUMBER" --request-changes --body "$BODY" 2>/dev/null || \
+              gh pr comment "$PR_NUMBER" --body "$BODY"
           else
-            gh pr review "$PR_NUMBER" \
-              --approve \
-              --body "$FULL_BODY" 2>/dev/null || \
-            gh pr comment "$PR_NUMBER" --body "$FULL_BODY"
+            gh pr review "$PR_NUMBER" --approve --body "$BODY" 2>/dev/null || \
+              gh pr comment "$PR_NUMBER" --body "$BODY"
           fi
-        env:
-          DIFF_SIZE: ${{ steps.diff.outputs.diff_size }}
-          DIFF_FILES: ${{ steps.diff.outputs.file_count }}
