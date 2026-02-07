@@ -22,9 +22,8 @@ linters:
     - misspell
 
   disable:
-    # errcheck disabled — codebase has widespread unchecked returns.
-    # TODO: enable and fix incrementally per-package.
-    - errcheck
+    - errcheck    # Widespread unchecked returns — enable incrementally
+    - gosimple    # Stylistic suggestions (S1009, S1039) — not security-relevant
 
 linters-settings:
   gosec:
