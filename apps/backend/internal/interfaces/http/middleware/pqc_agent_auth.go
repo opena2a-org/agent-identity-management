@@ -167,10 +167,15 @@ func verifyEd25519Signature(c fiber.Ctx, agent *domain.Agent, message []byte) er
 		return fmt.Errorf("missing Ed25519 signature or public key")
 	}
 
-	// Use registered key or provided key
-	verifyPublicKey := publicKeyB64
-	if agent.PublicKey != nil && *agent.PublicKey != "" {
-		verifyPublicKey = *agent.PublicKey
+	// SECURITY: Agent MUST have a registered Ed25519 public key
+	if agent.PublicKey == nil || *agent.PublicKey == "" {
+		return fmt.Errorf("agent has no registered Ed25519 public key")
+	}
+	verifyPublicKey := *agent.PublicKey
+
+	// Verify provided key matches registered key
+	if publicKeyB64 != verifyPublicKey {
+		return fmt.Errorf("provided Ed25519 public key does not match registered key")
 	}
 
 	// Decode public key
@@ -209,13 +214,15 @@ func verifyMLDSASignature(c fiber.Ctx, agent *domain.Agent, alg pqc.Algorithm, m
 		return fmt.Errorf("missing ML-DSA signature")
 	}
 
-	// Use registered PQC key or provided key
-	verifyPublicKey := pqcPublicKeyB64
-	if agent.PQCPublicKey != nil && *agent.PQCPublicKey != "" {
-		verifyPublicKey = *agent.PQCPublicKey
+	// SECURITY: Agent MUST have a registered PQC public key for ML-DSA auth
+	if agent.PQCPublicKey == nil || *agent.PQCPublicKey == "" {
+		return fmt.Errorf("agent has no registered ML-DSA public key")
 	}
-	if verifyPublicKey == "" {
-		return fmt.Errorf("no ML-DSA public key available")
+	verifyPublicKey := *agent.PQCPublicKey
+
+	// Verify provided key matches registered key
+	if pqcPublicKeyB64 != "" && pqcPublicKeyB64 != verifyPublicKey {
+		return fmt.Errorf("provided ML-DSA public key does not match registered key")
 	}
 
 	// Decode public key
@@ -266,23 +273,25 @@ func verifyHybridSignature(c fiber.Ctx, agent *domain.Agent, alg pqc.Algorithm, 
 		return fmt.Errorf("missing ML-DSA signature for hybrid mode")
 	}
 
-	// Get public keys
-	ed25519PubKeyB64 := c.Get("X-Public-Key")
-	pqcPubKeyB64 := c.Get("X-PQC-Public-Key")
-
-	// Use registered keys if available
-	if agent.PublicKey != nil && *agent.PublicKey != "" {
-		ed25519PubKeyB64 = *agent.PublicKey
+	// SECURITY: Both keys MUST be registered for hybrid mode
+	if agent.PublicKey == nil || *agent.PublicKey == "" {
+		return fmt.Errorf("agent has no registered Ed25519 public key for hybrid mode")
 	}
-	if agent.PQCPublicKey != nil && *agent.PQCPublicKey != "" {
-		pqcPubKeyB64 = *agent.PQCPublicKey
+	if agent.PQCPublicKey == nil || *agent.PQCPublicKey == "" {
+		return fmt.Errorf("agent has no registered ML-DSA public key for hybrid mode")
 	}
 
-	if ed25519PubKeyB64 == "" {
-		return fmt.Errorf("missing Ed25519 public key for hybrid mode")
+	ed25519PubKeyB64 := *agent.PublicKey
+	pqcPubKeyB64 := *agent.PQCPublicKey
+
+	// Verify provided keys match registered keys
+	providedEd25519 := c.Get("X-Public-Key")
+	providedPQC := c.Get("X-PQC-Public-Key")
+	if providedEd25519 != "" && providedEd25519 != ed25519PubKeyB64 {
+		return fmt.Errorf("provided Ed25519 public key does not match registered key")
 	}
-	if pqcPubKeyB64 == "" {
-		return fmt.Errorf("missing ML-DSA public key for hybrid mode")
+	if providedPQC != "" && providedPQC != pqcPubKeyB64 {
+		return fmt.Errorf("provided ML-DSA public key does not match registered key")
 	}
 
 	// 1. Verify Ed25519 first (faster)

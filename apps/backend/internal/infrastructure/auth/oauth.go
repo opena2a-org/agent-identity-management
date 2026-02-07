@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -95,15 +96,16 @@ func (s *OAuthService) GetAuthURL(provider OAuthProvider, state string) (string,
 		scope = "openid email profile"
 	}
 
-	url := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",
+	// SECURITY: URL-encode all parameters to prevent parameter injection
+	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",
 		config.AuthURL,
-		config.ClientID,
-		config.RedirectURL,
-		scope,
-		state,
+		url.QueryEscape(config.ClientID),
+		url.QueryEscape(config.RedirectURL),
+		url.QueryEscape(scope),
+		url.QueryEscape(state),
 	)
 
-	return url, nil
+	return authURL, nil
 }
 
 // ExchangeCode exchanges authorization code for access token
@@ -113,11 +115,12 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, provider OAuthProvider,
 		return "", fmt.Errorf("unsupported provider: %s", provider)
 	}
 
+	// SECURITY: URL-encode all parameters to prevent injection
 	data := fmt.Sprintf("client_id=%s&client_secret=%s&code=%s&redirect_uri=%s&grant_type=authorization_code",
-		config.ClientID,
-		config.ClientSecret,
-		code,
-		config.RedirectURL,
+		url.QueryEscape(config.ClientID),
+		url.QueryEscape(config.ClientSecret),
+		url.QueryEscape(code),
+		url.QueryEscape(config.RedirectURL),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", config.TokenURL, strings.NewReader(data))

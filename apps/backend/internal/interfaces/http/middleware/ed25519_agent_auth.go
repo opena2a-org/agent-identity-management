@@ -132,15 +132,23 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 			})
 		}
 
-		// Check if agent has a registered public key
-		var verifyPublicKey string
-		if agent.PublicKey != nil && *agent.PublicKey != "" {
-			// Use registered key from database
-			verifyPublicKey = *agent.PublicKey
-		} else {
-			// Agent hasn't registered a key yet, use the one from request
-			// (This allows first-time registration)
-			verifyPublicKey = publicKeyB64
+		// SECURITY: Agent MUST have a registered public key
+		// Reject requests from agents without registered keys to prevent TOFU bypass attacks
+		// where an attacker supplies their own key via X-Public-Key header.
+		// Key registration must happen through authenticated channels (JWT auth).
+		if agent.PublicKey == nil || *agent.PublicKey == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Agent has no registered public key. Register a key first using JWT authentication.",
+			})
+		}
+
+		verifyPublicKey := *agent.PublicKey
+
+		// Verify that the provided public key matches the registered one
+		if publicKeyB64 != verifyPublicKey {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Provided public key does not match registered key",
+			})
 		}
 
 		// Decode public key

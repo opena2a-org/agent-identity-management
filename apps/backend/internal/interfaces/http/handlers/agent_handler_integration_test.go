@@ -1332,8 +1332,8 @@ func TestAgentHandler_UpdateAgentTrustScore_InvalidScore(t *testing.T) {
 	app := createTestAppWithAuth(handler, orgID, userID)
 	app.Put("/agents/:id/trust-score", handler.UpdateAgentTrustScore)
 
-	// Score out of range (> 9.999)
-	body := `{"score":15.0,"reason":"Invalid score"}`
+	// Score out of range (> 100.0)
+	body := `{"score":150.0,"reason":"Invalid score"}`
 	req := httptest.NewRequest("PUT", "/agents/"+agentID.String()+"/trust-score", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
