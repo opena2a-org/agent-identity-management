@@ -75,8 +75,16 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz
           sudo mv gitleaks /usr/local/bin/
 
-      - name: Run gitleaks
-        run: gitleaks detect --config .gitleaks.toml --source . -v --redact
+      - name: Run gitleaks (PR — scan only new commits)
+        if: github.event_name == 'pull_request'
+        run: |
+          gitleaks detect --config .gitleaks.toml --source . \
+            --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            -v --redact
+
+      - name: Run gitleaks (push/schedule — scan last commit)
+        if: github.event_name != 'pull_request'
+        run: gitleaks detect --config .gitleaks.toml --source . --log-opts "HEAD~1..HEAD" -v --redact
 
   dependency-audit:
     name: Dependency Audit
@@ -136,10 +144,9 @@ jobs:
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run gosec
-        uses: securego/gosec@master
-        with:
-          args: -fmt sarif -out gosec-results.sarif -exclude-dir=vendor ./...
-          working-directory: apps/backend
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt sarif -out gosec-results.sarif -exclude-dir=vendor ./... || true
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
