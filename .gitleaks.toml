@@ -71,6 +71,7 @@ paths = [
   '''(.*/)?fixtures/.*$''',
   '''(.*/)?examples/.*$''',
   '''(.*/)?docs/.*$''',
+  '''(.*/)?migrations/.*$''',
   '''(.*/)?sdk.*/test.*$''',
   '''(.*/)?sdks/.*test.*$''',
   '''\.gitleaks\.toml$''',

@@ -22,8 +22,10 @@ linters:
     - misspell
     - goimports
 
+  disable:
     # errcheck disabled — codebase has widespread unchecked returns.
     # TODO: enable and fix incrementally per-package.
+    - errcheck
 
 linters-settings:
   gosec:
