@@ -1,0 +1,199 @@
+name: PR Review
+
+# Intelligent code reviewer powered by Claude. Reads the PR diff, analyzes
+# for security issues, code quality, and correctness, then posts a review.
+# Approves if no blocking issues; requests changes if security concerns found.
+#
+# Prerequisites:
+#   1. ANTHROPIC_API_KEY secret set in repo settings
+#   2. Org settings > Actions > "Allow GitHub Actions to create and approve
+#      pull requests" enabled
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the diff, truncate to ~120KB to stay within token limits
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr_diff.txt
+
+          # Get changed file list for context
+          gh pr diff ${{ github.event.pull_request.number }} --name-only > /tmp/changed_files.txt
+
+          DIFF_SIZE=$(wc -c < /tmp/pr_diff.txt)
+          FILE_COUNT=$(wc -l < /tmp/changed_files.txt)
+          echo "diff_size=$DIFF_SIZE" >> "$GITHUB_OUTPUT"
+          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
+
+          # Truncate if too large (120KB ~ 30K tokens)
+          if [ "$DIFF_SIZE" -gt 120000 ]; then
+            head -c 120000 /tmp/pr_diff.txt > /tmp/pr_diff_truncated.txt
+            echo -e "\n\n[DIFF TRUNCATED — original was ${DIFF_SIZE} bytes]" >> /tmp/pr_diff_truncated.txt
+            mv /tmp/pr_diff_truncated.txt /tmp/pr_diff.txt
+          fi
+
+      - name: Get PR metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q '.title')
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body' | head -c 2000)
+          echo "pr_title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+
+          # Write body to file to preserve newlines
+          echo "$PR_BODY" > /tmp/pr_body.txt
+
+      - name: Run Claude review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DIFF=$(cat /tmp/pr_diff.txt)
+          CHANGED_FILES=$(cat /tmp/changed_files.txt)
+          PR_BODY=$(cat /tmp/pr_body.txt)
+          PR_TITLE="${{ steps.meta.outputs.pr_title }}"
+
+          # Build the prompt as a JSON payload
+          PROMPT=$(cat <<'SYSTEM_END'
+          You are a senior security engineer reviewing a pull request for the Agent Identity Management (AIM) platform — an open-source non-human identity platform for AI agents.
+
+          Tech stack: Go 1.23 backend (Fiber v3), Next.js frontend, PostgreSQL, post-quantum cryptography (ML-DSA via cloudflare/circl).
+
+          Review focus (in priority order):
+          1. SECURITY: Injection flaws, auth bypasses, crypto misuse, secret leakage, unsafe deserialization, SSRF, path traversal
+          2. CORRECTNESS: Logic errors, race conditions, nil pointer dereferences, resource leaks, error handling gaps
+          3. QUALITY: API contract changes, breaking changes, missing input validation at system boundaries
+
+          Do NOT flag:
+          - Style/formatting preferences
+          - Missing comments or documentation
+          - Test coverage (CI handles this)
+          - Pre-existing issues not introduced by this PR
+
+          Response format (strict — parseable):
+          ---
+          VERDICT: APPROVE or REQUEST_CHANGES
+          SUMMARY: One paragraph summarizing the PR and your assessment.
+          FINDINGS:
+          - [CRITICAL] path/to/file.go:123 — Description of the issue
+          - [HIGH] path/to/file.go:456 — Description of the issue
+          - [MEDIUM] path/to/file.go:789 — Description of the issue
+          ---
+
+          Rules:
+          - VERDICT must be APPROVE if there are no CRITICAL or HIGH findings.
+          - Only use REQUEST_CHANGES for genuine security or correctness issues introduced in this PR.
+          - If the diff is only CI/config/docs changes, APPROVE with a brief summary.
+          - Keep findings actionable and specific. Reference exact file paths and line context.
+          - Maximum 10 findings. Focus on what matters most.
+          SYSTEM_END
+          )
+
+          USER_MSG=$(cat <<EOF
+          PR #${{ github.event.pull_request.number }}: ${PR_TITLE}
+
+          Description:
+          ${PR_BODY}
+
+          Changed files:
+          ${CHANGED_FILES}
+
+          Diff:
+          ${DIFF}
+          EOF
+          )
+
+          # Call Anthropic API
+          RESPONSE=$(jq -n \
+            --arg system "$PROMPT" \
+            --arg user "$USER_MSG" \
+            '{
+              model: "claude-sonnet-4-5-20250929",
+              max_tokens: 4096,
+              messages: [{ role: "user", content: $user }],
+              system: $system
+            }' | curl -s -X POST "https://api.anthropic.com/v1/messages" \
+              -H "Content-Type: application/json" \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -d @- \
+          )
+
+          # Extract the text response
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+          if [ -z "$REVIEW_TEXT" ]; then
+            ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown error"')
+            echo "API error: $ERROR"
+            echo "review_body=Review could not be completed: ${ERROR}" >> "$GITHUB_OUTPUT"
+            echo "verdict=APPROVE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Parse verdict
+          VERDICT=$(echo "$REVIEW_TEXT" | grep -oP 'VERDICT:\s*\K\S+' | head -1)
+          if [ -z "$VERDICT" ]; then
+            VERDICT="APPROVE"
+          fi
+
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+
+          # Write full review to file (handles multiline)
+          echo "$REVIEW_TEXT" > /tmp/review_body.txt
+
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERDICT="${{ steps.review.outputs.verdict }}"
+          REVIEW_BODY=$(cat /tmp/review_body.txt)
+          PR_NUMBER=${{ github.event.pull_request.number }}
+
+          # Build the review body with header
+          FULL_BODY=$(cat <<EOF
+          ## Claude Code Review
+
+          ${REVIEW_BODY}
+
+          ---
+          *Reviewed ${DIFF_FILES:-files} changed (${DIFF_SIZE:-?} bytes) with [Claude](https://anthropic.com)*
+          EOF
+          )
+
+          if [ "$VERDICT" = "REQUEST_CHANGES" ]; then
+            gh pr review "$PR_NUMBER" \
+              --request-changes \
+              --body "$FULL_BODY" 2>/dev/null || \
+            gh pr comment "$PR_NUMBER" --body "$FULL_BODY"
+          else
+            gh pr review "$PR_NUMBER" \
+              --approve \
+              --body "$FULL_BODY" 2>/dev/null || \
+            gh pr comment "$PR_NUMBER" --body "$FULL_BODY"
+          fi
+        env:
+          DIFF_SIZE: ${{ steps.diff.outputs.diff_size }}
+          DIFF_FILES: ${{ steps.diff.outputs.file_count }}
