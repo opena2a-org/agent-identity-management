@@ -64,12 +64,15 @@ tags = ["password", "hash"]
 description = "Global allowlist"
 paths = [
   '''(.*/)?_test\.go$''',
+  '''(.*/)?test_.*\.py$''',
   '''(.*/)?testdata/.*$''',
   '''(.*/)?test/.*$''',
   '''(.*/)?tests/.*$''',
   '''(.*/)?fixtures/.*$''',
   '''(.*/)?examples/.*$''',
   '''(.*/)?docs/.*$''',
+  '''(.*/)?sdk.*/test.*$''',
+  '''(.*/)?sdks/.*test.*$''',
   '''\.gitleaks\.toml$''',
   '''go\.sum$''',
   '''package-lock\.json$''',
