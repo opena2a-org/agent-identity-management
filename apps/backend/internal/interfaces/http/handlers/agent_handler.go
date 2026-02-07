@@ -2019,8 +2019,14 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 		})
 	}
 
-	// Update public key
-	if err := h.agentService.UpdateAgentPublicKey(c.Context(), agentID, req.PublicKey); err != nil {
+	// Get auth method from context (set by auth middleware)
+	authMethod := ""
+	if am := c.Locals("auth_method"); am != nil {
+		authMethod, _ = am.(string)
+	}
+
+	// Update public key (passes auth method for key replacement security check)
+	if err := h.agentService.UpdateAgentPublicKey(c.Context(), agentID, req.PublicKey, authMethod); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})

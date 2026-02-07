@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 type MCPCapabilityService struct {
@@ -89,6 +90,11 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 	}
 	capabilitiesURL := strings.TrimSuffix(baseURL, "/") + "/.well-known/mcp/capabilities"
 
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(capabilitiesURL); err != nil {
+		return fmt.Errorf("invalid MCP capabilities URL: %w", err)
+	}
+
 	fmt.Printf("🔍 Capability Detection for %s:\n", server.Name)
 	fmt.Printf("   Original URL: %s\n", server.URL)
 	fmt.Printf("   Base URL: %s\n", baseURL)
@@ -117,8 +123,8 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		return fmt.Errorf("MCP server returned non-200 status: %d", resp.StatusCode)
 	}
 
-	// Step 3: Parse MCP protocol response
-	body, err := io.ReadAll(resp.Body)
+	// Step 3: Parse MCP protocol response (limit to 1MB)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}

@@ -78,10 +78,10 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
-	// If this is a tracked SDK token, track usage and create new token entry
-	// NOTE: We do NOT revoke old tokens on rotation - this allows multiple SDK instances
-	// to work independently (like GitHub, Google, etc. handle device sessions)
-	// Old tokens expire naturally after 90 days
+	// If this is a tracked SDK token, revoke old token and create new one
+	// SECURITY: Old refresh tokens MUST be invalidated after rotation to prevent
+	// token theft attacks. Each device/SDK instance gets its own independent token
+	// via the download flow — rotation only affects the specific token being refreshed.
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
@@ -94,16 +94,10 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		ipAddress := c.IP()
 		_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
 
-		// IMPORTANT: We do NOT revoke the old token anymore!
-		// This was causing issues with multiple SDK instances:
-		// - SDK A downloads → Token A
-		// - SDK B downloads → Token B
-		// - SDK A refreshes → Old behavior: Token A revoked, Token A' created
-		// - SDK B refreshes → Token B is still valid, Token B' created
-		// - Now both A' and B' work independently!
-		//
-		// Old tokens will expire naturally after 90 days.
-		// For security, we still track token lineage via metadata.
+		// SECURITY: Revoke the old refresh token after rotation
+		// Each SDK instance has its own token from the download flow, so revoking
+		// one instance's old token doesn't affect other instances.
+		_ = h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation")
 
 		// Save the new rotated SDK token to database
 		if oldToken != nil {

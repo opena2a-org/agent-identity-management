@@ -934,18 +934,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	public.Post("/reset-password", h.PublicRegistration.ResetPassword)                      // 🚀 Password reset with token
 	public.Post("/request-access", h.PublicRegistration.RequestAccess)                      // 🚀 Request platform access (no password required)
 
-	// Auth routes (no authentication required)
+	// Auth routes (no authentication required, strict rate limiting)
 	auth := v1.Group("/auth")
+	auth.Use(middleware.StrictRateLimitMiddleware()) // SECURITY: Strict rate limiting on auth endpoints
 	auth.Post("/login/local", h.Auth.LocalLogin) // Local email/password login
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken)                 // Refresh access token (with token rotation)
-	auth.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // Recover revoked SDK tokens (zero downtime!)
 
 	// Authenticated auth routes (authentication required)
 	authProtected := v1.Group("/auth")
 	authProtected.Use(middleware.AuthMiddleware(jwtService)) // Apply middleware using Use() instead of inline
 	authProtected.Get("/me", h.Auth.Me)
 	authProtected.Post("/change-password", h.Auth.ChangePassword)
+	authProtected.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // SECURITY: Requires auth to prevent revocation bypass
 
 	// Organization routes (authentication required)
 	organizations := v1.Group("/organizations")
