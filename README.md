@@ -30,10 +30,10 @@ curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/
 mv .env.quickstart .env
 
 # Generate secure passwords (or edit .env manually)
-sed -i "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; \
+sed -i.bak "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; \
   s|CHANGE_ME_REDIS|$(openssl rand -hex 16)|; \
   s|CHANGE_ME_JWT|$(openssl rand -hex 32)|; \
-  s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env
+  s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env && rm .env.bak
 
 # Start
 docker compose -f docker-compose.quickstart.yml up -d
