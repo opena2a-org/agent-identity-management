@@ -1,0 +1,17 @@
+# Allowlist — exclude everything, then include what both Dockerfiles need
+**
+
+# Backend Dockerfile needs these
+!apps/backend/**
+!sdk/**
+!infrastructure/**
+
+# Frontend Dockerfile needs these
+!apps/web/**
+
+# Exclude secrets and build artifacts from included paths
+**/.env*
+**/*.pem
+**/*.key
+**/node_modules/
+.git/
