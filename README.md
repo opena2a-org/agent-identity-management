@@ -24,35 +24,54 @@
 ## Quick Start
 
 ```bash
-# Option A: Pull pre-built image and start
-docker pull ghcr.io/opena2a-org/aim-server:latest
-docker compose up -d
+# Download quickstart files
+curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml
+curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/.env.quickstart
+mv .env.quickstart .env
 
-# Option B: Clone and build from source
-git clone https://github.com/opena2a-org/agent-identity-management.git
-cd agent-identity-management
-docker compose up -d
+# Generate secure passwords (or edit .env manually)
+sed -i.bak "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; \
+  s|CHANGE_ME_REDIS|$(openssl rand -hex 16)|; \
+  s|CHANGE_ME_JWT|$(openssl rand -hex 32)|; \
+  s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env && rm .env.bak
+
+# Start
+docker compose -f docker-compose.quickstart.yml up -d
 
 # Open dashboard
 open http://localhost:3000
 # Login: admin@opena2a.org / AIM2025!Secure
-
-# Download SDK from Settings → SDK Download
 ```
 
 **Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
 
-### Image Tags
+<details>
+<summary><strong>Build from source instead</strong></summary>
+
+```bash
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
+docker compose build && docker compose up -d
+```
+
+</details>
+
+### Docker Images
+
+| Image | Description |
+|-------|-------------|
+| `ghcr.io/opena2a-org/aim-server` | Backend API server |
+| `ghcr.io/opena2a-org/aim-dashboard` | Web dashboard |
 
 | Tag | Description |
 |-----|-------------|
 | `latest` | Latest stable release |
-| `edge` | Built from `main` on every backend change |
+| `edge` | Built from `main` on every push |
 | `1.22.0` | Specific release version |
 | `1.22` | Latest patch in the 1.22 series |
 | `1` | Latest minor in the 1.x series |
 
-### Verify Image Signature
+### Verify Image Signatures
 
 ```bash
 cosign verify ghcr.io/opena2a-org/aim-server:latest \
