@@ -1,7 +1,13 @@
 # AIM Quickstart — run without cloning the repo
-# Usage: curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml
-#        docker compose -f docker-compose.quickstart.yml up -d
-#        open http://localhost:3000
+#
+# Usage:
+#   curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml
+#   curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/.env.quickstart
+#   mv .env.quickstart .env
+#   # Edit .env and set your own passwords, or generate them:
+#   #   sed -i '' "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; s|CHANGE_ME_REDIS|$(openssl rand -hex 16)|; s|CHANGE_ME_JWT|$(openssl rand -hex 32)|; s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env
+#   docker compose -f docker-compose.quickstart.yml up -d
+#   open http://localhost:3000
 
 services:
   postgres:
@@ -10,8 +16,9 @@ services:
     environment:
       POSTGRES_DB: identity
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       PGDATA: /var/lib/postgresql/data/pgdata
+    # WARNING: Removing 127.0.0.1 prefix exposes the database to all interfaces.
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -27,7 +34,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aim-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    # WARNING: Removing 127.0.0.1 prefix exposes Redis to all interfaces.
+    # Use a strong REDIS_PASSWORD if you change this.
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -47,16 +56,18 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       - POSTGRES_DB=identity
       - POSTGRES_SSL_MODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev_password}
-      - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
-      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-dev-only-keyvault-key-do-not-use-in-prod==}
-      - FRONTEND_URL=http://localhost:3000
-      - ALLOWED_ORIGINS=http://localhost:3000
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env}
+      # For non-localhost deployments, update FRONTEND_URL and ALLOWED_ORIGINS
+      # to match the actual URL where the dashboard is accessed.
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
       - "8080:8080"
@@ -78,7 +89,7 @@ services:
     image: ghcr.io/opena2a-org/aim-dashboard:latest
     container_name: aim-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:8080}
       - NODE_ENV=production
     ports:
       - "3000:3000"
