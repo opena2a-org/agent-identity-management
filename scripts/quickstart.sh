@@ -10,6 +10,11 @@ INSTALL_DIR="${AIM_DIR:-aim}"
 info()  { printf '\033[1;34m[AIM]\033[0m %s\n' "$*"; }
 error() { printf '\033[1;31m[AIM]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# --- Validate install directory ---
+case "$INSTALL_DIR" in
+  /*|*..*)  error "AIM_DIR must be a relative path without '..': $INSTALL_DIR" ;;
+esac
+
 # --- Pre-flight checks ---
 for cmd in docker openssl curl; do
   command -v "$cmd" >/dev/null 2>&1 || error "Required command not found: $cmd"
@@ -31,13 +36,15 @@ else
   # Download compose file
   curl -sSL "$COMPOSE_URL" -o docker-compose.quickstart.yml
 
-  # Generate .env with random secrets
-  cat > .env <<EOF
-POSTGRES_PASSWORD=$(openssl rand -hex 16)
-REDIS_PASSWORD=$(openssl rand -hex 16)
-JWT_SECRET=$(openssl rand -hex 32)
-KEYVAULT_MASTER_KEY=$(openssl rand -base64 32)
-EOF
+  # Generate secrets into variables (avoids exposing values in process args)
+  pg_pass=$(openssl rand -hex 16)
+  redis_pass=$(openssl rand -hex 16)
+  jwt_secret=$(openssl rand -hex 32)
+  kv_key=$(openssl rand -base64 32)
+
+  # Write .env from variables
+  printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\n' \
+    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" > .env
 
   info "Generated .env with random secrets"
   info "Pulling images and starting services..."
