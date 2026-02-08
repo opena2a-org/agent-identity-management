@@ -24,21 +24,19 @@
 ## Quick Start
 
 ```bash
-# Option A: Pull pre-built image and start
-docker pull ghcr.io/opena2a-org/aim-server:latest
-docker compose up -d
-
-# Option B: Clone and build from source
+# 1. Clone and start (pulls pre-built backend image from ghcr.io)
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 docker compose up -d
 
-# Open dashboard
+# 2. Open dashboard
 open http://localhost:3000
 # Login: admin@opena2a.org / AIM2025!Secure
 
-# Download SDK from Settings → SDK Download
+# 3. Download SDK from Settings → SDK Download
 ```
+
+To build from source instead of pulling the pre-built image, run `docker compose build && docker compose up -d`.
 
 **Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
 
