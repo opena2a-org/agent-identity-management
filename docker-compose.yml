@@ -180,6 +180,7 @@ services:
 
   # Backend API Service
   backend:
+    image: ghcr.io/opena2a-org/aim-server:latest
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.backend
