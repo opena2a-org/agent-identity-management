@@ -24,24 +24,10 @@
 ## Quick Start
 
 ```bash
-# Download quickstart files
-curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml
-curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/.env.quickstart
-mv .env.quickstart .env
-
-# Generate secure passwords (or edit .env manually)
-sed -i.bak "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; \
-  s|CHANGE_ME_REDIS|$(openssl rand -hex 16)|; \
-  s|CHANGE_ME_JWT|$(openssl rand -hex 32)|; \
-  s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env && rm .env.bak
-
-# Start
-docker compose -f docker-compose.quickstart.yml up -d
-
-# Open dashboard
-open http://localhost:3000
-# Login: admin@opena2a.org / AIM2025!Secure
+curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
 ```
+
+That's it. Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated.
 
 **Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
 
