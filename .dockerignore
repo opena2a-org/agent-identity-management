@@ -1,4 +1,6 @@
-# Allowlist — exclude everything, then include what both Dockerfiles need
+# Allowlist — exclude everything, then selectively include.
+# Docker uses last-match-wins, so exclusions for secrets must come
+# AFTER the allowlist includes to override them.
 **
 
 # Backend Dockerfile needs these
@@ -9,9 +11,18 @@
 # Frontend Dockerfile needs these
 !apps/web/**
 
-# Exclude secrets and build artifacts from included paths
-**/.env*
-**/*.pem
-**/*.key
+# Re-exclude secrets and build artifacts (must be after includes)
+apps/backend/**/.env*
+apps/backend/**/*.pem
+apps/backend/**/*.key
+apps/web/**/.env*
+apps/web/**/*.pem
+apps/web/**/*.key
+sdk/**/.env*
+sdk/**/*.pem
+sdk/**/*.key
+infrastructure/**/.env*
+infrastructure/**/*.pem
+infrastructure/**/*.key
 **/node_modules/
 .git/
