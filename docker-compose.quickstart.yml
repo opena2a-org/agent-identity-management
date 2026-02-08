@@ -1,0 +1,103 @@
+# AIM Quickstart — run without cloning the repo
+# Usage: curl -O https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml
+#        docker compose -f docker-compose.quickstart.yml up -d
+#        open http://localhost:3000
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: aim-postgres
+    environment:
+      POSTGRES_DB: identity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aim-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: aim-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aim-network
+
+  backend:
+    image: ghcr.io/opena2a-org/aim-server:latest
+    container_name: aim-backend
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=identity
+      - POSTGRES_SSL_MODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev_password}
+      - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-dev-only-keyvault-key-do-not-use-in-prod==}
+      - FRONTEND_URL=http://localhost:3000
+      - ALLOWED_ORIGINS=http://localhost:3000
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - aim-network
+
+  frontend:
+    image: ghcr.io/opena2a-org/aim-dashboard:latest
+    container_name: aim-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - aim-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  aim-network:
+    driver: bridge

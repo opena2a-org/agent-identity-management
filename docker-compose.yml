@@ -232,6 +232,7 @@ services:
 
   # Frontend Web Application
   frontend:
+    image: ghcr.io/opena2a-org/aim-dashboard:latest
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.frontend
