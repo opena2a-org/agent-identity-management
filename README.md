@@ -8,6 +8,7 @@
 
 [![Security Pipeline](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
 [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
+[![Docker](https://ghcr-badge.egpl.dev/opena2a-org/aim-server/latest_tag?label=docker)](https://github.com/opena2a-org/agent-identity-management/pkgs/container/aim-server)
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-blue)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/release.yml)
 [![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -23,19 +24,41 @@
 ## Quick Start
 
 ```bash
-# 1. Clone and start
+# Option A: Pull pre-built image and start
+docker pull ghcr.io/opena2a-org/aim-server:latest
+docker compose up -d
+
+# Option B: Clone and build from source
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 docker compose up -d
 
-# 2. Open dashboard
+# Open dashboard
 open http://localhost:3000
 # Login: admin@opena2a.org / AIM2025!Secure
 
-# 3. Download SDK from Settings → SDK Download
+# Download SDK from Settings → SDK Download
 ```
 
 **Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
+
+### Image Tags
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Latest stable release |
+| `edge` | Built from `main` on every backend change |
+| `1.22.0` | Specific release version |
+| `1.22` | Latest patch in the 1.22 series |
+| `1` | Latest minor in the 1.x series |
+
+### Verify Image Signature
+
+```bash
+cosign verify ghcr.io/opena2a-org/aim-server:latest \
+  --certificate-identity-regexp="https://github.com/opena2a-org/agent-identity-management" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
 
 ---
 
