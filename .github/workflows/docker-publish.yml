@@ -40,7 +40,7 @@ jobs:
       # Docker Hub login avoids rate limits when pulling base images.
       # No images are pushed here. Optional — build works without it.
       - name: Log in to Docker Hub (base image rate limits)
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: secrets.DOCKERHUB_USERNAME != ''
         continue-on-error: true
         uses: docker/login-action@v3
         with:
@@ -114,7 +114,7 @@ jobs:
       # Docker Hub login avoids rate limits when pulling base images.
       # No images are pushed here. Optional — build works without it.
       - name: Log in to Docker Hub (base image rate limits)
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: secrets.DOCKERHUB_USERNAME != ''
         continue-on-error: true
         uses: docker/login-action@v3
         with:
