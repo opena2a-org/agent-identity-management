@@ -42,9 +42,9 @@ else
   jwt_secret=$(openssl rand -hex 32)
   kv_key=$(openssl rand -base64 32)
 
-  # Write .env from variables
-  printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\n' \
-    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" > .env
+  # Write .env from variables (restricted permissions)
+  (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\n' \
+    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" > .env)
 
   info "Generated .env with random secrets"
   info "Pulling images and starting services..."
