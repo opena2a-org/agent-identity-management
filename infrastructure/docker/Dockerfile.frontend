@@ -44,6 +44,12 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
+# OCI labels
+LABEL org.opencontainers.image.source="https://github.com/opena2a-org/agent-identity-management"
+LABEL org.opencontainers.image.title="AIM Dashboard"
+LABEL org.opencontainers.image.description="Web dashboard for Agent Identity Management"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 # Expose port
 EXPOSE 3000
 
