@@ -71,6 +71,18 @@ import {
 
 type TabType = "overview" | "cards" | "consent" | "tasks" | "trust" | "skills";
 
+interface TrustScoreEntry {
+  agentId: string;
+  agentName?: string;
+  a2aTrustScore: number;
+  totalTasksAsClient: number;
+  totalTasksAsRemote: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  uniquePeersCount: number;
+  computedAt?: string;
+}
+
 interface TabConfig {
   id: TabType;
   label: string;
@@ -233,7 +245,12 @@ function LoadingState() {
 // TAB COMPONENTS
 // ============================================
 
-function OverviewTab({ agentCards, loading }: { agentCards: A2AAgentCard[]; loading: boolean }) {
+function OverviewTab({ agentCards, tasks, trustScores, loading }: {
+  agentCards: A2AAgentCard[];
+  tasks: A2ATask[];
+  trustScores: Map<string, number>;
+  loading: boolean;
+}) {
   const stats = useMemo(() => ({
     totalCards: agentCards.length,
     verifiedCards: agentCards.filter(c => c.verified).length,
@@ -248,18 +265,29 @@ function OverviewTab({ agentCards, loading }: { agentCards: A2AAgentCard[]; load
     { name: "Total Skills", value: stats.totalSkills, icon: Zap },
   ];
 
-  const taskStateData = [
-    { name: "Completed", value: 45, fill: "#22c55e" },
-    { name: "Working", value: 12, fill: "#eab308" },
-    { name: "Failed", value: 3, fill: "#ef4444" },
-  ];
+  const taskStateData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
+    const colorMap: Record<string, string> = {
+      COMPLETED: "#22c55e", WORKING: "#eab308", FAILED: "#ef4444",
+      SUBMITTED: "#3b82f6", CANCELLED: "#6b7280", INPUT_NEEDED: "#8b5cf6",
+    };
+    return Object.entries(counts).map(([name, value]) => ({
+      name, value, fill: colorMap[name] || "#94a3b8",
+    }));
+  }, [tasks]);
 
-  const trustDistData = [
-    { range: "90-100%", count: 8 },
-    { range: "70-89%", count: 15 },
-    { range: "50-69%", count: 5 },
-    { range: "<50%", count: 2 },
-  ];
+  const trustDistData = useMemo(() => {
+    const buckets = { "90-100%": 0, "70-89%": 0, "50-69%": 0, "<50%": 0 };
+    trustScores.forEach((score) => {
+      const pct = score * 100;
+      if (pct >= 90) buckets["90-100%"]++;
+      else if (pct >= 70) buckets["70-89%"]++;
+      else if (pct >= 50) buckets["50-69%"]++;
+      else buckets["<50%"]++;
+    });
+    return Object.entries(buckets).map(([range, count]) => ({ range, count }));
+  }, [trustScores]);
 
   if (loading) return <LoadingState />;
 
@@ -495,51 +523,26 @@ function AgentCardsTab({ agentCards, loading, onRefresh, onDelete }: {
   );
 }
 
-function ConsentTab({ loading }: { loading: boolean }) {
-  const [consents, setConsents] = useState<A2AConsent[]>([]);
+function ConsentTab({ consents: initialConsents, loading }: { consents: A2AConsent[]; loading: boolean }) {
+  const [consents, setConsents] = useState<A2AConsent[]>(initialConsents);
   const [userIdFilter, setUserIdFilter] = useState("");
 
   useEffect(() => {
-    // Load consents if user ID is provided
+    setConsents(initialConsents);
+  }, [initialConsents]);
+
+  useEffect(() => {
     if (userIdFilter) {
       api.listA2AConsents(userIdFilter).then(data => {
-        setConsents(data.consents || []);
+        const raw = data.consents || data as any;
+        setConsents(Array.isArray(raw) ? raw : []);
       }).catch(() => setConsents([]));
+    } else {
+      setConsents(initialConsents);
     }
-  }, [userIdFilter]);
+  }, [userIdFilter, initialConsents]);
 
-  // Demo data for visualization
-  const demoConsents: A2AConsent[] = [
-    {
-      id: "1",
-      userId: "user-123",
-      sourceAgentId: "agent-1",
-      targetAgentId: "agent-2",
-      purpose: "Data analysis",
-      dataTypes: ["email", "usage_data"],
-      status: "granted",
-      grantedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      legalBasis: "consent",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      userId: "user-456",
-      sourceAgentId: "agent-1",
-      targetAgentId: "agent-3",
-      purpose: "Payment processing",
-      dataTypes: ["financial_data"],
-      status: "granted",
-      grantedAt: new Date().toISOString(),
-      legalBasis: "contract",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ];
-
-  const displayConsents = consents.length > 0 ? consents : demoConsents;
+  const displayConsents = consents;
 
   if (loading) return <LoadingState />;
 
@@ -638,61 +641,38 @@ function ConsentTab({ loading }: { loading: boolean }) {
   );
 }
 
-function TasksTab({ loading }: { loading: boolean }) {
-  const [tasks, setTasks] = useState<A2ATask[]>([]);
+function TasksTab({ tasks, loading }: { tasks: A2ATask[]; loading: boolean }) {
   const [stateFilter, setStateFilter] = useState("all");
 
-  // Demo tasks for visualization
-  const demoTasks: A2ATask[] = [
-    {
-      id: "1",
-      externalTaskId: "task-001",
-      clientAgentId: "agent-1",
-      clientAgentName: "Data Analyzer",
-      remoteAgentId: "agent-2",
-      remoteAgentName: "Report Generator",
-      skillId: "generate-report",
-      state: "COMPLETED",
-      messageCount: 5,
-      durationMs: 2340,
-      createdAt: new Date(Date.now() - 60000).toISOString(),
-      completedAt: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      externalTaskId: "task-002",
-      clientAgentId: "agent-3",
-      clientAgentName: "Chat Agent",
-      remoteAgentId: "agent-1",
-      remoteAgentName: "Data Analyzer",
-      skillId: "analyze-data",
-      state: "WORKING",
-      messageCount: 3,
-      createdAt: new Date(Date.now() - 30000).toISOString(),
-    },
-    {
-      id: "3",
-      externalTaskId: "task-003",
-      clientAgentId: "agent-2",
-      clientAgentName: "Report Generator",
-      remoteAgentId: "agent-4",
-      remoteAgentName: "Email Sender",
-      skillId: "send-email",
-      state: "FAILED",
-      messageCount: 2,
-      errorCode: "AUTH_ERROR",
-      errorMessage: "Authentication failed",
-      createdAt: new Date(Date.now() - 120000).toISOString(),
-    },
-  ];
+  const filteredTasks = stateFilter === "all" ? tasks : tasks.filter(t => t.state === stateFilter);
 
-  const displayTasks = tasks.length > 0 ? tasks : demoTasks;
-  const filteredTasks = stateFilter === "all" ? displayTasks : displayTasks.filter(t => t.state === stateFilter);
+  const stateCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
+    return counts;
+  }, [tasks]);
 
   if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        {[
+          { label: "Total", value: tasks.length, color: "text-gray-900 dark:text-gray-100" },
+          { label: "Completed", value: stateCounts["completed"] || 0, color: "text-green-600" },
+          { label: "Working", value: stateCounts["working"] || 0, color: "text-yellow-600" },
+          { label: "Submitted", value: stateCounts["submitted"] || 0, color: "text-blue-600" },
+          { label: "Failed", value: stateCounts["failed"] || 0, color: "text-red-600" },
+          { label: "Cancelled", value: stateCounts["cancelled"] || 0, color: "text-gray-500" },
+        ].map(s => (
+          <div key={s.label} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+            <div className={`text-xl font-semibold ${s.color}`}>{s.value}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="flex gap-4">
         <select
@@ -700,13 +680,13 @@ function TasksTab({ loading }: { loading: boolean }) {
           onChange={(e) => setStateFilter(e.target.value)}
           className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
         >
-          <option value="all">All States</option>
-          <option value="SUBMITTED">Submitted</option>
-          <option value="WORKING">Working</option>
-          <option value="INPUT_NEEDED">Input Needed</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="FAILED">Failed</option>
-          <option value="CANCELLED">Cancelled</option>
+          <option value="all">All States ({tasks.length})</option>
+          <option value="submitted">Submitted ({stateCounts["submitted"] || 0})</option>
+          <option value="working">Working ({stateCounts["working"] || 0})</option>
+          <option value="input_needed">Input Needed ({stateCounts["input_needed"] || 0})</option>
+          <option value="completed">Completed ({stateCounts["completed"] || 0})</option>
+          <option value="failed">Failed ({stateCounts["failed"] || 0})</option>
+          <option value="cancelled">Cancelled ({stateCounts["cancelled"] || 0})</option>
         </select>
       </div>
 
@@ -729,13 +709,13 @@ function TasksTab({ loading }: { loading: boolean }) {
               {filteredTasks.map((task) => (
                 <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="px-4 py-3">
-                    <span className="text-sm font-mono text-gray-900 dark:text-gray-100">{task.externalTaskId}</span>
+                    <span className="text-sm font-mono text-gray-900 dark:text-gray-100">{task.externalTaskId || task.id.slice(0, 8)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 text-sm">
-                      <span className="text-gray-900 dark:text-gray-100">{task.clientAgentName || task.clientAgentId.slice(0, 8)}</span>
+                      <span className="text-gray-900 dark:text-gray-100">{task.clientAgentName || task.clientAgentId?.slice(0, 8) || "—"}</span>
                       <ArrowLeftRight className="h-3 w-3 text-gray-400" />
-                      <span className="text-gray-900 dark:text-gray-100">{task.remoteAgentName || task.remoteAgentId.slice(0, 8)}</span>
+                      <span className="text-gray-900 dark:text-gray-100">{task.remoteAgentName || task.remoteAgentId?.slice(0, 8) || "—"}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -745,7 +725,7 @@ function TasksTab({ loading }: { loading: boolean }) {
                     <StatusBadge status={task.state} />
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{task.messageCount}</span>
+                    <span className="text-sm text-gray-900 dark:text-gray-100">{task.messageCount || 0}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -754,7 +734,7 @@ function TasksTab({ loading }: { loading: boolean }) {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatRelativeTime(task.createdAt)}
+                      {task.createdAt ? formatRelativeTime(task.createdAt) : "—"}
                     </span>
                   </td>
                 </tr>
@@ -762,60 +742,59 @@ function TasksTab({ loading }: { loading: boolean }) {
             </tbody>
           </table>
         </div>
+        {filteredTasks.length === 0 && (
+          <EmptyState
+            icon={Activity}
+            title="No tasks found"
+            description={stateFilter !== "all" ? "Try changing the state filter" : "Tasks will appear here when agents communicate via A2A protocol"}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function TrustTab({ agentCards, loading }: { agentCards: A2AAgentCard[]; loading: boolean }) {
-  if (loading) return <LoadingState />;
+function TrustTab({ trustScores, agentCards, loading }: {
+  trustScores: TrustScoreEntry[];
+  agentCards: A2AAgentCard[];
+  loading: boolean;
+}) {
+  // Build agent name lookup from cards
+  const agentNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    agentCards.forEach(c => {
+      if (c.agentId && c.name) map.set(c.agentId, c.name);
+    });
+    return map;
+  }, [agentCards]);
 
-  // Demo peer trust relationships
-  const demoPeerTrust = [
-    { agentName: "Data Analyzer", peerName: "Report Generator", trustScore: 0.95, interactions: 45, successRate: 0.98 },
-    { agentName: "Chat Agent", peerName: "Data Analyzer", trustScore: 0.87, interactions: 23, successRate: 0.91 },
-    { agentName: "Report Generator", peerName: "Email Sender", trustScore: 0.72, interactions: 12, successRate: 0.83 },
-    { agentName: "Email Sender", peerName: "Notification Hub", trustScore: 0.89, interactions: 67, successRate: 0.95 },
-  ];
+  const enrichedScores = useMemo(() =>
+    trustScores.map(s => ({
+      ...s,
+      agentName: s.agentName || agentNameMap.get(s.agentId) || `Agent ${s.agentId.slice(0, 8)}`,
+    })),
+    [trustScores, agentNameMap]
+  );
+
+  if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-6">
-      {/* Trust Network Visualization */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Peer Trust Relationships</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {demoPeerTrust.map((peer, idx) => (
-            <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <Bot className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{peer.agentName}</span>
-                  </div>
-                  <ArrowRight className="h-3 w-3 text-gray-400" />
-                  <div className="flex items-center gap-1">
-                    <Bot className="h-4 w-4 text-green-500" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{peer.peerName}</span>
-                  </div>
-                </div>
-                <TrustScoreBadge score={peer.trustScore} size="md" />
-              </div>
-              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                <span>{peer.interactions} interactions</span>
-                <span>{(peer.successRate * 100).toFixed(0)}% success rate</span>
-              </div>
-              <div className="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-green-500 to-blue-500 rounded-full"
-                  style={{ width: `${peer.trustScore * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: "Agents Scored", value: trustScores.length, icon: Bot },
+          { label: "Avg Trust Score", value: trustScores.length > 0
+            ? `${(trustScores.reduce((a, s) => a + (s.a2aTrustScore || 0), 0) / trustScores.length * 100).toFixed(0)}%`
+            : "N/A", icon: Shield },
+          { label: "Total Tasks", value: trustScores.reduce((a, s) => a + s.totalTasksAsClient + s.totalTasksAsRemote, 0), icon: Activity },
+          { label: "Total Peers", value: trustScores.reduce((a, s) => a + s.uniquePeersCount, 0), icon: Users },
+        ].map(s => (
+          <StatCard key={s.label} stat={{ name: s.label, value: s.value, icon: s.icon }} />
+        ))}
       </div>
 
-      {/* Agent Trust Scores */}
+      {/* Agent Trust Scores Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agent A2A Trust Scores</h3>
@@ -828,29 +807,40 @@ function TrustTab({ agentCards, loading }: { agentCards: A2AAgentCard[]; loading
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Trust Score</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tasks (Client)</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tasks (Remote)</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Completed</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Failed</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unique Peers</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {agentCards.slice(0, 5).map((card) => (
-                <tr key={card.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              {enrichedScores.map((score) => (
+                <tr key={score.agentId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Bot className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{card.name}</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{score.agentName}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <TrustScoreBadge score={0.85 + Math.random() * 0.1} />
+                    <TrustScoreBadge score={score.a2aTrustScore || 0} />
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{Math.floor(Math.random() * 50)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{Math.floor(Math.random() * 30)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{Math.floor(Math.random() * 10) + 1}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{score.totalTasksAsClient}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{score.totalTasksAsRemote}</td>
+                  <td className="px-4 py-3 text-sm text-green-600">{score.tasksCompleted}</td>
+                  <td className="px-4 py-3 text-sm text-red-600">{score.tasksFailed}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{score.uniquePeersCount}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {enrichedScores.length === 0 && (
+          <EmptyState
+            icon={Network}
+            title="No trust scores yet"
+            description="Trust scores are computed when agents interact via A2A protocol"
+          />
+        )}
       </div>
     </div>
   );
@@ -949,15 +939,35 @@ export default function A2AProtocolPage() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [loading, setLoading] = useState(true);
   const [agentCards, setAgentCards] = useState<A2AAgentCard[]>([]);
+  const [tasks, setTasks] = useState<A2ATask[]>([]);
+  const [consents, setConsents] = useState<A2AConsent[]>([]);
+  const [trustScores, setTrustScores] = useState<TrustScoreEntry[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<A2AAgentCard | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Derived trust score map for OverviewTab
+  const trustScoreMap = useMemo(() => {
+    const map = new Map<string, number>();
+    trustScores.forEach(s => {
+      if (s.a2aTrustScore != null) map.set(s.agentId, s.a2aTrustScore);
+    });
+    return map;
+  }, [trustScores]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const data = await api.listA2AAgentCards();
-      setAgentCards(data.cards || []);
+      const [cardsData, tasksData, consentsData, trustData] = await Promise.allSettled([
+        api.listA2AAgentCards(),
+        api.listA2ATasks({ limit: 500 }),
+        api.listA2AConsents(),
+        api.listA2ATrustScores(),
+      ]);
+      if (cardsData.status === "fulfilled") setAgentCards(cardsData.value.cards || []);
+      if (tasksData.status === "fulfilled") setTasks(tasksData.value.tasks || []);
+      if (consentsData.status === "fulfilled") setConsents(consentsData.value.consents || []);
+      if (trustData.status === "fulfilled") setTrustScores(trustData.value.scores || []);
     } catch (err) {
       console.error("Failed to fetch A2A data:", err);
     } finally {
@@ -1001,15 +1011,15 @@ export default function A2AProtocolPage() {
   const renderTab = () => {
     switch (activeTab) {
       case "overview":
-        return <OverviewTab agentCards={agentCards} loading={loading} />;
+        return <OverviewTab agentCards={agentCards} tasks={tasks} trustScores={trustScoreMap} loading={loading} />;
       case "cards":
         return <AgentCardsTab agentCards={agentCards} loading={loading} onRefresh={handleRefresh} onDelete={requestDelete} />;
       case "consent":
-        return <ConsentTab loading={loading} />;
+        return <ConsentTab consents={consents} loading={loading} />;
       case "tasks":
-        return <TasksTab loading={loading} />;
+        return <TasksTab tasks={tasks} loading={loading} />;
       case "trust":
-        return <TrustTab agentCards={agentCards} loading={loading} />;
+        return <TrustTab trustScores={trustScores} agentCards={agentCards} loading={loading} />;
       case "skills":
         return <SkillsTab agentCards={agentCards} loading={loading} />;
       default:

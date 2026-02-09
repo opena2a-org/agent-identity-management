@@ -815,6 +815,16 @@ func (s *A2AService) ListUserConsents(ctx context.Context, userID string, includ
 	return s.consentRepo.ListByUser(ctx, userID, includeRevoked)
 }
 
+// ListAllConsents lists all consent records with pagination
+func (s *A2AService) ListAllConsents(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	return s.consentRepo.ListAll(ctx, limit, offset)
+}
+
+// ListAllTrustScores lists all A2A trust scores with pagination
+func (s *A2AService) ListAllTrustScores(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	return s.trustScoreRepo.ListAll(ctx, limit, offset)
+}
+
 // ============================================================================
 // Policy Evaluation
 // ============================================================================

@@ -870,6 +870,58 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 	})
 }
 
+// ListAllConsents lists all consent records with pagination (admin endpoint)
+func (h *A2AHandler) ListAllConsents(c fiber.Ctx) error {
+	limit := 100
+	offset := 0
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	consents, total, err := h.a2aService.ListAllConsents(c.Context(), limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"consents": consents,
+		"total":    total,
+		"limit":    limit,
+		"offset":   offset,
+	})
+}
+
+// ListAllTrustScores lists all A2A trust scores with pagination (admin endpoint)
+func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
+	limit := 100
+	offset := 0
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	scores, total, err := h.a2aService.ListAllTrustScores(c.Context(), limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"scores": scores,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
 // ============================================================================
 // Policy Evaluation Endpoint
 // ============================================================================

@@ -1335,10 +1335,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)
 
 	// A2A Consent Management (GDPR/PSD2 compliance)
+	a2a.Get("/consents", h.A2A.ListAllConsents)
 	a2a.Post("/consent", h.A2A.RecordConsent)
 	a2a.Get("/consent/check", h.A2A.CheckConsent)
 	a2a.Post("/consent/:id/revoke", h.A2A.RevokeConsent)
 	a2a.Get("/consent/user/:userId", h.A2A.ListUserConsents)
+
+	// A2A Trust Scores (admin)
+	a2a.Get("/trust-scores", h.A2A.ListAllTrustScores)
 
 	// A2A Policy Evaluation
 	a2a.Post("/policies/evaluate", h.A2A.EvaluatePolicy)

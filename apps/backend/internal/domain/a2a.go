@@ -575,6 +575,7 @@ type A2AConsentRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*A2AConsentRecord, error)
 	CheckConsent(ctx context.Context, userID string, grantorID, recipientID uuid.UUID, scope string) (bool, error)
 	ListByUser(ctx context.Context, userID string, includeRevoked bool) ([]*A2AConsentRecord, error)
+	ListAll(ctx context.Context, limit, offset int) ([]*A2AConsentRecord, int, error)
 	Revoke(ctx context.Context, id uuid.UUID, reason string) error
 }
 
@@ -582,6 +583,7 @@ type A2AConsentRepository interface {
 type A2ATrustScoreRepository interface {
 	Upsert(ctx context.Context, score *A2ATrustScore) error
 	GetByAgentID(ctx context.Context, agentID uuid.UUID) (*A2ATrustScore, error)
+	ListAll(ctx context.Context, limit, offset int) ([]*A2ATrustScore, int, error)
 	IncrementTaskStats(ctx context.Context, agentID uuid.UUID, asClient bool, completed bool) error
 	UpdatePerformanceMetrics(ctx context.Context, agentID uuid.UUID, responseTimeMs, durationMs int) error
 }
