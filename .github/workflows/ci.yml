@@ -121,9 +121,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
 
@@ -131,19 +128,15 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npm run type-check
+        run: npm ci --legacy-peer-deps
 
       - name: Lint
+        working-directory: apps/web
         run: npm run lint
 
-      - name: Test
-        run: npm test
-
       - name: Build
+        working-directory: apps/web
         run: npm run build

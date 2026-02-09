@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS a2a_agent_cards (
     CONSTRAINT unique_agent_card UNIQUE(agent_id)
 );
 
-CREATE INDEX idx_a2a_agent_cards_valid ON a2a_agent_cards(agent_id) WHERE is_valid = TRUE;
-CREATE INDEX idx_a2a_agent_cards_expiry ON a2a_agent_cards(attestation_expires_at) WHERE attestation_expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_valid ON a2a_agent_cards(agent_id) WHERE is_valid = TRUE;
+CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_expiry ON a2a_agent_cards(attestation_expires_at) WHERE attestation_expires_at IS NOT NULL;
 
 -- ============================================================================
 -- A2A Skills
@@ -70,9 +70,9 @@ CREATE TABLE IF NOT EXISTS a2a_skills (
     CONSTRAINT unique_agent_skill UNIQUE(agent_id, skill_id)
 );
 
-CREATE INDEX idx_a2a_skills_agent ON a2a_skills(agent_id);
-CREATE INDEX idx_a2a_skills_name ON a2a_skills(name);
-CREATE INDEX idx_a2a_skills_tags ON a2a_skills USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_a2a_skills_agent ON a2a_skills(agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_skills_name ON a2a_skills(name);
+CREATE INDEX IF NOT EXISTS idx_a2a_skills_tags ON a2a_skills USING GIN(tags);
 
 -- ============================================================================
 -- A2A Tasks
@@ -117,11 +117,11 @@ CREATE TABLE IF NOT EXISTS a2a_tasks (
     CONSTRAINT valid_task_state CHECK (state IN ('SUBMITTED', 'WORKING', 'INPUT_NEEDED', 'COMPLETED', 'FAILED', 'CANCELLED'))
 );
 
-CREATE INDEX idx_a2a_tasks_client ON a2a_tasks(client_agent_id, created_at DESC);
-CREATE INDEX idx_a2a_tasks_remote ON a2a_tasks(remote_agent_id, created_at DESC);
-CREATE INDEX idx_a2a_tasks_external ON a2a_tasks(external_task_id);
-CREATE INDEX idx_a2a_tasks_context ON a2a_tasks(context_id) WHERE context_id IS NOT NULL;
-CREATE INDEX idx_a2a_tasks_state ON a2a_tasks(state, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_client ON a2a_tasks(client_agent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_remote ON a2a_tasks(remote_agent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_external ON a2a_tasks(external_task_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_context ON a2a_tasks(context_id) WHERE context_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_state ON a2a_tasks(state, created_at DESC);
 
 -- ============================================================================
 -- A2A Messages
@@ -152,8 +152,8 @@ CREATE TABLE IF NOT EXISTS a2a_messages (
     CONSTRAINT valid_message_role CHECK (role IN ('user', 'agent'))
 );
 
-CREATE INDEX idx_a2a_messages_task ON a2a_messages(task_id, created_at);
-CREATE INDEX idx_a2a_messages_sender ON a2a_messages(sender_agent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_messages_task ON a2a_messages(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_a2a_messages_sender ON a2a_messages(sender_agent_id, created_at DESC);
 
 -- ============================================================================
 -- A2A Peer Trust
@@ -195,8 +195,8 @@ CREATE TABLE IF NOT EXISTS a2a_peer_trust (
     CONSTRAINT no_self_trust CHECK (agent_id != peer_agent_id)
 );
 
-CREATE INDEX idx_a2a_peer_trust_agent ON a2a_peer_trust(agent_id, peer_trust_score DESC);
-CREATE INDEX idx_a2a_peer_trust_peer ON a2a_peer_trust(peer_agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_peer_trust_agent ON a2a_peer_trust(agent_id, peer_trust_score DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_peer_trust_peer ON a2a_peer_trust(peer_agent_id);
 
 -- ============================================================================
 -- A2A Consent Records
@@ -235,10 +235,10 @@ CREATE TABLE IF NOT EXISTS a2a_consent_records (
     CONSTRAINT valid_consent_method CHECK (consent_method IN ('explicit_click', 'api', 'delegated', 'inherited'))
 );
 
-CREATE INDEX idx_a2a_consent_user ON a2a_consent_records(user_id, revoked);
-CREATE INDEX idx_a2a_consent_agents ON a2a_consent_records(grantor_agent_id, recipient_agent_id);
-CREATE INDEX idx_a2a_consent_org ON a2a_consent_records(organization_id) WHERE organization_id IS NOT NULL;
-CREATE INDEX idx_a2a_consent_active ON a2a_consent_records(user_id, grantor_agent_id, recipient_agent_id)
+CREATE INDEX IF NOT EXISTS idx_a2a_consent_user ON a2a_consent_records(user_id, revoked);
+CREATE INDEX IF NOT EXISTS idx_a2a_consent_agents ON a2a_consent_records(grantor_agent_id, recipient_agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_consent_org ON a2a_consent_records(organization_id) WHERE organization_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_a2a_consent_active ON a2a_consent_records(user_id, grantor_agent_id, recipient_agent_id)
     WHERE revoked = FALSE;
 
 -- ============================================================================
@@ -289,8 +289,8 @@ CREATE TABLE IF NOT EXISTS a2a_request_nonces (
     request_hash VARCHAR(64)  -- SHA256 of the request body
 );
 
-CREATE INDEX idx_a2a_nonces_agent ON a2a_request_nonces(agent_id, used_at DESC);
-CREATE INDEX idx_a2a_nonces_expiry ON a2a_request_nonces(expires_at);
+CREATE INDEX IF NOT EXISTS idx_a2a_nonces_agent ON a2a_request_nonces(agent_id, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_nonces_expiry ON a2a_request_nonces(expires_at);
 
 -- Cleanup expired nonces (run periodically)
 -- DELETE FROM a2a_request_nonces WHERE expires_at < NOW();
@@ -323,8 +323,8 @@ CREATE TABLE IF NOT EXISTS a2a_policies (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_a2a_policies_org ON a2a_policies(organization_id, is_active);
-CREATE INDEX idx_a2a_policies_active ON a2a_policies(is_active, priority);
+CREATE INDEX IF NOT EXISTS idx_a2a_policies_org ON a2a_policies(organization_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_a2a_policies_active ON a2a_policies(is_active, priority);
 
 -- ============================================================================
 -- Triggers for updated_at
@@ -338,26 +338,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_a2a_agent_cards_updated_at ON a2a_agent_cards;
 CREATE TRIGGER trigger_a2a_agent_cards_updated_at
     BEFORE UPDATE ON a2a_agent_cards
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_a2a_skills_updated_at ON a2a_skills;
 CREATE TRIGGER trigger_a2a_skills_updated_at
     BEFORE UPDATE ON a2a_skills
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_a2a_peer_trust_updated_at ON a2a_peer_trust;
 CREATE TRIGGER trigger_a2a_peer_trust_updated_at
     BEFORE UPDATE ON a2a_peer_trust
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_a2a_consent_records_updated_at ON a2a_consent_records;
 CREATE TRIGGER trigger_a2a_consent_records_updated_at
     BEFORE UPDATE ON a2a_consent_records
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_a2a_trust_scores_updated_at ON a2a_trust_scores;
 CREATE TRIGGER trigger_a2a_trust_scores_updated_at
     BEFORE UPDATE ON a2a_trust_scores
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_a2a_policies_updated_at ON a2a_policies;
 CREATE TRIGGER trigger_a2a_policies_updated_at
     BEFORE UPDATE ON a2a_policies
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();

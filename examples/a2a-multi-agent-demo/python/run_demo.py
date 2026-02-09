@@ -108,12 +108,13 @@ def print_summary(
     print("=" * 70 + "\n")
 
 
-def run_demo(aim_url: str):
+def run_demo(aim_url: str, api_token: str = None):
     """
     Run the full A2A collaboration demo.
 
     Args:
         aim_url: AIM platform URL (SDK handles auth automatically)
+        api_token: Optional Bearer token for API auth (bypasses SDK credentials)
     """
     print_banner()
 
@@ -126,7 +127,7 @@ def run_demo(aim_url: str):
     # =========================================================================
     print_step(1, "REGISTER ANALYSIS AGENT")
 
-    analysis_agent = AnalysisAgent(aim_url=aim_url)
+    analysis_agent = AnalysisAgent(aim_url=aim_url, api_token=api_token)
     analysis_card = analysis_agent.register_agent_card()
 
     print(f"\nAnalysis Agent ready with {len(analysis_agent.SKILLS)} skills:")
@@ -138,7 +139,7 @@ def run_demo(aim_url: str):
     # =========================================================================
     print_step(2, "REGISTER RESEARCH AGENT")
 
-    research_agent = ResearchAgent(aim_url=aim_url)
+    research_agent = ResearchAgent(aim_url=aim_url, api_token=api_token)
     research_card = research_agent.register_agent_card()
 
     # =========================================================================
@@ -285,11 +286,16 @@ def main():
         default=os.environ.get('AIM_URL', 'http://localhost:8080'),
         help='AIM platform URL (default: http://localhost:8080)'
     )
+    parser.add_argument(
+        '--api-token',
+        default=os.environ.get('AIM_API_TOKEN'),
+        help='Bearer token for API auth (bypasses SDK credentials). Also reads AIM_API_TOKEN env var.'
+    )
 
     args = parser.parse_args()
 
     try:
-        run_demo(aim_url=args.aim_url)
+        run_demo(aim_url=args.aim_url, api_token=args.api_token)
     except KeyboardInterrupt:
         print("\n\nDemo interrupted by user.")
         sys.exit(0)

@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../sdk/python'
 
 from aim_sdk import register_agent
 from aim_sdk.a2a import A2AClient, A2ATrustScore
+from analysis_agent import register_agent_via_api
 
 
 class ResearchAgent:
@@ -38,25 +39,34 @@ class ResearchAgent:
     7. Attest to skill quality
     """
 
-    def __init__(self, aim_url: str = None):
+    def __init__(self, aim_url: str = None, api_token: str = None):
         """
         Initialize the Research Agent.
 
         Args:
             aim_url: AIM platform URL (optional, auto-detected from SDK credentials)
+            api_token: Bearer token for API auth (bypasses SDK credential files)
         """
         self.agent_name = "research-agent"
 
         print(f"[Research Agent] Registering with AIM...")
 
-        # Register agent - SDK handles auth automatically
-        self.aim_client = register_agent(
-            name=self.agent_name,
-            aim_url=aim_url,
-            display_name="Research Agent",
-            agent_type="ai_agent",
-            description="Research agent that gathers information and collaborates with analysis agents"
-        )
+        if api_token:
+            self.aim_client = register_agent_via_api(
+                name=self.agent_name,
+                aim_url=aim_url or "http://localhost:8080",
+                api_token=api_token,
+                display_name="Research Agent",
+                description="Research agent that gathers information and collaborates with analysis agents",
+            )
+        else:
+            self.aim_client = register_agent(
+                name=self.agent_name,
+                aim_url=aim_url,
+                display_name="Research Agent",
+                agent_type="ai_agent",
+                description="Research agent that gathers information and collaborates with analysis agents"
+            )
 
         # Initialize A2A client
         self.a2a = A2AClient(self.aim_client)

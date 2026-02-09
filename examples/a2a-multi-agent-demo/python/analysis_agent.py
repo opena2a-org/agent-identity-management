@@ -9,13 +9,57 @@ Demonstrates:
 """
 import os
 import sys
+import requests
 from typing import Dict, List, Optional
 
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../sdk/python'))
 
-from aim_sdk import register_agent
+from aim_sdk import AIMClient, register_agent
 from aim_sdk.a2a import A2AClient
+
+
+def register_agent_via_api(name: str, aim_url: str, api_token: str,
+                           display_name: str, description: str,
+                           agent_type: str = "ai_agent",
+                           org_id: str = None) -> AIMClient:
+    """Register an agent via the REST API using a Bearer token, returning an AIMClient with API key auth."""
+    import time as _time
+
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {api_token}"
+    session.headers["Content-Type"] = "application/json"
+
+    # Get org ID from token if not provided
+    if not org_id:
+        resp = session.get(f"{aim_url}/api/v1/organizations")
+        if resp.status_code == 200:
+            orgs = resp.json().get("organizations", [])
+            if orgs:
+                org_id = orgs[0]["id"]
+
+    # Create agent with timestamp suffix to avoid name conflicts
+    ts = int(_time.time())
+    agent_name = f"{name}-{ts}"
+    resp = session.post(f"{aim_url}/api/v1/agents", json={
+        "name": agent_name,
+        "displayName": display_name,
+        "description": description,
+        "agentType": agent_type,
+        "organizationId": org_id,
+    })
+    if resp.status_code not in [200, 201]:
+        raise RuntimeError(f"Failed to create agent: {resp.status_code} {resp.text}")
+
+    data = resp.json()
+    agent_id = data["id"]
+    api_key = data["apiKey"]["key"]
+
+    return AIMClient(
+        agent_id=agent_id,
+        api_key=api_key,
+        aim_url=aim_url,
+    )
 
 
 class AnalysisAgent:
@@ -53,25 +97,34 @@ class AnalysisAgent:
         }
     ]
 
-    def __init__(self, aim_url: str = None):
+    def __init__(self, aim_url: str = None, api_token: str = None):
         """
         Initialize the Analysis Agent.
 
         Args:
             aim_url: AIM platform URL (optional, auto-detected from SDK credentials)
+            api_token: Bearer token for API auth (bypasses SDK credential files)
         """
         self.agent_name = "analysis-agent"
 
         print(f"[Analysis Agent] Registering with AIM...")
 
-        # Register agent - SDK handles auth automatically
-        self.aim_client = register_agent(
-            name=self.agent_name,
-            aim_url=aim_url,
-            display_name="Analysis Agent",
-            agent_type="ai_agent",
-            description="Analysis agent providing sentiment analysis, summarization, and trend detection"
-        )
+        if api_token:
+            self.aim_client = register_agent_via_api(
+                name=self.agent_name,
+                aim_url=aim_url or "http://localhost:8080",
+                api_token=api_token,
+                display_name="Analysis Agent",
+                description="Analysis agent providing sentiment analysis, summarization, and trend detection",
+            )
+        else:
+            self.aim_client = register_agent(
+                name=self.agent_name,
+                aim_url=aim_url,
+                display_name="Analysis Agent",
+                agent_type="ai_agent",
+                description="Analysis agent providing sentiment analysis, summarization, and trend detection"
+            )
 
         # Initialize A2A client
         self.a2a = A2AClient(self.aim_client)

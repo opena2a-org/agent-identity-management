@@ -134,8 +134,9 @@ func NewA2AService(
 
 // RegisterAgentCardRequest is the request to register an A2A agent card
 type RegisterAgentCardRequest struct {
-	AgentID  uuid.UUID `json:"agentId"`
-	CardURL  string    `json:"cardUrl"`
+	AgentID  uuid.UUID       `json:"agentId"`
+	CardURL  string          `json:"cardUrl"`
+	CardData json.RawMessage `json:"cardData"`
 }
 
 // RegisterAgentCardResponse is the response after registering an agent card
@@ -158,10 +159,16 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 		return nil, fmt.Errorf("agent not found")
 	}
 
-	// 2. Fetch the agent card from URL
-	cardData, err := s.fetchAgentCard(req.CardURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch agent card: %w", err)
+	// 2. Get card data: use provided cardData directly, or fetch from URL
+	var cardData []byte
+	if len(req.CardData) > 0 {
+		cardData = []byte(req.CardData)
+	} else {
+		var fetchErr error
+		cardData, fetchErr = s.fetchAgentCard(req.CardURL)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("failed to fetch agent card: %w", fetchErr)
+		}
 	}
 
 	// 3. Parse the card
@@ -182,11 +189,15 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 	}
 
 	// 6. Save the agent card
+	cardURL := req.CardURL
+	if cardURL == "" {
+		cardURL = fmt.Sprintf("inline://%s", req.AgentID.String())
+	}
 	now := time.Now().UTC()
 	card := &domain.A2AAgentCard{
 		ID:                   uuid.New(),
 		AgentID:              req.AgentID,
-		CardURL:              req.CardURL,
+		CardURL:              cardURL,
 		CardData:             cardData,
 		CardHash:             cardHashStr,
 		ProtocolVersion:      parsedCard.Version,
@@ -234,6 +245,11 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 // GetAgentCard retrieves the AIM-attested agent card
 func (s *A2AService) GetAgentCard(ctx context.Context, agentID uuid.UUID) (*domain.A2AAgentCard, error) {
 	return s.cardRepo.GetByAgentID(ctx, agentID)
+}
+
+// ListAgentCards returns all valid agent cards with pagination
+func (s *A2AService) ListAgentCards(ctx context.Context, limit, offset int) ([]*domain.A2AAgentCard, error) {
+	return s.cardRepo.GetValidCards(ctx, limit, offset)
 }
 
 // GetEnhancedAgentCard returns the agent card with AIM extensions
@@ -558,8 +574,19 @@ func (s *A2AService) GetPeerTrustScore(ctx context.Context, agentID, peerID uuid
 	return s.peerTrustRepo.GetByPeer(ctx, agentID, peerID)
 }
 
+// ListPeerTrusts returns all peer trust relationships for an agent
+func (s *A2AService) ListPeerTrusts(ctx context.Context, agentID uuid.UUID) ([]*domain.A2APeerTrust, error) {
+	return s.peerTrustRepo.GetByAgentID(ctx, agentID)
+}
+
 // ComputeA2ATrustScore computes and stores the A2A trust score for an agent
 func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID) (*domain.A2ATrustScore, error) {
+	// Verify agent exists before attempting to upsert (FK constraint on a2a_trust_scores)
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil || agent == nil {
+		return nil, fmt.Errorf("agent %s not found", agentID)
+	}
+
 	// Get existing score or create new
 	score, err := s.trustScoreRepo.GetByAgentID(ctx, agentID)
 	if err != nil {
@@ -626,6 +653,11 @@ func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID
 // ============================================================================
 // Task Logging
 // ============================================================================
+
+// ListA2ATasks returns paginated A2A tasks with optional filters
+func (s *A2AService) ListA2ATasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	return s.taskRepo.ListTasks(ctx, agentID, state, limit, offset)
+}
 
 // LogA2ATaskRequest is the request to log an A2A task
 type LogA2ATaskRequest struct {
@@ -781,6 +813,16 @@ func (s *A2AService) RevokeConsent(ctx context.Context, consentID uuid.UUID, rea
 // ListUserConsents lists all consent records for a user
 func (s *A2AService) ListUserConsents(ctx context.Context, userID string, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
 	return s.consentRepo.ListByUser(ctx, userID, includeRevoked)
+}
+
+// ListAllConsents lists all consent records with pagination
+func (s *A2AService) ListAllConsents(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	return s.consentRepo.ListAll(ctx, limit, offset)
+}
+
+// ListAllTrustScores lists all A2A trust scores with pagination
+func (s *A2AService) ListAllTrustScores(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	return s.trustScoreRepo.ListAll(ctx, limit, offset)
 }
 
 // ============================================================================

@@ -201,6 +201,37 @@ func markInitialized(db *sql.DB) error {
 	return nil
 }
 
+// applyAdminPasswordOverride updates the default admin user's password if ADMIN_PASSWORD env var is set.
+// This runs after migrations so it can override the hardcoded hash from migration 013.
+func applyAdminPasswordOverride(db *sql.DB) error {
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		return nil
+	}
+
+	adminEmail := getEnvOrDefault("ADMIN_EMAIL", "admin@opena2a.org")
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash admin password: %w", err)
+	}
+
+	result, err := db.Exec(
+		`UPDATE users SET password_hash = $1 WHERE email = $2 AND role = 'admin'`,
+		string(passwordHash), adminEmail,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update admin password: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows > 0 {
+		log.Printf("✅ Admin password updated for %s from ADMIN_PASSWORD env var", adminEmail)
+	}
+
+	return nil
+}
+
 // getEnvOrDefault returns environment variable value or default
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

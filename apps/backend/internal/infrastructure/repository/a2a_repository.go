@@ -770,6 +770,47 @@ func (r *A2ATaskRepository) Update(ctx context.Context, task *domain.A2ATask) er
 	return nil
 }
 
+func (r *A2ATaskRepository) ListTasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	baseQuery := `FROM a2a_tasks WHERE 1=1`
+	args := []interface{}{}
+	argIdx := 1
+
+	if agentID != nil {
+		baseQuery += fmt.Sprintf(" AND (client_agent_id = $%d OR remote_agent_id = $%d)", argIdx, argIdx)
+		args = append(args, *agentID)
+		argIdx++
+	}
+	if state != "" {
+		baseQuery += fmt.Sprintf(" AND state = $%d", argIdx)
+		args = append(args, state)
+		argIdx++
+	}
+
+	// Count total
+	var total int
+	countQuery := "SELECT COUNT(*) " + baseQuery
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count tasks: %w", err)
+	}
+
+	// Fetch page
+	selectQuery := `
+		SELECT
+			id, external_task_id, context_id, client_agent_id, remote_agent_id,
+			skill_id, state, created_at, started_at, completed_at, duration_ms,
+			policy_decision, policy_evaluated_at,
+			client_trust_score_snapshot, remote_trust_score_snapshot,
+			message_count, error_code, error_message
+		` + baseQuery + fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	tasks, err := r.queryTasks(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return tasks, total, nil
+}
+
 func (r *A2ATaskRepository) ListByClientAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.A2ATask, error) {
 	query := `
 		SELECT
@@ -1349,6 +1390,30 @@ func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, in
 	return r.queryConsents(ctx, query, userID)
 }
 
+func (r *A2AConsentRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	countQuery := `SELECT COUNT(*) FROM a2a_consent_records`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count consents: %w", err)
+	}
+
+	query := `
+		SELECT
+			id, user_id, organization_id, grantor_agent_id, recipient_agent_id,
+			scope, purpose, data_types, granted_at, expires_at,
+			revoked, revoked_at, revoked_reason, consent_method, evidence,
+			ip_address, user_agent, created_at, updated_at
+		FROM a2a_consent_records
+		ORDER BY granted_at DESC
+		LIMIT $1 OFFSET $2
+	`
+	consents, err := r.queryConsents(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return consents, total, nil
+}
+
 func (r *A2AConsentRepository) Revoke(ctx context.Context, id uuid.UUID, reason string) error {
 	query := `
 		UPDATE a2a_consent_records SET
@@ -1749,6 +1814,91 @@ func (r *A2ATrustScoreRepository) GetByAgentID(ctx context.Context, agentID uuid
 	}
 
 	return score, nil
+}
+
+func (r *A2ATrustScoreRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	countQuery := `SELECT COUNT(*) FROM a2a_trust_scores`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count trust scores: %w", err)
+	}
+
+	query := `
+		SELECT
+			agent_id, total_tasks_as_client, total_tasks_as_remote,
+			tasks_completed, tasks_failed, tasks_cancelled,
+			avg_response_time_ms, p95_response_time_ms, avg_task_duration_ms,
+			a2a_trust_score, peer_trust_average, unique_peers_count,
+			positive_feedback_count, negative_feedback_count,
+			computed_at, data_points, created_at, updated_at
+		FROM a2a_trust_scores
+		ORDER BY a2a_trust_score DESC NULLS LAST
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list trust scores: %w", err)
+	}
+	defer rows.Close()
+
+	var scores []*domain.A2ATrustScore
+	for rows.Next() {
+		score := &domain.A2ATrustScore{}
+		var avgResp, p95Resp, avgDuration sql.NullInt32
+		var a2aTrust, peerAvg sql.NullFloat64
+		var computedAt sql.NullTime
+
+		err := rows.Scan(
+			&score.AgentID,
+			&score.TotalTasksAsClient,
+			&score.TotalTasksAsRemote,
+			&score.TasksCompleted,
+			&score.TasksFailed,
+			&score.TasksCancelled,
+			&avgResp,
+			&p95Resp,
+			&avgDuration,
+			&a2aTrust,
+			&peerAvg,
+			&score.UniquePeersCount,
+			&score.PositiveFeedbackCount,
+			&score.NegativeFeedbackCount,
+			&computedAt,
+			&score.DataPoints,
+			&score.CreatedAt,
+			&score.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan trust score: %w", err)
+		}
+
+		if avgResp.Valid {
+			v := int(avgResp.Int32)
+			score.AvgResponseTimeMs = &v
+		}
+		if p95Resp.Valid {
+			v := int(p95Resp.Int32)
+			score.P95ResponseTimeMs = &v
+		}
+		if avgDuration.Valid {
+			v := int(avgDuration.Int32)
+			score.AvgTaskDurationMs = &v
+		}
+		if a2aTrust.Valid {
+			score.A2ATrustScore = &a2aTrust.Float64
+		}
+		if peerAvg.Valid {
+			score.PeerTrustAverage = &peerAvg.Float64
+		}
+		if computedAt.Valid {
+			score.ComputedAt = &computedAt.Time
+		}
+
+		scores = append(scores, score)
+	}
+
+	return scores, total, nil
 }
 
 func (r *A2ATrustScoreRepository) IncrementTaskStats(ctx context.Context, agentID uuid.UUID, asClient bool, completed bool) error {

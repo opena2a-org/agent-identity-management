@@ -128,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_a2a_dependencies_critical ON a2a_agent_dependenci
 -- ============================================================================
 -- Trigger for updated_at
 -- ============================================================================
+DROP TRIGGER IF EXISTS trigger_a2a_delegation_updated_at ON a2a_delegation;
 CREATE TRIGGER trigger_a2a_delegation_updated_at
     BEFORE UPDATE ON a2a_delegation
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();

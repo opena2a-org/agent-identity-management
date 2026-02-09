@@ -392,7 +392,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                         label={{ value: 'Trust Score (%)', angle: -90, position: 'insideLeft' }}
                       />
                       <RechartsTooltip
-                        content={({ active, payload }) => {
+                        content={({ active, payload }: { active?: boolean; payload?: any[] }) => {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload;
                             return (
