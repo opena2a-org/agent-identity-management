@@ -74,6 +74,11 @@ func main() {
 	}
 	log.Println("✅ Database migrations completed successfully")
 
+	// Override default admin password if ADMIN_PASSWORD env var is set
+	if err := applyAdminPasswordOverride(db); err != nil {
+		log.Printf("⚠️  Failed to apply admin password override: %v", err)
+	}
+
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
 	if err != nil {

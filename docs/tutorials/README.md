@@ -61,7 +61,7 @@ Before starting any tutorial, ensure:
    ```
 
 2. **Access the dashboard** - http://localhost:3000
-   - Email: `admin@localhost`
+   - Email: `admin@opena2a.org`
    - Password: printed by the quickstart script (change on first login)
 
 3. **Download the SDK** - Settings → SDK Download

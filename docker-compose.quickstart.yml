@@ -68,7 +68,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - ENVIRONMENT=${ENVIRONMENT:-development}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     ports:
       - "8080:8080"
