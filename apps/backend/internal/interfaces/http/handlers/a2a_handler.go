@@ -63,7 +63,8 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		CardURL string `json:"cardUrl"`
+		CardURL  string          `json:"cardUrl"`
+		CardData json.RawMessage `json:"cardData"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -71,15 +72,16 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		})
 	}
 
-	if req.CardURL == "" {
+	if req.CardURL == "" && len(req.CardData) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "cardUrl is required",
+			"error": "cardUrl or cardData is required",
 		})
 	}
 
 	resp, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
 		AgentID:  agentID,
 		CardURL:  req.CardURL,
+		CardData: req.CardData,
 	})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -382,6 +384,41 @@ func (h *A2AHandler) GetPeerTrustScore(c fiber.Ctx) error {
 // ============================================================================
 // Task Logging Endpoints
 // ============================================================================
+
+// ListTasks returns paginated A2A tasks with optional filters
+// GET /api/v1/a2a/tasks
+func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
+	limit := 100
+	offset := 0
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	var agentID *uuid.UUID
+	if idStr := c.Query("agentId"); idStr != "" {
+		if parsed, err := uuid.Parse(idStr); err == nil {
+			agentID = &parsed
+		}
+	}
+	state := c.Query("state")
+
+	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), agentID, state, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"tasks":  tasks,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
 
 // LogTask logs an A2A task for audit trail
 // POST /api/v1/a2a/tasks
@@ -1118,6 +1155,30 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 	return c.JSON(attestations)
 }
 
+// GetAgentAttestations returns all attestations for an agent (SDK-compatible path)
+// GET /api/v1/a2a/agents/:id/attestations
+func (h *A2AHandler) GetAgentAttestations(c fiber.Ctx) error {
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	skillID := c.Query("skillId")
+
+	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"attestations": attestations,
+	})
+}
+
 // ============================================================================
 // Security Check Operations
 // ============================================================================
@@ -1518,12 +1579,12 @@ func (h *A2AHandler) ListAgentCards(c fiber.Ctx) error {
 		}
 	}
 
-	// Get all agent cards from repository (we'll need to add a service method)
-	// For now, return empty list as placeholder
-	cards := make([]*domain.A2AAgentCard, 0)
-
-	// Try to get cards using GetAgentCard for known agents
-	// This is a placeholder - proper implementation needs ListAgentCards service method
+	cards, err := h.a2aService.ListAgentCards(c.Context(), limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"cards":  cards,
@@ -1623,10 +1684,15 @@ func (h *A2AHandler) ListPeerTrusts(c fiber.Ctx) error {
 		})
 	}
 
-	// Get peer trusts from repository
-	// For now use the peerTrustRepo through the service if available
-	// Placeholder: return empty list
-	peers := make([]*domain.A2APeerTrust, 0)
+	peers, err := h.a2aService.ListPeerTrusts(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+	if peers == nil {
+		peers = make([]*domain.A2APeerTrust, 0)
+	}
 
 	return c.JSON(fiber.Map{
 		"peers":   peers,

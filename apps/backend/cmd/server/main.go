@@ -1301,8 +1301,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// A2A signature verification (no auth - validates incoming A2A requests)
 	v1.Post("/a2a/verify", h.A2A.VerifyRequest)
 
-	// A2A routes (JWT authenticated - web UI)
+	// A2A routes (multi-auth: API key, agent signature, or JWT)
 	a2a := v1.Group("/a2a")
+	a2a.Use(middleware.OptionalAPIKeyMiddleware(db))
+	a2a.Use(middleware.PQCAgentMiddleware(services.Agent))
 	a2a.Use(middleware.AuthMiddleware(jwtService))
 	a2a.Use(middleware.RateLimitMiddleware())
 
@@ -1328,6 +1330,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/capable-of", h.A2A.CapableOf)
 
 	// A2A Tasks (audit trail)
+	a2a.Get("/tasks", h.A2A.ListTasks)
 	a2a.Post("/tasks", h.A2A.LogTask)
 	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)
 
@@ -1369,6 +1372,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                    // SDK list peer trusts
 	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                               // SDK delete skill
 	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)               // SDK get security violations
+	a2a.Get("/agents/:id/attestations", h.A2A.GetAgentAttestations)            // SDK path: /agents/:id/attestations
 	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
 
 	// A2A Maintenance (admin only)

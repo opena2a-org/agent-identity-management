@@ -770,6 +770,47 @@ func (r *A2ATaskRepository) Update(ctx context.Context, task *domain.A2ATask) er
 	return nil
 }
 
+func (r *A2ATaskRepository) ListTasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	baseQuery := `FROM a2a_tasks WHERE 1=1`
+	args := []interface{}{}
+	argIdx := 1
+
+	if agentID != nil {
+		baseQuery += fmt.Sprintf(" AND (client_agent_id = $%d OR remote_agent_id = $%d)", argIdx, argIdx)
+		args = append(args, *agentID)
+		argIdx++
+	}
+	if state != "" {
+		baseQuery += fmt.Sprintf(" AND state = $%d", argIdx)
+		args = append(args, state)
+		argIdx++
+	}
+
+	// Count total
+	var total int
+	countQuery := "SELECT COUNT(*) " + baseQuery
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count tasks: %w", err)
+	}
+
+	// Fetch page
+	selectQuery := `
+		SELECT
+			id, external_task_id, context_id, client_agent_id, remote_agent_id,
+			skill_id, state, created_at, started_at, completed_at, duration_ms,
+			policy_decision, policy_evaluated_at,
+			client_trust_score_snapshot, remote_trust_score_snapshot,
+			message_count, error_code, error_message
+		` + baseQuery + fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	tasks, err := r.queryTasks(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return tasks, total, nil
+}
+
 func (r *A2ATaskRepository) ListByClientAgent(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.A2ATask, error) {
 	query := `
 		SELECT
