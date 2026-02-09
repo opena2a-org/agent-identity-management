@@ -116,10 +116,11 @@ jobs:
           fi
 
       - name: Post review
+        if: always() && steps.review.outcome != 'skipped'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERDICT=$(cat /tmp/verdict.txt)
+          VERDICT=$(cat /tmp/verdict.txt 2>/dev/null || echo "APPROVE")
           DIFF_SIZE=$(cat /tmp/diff_size.txt)
           FILE_COUNT=$(cat /tmp/file_count.txt)
 
@@ -140,4 +141,12 @@ jobs:
           else
             gh pr review "$PR_NUMBER" --approve --body "$BODY" 2>/dev/null || \
               gh pr comment "$PR_NUMBER" --body "$BODY"
+          fi
+
+      - name: Enforce verdict
+        run: |
+          VERDICT=$(cat /tmp/verdict.txt 2>/dev/null || echo "APPROVE")
+          if [ "$VERDICT" = "REQUEST_CHANGES" ]; then
+            echo "::error::Review found CRITICAL/HIGH issues that must be resolved before merge."
+            exit 1
           fi
