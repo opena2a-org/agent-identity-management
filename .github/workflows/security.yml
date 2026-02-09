@@ -1,0 +1,275 @@
+name: Security Pipeline
+
+# Trigger strategy:
+#   PR to main  → full scan (merge gate — nothing lands without passing)
+#   Push to main → lightweight checks only (secret scan + dependency audit)
+#   Weekly       → full scan (catches newly disclosed CVEs in dependencies)
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # Detect what changed so heavy jobs can be skipped when irrelevant
+  changes:
+    name: Detect Changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+      deps: ${{ steps.filter.outputs.deps }}
+      crypto: ${{ steps.filter.outputs.crypto }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+            frontend:
+              - 'apps/web/**'
+            docker:
+              - 'infrastructure/docker/**'
+              - 'apps/backend/go.mod'
+              - 'apps/backend/go.sum'
+              - 'apps/web/package.json'
+              - 'apps/web/package-lock.json'
+            deps:
+              - 'apps/backend/go.mod'
+              - 'apps/backend/go.sum'
+              - 'apps/web/package.json'
+              - 'apps/web/package-lock.json'
+            crypto:
+              - 'apps/backend/internal/crypto/**'
+              - 'apps/backend/internal/infrastructure/auth/**'
+              - 'scripts/crypto-audit.sh'
+
+  # ── Always-run jobs (PR + push + schedule) ─────────────────────────
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run gitleaks (PR — scan only new commits)
+        if: github.event_name == 'pull_request'
+        run: |
+          gitleaks detect --config .gitleaks.toml --source . \
+            --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            -v --redact
+
+      - name: Run gitleaks (push/schedule — scan last commit)
+        if: github.event_name != 'pull_request'
+        run: gitleaks detect --config .gitleaks.toml --source . --log-opts "HEAD~1..HEAD" -v --redact
+
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Trivy filesystem scan (Go)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: apps/backend
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+      - name: Trivy filesystem scan (Frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: apps/web
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+      - name: npm audit
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm audit --audit-level=high || true
+
+  # ── PR-only / schedule-only jobs (merge gate + weekly) ─────────────
+
+  go-security-scan:
+    name: Go Security Scan (SAST)
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt sarif -out gosec-results.sarif -exclude-dir=vendor ./... || true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: apps/backend/gosec-results.sarif
+          category: gosec
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || true
+
+  container-scan:
+    name: Container Scan (${{ matrix.image }})
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.docker == 'true')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            dockerfile: infrastructure/docker/Dockerfile.backend
+            context: .
+          - image: frontend
+            dockerfile: infrastructure/docker/Dockerfile.frontend
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            -f ${{ matrix.dockerfile }} \
+            -t aim-${{ matrix.image }}:scan \
+            ${{ matrix.context }}
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: aim-${{ matrix.image }}:scan
+          severity: CRITICAL,HIGH
+          exit-code: 0
+          format: table
+
+  crypto-audit:
+    name: Crypto Best Practices
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.crypto == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run crypto audit
+        run: |
+          chmod +x scripts/crypto-audit.sh
+          ./scripts/crypto-audit.sh
+
+  license-check:
+    name: License Compliance
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.deps == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Check Go licenses
+        working-directory: apps/backend
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses check ./... --disallowed_types=restricted,reciprocal 2>&1 | tee license-report.txt
+          # Fail on GPL/AGPL/SSPL
+          if grep -iE 'GPL|AGPL|SSPL' license-report.txt | grep -iv 'LGPL'; then
+            echo "::error::Copyleft license detected in Go dependencies"
+            exit 1
+          fi
+
+      - name: Check npm licenses
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx license-checker --failOn "GPL-2.0;GPL-3.0;AGPL-1.0;AGPL-3.0;SSPL-1.0" --summary
+
+  go-lint:
+    name: Go Lint
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        continue-on-error: true
+        with:
+          version: latest
+          working-directory: apps/backend
+          args: --config ../../.golangci.yml

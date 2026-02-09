@@ -523,8 +523,7 @@ End-to-end UI testing:
 
 ### TypeScript/Node.js SDK
 **Priority**: High
-**Status**: Planned (Q1 2026)
-**Estimated Effort**: 2 weeks
+**Status**: Planned (Q2 2026)
 
 TypeScript SDK for Node.js applications:
 - Full TypeScript support with type definitions
@@ -539,8 +538,7 @@ TypeScript SDK for Node.js applications:
 
 ### GitHub Copilot Integration
 **Priority**: Medium
-**Status**: Planned (Q1 2026)
-**Estimated Effort**: 2 weeks
+**Status**: Planned (Q2 2026)
 
 Integrate AIM with GitHub Copilot for VS Code:
 - Copilot agent capability detection

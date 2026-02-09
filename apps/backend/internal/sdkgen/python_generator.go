@@ -25,7 +25,7 @@ func GeneratePythonSDK(config PythonSDKConfig) ([]byte, error) {
 	// Default version if not provided
 	version := config.Version
 	if version == "" {
-		version = "1.6.0"
+		version = "1.23.0"
 	}
 
 	// Add SDK files

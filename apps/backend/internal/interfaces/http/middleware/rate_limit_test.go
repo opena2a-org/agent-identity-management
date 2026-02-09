@@ -48,7 +48,7 @@ func TestGetClientIP_WithTrustedProxy(t *testing.T) {
 	// With trusted proxies, should respect X-Real-IP
 	originalEnv := os.Getenv("TRUSTED_PROXIES")
 	// Note: In test environment, the direct IP is typically "0.0.0.0"
-	os.Setenv("TRUSTED_PROXIES", "*")
+	os.Setenv("TRUSTED_PROXIES", "0.0.0.0")
 	defer func() {
 		if originalEnv != "" {
 			os.Setenv("TRUSTED_PROXIES", originalEnv)
@@ -72,13 +72,13 @@ func TestGetClientIP_WithTrustedProxy(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should use X-Real-IP when trusted proxy is configured with wildcard
+	// Should use X-Real-IP when direct connection IP matches a trusted proxy
 	assert.Equal(t, "203.0.113.50", capturedIP)
 }
 
 func TestGetClientIP_XForwardedFor(t *testing.T) {
 	originalEnv := os.Getenv("TRUSTED_PROXIES")
-	os.Setenv("TRUSTED_PROXIES", "*")
+	os.Setenv("TRUSTED_PROXIES", "0.0.0.0")
 	defer func() {
 		if originalEnv != "" {
 			os.Setenv("TRUSTED_PROXIES", originalEnv)
@@ -239,7 +239,7 @@ func TestGetClientIP_SpecificTrustedProxy(t *testing.T) {
 
 func TestGetClientIP_XRealIPPreferredOverXForwardedFor(t *testing.T) {
 	originalEnv := os.Getenv("TRUSTED_PROXIES")
-	os.Setenv("TRUSTED_PROXIES", "*")
+	os.Setenv("TRUSTED_PROXIES", "0.0.0.0")
 	defer func() {
 		if originalEnv != "" {
 			os.Setenv("TRUSTED_PROXIES", originalEnv)

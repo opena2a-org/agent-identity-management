@@ -51,28 +51,49 @@ agent = secure("my-agent", api_key="aim_abc123")
 
 ## Installation
 
-### Step 1: Download SDK from Dashboard
+### Option A: Install from PyPI (Recommended)
+
+```bash
+# 1. Install the SDK
+pip install aim-sdk
+
+# 2. Login to AIM Cloud (or your self-hosted instance)
+aim-sdk login                              # AIM Cloud (aim.opena2a.org)
+aim-sdk login --url http://localhost:8080  # Self-hosted
+
+# 3. Start using!
+python -c "from aim_sdk import secure; agent = secure('my-agent')"
+```
+
+The `aim-sdk login` command will:
+- Open your browser for secure OAuth authentication (Google, etc.)
+- Use PKCE (Proof Key for Code Exchange) for security - same as AWS CLI
+- Save credentials to `~/.aim/sdk_credentials.json`
+- No password prompts or browser permission dialogs
+
+### Option B: Download from Dashboard
+
+For pre-configured credentials without login:
+
 1. Log in to AIM at http://localhost:3000 (or your AIM instance)
 2. Go to **Settings → SDK Download**
 3. Click **"Download SDK"** → Includes pre-configured credentials
+4. Extract and install:
+   ```bash
+   unzip ~/Downloads/aim-sdk-python.zip
+   cd aim-sdk-python
+   pip install -e .
+   ```
 
-### Step 2: Extract to Your Projects Folder
+### CLI Commands
+
 ```bash
-# Extract anywhere you keep your projects
-cd ~/projects  # or ~/dev, ~/Desktop, etc.
-unzip ~/Downloads/aim-sdk-python.zip
-cd aim-sdk-python
-pip install -e .
+aim-sdk login                    # Authenticate with AIM
+aim-sdk login --url <URL>        # Authenticate with self-hosted AIM
+aim-sdk logout                   # Clear saved credentials
+aim-sdk status                   # Check authentication status
+aim-sdk --version                # Show SDK version
 ```
-
-### Step 3: Run the Demo Agent!
-```bash
-python demo_agent.py
-```
-
-The demo agent is an interactive menu that lets you trigger different actions (weather checks, product searches, user lookups, etc.) and watch your AIM dashboard update in real-time.
-
-**Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials and authentication tokens.
 
 ## Why AIM?
 
@@ -498,7 +519,7 @@ sdk/python/
 ├── demos/                # Demo projects
 ├── README.md             # This file
 ├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.14.0)
+├── VERSION               # Current SDK version (1.21.0)
 ├── requirements.txt      # Dependencies
 └── setup.py              # Package setup
 ```
@@ -557,7 +578,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 └─────── MAJOR: Breaking changes
 ```
 
-**Current Version**: 1.14.0
+**Current Version**: 1.21.0
 
 **Version Compatibility**:
 - SDK 1.x.x works with Backend 1.x.x ✅
@@ -566,7 +587,7 @@ The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
 **Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.14.0"
+print(aim_sdk.__version__)  # "1.21.0"
 ```
 
 **See Also**:

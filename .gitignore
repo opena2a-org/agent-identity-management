@@ -66,6 +66,8 @@ logs/
 apps/backend/aim-backend
 apps/backend/backend
 .pytest_cache/
+__pycache__/
+*.pyc
 
 # SDK credentials and sensitive data
 sdk/python/.aim/

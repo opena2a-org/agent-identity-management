@@ -215,6 +215,10 @@ func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, erro
 // Useful for token revocation checks before full validation
 func (s *JWTService) GetTokenID(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// SECURITY: Enforce HMAC signing method to prevent algorithm confusion attacks
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return s.secret, nil
 	})
 

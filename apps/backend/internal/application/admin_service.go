@@ -37,10 +37,15 @@ func (s *AdminService) GetPendingUsers(ctx context.Context, adminOrgID uuid.UUID
 }
 
 // ApproveUser approves a pending user
-func (s *AdminService) ApproveUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (s *AdminService) ApproveUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status != domain.UserStatusPending {
@@ -60,10 +65,15 @@ func (s *AdminService) ApproveUser(ctx context.Context, userID, adminID uuid.UUI
 }
 
 // RejectUser rejects a pending user by deleting their account
-func (s *AdminService) RejectUser(ctx context.Context, userID, adminID uuid.UUID, reason string) error {
+func (s *AdminService) RejectUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID, reason string) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status != domain.UserStatusPending {
@@ -81,10 +91,15 @@ func (s *AdminService) RejectUser(ctx context.Context, userID, adminID uuid.UUID
 }
 
 // UpdateUserRole updates a user's role
-func (s *AdminService) UpdateUserRole(ctx context.Context, userID uuid.UUID, role domain.UserRole) error {
+func (s *AdminService) UpdateUserRole(ctx context.Context, userID, adminOrgID uuid.UUID, role domain.UserRole) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status != domain.UserStatusActive {
@@ -99,10 +114,15 @@ func (s *AdminService) UpdateUserRole(ctx context.Context, userID uuid.UUID, rol
 }
 
 // SuspendUser suspends a user account
-func (s *AdminService) SuspendUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (s *AdminService) SuspendUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status == domain.UserStatusSuspended {
@@ -118,10 +138,15 @@ func (s *AdminService) SuspendUser(ctx context.Context, userID, adminID uuid.UUI
 }
 
 // ActivateUser activates a suspended or deactivated user account
-func (s *AdminService) ActivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (s *AdminService) ActivateUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status == domain.UserStatusActive && user.DeletedAt == nil {
@@ -145,10 +170,15 @@ func (s *AdminService) ActivateUser(ctx context.Context, userID, adminID uuid.UU
 }
 
 // DeactivateUser deactivates a user account (soft delete)
-func (s *AdminService) DeactivateUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (s *AdminService) DeactivateUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	if user.Status == domain.UserStatusDeactivated && user.DeletedAt != nil {
@@ -169,10 +199,15 @@ func (s *AdminService) DeactivateUser(ctx context.Context, userID, adminID uuid.
 
 // PermanentlyDeleteUser permanently deletes a user from the database (hard delete)
 // This is irreversible and should only be used in specific circumstances
-func (s *AdminService) PermanentlyDeleteUser(ctx context.Context, userID, adminID uuid.UUID) error {
+func (s *AdminService) PermanentlyDeleteUser(ctx context.Context, userID, adminID, adminOrgID uuid.UUID) error {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// SECURITY: Verify target user belongs to admin's organization
+	if user.OrganizationID != adminOrgID {
+		return fmt.Errorf("unauthorized: user belongs to a different organization")
 	}
 
 	// Prevent self-deletion

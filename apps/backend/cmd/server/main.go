@@ -74,6 +74,11 @@ func main() {
 	}
 	log.Println("✅ Database migrations completed successfully")
 
+	// Override default admin password if ADMIN_PASSWORD env var is set
+	if err := applyAdminPasswordOverride(db); err != nil {
+		log.Printf("⚠️  Failed to apply admin password override: %v", err)
+	}
+
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
 	if err != nil {
@@ -934,18 +939,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	public.Post("/reset-password", h.PublicRegistration.ResetPassword)                      // 🚀 Password reset with token
 	public.Post("/request-access", h.PublicRegistration.RequestAccess)                      // 🚀 Request platform access (no password required)
 
-	// Auth routes (no authentication required)
+	// Auth routes (no authentication required, strict rate limiting)
 	auth := v1.Group("/auth")
+	auth.Use(middleware.StrictRateLimitMiddleware()) // SECURITY: Strict rate limiting on auth endpoints
 	auth.Post("/login/local", h.Auth.LocalLogin) // Local email/password login
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken)                 // Refresh access token (with token rotation)
-	auth.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // Recover revoked SDK tokens (zero downtime!)
 
 	// Authenticated auth routes (authentication required)
 	authProtected := v1.Group("/auth")
 	authProtected.Use(middleware.AuthMiddleware(jwtService)) // Apply middleware using Use() instead of inline
 	authProtected.Get("/me", h.Auth.Me)
 	authProtected.Post("/change-password", h.Auth.ChangePassword)
+	authProtected.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // SECURITY: Requires auth to prevent revocation bypass
 
 	// Organization routes (authentication required)
 	organizations := v1.Group("/organizations")
@@ -1295,8 +1301,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// A2A signature verification (no auth - validates incoming A2A requests)
 	v1.Post("/a2a/verify", h.A2A.VerifyRequest)
 
-	// A2A routes (JWT authenticated - web UI)
+	// A2A routes (multi-auth: API key, agent signature, or JWT)
 	a2a := v1.Group("/a2a")
+	a2a.Use(middleware.OptionalAPIKeyMiddleware(db))
+	a2a.Use(middleware.PQCAgentMiddleware(services.Agent))
 	a2a.Use(middleware.AuthMiddleware(jwtService))
 	a2a.Use(middleware.RateLimitMiddleware())
 
@@ -1322,14 +1330,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/capable-of", h.A2A.CapableOf)
 
 	// A2A Tasks (audit trail)
+	a2a.Get("/tasks", h.A2A.ListTasks)
 	a2a.Post("/tasks", h.A2A.LogTask)
 	a2a.Put("/tasks/:id/state", h.A2A.UpdateTaskState)
 
 	// A2A Consent Management (GDPR/PSD2 compliance)
+	a2a.Get("/consents", h.A2A.ListAllConsents)
 	a2a.Post("/consent", h.A2A.RecordConsent)
 	a2a.Get("/consent/check", h.A2A.CheckConsent)
 	a2a.Post("/consent/:id/revoke", h.A2A.RevokeConsent)
 	a2a.Get("/consent/user/:userId", h.A2A.ListUserConsents)
+
+	// A2A Trust Scores (admin)
+	a2a.Get("/trust-scores", h.A2A.ListAllTrustScores)
 
 	// A2A Policy Evaluation
 	a2a.Post("/policies/evaluate", h.A2A.EvaluatePolicy)
@@ -1363,6 +1376,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                    // SDK list peer trusts
 	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                               // SDK delete skill
 	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)               // SDK get security violations
+	a2a.Get("/agents/:id/attestations", h.A2A.GetAgentAttestations)            // SDK path: /agents/:id/attestations
 	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
 
 	// A2A Maintenance (admin only)

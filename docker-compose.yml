@@ -6,12 +6,12 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: aim-postgres
     environment:
-      POSTGRES_DB: identity
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-identity}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,12 +22,13 @@ services:
     networks:
       - aim-network
 
-  # Redis Cache (no password for local development)
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: aim-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -47,8 +48,8 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -65,11 +66,11 @@ services:
     container_name: aim-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: aim_minio_user
-      MINIO_ROOT_PASSWORD: aim_minio_password_dev
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aim_minio_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aim_minio_password_dev}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -86,8 +87,8 @@ services:
     container_name: aim-nats
     command: "--jetstream --store_dir=/data"
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
     volumes:
       - nats_data:/data
     healthcheck:
@@ -108,7 +109,7 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -125,12 +126,12 @@ services:
     image: grafana/grafana:latest
     container_name: aim-grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3003
     ports:
-      - "3003:3000"
+      - "127.0.0.1:3003:3000"
     volumes:
       - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
@@ -151,7 +152,7 @@ services:
     container_name: aim-loki
     command: -config.file=/etc/loki/local-config.yaml
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
       - ./infrastructure/monitoring/loki.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
@@ -179,6 +180,7 @@ services:
 
   # Backend API Service
   backend:
+    image: ghcr.io/opena2a-org/aim-server:latest
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.backend
@@ -187,17 +189,20 @@ services:
       # Database Configuration (connects to postgres service)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=identity
-      - POSTGRES_SSL_MODE=disable
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-identity}
+      - POSTGRES_SSL_MODE=${POSTGRES_SSL_MODE:-disable}
       # Redis Configuration (connects to redis service)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev_password}
       # Security Configuration
-      # NOTE: For production, override these with your own secrets via .env file or environment
-      - JWT_SECRET=${JWT_SECRET:-pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=}
-      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=}
+      # WARNING: Default secrets are for LOCAL DEVELOPMENT ONLY
+      # For production: Generate your own with openssl rand -hex 32 (JWT) / openssl rand -base64 32 (KEYVAULT)
+      # The backend will refuse to start in production mode with default secrets
+      - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-dev-only-keyvault-key-do-not-use-in-prod==}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -207,8 +212,11 @@ services:
       # Frontend URL for CORS and links
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
-      # Environment
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Admin user configuration (optional - override default admin password)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
       - "8080:8080"
     depends_on:
@@ -227,6 +235,7 @@ services:
 
   # Frontend Web Application
   frontend:
+    image: ghcr.io/opena2a-org/aim-dashboard:latest
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.frontend

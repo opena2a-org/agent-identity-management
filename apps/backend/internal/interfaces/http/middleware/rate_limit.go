@@ -31,8 +31,9 @@ func getClientIP(c fiber.Ctx) string {
 	// Get the direct connection IP
 	directIP := c.IP()
 
-	// Only trust headers if the direct connection is from a trusted proxy
-	if trusted[directIP] || trusted["*"] {
+	// SECURITY: Wildcard "*" is not allowed — it would let any client spoof their IP.
+	// Only trust headers if the direct connection IP is in the trusted proxy list.
+	if trusted[directIP] {
 		// Try X-Real-IP first (set by nginx)
 		if realIP := c.Get("X-Real-IP"); realIP != "" {
 			return realIP

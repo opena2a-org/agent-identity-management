@@ -3,7 +3,9 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -128,6 +130,26 @@ func (kv *KeyVault) DecryptPrivateKey(encryptedPrivateKey string) (string, error
 	}
 
 	return string(plaintext), nil
+}
+
+// GetServerSigningKey derives a deterministic Ed25519 server signing key from the master key.
+// This key is used for server-issued attestations and should NOT be the agent's own key.
+// The derivation uses HKDF-like key stretching via SHA-256 with a domain separator.
+func (kv *KeyVault) GetServerSigningKey() ed25519.PrivateKey {
+	// Derive a 32-byte seed from master key using SHA-256 with domain separator
+	h := sha256.New()
+	h.Write([]byte("aim-server-attestation-signing-key-v1:"))
+	h.Write(kv.masterKey)
+	seed := h.Sum(nil) // 32 bytes
+
+	// Generate Ed25519 key from seed (deterministic)
+	return ed25519.NewKeyFromSeed(seed)
+}
+
+// GetServerSigningPublicKey returns the public key corresponding to the server signing key.
+func (kv *KeyVault) GetServerSigningPublicKey() ed25519.PublicKey {
+	privateKey := kv.GetServerSigningKey()
+	return privateKey.Public().(ed25519.PublicKey)
 }
 
 // RotatePrivateKey decrypts with old key, re-encrypts with new key

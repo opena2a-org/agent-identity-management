@@ -16,15 +16,22 @@ RUN go mod download
 # Copy source code
 COPY apps/backend/ ./
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/aim-server ./cmd/server
+# Build the application for the target platform
+ARG TARGETARCH
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /bin/aim-server ./cmd/server
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:3.21
 
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+# SECURITY: Run as non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
 
 # Copy the binary from builder
 COPY --from=builder /bin/aim-server .
@@ -34,6 +41,17 @@ COPY apps/backend/migrations ./migrations
 
 # Copy SDK directory
 COPY sdk ./sdk
+
+# Ensure correct ownership
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
+# OCI labels
+LABEL org.opencontainers.image.source="https://github.com/opena2a-org/agent-identity-management"
+LABEL org.opencontainers.image.title="AIM Server"
+LABEL org.opencontainers.image.description="Open-source non-human identity platform for AI agents — cryptographic identity, governance, and access control"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Expose port
 EXPOSE 8080

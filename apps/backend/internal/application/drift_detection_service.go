@@ -8,7 +8,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// Trust score penalty constants
+// Trust score penalty constants (on 0-100 scale)
 const (
 	// FirstViolationPenalty is the penalty for first-time drift violation (-5 points)
 	FirstViolationPenalty = 5.0

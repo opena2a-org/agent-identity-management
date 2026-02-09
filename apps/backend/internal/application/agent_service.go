@@ -241,7 +241,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		TalksTo:             req.TalksTo,      // MCP servers this agent communicates with
 		Capabilities:        req.Capabilities, // ✅ Store detected capabilities from SDK
 		Metadata:            req.Metadata,     // ✅ Custom metadata (model, department, owner, etc.)
-		Status:              domain.AgentStatusVerified, // ✅ Auto-verified for authenticated users
+		Status:              domain.AgentStatusPending, // Agents start as pending, verification is earned
 		CreatedBy:           userID,
 		CreatedByName:       createdByName,   // ✅ Denormalized for audit trail
 		CreatedByEmail:      createdByEmail,  // ✅ Denormalized for audit trail
@@ -273,9 +273,14 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
-	// ✅ AUTO-VERIFICATION: Automatically verify agent if it meets basic criteria
-	// This eliminates manual verification step for legitimate agents
-	shouldAutoVerify := s.shouldAutoVerifyAgent(agent)
+	// AUTO-VERIFICATION: Only in monitoring mode. In strict mode, agents must be manually verified.
+	// This ensures strict environments require explicit approval before agents can operate.
+	var isStrictMode bool
+	if s.orgRepo != nil {
+		org, orgErr := s.orgRepo.GetByID(orgID)
+		isStrictMode = orgErr == nil && org != nil && org.EnforcementMode == domain.EnforcementModeStrict
+	}
+	shouldAutoVerify := !isStrictMode && s.shouldAutoVerifyAgent(agent)
 	if shouldAutoVerify {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
@@ -319,10 +324,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
-	// ✅ AUTO-GRANT CAPABILITIES: Auto-grant declared capabilities during registration
-	// This eliminates admin approval bottleneck - users can start using agents immediately!
-	// Admins only approve capability UPDATES, not initial registration.
-	if len(req.Capabilities) > 0 {
+	// AUTO-GRANT CAPABILITIES: Only in monitoring mode.
+	// In strict mode, capabilities require explicit admin approval.
+	if len(req.Capabilities) > 0 && !isStrictMode {
 		grantedCount := 0
 		for _, capabilityType := range req.Capabilities {
 			capabilityRecord := &domain.AgentCapability{
@@ -648,9 +652,9 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 
 // UpdateTrustScore manually updates an agent's trust score (admin override)
 func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, newScore float64) error {
-	// Validate score range (0.000 to 9.999 based on database schema)
-	if newScore < 0.0 || newScore > 9.999 {
-		return fmt.Errorf("trust score must be between 0.0 and 9.999")
+	// Validate score range (0.0 to 100.0 matching trust calculator output and DB schema DECIMAL(5,2))
+	if newScore < 0.0 || newScore > 100.0 {
+		return fmt.Errorf("trust score must be between 0.0 and 100.0")
 	}
 
 	// Get agent to check previous score and for alert creation
@@ -796,8 +800,74 @@ func (s *AgentService) VerifyCapability(
 		return false, "Agent not found", uuid.Nil, err
 	}
 
-	// 2. Check agent status - MUST be verified
+	// 2. Check agent status - MUST be verified (unless MONITORING mode)
 	if agent.Status != domain.AgentStatusVerified {
+		// Check enforcement mode before blocking
+		enforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
+		if s.orgRepo != nil {
+			org, orgErr := s.orgRepo.GetByID(agent.OrganizationID)
+			if orgErr == nil && org != nil {
+				enforcementMode = org.EnforcementMode
+			}
+		}
+
+		if enforcementMode == domain.EnforcementModeMonitoring {
+			fmt.Printf("✅ MONITORING MODE: Allowing action '%s' for unverified agent %s (status: %s) - logged for review\n",
+				capability, agent.Name, agent.Status)
+
+			// Log violation for visibility
+			violation := &domain.CapabilityViolation{
+				AgentID:             agentID,
+				AttemptedCapability: capability,
+				RegisteredCapabilities: map[string]interface{}{
+					"attemptedCapability": capability,
+					"resource":            resource,
+					"enforcementMode":     "monitoring",
+					"agentStatus":         string(agent.Status),
+					"reason":              "agent not verified - allowed by monitoring mode",
+				},
+				Severity:         "medium",
+				TrustScoreImpact: -2,
+				IsBlocked:        false,
+				SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
+				RequestMetadata:  metadata,
+			}
+			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
+			}
+
+			// Create alert so admin sees unverified agent activity
+			alertTitle := fmt.Sprintf("Unverified Agent Action (Monitoring Mode): %s", agent.DisplayName)
+			alertDescription := fmt.Sprintf(
+				"Agent '%s' (status: %s) used capability '%s' without being verified. "+
+					"Enforcement mode: MONITORING. Action was ALLOWED but logged. Audit ID: %s",
+				agent.DisplayName, agent.Status, capability, auditID.String(),
+			)
+			alert := &domain.Alert{
+				ID:             uuid.New(),
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertSecurityBreach,
+				Severity:       domain.AlertSeverityWarning,
+				Title:          alertTitle,
+				Description:    alertDescription,
+				ResourceType:   "agent",
+				ResourceID:     agentID,
+				AgentName:      agent.DisplayName,
+				SourceIP:       sourceIP,
+				IsAcknowledged: false,
+				CreatedAt:      time.Now(),
+			}
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
+			}
+
+			return true, fmt.Sprintf(
+				"Action allowed by MONITORING mode (agent status: %s, not yet verified) - logged for review",
+				agent.Status,
+			), auditID, nil
+		}
+
+		// STRICT mode: deny unverified agents
 		return false, "Agent not verified - all actions denied", auditID, nil
 	}
 
@@ -1840,7 +1910,9 @@ func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (pub
 
 // UpdateAgentPublicKey allows SDK to register/update its own public key
 // This is used during SDK initialization when the SDK generates its own keypair
-func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string) error {
+// SECURITY: If agent already has a key, the caller must authenticate via JWT (not Ed25519)
+// to prevent an attacker with a stolen key from replacing it with their own.
+func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UUID, publicKey string, authMethod string) error {
 	// 1. Fetch agent
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
@@ -1852,7 +1924,15 @@ func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UU
 		return fmt.Errorf("public_key is required")
 	}
 
-	// 3. Store previous public key for grace period
+	// 3. SECURITY: If agent already has a registered key, require JWT auth (not Ed25519)
+	// This prevents an attacker who compromised the old key from replacing it.
+	if agent.PublicKey != nil && *agent.PublicKey != "" {
+		if authMethod == "ed25519" || authMethod == "mldsa" || authMethod == "hybrid" {
+			return fmt.Errorf("key replacement requires JWT authentication, not cryptographic agent auth")
+		}
+	}
+
+	// 4. Store previous public key for grace period
 	if agent.PublicKey != nil {
 		agent.PreviousPublicKey = agent.PublicKey
 	}

@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Detect which parts of the monorepo changed
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+              - '.golangci.yml'
+            frontend:
+              - 'apps/web/**'
+
+  backend:
+    name: Backend (Go)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with coverage
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out | tee coverage.txt
+
+      - name: Check coverage thresholds
+        run: |
+          check_coverage() {
+            local pkg_pattern="$1"
+            local min_pct="$2"
+            local label="$3"
+
+            # Extract coverage for matching packages
+            local pct
+            pct=$(grep "$pkg_pattern" coverage.txt \
+              | awk '{print $NF}' \
+              | sed 's/%//' \
+              | awk '{ sum += $1; n++ } END { if (n > 0) printf "%.1f", sum/n; else print "0" }')
+
+            if [ -z "$pct" ] || [ "$pct" = "0" ]; then
+              echo "⚠ $label: no coverage data found (pattern: $pkg_pattern)"
+              return 0
+            fi
+
+            local pass
+            pass=$(echo "$pct >= $min_pct" | bc -l)
+            if [ "$pass" -eq 1 ]; then
+              echo "✓ $label: ${pct}% (minimum: ${min_pct}%)"
+            else
+              echo "✗ $label: ${pct}% is below minimum ${min_pct}%"
+              return 1
+            fi
+          }
+
+          FAILED=0
+          check_coverage "internal/domain" 90 "Domain layer" || FAILED=1
+          check_coverage "internal/crypto/pqc" 85 "PQC crypto" || FAILED=1
+          check_coverage "internal/crypto" 75 "Crypto layer" || FAILED=1
+          check_coverage "internal/infrastructure/auth" 60 "Auth layer" || FAILED=1
+
+          # Overall coverage (30% minimum — cmd/ and infra/ have 0% which drags average)
+          TOTAL=$(grep "^total:" coverage.txt | awk '{print $NF}' | sed 's/%//')
+          if [ -n "$TOTAL" ]; then
+            PASS=$(echo "$TOTAL >= 30" | bc -l)
+            if [ "$PASS" -eq 1 ]; then
+              echo "✓ Overall: ${TOTAL}% (minimum: 30%)"
+            else
+              echo "✗ Overall: ${TOTAL}% is below minimum 30%"
+              FAILED=1
+            fi
+          fi
+
+          if [ "$FAILED" -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: apps/backend/coverage.out
+
+  frontend:
+    name: Frontend (Next.js)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build

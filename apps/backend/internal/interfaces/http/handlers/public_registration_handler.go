@@ -600,6 +600,15 @@ func (h *PublicRegistrationHandler) ChangePassword(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: Public (unauthenticated) password change is only allowed for forced password changes.
+	// Normal password changes must go through the authenticated /api/v1/auth/change-password endpoint.
+	if !user.ForcePasswordChange {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"success": false,
+			"error":   "Password change via this endpoint is only available for forced password changes. Use the authenticated endpoint.",
+		})
+	}
+
 	// Use AuthService.ChangePassword (handles validation, hashing, and force_password_change flag)
 	if err := h.authService.ChangePassword(c.Context(), user.ID, req.OldPassword, req.NewPassword); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"os"
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -107,12 +110,14 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 		})
 	}
 
-	// Set cookies
+	// SECURITY: Set Secure flag based on environment
+	isProduction := strings.EqualFold(os.Getenv("ENVIRONMENT"), "production")
+
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
 		HTTPOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   isProduction,
 		SameSite: "Lax",
 	})
 
@@ -120,7 +125,7 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		HTTPOnly: true,
-		Secure:   false,
+		Secure:   isProduction,
 		SameSite: "Lax",
 	})
 

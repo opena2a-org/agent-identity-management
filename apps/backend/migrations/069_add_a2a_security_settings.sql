@@ -89,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_a2a_violations_type ON a2a_security_violations(vi
 CREATE INDEX IF NOT EXISTS idx_a2a_violations_agent ON a2a_security_violations(requesting_agent_id, created_at DESC);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS trigger_a2a_security_settings_updated_at ON a2a_security_settings;
 CREATE TRIGGER trigger_a2a_security_settings_updated_at
     BEFORE UPDATE ON a2a_security_settings
     FOR EACH ROW EXECUTE FUNCTION update_a2a_updated_at();

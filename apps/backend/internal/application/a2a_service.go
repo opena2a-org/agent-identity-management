@@ -19,6 +19,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 // A2A Configuration Constants
@@ -117,6 +118,12 @@ func NewA2AService(
 		keyVault:        keyVault,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// SECURITY: Disable redirect following to prevent SSRF bypass.
+			// An attacker could pass URL validation with a safe URL that redirects
+			// to an internal address (e.g., cloud metadata endpoint).
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}
 }
@@ -127,8 +134,9 @@ func NewA2AService(
 
 // RegisterAgentCardRequest is the request to register an A2A agent card
 type RegisterAgentCardRequest struct {
-	AgentID  uuid.UUID `json:"agentId"`
-	CardURL  string    `json:"cardUrl"`
+	AgentID  uuid.UUID       `json:"agentId"`
+	CardURL  string          `json:"cardUrl"`
+	CardData json.RawMessage `json:"cardData"`
 }
 
 // RegisterAgentCardResponse is the response after registering an agent card
@@ -151,10 +159,16 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 		return nil, fmt.Errorf("agent not found")
 	}
 
-	// 2. Fetch the agent card from URL
-	cardData, err := s.fetchAgentCard(req.CardURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch agent card: %w", err)
+	// 2. Get card data: use provided cardData directly, or fetch from URL
+	var cardData []byte
+	if len(req.CardData) > 0 {
+		cardData = []byte(req.CardData)
+	} else {
+		var fetchErr error
+		cardData, fetchErr = s.fetchAgentCard(req.CardURL)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("failed to fetch agent card: %w", fetchErr)
+		}
 	}
 
 	// 3. Parse the card
@@ -175,11 +189,15 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 	}
 
 	// 6. Save the agent card
+	cardURL := req.CardURL
+	if cardURL == "" {
+		cardURL = fmt.Sprintf("inline://%s", req.AgentID.String())
+	}
 	now := time.Now().UTC()
 	card := &domain.A2AAgentCard{
 		ID:                   uuid.New(),
 		AgentID:              req.AgentID,
-		CardURL:              req.CardURL,
+		CardURL:              cardURL,
 		CardData:             cardData,
 		CardHash:             cardHashStr,
 		ProtocolVersion:      parsedCard.Version,
@@ -227,6 +245,11 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 // GetAgentCard retrieves the AIM-attested agent card
 func (s *A2AService) GetAgentCard(ctx context.Context, agentID uuid.UUID) (*domain.A2AAgentCard, error) {
 	return s.cardRepo.GetByAgentID(ctx, agentID)
+}
+
+// ListAgentCards returns all valid agent cards with pagination
+func (s *A2AService) ListAgentCards(ctx context.Context, limit, offset int) ([]*domain.A2AAgentCard, error) {
+	return s.cardRepo.GetValidCards(ctx, limit, offset)
 }
 
 // GetEnhancedAgentCard returns the agent card with AIM extensions
@@ -551,8 +574,19 @@ func (s *A2AService) GetPeerTrustScore(ctx context.Context, agentID, peerID uuid
 	return s.peerTrustRepo.GetByPeer(ctx, agentID, peerID)
 }
 
+// ListPeerTrusts returns all peer trust relationships for an agent
+func (s *A2AService) ListPeerTrusts(ctx context.Context, agentID uuid.UUID) ([]*domain.A2APeerTrust, error) {
+	return s.peerTrustRepo.GetByAgentID(ctx, agentID)
+}
+
 // ComputeA2ATrustScore computes and stores the A2A trust score for an agent
 func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID) (*domain.A2ATrustScore, error) {
+	// Verify agent exists before attempting to upsert (FK constraint on a2a_trust_scores)
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil || agent == nil {
+		return nil, fmt.Errorf("agent %s not found", agentID)
+	}
+
 	// Get existing score or create new
 	score, err := s.trustScoreRepo.GetByAgentID(ctx, agentID)
 	if err != nil {
@@ -619,6 +653,11 @@ func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID
 // ============================================================================
 // Task Logging
 // ============================================================================
+
+// ListA2ATasks returns paginated A2A tasks with optional filters
+func (s *A2AService) ListA2ATasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	return s.taskRepo.ListTasks(ctx, agentID, state, limit, offset)
+}
 
 // LogA2ATaskRequest is the request to log an A2A task
 type LogA2ATaskRequest struct {
@@ -774,6 +813,16 @@ func (s *A2AService) RevokeConsent(ctx context.Context, consentID uuid.UUID, rea
 // ListUserConsents lists all consent records for a user
 func (s *A2AService) ListUserConsents(ctx context.Context, userID string, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
 	return s.consentRepo.ListByUser(ctx, userID, includeRevoked)
+}
+
+// ListAllConsents lists all consent records with pagination
+func (s *A2AService) ListAllConsents(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	return s.consentRepo.ListAll(ctx, limit, offset)
+}
+
+// ListAllTrustScores lists all A2A trust scores with pagination
+func (s *A2AService) ListAllTrustScores(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	return s.trustScoreRepo.ListAll(ctx, limit, offset)
 }
 
 // ============================================================================
@@ -1390,6 +1439,11 @@ func (s *A2AService) RefreshExpiredCards(ctx context.Context) (int, error) {
 // ============================================================================
 
 func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
+	// SECURITY: Validate URL to prevent SSRF attacks
+	if err := utils.ValidateExternalURL(url); err != nil {
+		return nil, fmt.Errorf("invalid agent card URL: %w", err)
+	}
+
 	resp, err := s.httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
@@ -1400,7 +1454,8 @@ func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Limit response size to 1MB to prevent memory exhaustion
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -1409,30 +1464,26 @@ func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 }
 
 func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.RawMessage, expiresAt time.Time) (string, error) {
-	// Get server's signing key (would be from config in production)
-	// For now, use the agent's own key for self-attestation
-	if agent.EncryptedPrivateKey == nil {
-		return "", fmt.Errorf("agent has no private key for signing")
-	}
-
-	privateKeyB64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt private key: %w", err)
-	}
-	privateKey, err := base64.StdEncoding.DecodeString(privateKeyB64)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode private key: %w", err)
+	// SECURITY: Use the AIM server's signing key for attestation, NOT the agent's own key.
+	// Self-attestation provides no trust guarantee — an attacker controlling an agent
+	// could sign any card data. Server-signed attestation proves the AIM platform
+	// verified and approved this agent card.
+	serverPrivateKey := s.keyVault.GetServerSigningKey()
+	if serverPrivateKey == nil {
+		return "", fmt.Errorf("server signing key not configured — cannot issue attestation")
 	}
 
 	// Create attestation payload
 	attestPayload := struct {
 		CardHash  string    `json:"cardHash"`
 		AgentID   string    `json:"agentId"`
+		Issuer    string    `json:"issuer"`
 		IssuedAt  time.Time `json:"issuedAt"`
 		ExpiresAt time.Time `json:"expiresAt"`
 	}{
 		CardHash:  hex.EncodeToString(sha256Hash(cardData)),
 		AgentID:   agent.ID.String(),
+		Issuer:    "aim-server",
 		IssuedAt:  time.Now().UTC(),
 		ExpiresAt: expiresAt,
 	}
@@ -1440,7 +1491,7 @@ func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.Ra
 	payloadJSON, _ := json.Marshal(attestPayload)
 	payloadHash := sha256.Sum256(payloadJSON)
 
-	signature := ed25519.Sign(privateKey, payloadHash[:])
+	signature := ed25519.Sign(serverPrivateKey, payloadHash[:])
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
