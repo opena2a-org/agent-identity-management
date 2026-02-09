@@ -3034,21 +3034,30 @@ class APIClient {
     cards: A2AAgentCard[];
     total: number;
   }> {
-    // Get all agents and their A2A cards
-    const agents = await this.listAgents();
-    const cards: A2AAgentCard[] = [];
-
-    for (const agent of agents.agents || []) {
-      try {
-        const card = await this.getA2AAgentCard(agent.id);
-        if (card) {
-          cards.push(card);
-        }
-      } catch {
-        // Agent doesn't have a card, skip
-      }
-    }
-
+    // Use the dedicated cards list endpoint, then enrich with parsed card_data
+    const raw = await this.request<{ cards: any[]; limit: number; offset: number }>(`/api/v1/a2a/cards`);
+    const cards: A2AAgentCard[] = (raw.cards || []).map((c: any) => {
+      const cardData = c.cardData || {};
+      return {
+        id: c.id,
+        agentId: c.agentId,
+        name: cardData.name || `Agent ${c.agentId?.slice(0, 8)}`,
+        description: cardData.description,
+        url: cardData.url || c.cardUrl || "",
+        version: cardData.version || c.protocolVersion,
+        provider: cardData.provider,
+        capabilities: cardData.capabilities,
+        skills: cardData.skills || [],
+        authentication: cardData.authentication,
+        defaultInputModes: cardData.defaultInputModes,
+        defaultOutputModes: cardData.defaultOutputModes,
+        aimAttestation: c.attestationSignature || undefined,
+        aimAttestationExpiresAt: c.attestationExpiresAt || undefined,
+        verified: c.isValid === true,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      };
+    });
     return { cards, total: cards.length };
   }
 
@@ -3182,10 +3191,45 @@ class APIClient {
     total: number;
   }> {
     if (userId) {
-      return this.request(`/api/v1/a2a/consent/user/${userId}`);
+      const data = await this.request<{ consents: any[]; count: number }>(`/api/v1/a2a/consent/user/${userId}`);
+      return { consents: this.mapConsents(data.consents || []), total: data.count || 0 };
     }
-    // No general list endpoint, return empty for now
-    return { consents: [], total: 0 };
+    const data = await this.request<{ consents: any[]; total: number }>(`/api/v1/a2a/consents`);
+    return { consents: this.mapConsents(data.consents || []), total: data.total || 0 };
+  }
+
+  async listA2ATrustScores(limit = 100): Promise<{
+    scores: Array<{
+      agentId: string;
+      a2aTrustScore: number;
+      totalTasksAsClient: number;
+      totalTasksAsRemote: number;
+      tasksCompleted: number;
+      tasksFailed: number;
+      uniquePeersCount: number;
+      computedAt?: string;
+    }>;
+    total: number;
+  }> {
+    return this.request(`/api/v1/a2a/trust-scores?limit=${limit}`);
+  }
+
+  private mapConsents(raw: any[]): A2AConsent[] {
+    return raw.map((c: any) => ({
+      id: c.id,
+      userId: c.userId || "",
+      sourceAgentId: c.grantorAgentId || c.sourceAgentId || "",
+      targetAgentId: c.recipientAgentId || c.targetAgentId || "",
+      purpose: c.purpose || "",
+      dataTypes: c.dataTypes || c.scope || [],
+      status: c.revoked ? "revoked" : (c.expiresAt && new Date(c.expiresAt) < new Date() ? "expired" : "granted"),
+      grantedAt: c.grantedAt,
+      expiresAt: c.expiresAt,
+      revokedAt: c.revokedAt,
+      revocationReason: c.revokedReason,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    }));
   }
 
   async recordA2AConsent(

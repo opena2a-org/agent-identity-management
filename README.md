@@ -27,7 +27,7 @@
 curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
 ```
 
-That's it. Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated.
+That's it. Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end — change the password on first login.
 
 **Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
 
@@ -277,11 +277,17 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Community
+## OpenA2A Ecosystem
 
-- **Discord**: [discord.gg/uRZa3KXgEn](https://discord.gg/uRZa3KXgEn)
-- **Email**: [info@opena2a.org](mailto:info@opena2a.org)
-- **Website**: [opena2a.org](https://opena2a.org)
+| Project | What it does |
+|---------|-------------|
+| [**AIM**](https://github.com/opena2a-org/agent-identity-management) | Identity & access management for AI agents |
+| [**HackMyAgent**](https://github.com/opena2a-org/hackmyagent) | Security scanner — 147 checks, attack mode, auto-fix |
+| [**Secretless AI**](https://github.com/opena2a-org/secretless-ai) | Keep credentials out of AI context windows |
+| [**DVAA**](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Deliberately vulnerable AI agents for security training |
+| [**OASB**](https://oasb.ai) | Open Agent Security Benchmark |
+
+[Website](https://opena2a.org) · [Discord](https://discord.gg/uRZa3KXgEn) · [Email](mailto:info@opena2a.org)
 
 ---
 

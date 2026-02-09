@@ -1104,7 +1104,7 @@ function SupplyChainPage() {
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, value }) => (value > 0 ? `${value}` : "")}
+                  label={({ name, value }: { name: string; value: number }) => (value > 0 ? `${value}` : "")}
                 >
                   {confidenceDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1120,7 +1120,7 @@ function SupplyChainPage() {
                 />
                 <Legend
                   wrapperStyle={{ paddingTop: "20px" }}
-                  formatter={(value) => (
+                  formatter={(value: string) => (
                     <span className="text-gray-600 dark:text-gray-300 text-sm">
                       {value}
                     </span>

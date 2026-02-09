@@ -62,6 +62,11 @@ tags = ["password", "hash"]
 
 [allowlist]
 description = "Global allowlist"
+# False positives: Java SDK constructor param validation, TS test fixtures
+commits = [
+  "5c51070d3c86add39fbbf421912fe4bcc4ea079f",
+  "73ef4dabbd3598d785fc06eb6e2f98ea41a27196",
+]
 paths = [
   '''(.*/)?_test\.go$''',
   '''(.*/)?test_.*\.py$''',
@@ -73,6 +78,8 @@ paths = [
   '''(.*/)?docs/.*$''',
   '''(.*/)?migrations/.*$''',
   '''(.*/)?sdk.*/test.*$''',
+  '''(.*/)?sdk/.*\.test\.(ts|js)$''',
+  '''(.*/)?sdk/.*\.integration\.test\.(ts|js)$''',
   '''(.*/)?sdks/.*test.*$''',
   '''\.gitleaks\.toml$''',
   '''go\.sum$''',

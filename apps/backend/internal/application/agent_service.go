@@ -800,8 +800,74 @@ func (s *AgentService) VerifyCapability(
 		return false, "Agent not found", uuid.Nil, err
 	}
 
-	// 2. Check agent status - MUST be verified
+	// 2. Check agent status - MUST be verified (unless MONITORING mode)
 	if agent.Status != domain.AgentStatusVerified {
+		// Check enforcement mode before blocking
+		enforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
+		if s.orgRepo != nil {
+			org, orgErr := s.orgRepo.GetByID(agent.OrganizationID)
+			if orgErr == nil && org != nil {
+				enforcementMode = org.EnforcementMode
+			}
+		}
+
+		if enforcementMode == domain.EnforcementModeMonitoring {
+			fmt.Printf("✅ MONITORING MODE: Allowing action '%s' for unverified agent %s (status: %s) - logged for review\n",
+				capability, agent.Name, agent.Status)
+
+			// Log violation for visibility
+			violation := &domain.CapabilityViolation{
+				AgentID:             agentID,
+				AttemptedCapability: capability,
+				RegisteredCapabilities: map[string]interface{}{
+					"attemptedCapability": capability,
+					"resource":            resource,
+					"enforcementMode":     "monitoring",
+					"agentStatus":         string(agent.Status),
+					"reason":              "agent not verified - allowed by monitoring mode",
+				},
+				Severity:         "medium",
+				TrustScoreImpact: -2,
+				IsBlocked:        false,
+				SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
+				RequestMetadata:  metadata,
+			}
+			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
+			}
+
+			// Create alert so admin sees unverified agent activity
+			alertTitle := fmt.Sprintf("Unverified Agent Action (Monitoring Mode): %s", agent.DisplayName)
+			alertDescription := fmt.Sprintf(
+				"Agent '%s' (status: %s) used capability '%s' without being verified. "+
+					"Enforcement mode: MONITORING. Action was ALLOWED but logged. Audit ID: %s",
+				agent.DisplayName, agent.Status, capability, auditID.String(),
+			)
+			alert := &domain.Alert{
+				ID:             uuid.New(),
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertSecurityBreach,
+				Severity:       domain.AlertSeverityWarning,
+				Title:          alertTitle,
+				Description:    alertDescription,
+				ResourceType:   "agent",
+				ResourceID:     agentID,
+				AgentName:      agent.DisplayName,
+				SourceIP:       sourceIP,
+				IsAcknowledged: false,
+				CreatedAt:      time.Now(),
+			}
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
+			}
+
+			return true, fmt.Sprintf(
+				"Action allowed by MONITORING mode (agent status: %s, not yet verified) - logged for review",
+				agent.Status,
+			), auditID, nil
+		}
+
+		// STRICT mode: deny unverified agents
 		return false, "Agent not verified - all actions denied", auditID, nil
 	}
 

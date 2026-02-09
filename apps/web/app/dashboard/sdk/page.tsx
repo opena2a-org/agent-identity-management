@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Download, Code, Terminal, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { AuthGuard } from "@/components/auth-guard";
@@ -362,7 +363,7 @@ export default function SDKDownloadPage() {
               </div>
               <p className="text-sm text-green-800 mb-2">
                 The demo agent includes interactive actions you can trigger. Open your{' '}
-                <a href="/dashboard/agents" className="underline font-medium">Agents Dashboard</a>{' '}
+                <Link href="/dashboard/agents" className="underline font-medium">Agents Dashboard</Link>{' '}
                 side-by-side and watch it update in real-time as you perform actions!
               </p>
               <p className="text-sm text-green-700">
@@ -399,12 +400,12 @@ export default function SDKDownloadPage() {
               <p className="text-gray-700 dark:text-gray-300 mb-3">
                 Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics in real-time.
               </p>
-              <a
+              <Link
                 href="/dashboard/agents"
                 className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
               >
                 View Agents Dashboard →
-              </a>
+              </Link>
             </div>
           </div>
         </div>

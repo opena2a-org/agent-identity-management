@@ -19,6 +19,7 @@ import os
 import sys
 import json
 import time
+import argparse
 import requests
 import hashlib
 import threading
@@ -107,8 +108,9 @@ class AgentCardServer:
 
 
 class A2AIntegrationTest:
-    def __init__(self):
-        self.base_url = BASE_URL
+    def __init__(self, base_url: str = None, keep_data: bool = False):
+        self.base_url = base_url or BASE_URL
+        self.keep_data = keep_data
         self.session = requests.Session()
         self.admin_token = None
         self.org_id = None
@@ -153,8 +155,13 @@ class A2AIntegrationTest:
             self.test_trust_scores()
 
             # Cleanup
-            print_section("Cleanup")
-            self.cleanup()
+            if self.keep_data:
+                print_section("Cleanup (skipped: --keep-data)")
+                self.card_server.stop()
+                print(f"  {YELLOW}Skipping agent/data cleanup to preserve dashboard data{RESET}")
+            else:
+                print_section("Cleanup")
+                self.cleanup()
 
             # Summary
             print_section("Test Summary")
@@ -186,7 +193,7 @@ class A2AIntegrationTest:
         try:
             resp = self.session.post(
                 f"{self.base_url}/api/v1/public/login",
-                json={"email": "admin@opena2a.org", "password": "AIM2025!Secure"}
+                json={"email": "admin@opena2a.org", "password": os.environ.get("ADMIN_PASSWORD", "AIM2025!Secure")}
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -352,15 +359,10 @@ class A2AIntegrationTest:
             "defaultOutputModes": ["text", "json"]
         }
 
-        # Set card data and start the server
-        self.card_server.set_card_data(agent_card_json)
-        self.card_server.start()
-        time.sleep(0.2)  # Give server time to start
-
         # Test 1: Register Agent Card for Agent 1
         # Endpoint: POST /api/v1/a2a/agents/:id/card
+        # Send cardData directly to avoid SSRF issues with local URLs
         card_data = {
-            "cardUrl": self.card_server.get_card_url(),
             "cardData": agent_card_json
         }
 
@@ -630,7 +632,20 @@ class A2AIntegrationTest:
 
 
 def main():
-    test = A2AIntegrationTest()
+    parser = argparse.ArgumentParser(description="A2A Protocol E2E Integration Tests")
+    parser.add_argument(
+        '--aim-url',
+        default=os.environ.get('AIM_BASE_URL', 'http://localhost:8080'),
+        help='AIM platform URL (default: $AIM_BASE_URL or http://localhost:8080)'
+    )
+    parser.add_argument(
+        '--keep-data',
+        action='store_true',
+        help='Skip cleanup to preserve test data in the database for dashboard viewing'
+    )
+    args = parser.parse_args()
+
+    test = A2AIntegrationTest(base_url=args.aim_url, keep_data=args.keep_data)
     success = test.run()
     sys.exit(0 if success else 1)
 
