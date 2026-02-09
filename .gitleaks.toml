@@ -73,6 +73,8 @@ paths = [
   '''(.*/)?docs/.*$''',
   '''(.*/)?migrations/.*$''',
   '''(.*/)?sdk.*/test.*$''',
+  '''(.*/)?sdk/.*\.test\.(ts|js)$''',
+  '''(.*/)?sdk/.*\.integration\.test\.(ts|js)$''',
   '''(.*/)?sdks/.*test.*$''',
   '''\.gitleaks\.toml$''',
   '''go\.sum$''',
