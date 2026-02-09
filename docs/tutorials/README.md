@@ -61,8 +61,8 @@ Before starting any tutorial, ensure:
    ```
 
 2. **Access the dashboard** - http://localhost:3000
-   - Email: `admin@opena2a.org`
-   - Password: `AIM2025!Secure` (change on first login)
+   - Email: `admin@localhost`
+   - Password: printed by the quickstart script (change on first login)
 
 3. **Download the SDK** - Settings → SDK Download
 

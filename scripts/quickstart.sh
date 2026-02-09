@@ -41,10 +41,11 @@ else
   redis_pass=$(openssl rand -hex 16)
   jwt_secret=$(openssl rand -hex 32)
   kv_key=$(openssl rand -base64 32)
+  admin_pass=$(openssl rand -base64 18)
 
   # Write .env from variables (restricted permissions)
-  (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\n' \
-    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" > .env)
+  (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\nADMIN_EMAIL=admin@localhost\nADMIN_PASSWORD=%s\n' \
+    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" "$admin_pass" > .env)
 
   info "Generated .env with random secrets"
   info "Pulling images and starting services..."
@@ -69,7 +70,12 @@ info "AIM is running!"
 printf '\n'
 printf '  Dashboard:  \033[1;32mhttp://localhost:3000\033[0m\n'
 printf '  API:        \033[1;32mhttp://localhost:8080\033[0m\n'
-printf '  Login:      admin@opena2a.org / AIM2025!Secure\n'
+if [ -n "${admin_pass:-}" ]; then
+  printf '  Login:      admin@localhost / %s\n' "$admin_pass"
+  printf '              (change this password on first login)\n'
+else
+  printf '  Login:      credentials from initial setup (see .env)\n'
+fi
 printf '\n'
 printf '  Stop:       cd %s && docker compose -f docker-compose.quickstart.yml stop\n' "$INSTALL_DIR"
 printf '  Logs:       cd %s && docker compose -f docker-compose.quickstart.yml logs -f\n' "$INSTALL_DIR"
