@@ -119,7 +119,8 @@ func createBootstrapData(db *sql.DB) error {
 			return fmt.Errorf("failed to generate random admin password: %w", err)
 		}
 		adminPassword = base64.URLEncoding.EncodeToString(randomBytes)
-		log.Printf("Generated random admin password (set ADMIN_PASSWORD env var to override): %s", adminPassword)
+		log.Println("Generated random admin password. Set ADMIN_PASSWORD env var to use a known password.")
+		log.Printf("  Temporary admin password: %s...%s", adminPassword[:4], adminPassword[len(adminPassword)-4:])
 	}
 	adminName := getEnvOrDefault("ADMIN_NAME", "System Administrator")
 	orgName := getEnvOrDefault("ORG_NAME", "Default Organization")

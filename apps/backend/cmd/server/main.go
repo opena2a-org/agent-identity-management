@@ -327,8 +327,9 @@ func main() {
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
 	// Build connection string using key=value format to avoid URL encoding issues
 	// This format works better with passwords containing special characters
-	// SECURITY: Escape single quotes in password to prevent connection string injection
-	escapedPassword := strings.ReplaceAll(cfg.Database.Password, "'", "\\'")
+	// SECURITY: Escape single quotes in password for libpq connection string format
+	// PostgreSQL libpq requires single quotes to be doubled (''), not backslash-escaped
+	escapedPassword := strings.ReplaceAll(cfg.Database.Password, "'", "''")
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
 		cfg.Database.Host,
 		cfg.Database.Port,
