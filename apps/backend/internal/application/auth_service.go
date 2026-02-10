@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,7 +65,7 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 		lockout, err := s.authFailureRepo.GetActiveLockout(email)
 		if err != nil {
 			// Log error but continue - don't block login on monitoring errors
-			fmt.Printf("Warning: failed to check lockout status for %s: %v\n", email, err)
+			log.Printf("Warning: failed to check lockout status for %s: %v\n", email, err)
 		} else if lockout != nil {
 			remainingMins := int(time.Until(lockout.LockedUntil).Minutes()) + 1
 			return nil, fmt.Errorf("account is temporarily locked due to too many failed attempts. Please try again in %d minutes", remainingMins)
@@ -102,7 +103,7 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 	// Clear previous failures on successful login
 	if s.authFailureRepo != nil {
 		if err := s.authFailureRepo.ClearFailures(email); err != nil {
-			fmt.Printf("Warning: failed to clear auth failures for %s: %v\n", email, err)
+			log.Printf("Warning: failed to clear auth failures for %s: %v\n", email, err)
 		}
 	}
 
@@ -112,7 +113,7 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 	user.UpdatedAt = now
 	if err := s.userRepo.Update(user); err != nil {
 		// Log error but don't fail the login - this is non-critical
-		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
+		log.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
 	}
 
 	return user, nil
@@ -136,14 +137,14 @@ func (s *AuthService) recordAuthFailure(email string, orgID, userID *uuid.UUID, 
 	}
 
 	if err := s.authFailureRepo.RecordFailure(failure); err != nil {
-		fmt.Printf("Warning: failed to record auth failure for %s: %v\n", email, err)
+		log.Printf("Warning: failed to record auth failure for %s: %v\n", email, err)
 		return
 	}
 
 	// Check if lockout threshold reached
 	failureCount, err := s.authFailureRepo.CountRecentFailures(email, s.failureConfig.TimeWindowMins)
 	if err != nil {
-		fmt.Printf("Warning: failed to count auth failures for %s: %v\n", email, err)
+		log.Printf("Warning: failed to count auth failures for %s: %v\n", email, err)
 		return
 	}
 
@@ -159,7 +160,7 @@ func (s *AuthService) recordAuthFailure(email string, orgID, userID *uuid.UUID, 
 		}
 
 		if err := s.authFailureRepo.CreateLockout(lockout); err != nil {
-			fmt.Printf("Warning: failed to create lockout for %s: %v\n", email, err)
+			log.Printf("Warning: failed to create lockout for %s: %v\n", email, err)
 			return
 		}
 
@@ -370,7 +371,7 @@ func (s *AuthService) UpdateLastLogin(ctx context.Context, user *domain.User) er
 	user.UpdatedAt = now
 	if err := s.userRepo.Update(user); err != nil {
 		// Log error but don't fail - this is non-critical
-		fmt.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
+		log.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
 		return err
 	}
 	return nil
