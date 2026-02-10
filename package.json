@@ -29,5 +29,6 @@
     "url": "https://github.com/opena2a/identity.git"
   },
   "license": "Apache-2.0",
-  "author": "OpenA2A Team"
+  "author": "OpenA2A Team",
+  "packageManager": "npm@10.9.3"
 }
