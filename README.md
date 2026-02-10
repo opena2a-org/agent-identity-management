@@ -253,12 +253,9 @@ AIM uses **direct observation** — not proxies. Unlike traditional NHI platform
 ```bash
 # Development
 docker compose up -d
-
-# Production (Kubernetes)
-kubectl apply -f k8s/
 ```
 
-See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for AWS, Azure, and GCP guides.
+See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for production deployment guides (AWS, Azure, GCP, Kubernetes).
 
 ---
 

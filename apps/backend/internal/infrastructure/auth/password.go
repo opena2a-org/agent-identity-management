@@ -28,6 +28,13 @@ var (
 
 	// ErrInvalidPassword indicates password verification failed
 	ErrInvalidPassword = errors.New("invalid password")
+
+	// Pre-compiled regex patterns for password validation
+	reUpper   = regexp.MustCompile(`[A-Z]`)
+	reLower   = regexp.MustCompile(`[a-z]`)
+	reDigit   = regexp.MustCompile(`[0-9]`)
+	reSpecial = regexp.MustCompile(`[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]`)
+	reBcrypt  = regexp.MustCompile(`^\$2[aby]\$\d{2}\$.{53}$`)
 )
 
 // PasswordHasher provides password hashing and verification
@@ -73,13 +80,13 @@ func (h *PasswordHasher) ValidatePassword(password string) error {
 	}
 
 	// Check for uppercase letter
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasUpper := reUpper.MatchString(password)
 	// Check for lowercase letter
-	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasLower := reLower.MatchString(password)
 	// Check for digit
-	hasDigit := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasDigit := reDigit.MatchString(password)
 	// Check for special character
-	hasSpecial := regexp.MustCompile(`[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]`).MatchString(password)
+	hasSpecial := reSpecial.MatchString(password)
 
 	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
 		return ErrPasswordTooWeak
@@ -99,6 +106,5 @@ func (h *PasswordHasher) ComparePasswords(password, confirmation string) error {
 // IsPasswordHash checks if a string looks like a bcrypt hash
 func (h *PasswordHasher) IsPasswordHash(hash string) bool {
 	// Bcrypt hashes start with $2a$, $2b$, or $2y$
-	matched, _ := regexp.MatchString(`^\$2[aby]\$\d{2}\$.{53}$`, hash)
-	return matched
+	return reBcrypt.MatchString(hash)
 }

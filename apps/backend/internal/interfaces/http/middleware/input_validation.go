@@ -2,8 +2,15 @@ package middleware
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
+)
+
+// Pre-compiled regex patterns to avoid recompilation on every call
+var (
+	emailRegexp = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	uuidRegexp  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 )
 
 // PasswordValidationResult contains the results of password validation
@@ -31,7 +38,7 @@ func ValidatePassword(password string, minLength int) PasswordValidationResult {
 	// Length check
 	if len(password) < minLength {
 		result.Valid = false
-		result.Messages = append(result.Messages, "Password must be at least "+string(rune(minLength+'0'))+" characters")
+		result.Messages = append(result.Messages, "Password must be at least "+strconv.Itoa(minLength)+" characters")
 	}
 
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
@@ -96,9 +103,7 @@ func ValidateEmail(email string) bool {
 		return false
 	}
 
-	// RFC 5322 compliant email regex (simplified for practical use)
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-	return emailRegex.MatchString(email)
+	return emailRegexp.MatchString(email)
 }
 
 // SanitizeInput removes potentially dangerous characters from input
@@ -120,6 +125,5 @@ func SanitizeInput(input string) string {
 
 // ValidateUUID validates UUID format
 func ValidateUUID(id string) bool {
-	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
-	return uuidRegex.MatchString(id)
+	return uuidRegexp.MatchString(id)
 }

@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -91,7 +91,6 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		req.Password,
 	)
 	if err != nil {
-		// SECURITY: No error logging to prevent information leakage
 		// Handle specific error cases
 		switch err {
 		case application.ErrUserAlreadyExists:
@@ -105,9 +104,18 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 				"error":   "A registration request with this email already exists and is pending approval",
 			})
 		default:
+			// Return validation errors (e.g. password too short) to the client
+			if strings.Contains(err.Error(), "password validation failed") {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+			// SECURITY: Log unexpected errors server-side, return generic message to client
+			log.Printf("Registration request failed for email %s: %v", email, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
-				"error":   fmt.Sprintf("Failed to create registration request: %v", err),
+				"error":   "An internal error occurred. Please try again later.",
 			})
 		}
 	}
@@ -515,7 +523,6 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 		req.OrganizationName,
 	)
 	if err != nil {
-		// SECURITY: No error logging to prevent information leakage
 		// Handle specific error cases
 		switch err {
 		case application.ErrUserAlreadyExists:
@@ -529,9 +536,18 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 				"error":   "An access request with this email is already pending approval",
 			})
 		default:
+			// Return validation errors (e.g. password too short) to the client
+			if strings.Contains(err.Error(), "password validation failed") {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+			// SECURITY: Log unexpected errors server-side, return generic message to client
+			log.Printf("Access request failed for email %s: %v", email, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
-				"error":   fmt.Sprintf("Failed to create access request: %v", err),
+				"error":   "An internal error occurred. Please try again later.",
 			})
 		}
 	}
