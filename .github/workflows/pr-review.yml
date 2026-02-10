@@ -1,5 +1,6 @@
 name: PR Review
 # Runs on every PR to main — calls Claude API for security-focused code review
+# v2: Full file context + verification mandate + re-review awareness
 
 on:
   pull_request:
@@ -25,10 +26,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff and metadata
+      - name: Gather review context
+        id: context
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # PR metadata
           gh pr diff "$PR_NUMBER" > /tmp/pr_diff.txt
           gh pr diff "$PR_NUMBER" --name-only > /tmp/changed_files.txt
           gh pr view "$PR_NUMBER" --json title -q '.title' > /tmp/pr_title.txt
@@ -36,15 +39,43 @@ jobs:
 
           DIFF_BYTES=$(wc -c < /tmp/pr_diff.txt | tr -d ' ')
           echo "$DIFF_BYTES" > /tmp/diff_size.txt
-          wc -l < /tmp/changed_files.txt | tr -d ' ' > /tmp/file_count.txt
+          FILE_COUNT=$(wc -l < /tmp/changed_files.txt | tr -d ' ')
+          echo "$FILE_COUNT" > /tmp/file_count.txt
 
+          # Truncate diff at 120KB
           if [ "$DIFF_BYTES" -gt 120000 ]; then
             head -c 120000 /tmp/pr_diff.txt > /tmp/pr_diff_trunc.txt
             printf '\n\n[DIFF TRUNCATED — original was %s bytes]\n' "$DIFF_BYTES" >> /tmp/pr_diff_trunc.txt
             mv /tmp/pr_diff_trunc.txt /tmp/pr_diff.txt
           fi
 
+          # Full source file context (line-numbered) for mitigation verification
+          echo "" > /tmp/full_files.txt
+          TOTAL_SIZE=0
+          MAX_FULL_SIZE=200000
+          while IFS= read -r file; do
+            case "$file" in
+              *_test.go | *.test.* | *.spec.* | package-lock.json | *.lock | go.sum) continue ;;
+            esac
+            [ -f "$file" ] || continue
+            FILE_SIZE=$(wc -c < "$file" | tr -d ' ')
+            NEW_TOTAL=$((TOTAL_SIZE + FILE_SIZE))
+            if [ "$NEW_TOTAL" -gt "$MAX_FULL_SIZE" ]; then
+              printf '\n[FULL FILE CONTEXT TRUNCATED at %s bytes — remaining files omitted]\n' "$TOTAL_SIZE" >> /tmp/full_files.txt
+              break
+            fi
+            TOTAL_SIZE=$NEW_TOTAL
+            printf '\n=== %s ===\n' "$file" >> /tmp/full_files.txt
+            nl -ba "$file" >> /tmp/full_files.txt
+          done < /tmp/changed_files.txt
+
+          # Previous review comments (for re-review awareness on synchronize)
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews" \
+            --jq '[.[] | select(.body | test("Claude Code Review")) | .body] | last // ""' \
+            2>/dev/null | head -c 4000 > /tmp/previous_review.txt || echo "" > /tmp/previous_review.txt
+
       - name: Run Claude review
+        id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -56,54 +87,109 @@ jobs:
 
           Tech stack: Go 1.23 backend (Fiber v3), Next.js frontend, PostgreSQL, post-quantum cryptography (ML-DSA via cloudflare/circl).
 
+          You have TWO sources of information:
+          1. FULL SOURCE FILES — complete line-numbered source code of changed files (use this to VERIFY mitigations)
+          2. DIFF — the actual changes introduced in this PR
+
           Review focus (in priority order):
           1. SECURITY: Injection flaws, auth bypasses, crypto misuse, secret leakage, unsafe deserialization, SSRF, path traversal
           2. CORRECTNESS: Logic errors, race conditions, nil pointer dereferences, resource leaks, error handling gaps
           3. QUALITY: API contract changes, breaking changes, missing input validation at system boundaries
 
-          Do NOT flag: style preferences, missing docs, test coverage, pre-existing issues.
+          === VERIFICATION MANDATE ===
+          For EVERY potential finding, you MUST complete this checklist before reporting:
+          1. Identify the vulnerability pattern and its location
+          2. Search the FULL SOURCE FILE for mitigations within the same function or calling code
+          3. Check if input validation, bounds checks, or sanitization exists nearby
+          4. ONLY report the finding if NO adequate mitigation exists
+
+          If you find a vulnerability AND its mitigation in the same code, do NOT report it.
+
+          === COMMON FALSE POSITIVES — DO NOT REPORT ===
+          - SQL injection when parameterized queries ($1, $2) or ORM methods are used
+          - Race conditions when sync.Mutex, sync.RWMutex, or channels provide synchronization
+          - Nil pointer dereferences when the nil check exists earlier in the same function
+          - Resource leaks when defer close/cleanup is present
+          - Auth bypasses when middleware validates tokens before the handler executes
+          - Crypto misuse when the implementation follows the library's documented usage pattern
+          - Path traversal when filepath.Clean() + prefix validation is present
+
+          === RE-REVIEW AWARENESS ===
+          If a PREVIOUS REVIEW section is included below, check whether each previously flagged issue has been FIXED in the current code. Do NOT re-raise issues that now have adequate mitigations. Briefly note which previous findings were addressed.
+
+          === LINE NUMBERS ===
+          Use line numbers from the FULL SOURCE FILES section (these are accurate). Do NOT estimate line numbers from diff hunk headers.
+
+          Do NOT flag: style preferences, missing docs, test coverage, pre-existing issues outside the diff.
 
           Response format (strict):
           VERDICT: APPROVE or REQUEST_CHANGES
           SUMMARY: One paragraph.
           FINDINGS:
-          - [CRITICAL|HIGH|MEDIUM] path/file.go:line — Description
+          - [CRITICAL|HIGH|MEDIUM] path/file.go:line — Description. Mitigation check: [what you looked for and didn't find]
           (omit FINDINGS section if none)
 
           Rules:
-          - APPROVE if no CRITICAL or HIGH findings
-          - Only REQUEST_CHANGES for genuine security/correctness issues introduced in this PR
+          - APPROVE if no CRITICAL or HIGH findings remain after verification
+          - Only REQUEST_CHANGES for genuine, unmitigated security/correctness issues introduced in this PR
           - CI/config/docs-only changes: always APPROVE
           - Max 10 findings, most important first
           SYSPROMPT
 
-          # Build user message
+          # Build user message with full context
           {
             printf 'PR #%s: %s\n\nDescription:\n' "$PR_NUMBER" "$PR_TITLE"
             cat /tmp/pr_body.txt
             printf '\n\nChanged files:\n'
             cat /tmp/changed_files.txt
-            printf '\n\nDiff:\n'
+            printf '\n\nFULL SOURCE FILES (line-numbered — use for verifying mitigations):\n'
+            cat /tmp/full_files.txt
+            printf '\n\nDIFF (changes introduced in this PR):\n'
             cat /tmp/pr_diff.txt
           } > /tmp/user_msg.txt
 
-          # Call Anthropic API via jq + curl
+          # Append previous review if exists
+          if [ -s /tmp/previous_review.txt ] && [ "$(wc -c < /tmp/previous_review.txt | tr -d ' ')" -gt 10 ]; then
+            printf '\n\nPREVIOUS REVIEW (check if issues were fixed — do not re-raise mitigated findings):\n' >> /tmp/user_msg.txt
+            cat /tmp/previous_review.txt >> /tmp/user_msg.txt
+          fi
+
+          # Call Anthropic API
           RESPONSE=$(jq -n \
             --rawfile system /tmp/system_prompt.txt \
             --rawfile user /tmp/user_msg.txt \
             '{
               model: "claude-sonnet-4-5-20250929",
-              max_tokens: 4096,
+              max_tokens: 16000,
+              thinking: { type: "enabled", budget_tokens: 10000 },
               system: $system,
               messages: [{ role: "user", content: $user }]
             }' | curl -s -X POST "https://api.anthropic.com/v1/messages" \
               -H "Content-Type: application/json" \
               -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-              -H "anthropic-version: 2023-06-01" \
+              -H "anthropic-version: 2025-04-15" \
               -d @-)
 
-          # Extract response text
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+          # Extract response text (skip thinking blocks)
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '[.content[] | select(.type == "text") | .text] | join("\n") // empty')
+
+          if [ -z "$REVIEW_TEXT" ]; then
+            # Fallback: try without thinking (in case API version doesn't support it)
+            RESPONSE=$(jq -n \
+              --rawfile system /tmp/system_prompt.txt \
+              --rawfile user /tmp/user_msg.txt \
+              '{
+                model: "claude-sonnet-4-5-20250929",
+                max_tokens: 8192,
+                system: $system,
+                messages: [{ role: "user", content: $user }]
+              }' | curl -s -X POST "https://api.anthropic.com/v1/messages" \
+                -H "Content-Type: application/json" \
+                -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+                -H "anthropic-version: 2023-06-01" \
+                -d @-)
+            REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+          fi
 
           if [ -z "$REVIEW_TEXT" ]; then
             ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown API error"')
