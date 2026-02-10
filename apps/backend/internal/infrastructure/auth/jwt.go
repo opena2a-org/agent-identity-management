@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -42,8 +43,19 @@ func NewJWTService() *JWTService {
 	// Get expiry durations from env or use secure defaults
 	// Access tokens last 2 hours for better UX during active sessions
 	// Refresh tokens last 7 days and support rotation
-	accessExpiry, _ := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "2h"))
-	refreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
+	defaultAccessExpiry := 2 * time.Hour
+	defaultRefreshExpiry := 168 * time.Hour
+
+	accessExpiry, err := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "2h"))
+	if err != nil {
+		log.Printf("WARNING: invalid JWT_ACCESS_TTL, using default 2h: %v", err)
+		accessExpiry = defaultAccessExpiry
+	}
+	refreshExpiry, err := time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
+	if err != nil {
+		log.Printf("WARNING: invalid JWT_REFRESH_TTL, using default 168h: %v", err)
+		refreshExpiry = defaultRefreshExpiry
+	}
 
 	return &JWTService{
 		secret:        []byte(secret),

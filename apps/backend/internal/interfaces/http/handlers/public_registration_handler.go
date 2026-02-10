@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -105,9 +105,11 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 				"error":   "A registration request with this email already exists and is pending approval",
 			})
 		default:
+			// SECURITY: Log the actual error server-side, return generic message to client
+			log.Printf("Registration request failed for email %s: %v", email, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
-				"error":   fmt.Sprintf("Failed to create registration request: %v", err),
+				"error":   "An internal error occurred. Please try again later.",
 			})
 		}
 	}
@@ -529,9 +531,11 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 				"error":   "An access request with this email is already pending approval",
 			})
 		default:
+			// SECURITY: Log the actual error server-side, return generic message to client
+			log.Printf("Access request failed for email %s: %v", email, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
-				"error":   fmt.Sprintf("Failed to create access request: %v", err),
+				"error":   "An internal error occurred. Please try again later.",
 			})
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -328,11 +327,13 @@ func main() {
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
 	// Build connection string using key=value format to avoid URL encoding issues
 	// This format works better with passwords containing special characters
+	// SECURITY: Escape single quotes in password to prevent connection string injection
+	escapedPassword := strings.ReplaceAll(cfg.Database.Password, "'", "\\'")
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
 		cfg.Database.Host,
 		cfg.Database.Port,
 		cfg.Database.User,
-		cfg.Database.Password,
+		escapedPassword,
 		cfg.Database.Database,
 		cfg.Database.SSLMode,
 	)
@@ -1445,7 +1446,7 @@ func runMigrations(db *sql.DB) error {
 		log.Printf("🔄 Applying %s...", file)
 
 		// Read migration file
-		content, err := ioutil.ReadFile(filepath.Join("migrations", file))
+		content, err := os.ReadFile(filepath.Join("migrations", file))
 		if err != nil {
 			return fmt.Errorf("failed to read %s: %w", file, err)
 		}
@@ -1501,7 +1502,7 @@ func createMigrationsTable(db *sql.DB) error {
 
 // getMigrationFiles returns sorted list of .up.sql migration files
 func getMigrationFiles() ([]string, error) {
-	files, err := ioutil.ReadDir("migrations")
+	entries, err := os.ReadDir("migrations")
 	if err != nil {
 		// If migrations directory doesn't exist, return empty list (not an error)
 		if os.IsNotExist(err) {
@@ -1511,14 +1512,14 @@ func getMigrationFiles() ([]string, error) {
 	}
 
 	var migrations []string
-	for _, file := range files {
-		if file.IsDir() {
+	for _, entry := range entries {
+		if entry.IsDir() {
 			continue
 		}
 		// Only include .up.sql files for forward migrations
-		if strings.HasSuffix(file.Name(), ".up.sql") ||
-			(strings.HasSuffix(file.Name(), ".sql") && !strings.Contains(file.Name(), ".down.sql")) {
-			migrations = append(migrations, file.Name())
+		if strings.HasSuffix(entry.Name(), ".up.sql") ||
+			(strings.HasSuffix(entry.Name(), ".sql") && !strings.Contains(entry.Name(), ".down.sql")) {
+			migrations = append(migrations, entry.Name())
 		}
 	}
 

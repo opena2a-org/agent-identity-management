@@ -1,9 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -80,7 +81,7 @@ func applyCompleteSchema(db *sql.DB) error {
 
 	// Read complete schema file
 	schemaPath := filepath.Join("schema", "complete_schema.sql")
-	content, err := ioutil.ReadFile(schemaPath)
+	content, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return fmt.Errorf("failed to read complete_schema.sql: %w", err)
 	}
@@ -110,7 +111,16 @@ func createBootstrapData(db *sql.DB) error {
 
 	// Get configuration from environment (with sensible defaults)
 	adminEmail := getEnvOrDefault("ADMIN_EMAIL", "admin@localhost")
-	adminPassword := getEnvOrDefault("ADMIN_PASSWORD", "admin123456") // Change in production!
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		// SECURITY: Generate a cryptographically random password instead of using a static default
+		randomBytes := make([]byte, 24)
+		if _, err := rand.Read(randomBytes); err != nil {
+			return fmt.Errorf("failed to generate random admin password: %w", err)
+		}
+		adminPassword = base64.URLEncoding.EncodeToString(randomBytes)
+		log.Printf("Generated random admin password (set ADMIN_PASSWORD env var to override): %s", adminPassword)
+	}
 	adminName := getEnvOrDefault("ADMIN_NAME", "System Administrator")
 	orgName := getEnvOrDefault("ORG_NAME", "Default Organization")
 	orgDomain := getEnvOrDefault("ORG_DOMAIN", "localhost")
@@ -160,9 +170,6 @@ func createBootstrapData(db *sql.DB) error {
 
 	log.Printf("   ✅ Created organization: %s", orgName)
 	log.Printf("   ✅ Created admin user: %s", adminEmail)
-	if adminPassword == "admin123456" {
-		log.Println("   ⚠️  WARNING: Using default admin password - CHANGE IN PRODUCTION!")
-	}
 
 	return nil
 }
@@ -173,7 +180,7 @@ func seedDefaults(db *sql.DB) error {
 
 	// Read seed data file
 	seedPath := filepath.Join("seed", "default_security_policies.sql")
-	content, err := ioutil.ReadFile(seedPath)
+	content, err := os.ReadFile(seedPath)
 	if err != nil {
 		return fmt.Errorf("failed to read seed file: %w", err)
 	}
