@@ -60,13 +60,28 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		hasher.Write([]byte(req.RefreshToken))
 		tokenHash := hex.EncodeToString(hasher.Sum(nil))
 
-		// Check if token is tracked and not revoked
-		_, err := h.sdkTokenService.ValidateToken(c.Context(), tokenHash)
-		if err != nil {
-			// Token is revoked or invalid in database
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Token has been revoked or is invalid",
-			})
+		// Check if token is tracked in SDK tokens table
+		sdkToken, err := h.sdkTokenService.GetByTokenHash(c.Context(), tokenHash)
+		if err == nil && sdkToken != nil {
+			// Token is tracked in SDK table - verify it's still active
+			if !sdkToken.IsActive() {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Token has been revoked or is invalid",
+				})
+			}
+		} else {
+			// Token NOT found in SDK table - check if it was issued as an SDK token.
+			// SDK tokens have issuer "agent-identity-management-sdk". If a token claims
+			// to be an SDK token but has no database record, it was deleted/purged and
+			// should be rejected to prevent deleted SDK tokens from being refreshed.
+			claims, validateErr := h.jwtService.ValidateToken(req.RefreshToken)
+			if validateErr == nil && claims != nil && claims.Issuer == "agent-identity-management-sdk" {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Token has been revoked or is invalid",
+				})
+			}
+			// Regular login tokens (issuer "agent-identity-management") are not tracked
+			// in the SDK table and are allowed to refresh normally.
 		}
 	}
 

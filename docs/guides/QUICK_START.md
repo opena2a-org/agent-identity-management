@@ -1,231 +1,205 @@
 # Quick Start Guide - Agent Identity Management
 
-**For impatient developers who want to get up and running in 5 minutes** ⚡
+Get AIM running locally in under 5 minutes.
 
 ---
 
-## Prerequisites
+## Option 1: One-Line Install (Recommended)
 
-- Docker Desktop running ✅ (you have this)
+```bash
+curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
+```
+
+This script handles everything: pulls images, generates secrets, starts services, runs migrations, and prints login credentials. Dashboard opens at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080).
+
+---
+
+## Option 2: Build from Source
+
+### Prerequisites
+
+- Docker Desktop running
 - Go 1.23+ installed
 - Node.js 18+ installed
-- 15 minutes of your time
 
----
+### Step 1: Clone and Start Infrastructure
 
-## Step 1: Configure OAuth (3 minutes)
-
-### Google OAuth (Required)
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create OAuth 2.0 Client ID
-3. Set authorized redirect URI: `http://localhost:8080/api/v1/auth/callback/google`
-4. Copy Client ID and Client Secret
-
-### Update .env
 ```bash
-cd /Users/decimai/workspace/agent-identity-management/apps/backend
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
 
-# Edit .env file
-nano .env
-
-# Add these lines:
-GOOGLE_CLIENT_ID=<paste-your-client-id>
-GOOGLE_CLIENT_SECRET=<paste-your-client-secret>
-
-# Save and exit (Ctrl+X, Y, Enter)
+# Start PostgreSQL (TimescaleDB), Redis, and other services
+docker compose up -d postgres redis
 ```
 
----
-
-## Step 2: Database Setup (2 minutes)
+Wait for services to be healthy:
 
 ```bash
-# Docker services are already running! ✅
-# PostgreSQL: localhost:5432
-# Redis: localhost:6379
-
-# Run migrations
-cd /Users/decimai/workspace/agent-identity-management/apps/backend
-go run cmd/migrate/main.go up
-
-# Expected output:
-# ✅ Applied migration: 001_initial_schema
-# ✅ Applied migration: 002_add_indexes
-# ✅ All migrations complete
+docker compose ps
 ```
 
----
-
-## Step 3: Start Backend (1 minute)
+### Step 2: Start the Backend
 
 ```bash
-# Terminal 1
-cd /Users/decimai/workspace/agent-identity-management/apps/backend
-go run cmd/server/main.go
+cd apps/backend
 
-# Expected output:
-# ✅ Server starting on :8080
-# ✅ Database connected
-# ✅ Redis connected
-# ✅ Routes registered
+# Copy the example environment file
+cp .env.example .env
+
+# Build and run (migrations run automatically on startup)
+go build -o aim-server ./cmd/server && ./aim-server
 ```
 
-**Verify**: Open http://localhost:8080/api/v1/health
-- Should return: `{"status":"healthy","timestamp":"..."}`
+The backend starts on port 8080. Migrations are applied automatically on first run.
 
----
-
-## Step 4: Start Frontend (1 minute)
+**Verify:**
 
 ```bash
-# Terminal 2
-cd /Users/decimai/workspace/agent-identity-management/apps/web
+curl http://localhost:8080/health
+# Expected: {"status":"healthy","service":"agent-identity-management","timestamp":"..."}
+```
 
-# Install dependencies (first time only)
+### Step 3: Start the Dashboard (Optional)
+
+```bash
+cd apps/web
 npm install
-
-# Start dev server
 npm run dev
-
-# Expected output:
-# ✅ Ready on http://localhost:3000
 ```
 
-**Verify**: Open http://localhost:3000
-- Should see landing page with "Sign in with Google" button
+Dashboard opens at [localhost:3000](http://localhost:3000).
+
+### Step 4: Log In
+
+The default admin account is created automatically:
+
+- **Email:** `admin@opena2a.org`
+- **Password:** `AIM2025!Secure` (you must change this on first login)
+
+Log in via the dashboard or via API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/public/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@opena2a.org","password":"AIM2025!Secure"}'
+```
+
+The response includes an `accessToken` for authenticated API calls.
 
 ---
 
-## Step 5: Test It! (2 minutes)
+## Verify the Installation
 
-### Test 1: Health Check
+### Health Check
+
 ```bash
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 ```
-**Expected**: `{"status":"healthy","timestamp":"..."}`
 
-### Test 2: OAuth Flow
-1. Open http://localhost:3000
-2. Click "Sign in with Google"
-3. Should redirect to Google OAuth
-4. After login, should redirect to Dashboard
+### A2A Agent Discovery
 
-### Test 3: API Protection
+```bash
+curl http://localhost:8080/.well-known/agent.json
+```
+
+### API Protection (Should Return 401)
+
 ```bash
 curl http://localhost:8080/api/v1/agents
 ```
-**Expected**: `401 Unauthorized` (because no auth token)
+
+### Create an Agent (Authenticated)
+
+```bash
+TOKEN="<your-access-token-from-login>"
+
+curl -X POST http://localhost:8080/api/v1/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "test-agent",
+    "type": "langchain",
+    "capabilities": ["db:read", "api:call"]
+  }'
+```
+
+---
+
+## Running Tests
+
+### Unit Tests
+
+```bash
+cd apps/backend
+go test ./... -short
+```
+
+### Integration Tests
+
+Integration tests require a running backend:
+
+```bash
+cd apps/backend
+ENVIRONMENT=test go test ./tests/integration/... -v
+```
 
 ---
 
 ## Common Issues
 
-### Issue: Backend won't start
-**Solution**:
+### Port Already in Use
+
 ```bash
-# Check if port 8080 is in use
+# Check what's using the port
 lsof -i :8080
-
-# Kill process if needed
-kill -9 <PID>
-
-# Restart backend
-go run cmd/server/main.go
-```
-
-### Issue: Frontend won't start
-**Solution**:
-```bash
-# Check if port 3000 is in use
 lsof -i :3000
 
-# Kill process if needed
-kill -9 <PID>
-
-# Clear cache and restart
-rm -rf .next
-npm run dev
+# Kill the process if needed
+kill <PID>
 ```
 
-### Issue: Database connection failed
-**Solution**:
+### Database Connection Failed
+
 ```bash
-# Check PostgreSQL container
-docker ps | grep postgres
+# Check if PostgreSQL is running
+docker compose ps postgres
 
 # Restart if needed
 docker compose restart postgres
-
-# Wait 10 seconds
-sleep 10
-
-# Try migrations again
-go run cmd/migrate/main.go up
 ```
 
-### Issue: OAuth not working
-**Check**:
-1. Client ID and Secret correct in `.env`
-2. Redirect URI matches exactly: `http://localhost:8080/api/v1/auth/callback/google`
-3. OAuth consent screen configured in Google Cloud Console
+### Backend Won't Start
+
+Check that required environment variables are set. The backend needs at minimum:
+- `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_DB` (database connection)
+- `JWT_SECRET` (authentication)
+
+See `.env.example` for all available configuration options.
 
 ---
 
-## What's Running?
+## What's Running
 
-```
-PostgreSQL:  localhost:5432  (aim-postgres)
-Redis:       localhost:6379  (aim-redis)
-Backend:     localhost:8080  (Go + Fiber)
-Frontend:    localhost:3000  (Next.js)
-```
+| Service | Address | Description |
+|---------|---------|-------------|
+| PostgreSQL | localhost:5432 | TimescaleDB (PG16) |
+| Redis | localhost:6379 | Cache and session storage |
+| Backend | localhost:8080 | Go API server (Fiber v3) |
+| Dashboard | localhost:3000 | Next.js web interface |
 
 ---
 
 ## Next Steps
 
-### Test the Platform
-1. ✅ Sign in with Google OAuth
-2. ✅ Create a test agent
-3. ✅ Generate an API key
-4. ✅ Check trust score
-5. ✅ View audit logs (if admin)
-
-### Run Tests
-```bash
-# Backend integration tests
-cd apps/backend
-go test ./tests/integration/... -v
-
-# Frontend E2E tests
-cd apps/web
-npm run test:e2e
-```
-
-### Read Documentation
-- `README.md` - Project overview
-- `SETUP_GUIDE.md` - Detailed setup
-- `API_REFERENCE.md` - API docs
-- `MANUAL_TESTING_GUIDE.md` - Testing procedures
-
----
-
-## Production Deployment
-
-Ready for production? See:
-- `DEPLOYMENT_CHECKLIST.md` - Complete deployment guide
-- `PRODUCTION_READINESS.md` - Production readiness report
+- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) -- Secure your first agent with the Python or Java SDK
+- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) -- Connect and attest MCP servers
+- [Post-Quantum Cryptography](PQC.md) -- Enable ML-DSA signatures
+- [Deployment Guide](../../infrastructure/DEPLOYMENT.md) -- Production deployment on AWS, Azure, GCP, Kubernetes
 
 ---
 
 ## Getting Help
 
-- **Documentation**: All files in repository
-- **Email**: info@opena2a.org
-- **GitHub Issues**: (after public launch)
-
----
-
-**That's it!** You now have Agent Identity Management running locally. 🎉
-
-Total time: **~10 minutes** ⚡
+- [Documentation](https://opena2a.org/docs)
+- [Discord](https://discord.gg/uRZa3KXgEn)
+- [GitHub Issues](https://github.com/opena2a-org/agent-identity-management/issues)

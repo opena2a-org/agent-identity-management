@@ -42,7 +42,7 @@ VALUES (
     'admin',
     'local',
     'admin@opena2a.org',
-    '$2b$12$EYtPexZSmNuHT/bzVhoLWOjNM9ZvdPbclV/f7KQx9otOde07.0WXG',  -- Random default password (MUST be changed on first login)
+    '$2a$12$UbRtBE0U9Ry36Bdl04YWDuXe3lIw14aZaxQ8B6bbA4P7peLRski66',  -- Default password: AIM2025!Secure (MUST be changed on first login)
     'active',
     TRUE,
     TRUE  -- Admin MUST change password on first login

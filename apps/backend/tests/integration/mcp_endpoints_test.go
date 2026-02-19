@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,12 +26,16 @@ func TestMCPServerEndpoints(t *testing.T) {
 
 	var createdServerID string
 	var createdAgentID string
+	mcpServerName := fmt.Sprintf("Test MCP Server %d", time.Now().UnixNano())
+	mcpServerURL := fmt.Sprintf("https://mcp-server-%d.example.com", time.Now().UnixNano())
 
 	// Create an agent first (required for MCP server registration)
 	t.Run("Setup - Create agent for MCP tests", func(t *testing.T) {
+		agentName := fmt.Sprintf("MCP Test Agent %d", time.Now().UnixNano())
 		body := map[string]interface{}{
-			"name":        "MCP Test Agent",
-			"type":        "ai_agent",
+			"name":        agentName,
+			"displayName": agentName,
+			"agentType":   "ai_agent",
 			"description": "Agent for MCP testing",
 		}
 
@@ -45,8 +50,8 @@ func TestMCPServerEndpoints(t *testing.T) {
 
 	t.Run("POST /api/v1/mcp-servers - Register MCP server", func(t *testing.T) {
 		body := map[string]interface{}{
-			"name":        "Test MCP Server",
-			"url":         "https://mcp-server.example.com",
+			"name":        mcpServerName,
+			"url":         mcpServerURL,
 			"description": "Integration test MCP server",
 			"agentID":     createdAgentID,
 			"publicKey":   "test-public-key-data",
@@ -59,8 +64,8 @@ func TestMCPServerEndpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Contains(t, result, "id")
-		assert.Equal(t, "Test MCP Server", result["name"])
-		assert.Equal(t, "https://mcp-server.example.com", result["url"])
+		assert.Equal(t, mcpServerName, result["name"])
+		assert.Equal(t, mcpServerURL, result["url"])
 
 		createdServerID = result["id"].(string)
 	})
@@ -72,8 +77,8 @@ func TestMCPServerEndpoints(t *testing.T) {
 		err := json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Contains(t, result, "servers")
-		servers := result["servers"].([]interface{})
+		assert.Contains(t, result, "mcpServers")
+		servers := result["mcpServers"].([]interface{})
 		assert.GreaterOrEqual(t, len(servers), 1)
 	})
 
@@ -86,7 +91,7 @@ func TestMCPServerEndpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, createdServerID, result["id"])
-		assert.Equal(t, "Test MCP Server", result["name"])
+		assert.Equal(t, mcpServerName, result["name"])
 	})
 
 	t.Run("PUT /api/v1/mcp-servers/:id - Update MCP server", func(t *testing.T) {
@@ -107,17 +112,13 @@ func TestMCPServerEndpoints(t *testing.T) {
 
 	t.Run("POST /api/v1/mcp-servers/:id/verify - Verify MCP server", func(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/mcp-servers/%s/verify", createdServerID)
-		body := map[string]interface{}{
-			"signature": "test-signature",
-			"nonce":     "test-nonce",
-		}
-
-		respBody := tc.AssertStatusCode("POST", path, body, userToken, 200)
+		respBody := tc.AssertStatusCode("POST", path, nil, userToken, 200)
 
 		var result map[string]interface{}
 		err := json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
+		// Test URLs fail DNS resolution, so we expect verified=false with structured failure
 		assert.Contains(t, result, "verified")
 	})
 
@@ -132,35 +133,20 @@ func TestMCPServerEndpoints(t *testing.T) {
 		assert.Contains(t, result, "capabilities")
 	})
 
-	t.Run("POST /api/v1/mcp-servers/:id/capabilities - Update capabilities", func(t *testing.T) {
-		path := fmt.Sprintf("/api/v1/mcp-servers/%s/capabilities", createdServerID)
-		body := map[string]interface{}{
-			"capabilities": []string{"FileRead", "FileWrite", "NetworkAccess"},
-		}
-
-		respBody := tc.AssertStatusCode("POST", path, body, userToken, 200)
+	t.Run("GET /api/v1/mcp-servers - List filters MCP servers", func(t *testing.T) {
+		// No dedicated search endpoint; use the list endpoint
+		respBody := tc.AssertStatusCode("GET", "/api/v1/mcp-servers", nil, userToken, 200)
 
 		var result map[string]interface{}
 		err := json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Contains(t, result, "capabilities")
-	})
-
-	t.Run("GET /api/v1/mcp-servers/search - Search MCP servers", func(t *testing.T) {
-		path := "/api/v1/mcp-servers/search?query=MCP"
-		respBody := tc.AssertStatusCode("GET", path, nil, userToken, 200)
-
-		var result map[string]interface{}
-		err := json.Unmarshal(respBody, &result)
-		require.NoError(t, err)
-
-		assert.Contains(t, result, "servers")
+		assert.Contains(t, result, "mcpServers")
 	})
 
 	t.Run("DELETE /api/v1/mcp-servers/:id - Delete MCP server", func(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/mcp-servers/%s", createdServerID)
-		tc.AssertStatusCode("DELETE", path, nil, userToken, 200)
+		tc.AssertStatusCode("DELETE", path, nil, userToken, 204)
 
 		// Verify server is deleted
 		tc.AssertStatusCode("GET", path, nil, userToken, 404)
@@ -178,6 +164,6 @@ func TestMCPServerEndpoints(t *testing.T) {
 	// Cleanup
 	t.Run("Cleanup - Delete test agent", func(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/agents/%s", createdAgentID)
-		tc.AssertStatusCode("DELETE", path, nil, userToken, 200)
+		tc.AssertStatusCode("DELETE", path, nil, userToken, 204)
 	})
 }

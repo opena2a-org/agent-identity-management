@@ -201,6 +201,23 @@ var (
 	)
 )
 
+// validHTTPMethods contains the set of standard HTTP methods for metric normalization.
+// Fiber v3 beta may report garbled methods (e.g. "GETT", "POS") for unmatched routes,
+// which causes Prometheus label cardinality issues.
+var validHTTPMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "DELETE": true,
+	"PATCH": true, "HEAD": true, "OPTIONS": true, "TRACE": true, "CONNECT": true,
+}
+
+// normalizeMethod ensures the HTTP method is a valid standard method.
+// Returns "UNKNOWN" for garbled or non-standard methods to prevent label explosion.
+func normalizeMethod(method string) string {
+	if validHTTPMethods[method] {
+		return method
+	}
+	return "UNKNOWN"
+}
+
 // PrometheusMiddleware collects HTTP metrics for all requests
 func PrometheusMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -217,7 +234,7 @@ func PrometheusMiddleware() fiber.Handler {
 		// Record metrics
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().StatusCode())
-		method := c.Method()
+		method := normalizeMethod(c.Method())
 		path := normalizePath(c.Path())
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
