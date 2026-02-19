@@ -111,9 +111,15 @@ func TestMCPServerEndpoints(t *testing.T) {
 	})
 
 	t.Run("POST /api/v1/mcp-servers/:id/verify - Verify MCP server", func(t *testing.T) {
-		// Skip: The verify endpoint performs DNS resolution on the MCP server URL.
-		// Dynamic test URLs use non-existent hostnames that can't be resolved.
-		t.Skip("Skipping: verify endpoint performs DNS resolution on test URLs")
+		path := fmt.Sprintf("/api/v1/mcp-servers/%s/verify", createdServerID)
+		respBody := tc.AssertStatusCode("POST", path, nil, userToken, 200)
+
+		var result map[string]interface{}
+		err := json.Unmarshal(respBody, &result)
+		require.NoError(t, err)
+
+		// Test URLs fail DNS resolution, so we expect verified=false with structured failure
+		assert.Contains(t, result, "verified")
 	})
 
 	t.Run("GET /api/v1/mcp-servers/:id/capabilities - Get MCP server capabilities", func(t *testing.T) {

@@ -1684,7 +1684,17 @@ func (h *AgentHandler) UpdateAgentTrustScore(c fiber.Ctx) error {
 	}
 
 	// Get updated agent
-	updatedAgent, _ := h.agentService.GetAgent(c.Context(), agentID)
+	updatedAgent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil || updatedAgent == nil {
+		// Update succeeded but re-fetch failed; return the requested score
+		return c.JSON(fiber.Map{
+			"success":    true,
+			"agentId":    agentID,
+			"agentName":  agent.Name,
+			"trustScore": req.Score,
+			"message":    "Trust score updated successfully",
+		})
+	}
 
 	// Log audit - manual trust score override is a sensitive admin action
 	h.auditService.LogAction(

@@ -119,11 +119,36 @@ func TestAuthEndpoints(t *testing.T) {
 	})
 
 	t.Run("POST /api/v1/auth/refresh - Refresh access token", func(t *testing.T) {
-		// Skip: login-generated refresh tokens are rejected by the SDK token validation
-		// layer because they have a tokenID in the JWT but aren't tracked in the
-		// sdk_tokens table. This is a backend issue where the refresh handler checks
-		// ValidateToken() and fails for non-SDK tokens.
-		t.Skip("Skipping: refresh endpoint rejects login-generated tokens (SDK token validation layer)")
+		// Login to get a refresh token
+		loginBody := map[string]interface{}{
+			"email":    tc.Config.AdminEmail,
+			"password": tc.Config.AdminPassword,
+		}
+
+		loginResp := tc.AssertStatusCode("POST", "/api/v1/public/login", loginBody, "", 200)
+
+		var loginResult map[string]interface{}
+		err := json.Unmarshal(loginResp, &loginResult)
+		require.NoError(t, err)
+
+		refreshToken, ok := loginResult["refreshToken"].(string)
+		require.True(t, ok, "Login response should contain refreshToken")
+		require.NotEmpty(t, refreshToken, "Refresh token should not be empty")
+
+		// Use the refresh token to get new tokens
+		refreshBody := map[string]interface{}{
+			"refreshToken": refreshToken,
+		}
+
+		refreshResp := tc.AssertStatusCode("POST", "/api/v1/auth/refresh", refreshBody, "", 200)
+
+		var refreshResult map[string]interface{}
+		err = json.Unmarshal(refreshResp, &refreshResult)
+		require.NoError(t, err)
+
+		assert.Contains(t, refreshResult, "accessToken", "Refresh response should contain new accessToken")
+		assert.Contains(t, refreshResult, "refreshToken", "Refresh response should contain new refreshToken")
+		assert.Equal(t, "Bearer", refreshResult["tokenType"])
 	})
 
 	t.Run("POST /api/v1/auth/change-password - Change password successfully", func(t *testing.T) {

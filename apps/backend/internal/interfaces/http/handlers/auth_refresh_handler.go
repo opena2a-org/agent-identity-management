@@ -60,14 +60,17 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		hasher.Write([]byte(req.RefreshToken))
 		tokenHash := hex.EncodeToString(hasher.Sum(nil))
 
-		// Check if token is tracked and not revoked
-		_, err := h.sdkTokenService.ValidateToken(c.Context(), tokenHash)
-		if err != nil {
-			// Token is revoked or invalid in database
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Token has been revoked or is invalid",
-			})
+		// Check if token is tracked in SDK tokens table
+		sdkToken, err := h.sdkTokenService.GetByTokenHash(c.Context(), tokenHash)
+		if err == nil && sdkToken != nil {
+			// Token is tracked in SDK table - verify it's still active
+			if !sdkToken.IsActive() {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Token has been revoked or is invalid",
+				})
+			}
 		}
+		// If token is NOT found in SDK table, it's a regular login token - allow refresh
 	}
 
 	// Validate refresh token and generate new tokens (with rotation)

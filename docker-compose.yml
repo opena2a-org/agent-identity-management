@@ -202,7 +202,7 @@ services:
       # For production: Generate your own with openssl rand -hex 32 (JWT) / openssl rand -base64 32 (KEYVAULT)
       # The backend will refuse to start in production mode with default secrets
       - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
-      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-dev-only-keyvault-key-do-not-use-in-prod==}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-XfnA4gOf872btnIv8pMyaTBu0bpi4AfbAFDfisQBUt0=}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}

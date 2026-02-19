@@ -293,14 +293,8 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		return nil, ErrRegistrationNotPending
 	}
 
-	// Extract email domain from the user's email
-	emailDomain := extractEmailDomain(req.Email)
-	
-	// Find or create organization based on email domain
-	targetOrgID, err := s.findOrCreateOrganization(ctx, emailDomain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find or create organization: %w", err)
-	}
+	// Use the approving admin's organization so the user joins the same org
+	targetOrgID := orgID
 
 	// Approve request
 	req.Approve(reviewerID)
@@ -342,12 +336,12 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	userRole := domain.RoleViewer // Default to viewer
 	if len(existingUsers) == 0 {
 		userRole = domain.RoleAdmin // First user becomes admin
-		fmt.Printf("✅ Making user %s admin (first user in organization %s)\n", req.Email, emailDomain)
+		fmt.Printf("Making user %s admin (first user in organization %s)\n", req.Email, targetOrgID)
 	}
 
 	user := &domain.User{
 		ID:             uuid.New(),
-		OrganizationID: targetOrgID, // Use the organization based on email domain
+		OrganizationID: targetOrgID, // Use the approving admin's organization
 		Email:          req.Email,
 		Name:           fullName,
 		Role:           userRole, // Admin if first user, otherwise viewer

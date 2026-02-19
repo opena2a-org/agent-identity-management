@@ -73,12 +73,35 @@ func TestAdminEndpoints(t *testing.T) {
 		assert.Equal(t, "admin", result["role"])
 	})
 
-	t.Run("DELETE /api/v1/admin/users/:id - Deactivate user", func(t *testing.T) {
-		// Skip: PermanentlyDeleteUser handler checks user.OrganizationID == admin.OrgID,
-		// but users created via CreateTestUser (register + admin approve) are not found
-		// in the admin's organization by GetUserByID. This is a backend org-association
-		// issue in the admin approval flow.
-		t.Skip("Skipping: admin delete returns 403 (user not found in organization after admin approval)")
+	t.Run("DELETE /api/v1/admin/users/:id - Deactivate and delete user", func(t *testing.T) {
+		// Create a test user (will be in admin's org)
+		email := fmt.Sprintf("delete-test-%d@example.com", time.Now().Unix())
+		_, err := tc.CreateTestUser(email, "TestPass123!")
+		require.NoError(t, err)
+
+		// Find the user ID from admin user list
+		usersResp := tc.AssertStatusCode("GET", "/api/v1/admin/users", nil, tc.AdminToken, 200)
+		var usersResult map[string]interface{}
+		require.NoError(t, json.Unmarshal(usersResp, &usersResult))
+
+		users := usersResult["users"].([]interface{})
+		var targetUserID string
+		for _, u := range users {
+			user := u.(map[string]interface{})
+			if user["email"] == email {
+				targetUserID = user["id"].(string)
+				break
+			}
+		}
+		require.NotEmpty(t, targetUserID, "Should find the created user in admin user list")
+
+		// Step 1: Deactivate the user (required before permanent deletion)
+		deactivatePath := fmt.Sprintf("/api/v1/admin/users/%s/deactivate", targetUserID)
+		tc.AssertStatusCode("POST", deactivatePath, nil, tc.AdminToken, 200)
+
+		// Step 2: Permanently delete the deactivated user
+		deletePath := fmt.Sprintf("/api/v1/admin/users/%s", targetUserID)
+		tc.AssertStatusCode("DELETE", deletePath, nil, tc.AdminToken, 200)
 	})
 
 	t.Run("GET /api/v1/admin/audit-logs - Get audit logs", func(t *testing.T) {

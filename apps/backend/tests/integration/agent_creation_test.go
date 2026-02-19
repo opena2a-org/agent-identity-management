@@ -509,9 +509,25 @@ func TestAgentTrustScore_GetAndUpdate(t *testing.T) {
 		assert.Contains(t, result, "agentId")
 	})
 
-	// UPDATE TRUST SCORE (manual override)
+	// UPDATE TRUST SCORE (manual override - requires admin role)
 	t.Run("UpdateTrustScore", func(t *testing.T) {
-		t.Skip("Skipping: PUT trust-score endpoint returns 500 (backend trust score update not fully implemented)")
+		// The PUT trust-score endpoint requires admin middleware
+		require.NoError(t, tc.LoginAsAdmin())
+		adminToken := tc.AdminToken
+
+		updateBody := map[string]interface{}{
+			"score":  0.85,
+			"reason": "Integration test trust score update",
+		}
+
+		respBody := tc.AssertStatusCode("PUT", fmt.Sprintf("/api/v1/agents/%s/trust-score", agentID), updateBody, adminToken, 200)
+
+		var result map[string]interface{}
+		err := json.Unmarshal(respBody, &result)
+		require.NoError(t, err)
+
+		assert.Equal(t, true, result["success"])
+		assert.Contains(t, result, "trustScore")
 	})
 
 	// GET TRUST SCORE HISTORY
