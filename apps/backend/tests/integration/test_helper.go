@@ -28,11 +28,16 @@ func GetTestConfig() *TestConfig {
 		baseURL = "http://localhost:8080"
 	}
 
+	adminPassword := os.Getenv("TEST_ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "AIM2025!Secure"
+	}
+
 	return &TestConfig{
-		BaseURL:      baseURL,
-		AdminEmail:   "admin@opena2a.org",
-		AdminPassword: "AIM2025!Secure",
-		TestTimeout:  30 * time.Second,
+		BaseURL:       baseURL,
+		AdminEmail:    "admin@opena2a.org",
+		AdminPassword: adminPassword,
+		TestTimeout:   30 * time.Second,
 	}
 }
 
@@ -110,33 +115,65 @@ func (tc *TestContext) LoginAsAdmin() error {
 	return nil
 }
 
-// CreateTestUser creates a test user and returns token
+// CreateTestUser registers a user, approves via admin API, and returns a login token.
+// Flow: register → admin approves registration → login as new user → return token.
 func (tc *TestContext) CreateTestUser(email, password string) (string, error) {
-	body := map[string]interface{}{
+	// Ensure admin is logged in (needed to approve registrations)
+	if tc.AdminToken == "" {
+		if err := tc.LoginAsAdmin(); err != nil {
+			return "", fmt.Errorf("failed to login as admin for approval: %w", err)
+		}
+	}
+
+	// Step 1: Register user via public endpoint
+	regBody := map[string]interface{}{
 		"email":     email,
 		"password":  password,
 		"firstName": "Test",
 		"lastName":  "User",
 	}
 
-	// Use public registration endpoint (doesn't require authentication)
-	resp, err := tc.Post("/api/v1/public/register", body, "")
-	if err != nil {
-		return "", fmt.Errorf("user registration failed: %w", err)
+	regResp, regRespBody := tc.Request("POST", "/api/v1/public/register", regBody, "")
+	if regResp.StatusCode != 201 {
+		return "", fmt.Errorf("registration failed with status %d: %s", regResp.StatusCode, string(regRespBody))
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(resp, &result); err != nil {
+	var regResult map[string]interface{}
+	if err := json.Unmarshal(regRespBody, &regResult); err != nil {
 		return "", fmt.Errorf("failed to parse registration response: %w", err)
 	}
 
-	// Note: Public registration requires admin approval, so it won't return a token immediately
-	// For tests, we should use admin token to create users directly or approve the registration
-	token, ok := result["accessToken"].(string)
+	// Step 2: Approve the registration request using admin token
+	requestID, ok := regResult["requestId"].(string)
 	if !ok {
-		// Registration pending approval - not an error in production flow
-		// For testing, we'll need to handle this differently
-		return "", fmt.Errorf("registration pending approval (expected for public registration)")
+		return "", fmt.Errorf("no requestId in registration response: %v", regResult)
+	}
+
+	approvePath := fmt.Sprintf("/api/v1/admin/registration-requests/%s/approve", requestID)
+	approveResp, approveRespBody := tc.Request("POST", approvePath, nil, tc.AdminToken)
+	if approveResp.StatusCode != 200 {
+		return "", fmt.Errorf("registration approval failed with status %d: %s", approveResp.StatusCode, string(approveRespBody))
+	}
+
+	// Step 3: Login as the new user to get their token
+	loginBody := map[string]interface{}{
+		"email":    email,
+		"password": password,
+	}
+
+	loginResp, loginRespBody := tc.Request("POST", "/api/v1/public/login", loginBody, "")
+	if loginResp.StatusCode != 200 {
+		return "", fmt.Errorf("user login after approval failed with status %d: %s", loginResp.StatusCode, string(loginRespBody))
+	}
+
+	var loginResult map[string]interface{}
+	if err := json.Unmarshal(loginRespBody, &loginResult); err != nil {
+		return "", fmt.Errorf("failed to parse login response: %w", err)
+	}
+
+	token, ok := loginResult["accessToken"].(string)
+	if !ok {
+		return "", fmt.Errorf("no access token in login response: %v", loginResult)
 	}
 
 	return token, nil

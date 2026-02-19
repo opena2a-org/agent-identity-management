@@ -27,11 +27,13 @@ func TestAgentEndpoints(t *testing.T) {
 	require.NoError(t, err)
 
 	var createdAgentID string
+	agentName := fmt.Sprintf("Test Agent %d", time.Now().UnixNano())
 
 	t.Run("POST /api/v1/agents - Create agent", func(t *testing.T) {
 		body := map[string]interface{}{
-			"name":        "Test Agent",
-			"type":        "ai_agent",
+			"name":        agentName,
+			"displayName": agentName,
+			"agentType":   "ai_agent",
 			"description": "Integration test agent",
 			"version":     "1.0.0",
 		}
@@ -43,8 +45,8 @@ func TestAgentEndpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Contains(t, result, "id")
-		assert.Equal(t, "Test Agent", result["name"])
-		assert.Equal(t, "ai_agent", result["type"])
+		assert.Equal(t, agentName, result["name"])
+		assert.Equal(t, "ai_agent", result["agentType"])
 
 		createdAgentID = result["id"].(string)
 	})
@@ -70,13 +72,15 @@ func TestAgentEndpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, createdAgentID, result["id"])
-		assert.Equal(t, "Test Agent", result["name"])
+		assert.Equal(t, agentName, result["name"])
 	})
 
 	t.Run("PUT /api/v1/agents/:id - Update agent", func(t *testing.T) {
+		// Note: agent name is immutable; update displayName and description instead
+		updatedDisplayName := fmt.Sprintf("Updated Agent %d", time.Now().UnixNano())
 		path := fmt.Sprintf("/api/v1/agents/%s", createdAgentID)
 		body := map[string]interface{}{
-			"name":        "Updated Test Agent",
+			"displayName": updatedDisplayName,
 			"description": "Updated description",
 		}
 
@@ -86,7 +90,7 @@ func TestAgentEndpoints(t *testing.T) {
 		err := json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "Updated Test Agent", result["name"])
+		assert.Equal(t, updatedDisplayName, result["displayName"])
 		assert.Equal(t, "Updated description", result["description"])
 	})
 
@@ -98,8 +102,7 @@ func TestAgentEndpoints(t *testing.T) {
 		err := json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Contains(t, result, "trustScore")
-		assert.Contains(t, result, "confidence")
+		assert.Contains(t, result, "score")
 		assert.Contains(t, result, "factors")
 	})
 
@@ -130,9 +133,10 @@ func TestAgentEndpoints(t *testing.T) {
 		assert.Contains(t, result, "activities")
 	})
 
-	t.Run("GET /api/v1/agents/search - Search agents", func(t *testing.T) {
-		path := "/api/v1/agents/search?query=Test"
-		respBody := tc.AssertStatusCode("GET", path, nil, userToken, 200)
+	t.Run("GET /api/v1/agents - List agents (no dedicated search route)", func(t *testing.T) {
+		// No /agents/search route; Fiber interprets "search" as :id param.
+		// Use list endpoint instead.
+		respBody := tc.AssertStatusCode("GET", "/api/v1/agents", nil, userToken, 200)
 
 		var result map[string]interface{}
 		err := json.Unmarshal(respBody, &result)
@@ -143,7 +147,7 @@ func TestAgentEndpoints(t *testing.T) {
 
 	t.Run("DELETE /api/v1/agents/:id - Delete agent", func(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/agents/%s", createdAgentID)
-		tc.AssertStatusCode("DELETE", path, nil, userToken, 200)
+		tc.AssertStatusCode("DELETE", path, nil, userToken, 204)
 
 		// Verify agent is deleted
 		tc.AssertStatusCode("GET", path, nil, userToken, 404)

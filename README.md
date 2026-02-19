@@ -21,6 +21,15 @@
 
 </div>
 
+### Recent Updates
+
+- **A2A Protocol Discovery** -- `/.well-known/agent.json` now served at the root path per the A2A specification
+- **Metrics Stability** -- Fixed Prometheus metric collection with HTTP method normalization for Fiber v3
+- **A2A Skill Registration** -- Fixed skill search vector function to handle NULL and non-array tags
+- **Rate Limiting** -- Development and test environments use relaxed rate limits (10x) to avoid interference with test suites
+- **Admin Authentication** -- Fixed default admin password hash alignment across migrations
+- **Integration Tests** -- Improved test helper with admin-approved user creation flow
+
 ---
 
 ## Quick Start

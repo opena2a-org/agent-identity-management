@@ -257,6 +257,10 @@ func main() {
 		})
 	})
 
+	// A2A Discovery endpoint at root (no auth required)
+	// Standard A2A protocol requires /.well-known/agent.json at the root
+	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
+
 	// ✅ Action verification for SDK (signature-based auth, NO API key required)
 	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
 	// These endpoints verify Ed25519 signatures instead of requiring API keys
@@ -741,7 +745,8 @@ type Handlers struct {
 	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
-	A2A                *handlers.A2AHandler                // ✅ For A2A (Agent-to-Agent) protocol
+	A2A                *handlers.A2AHandler                // For A2A (Agent-to-Agent) protocol
+	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -898,6 +903,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.Audit,
 		),
+		OAuthToken: handlers.NewOAuthTokenHandler(jwtService, repos.Agent),
 	}
 }
 
@@ -940,6 +946,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	public.Post("/forgot-password", h.PublicRegistration.ForgotPassword)                    // 🚀 Password reset request
 	public.Post("/reset-password", h.PublicRegistration.ResetPassword)                      // 🚀 Password reset with token
 	public.Post("/request-access", h.PublicRegistration.RequestAccess)                      // 🚀 Request platform access (no password required)
+
+	// OAuth 2.0 token endpoint (RFC 6749 / RFC 7523 jwt-bearer grant)
+	oauth := v1.Group("/oauth")
+	oauth.Use(middleware.StrictRateLimitMiddleware())
+	oauth.Post("/token", h.OAuthToken.HandleTokenRequest)
 
 	// Auth routes (no authentication required, strict rate limiting)
 	auth := v1.Group("/auth")
@@ -1295,10 +1306,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// A2A (Agent-to-Agent) Protocol Routes
 	// Google A2A protocol implementation with AIM security enhancements
 	// ============================================================================
-
-	// Public A2A discovery endpoint (no auth required)
-	// /.well-known/agent.json - Standard A2A agent card discovery
-	v1.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
 	// A2A signature verification (no auth - validates incoming A2A requests)
 	v1.Post("/a2a/verify", h.A2A.VerifyRequest)

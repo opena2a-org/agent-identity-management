@@ -592,8 +592,29 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 
 	// Perform verification with user context
 	if err := h.mcpService.VerifyMCPServer(c.Context(), serverID, userID, c.IP()); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+		// Verification failed (e.g. DNS resolution, unreachable server) -- return
+		// structured failure response instead of 500 so callers can inspect the result.
+		h.auditService.LogAction(
+			c.Context(),
+			orgID,
+			userID,
+			domain.AuditActionVerify,
+			"mcp_server",
+			server.ID,
+			c.IP(),
+			c.Get("User-Agent"),
+			map[string]interface{}{
+				"serverName": server.Name,
+				"status":     "unreachable",
+				"error":      err.Error(),
+			},
+		)
+
+		return c.JSON(fiber.Map{
+			"verified":  false,
+			"status":    "unreachable",
+			"message":   "Verification failed: server is unreachable",
+			"checkedAt": time.Now(),
 		})
 	}
 

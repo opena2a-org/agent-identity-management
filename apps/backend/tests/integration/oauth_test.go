@@ -2,188 +2,367 @@ package integration
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/url"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestOAuthTokenEndpointExists verifies OAuth token endpoint is available
+// oauthTestAgent holds an agent's ID and Ed25519 keypair for OAuth tests.
+type oauthTestAgent struct {
+	AgentID    string
+	PublicKey  ed25519.PublicKey
+	PrivateKey ed25519.PrivateKey
+}
+
+// createOAuthTestAgent creates an agent with a known Ed25519 public key
+// and returns the agent ID and keypair for signing JWT assertions.
+func createOAuthTestAgent(t *testing.T, tc *TestContext) *oauthTestAgent {
+	t.Helper()
+
+	// Generate Ed25519 keypair
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	pubKeyB64 := base64.StdEncoding.EncodeToString(pub)
+
+	// Create agent with the public key
+	agentName := fmt.Sprintf("oauth-test-agent-%d", time.Now().UnixNano())
+	agentBody := map[string]interface{}{
+		"name":        agentName,
+		"displayName": agentName,
+		"agentType":   "claude",
+		"publicKey":   pubKeyB64,
+	}
+
+	respBody := tc.AssertStatusCode("POST", "/api/v1/agents", agentBody, tc.AdminToken, 201)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+
+	agentID, ok := result["id"].(string)
+	require.True(t, ok, "agent creation should return an id")
+
+	return &oauthTestAgent{
+		AgentID:    agentID,
+		PublicKey:  pub,
+		PrivateKey: priv,
+	}
+}
+
+// buildSignedJWTAssertion creates a properly Ed25519-signed JWT for OAuth testing.
+// Format: base64url(header).base64url(payload).base64url(signature)
+func buildSignedJWTAssertion(sub string, privateKey ed25519.PrivateKey) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]interface{}{"sub": sub, "iss": sub, "aud": "aim"})
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+
+	signedContent := header + "." + payloadB64
+	signature := ed25519.Sign(privateKey, []byte(signedContent))
+	sigB64 := base64.RawURLEncoding.EncodeToString(signature)
+
+	return signedContent + "." + sigB64
+}
+
+// buildFakeJWTAssertion creates a JWT-like string with a fake signature for error path testing.
+func buildFakeJWTAssertion(sub string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]interface{}{"sub": sub, "iss": sub, "aud": "aim"})
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+	sig := base64.RawURLEncoding.EncodeToString([]byte("fake-signature-for-testing"))
+	return header + "." + payloadB64 + "." + sig
+}
+
 func TestOAuthTokenEndpointExists(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	// Empty request should fail with validation error, not 404
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", nil)
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
+
+	agent := createOAuthTestAgent(t, tc)
+
+	body := map[string]interface{}{
+		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_id":        agent.AgentID,
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+	}
+
+	jsonBody, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "OAuth token endpoint should exist")
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+
+	assert.Equal(t, 200, resp.StatusCode, "OAuth token endpoint should exist and return 200: %s", string(respBody))
+	assert.Contains(t, result, "access_token")
+	assert.Equal(t, "Bearer", result["token_type"])
 }
 
-// TestOAuthTokenWithInvalidGrantType tests token request with invalid grant type
 func TestOAuthTokenWithInvalidGrantType(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "invalid_grant")
-	data.Set("client_id", "test-client")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	body := map[string]interface{}{
+		"grant_type": "invalid_grant",
+		"client_id":  "test-agent",
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 400 Bad Request for invalid grant type
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized,
-		"Should return 400 or 401 for invalid grant type, got %d", resp.StatusCode)
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "unsupported_grant_type", result["error"])
 }
 
-// TestOAuthTokenWithMissingClientId tests token request without client_id
 func TestOAuthTokenWithMissingClientId(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	body := map[string]interface{}{
+		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_assertion": buildFakeJWTAssertion("some-client"),
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 400 or 401 for missing client_id
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized,
-		"Should return 400 or 401 for missing client_id, got %d", resp.StatusCode)
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "invalid_request", result["error"])
 }
 
-// TestOAuthTokenWithInvalidClientAssertion tests token request with invalid client assertion
 func TestOAuthTokenWithInvalidClientAssertion(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", "nonexistent-agent-id")
-	data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-	data.Set("client_assertion", "invalid.jwt.token")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	// Assertion sub doesn't match client_id
+	body := map[string]interface{}{
+		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_id":        "actual-client-id",
+		"client_assertion": buildFakeJWTAssertion("different-client-id"),
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 401 for invalid client assertion
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Should return 401 for invalid client assertion")
+	assert.Equal(t, 401, resp.StatusCode)
 
-	var errorResp map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&errorResp)
-	require.NoError(t, err, "Response should be valid JSON")
-
-	// OAuth error response should have "error" field
-	_, hasError := errorResp["error"]
-	assert.True(t, hasError, "Response should contain 'error' field")
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "invalid_client", result["error"])
 }
 
-// TestOAuthTokenWithMalformedAssertion tests token request with malformed JWT
 func TestOAuthTokenWithMalformedAssertion(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", "test-agent-id")
-	data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-	data.Set("client_assertion", "not-a-jwt")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	body := map[string]interface{}{
+		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_id":        "test-client",
+		"client_assertion": "not-a-valid-jwt",
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 400 or 401 for malformed assertion
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized,
-		"Should return 400 or 401 for malformed assertion, got %d", resp.StatusCode)
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "invalid_request", result["error"])
 }
 
-// TestOAuthTokenWithUnsupportedAssertionType tests unsupported assertion type
 func TestOAuthTokenWithUnsupportedAssertionType(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", "test-agent-id")
-	data.Set("client_assertion_type", "unsupported-type")
-	data.Set("client_assertion", "some-assertion")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	agent := createOAuthTestAgent(t, tc)
+
+	body := map[string]interface{}{
+		"grant_type":            "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_id":             agent.AgentID,
+		"client_assertion":      buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+		"client_assertion_type": "urn:unsupported:assertion-type",
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 400 for unsupported assertion type
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized,
-		"Should return 400 or 401 for unsupported assertion type, got %d", resp.StatusCode)
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "invalid_request", result["error"])
 }
 
-// TestOAuthTokenContentType tests that endpoint accepts correct content type
 func TestOAuthTokenContentType(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
-
-	// Test with JSON content type (should be rejected or handled)
-	jsonBody := map[string]string{
-		"grant_type": "client_credentials",
-		"client_id":  "test-client",
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
 	}
-	jsonData, _ := json.Marshal(jsonBody)
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/json", bytes.NewBuffer(jsonData))
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
+
+	// Send request without Content-Type header
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader([]byte("{}")))
+	// Deliberately NOT setting Content-Type
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// OAuth spec requires application/x-www-form-urlencoded
-	// Server might accept JSON but form-urlencoded is standard
-	assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "Endpoint should exist")
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Equal(t, "invalid_request", result["error"])
 }
 
-// TestOAuthTokenEmptyBody tests endpoint with empty body
 func TestOAuthTokenEmptyBody(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(""))
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
+
+	// Send empty body
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader([]byte("")))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Should return 400 for empty request
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized,
-		"Should return 400 or 401 for empty body, got %d", resp.StatusCode)
+	assert.Equal(t, 400, resp.StatusCode)
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+	assert.Contains(t, result, "error")
 }
 
-// TestOAuthTokenResponseFormat verifies error response follows OAuth spec
 func TestOAuthTokenResponseFormat(t *testing.T) {
 	ensureAIMBackendRunning(t)
-	baseURL := getBaseURL()
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
 
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", "invalid-client")
-	data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-	data.Set("client_assertion", "invalid.jwt.assertion")
+	tc := NewTestContext(t)
+	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	resp, err := http.Post(baseURL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	agent := createOAuthTestAgent(t, tc)
+
+	body := map[string]interface{}{
+		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"client_id":        agent.AgentID,
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", tc.Config.BaseURL+"/api/v1/oauth/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tc.Client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		var errorResp map[string]interface{}
-		err = json.NewDecoder(resp.Body).Decode(&errorResp)
-		require.NoError(t, err, "Error response should be valid JSON")
+	assert.Equal(t, 200, resp.StatusCode)
 
-		// OAuth 2.0 error responses should have these fields
-		_, hasError := errorResp["error"]
-		assert.True(t, hasError, "OAuth error response should contain 'error' field")
-	}
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+
+	// Verify RFC 6749 token response format
+	assert.Contains(t, result, "access_token", "Response must contain access_token")
+	assert.Contains(t, result, "token_type", "Response must contain token_type")
+	assert.Contains(t, result, "expires_in", "Response must contain expires_in")
+	assert.Equal(t, "Bearer", result["token_type"])
+	assert.Greater(t, result["expires_in"].(float64), float64(0))
 }
