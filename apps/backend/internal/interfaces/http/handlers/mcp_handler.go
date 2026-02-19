@@ -613,7 +613,7 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"verified":  false,
 			"status":    "unreachable",
-			"message":   fmt.Sprintf("Verification failed: %s", err.Error()),
+			"message":   "Verification failed: server is unreachable",
 			"checkedAt": time.Now(),
 		})
 	}

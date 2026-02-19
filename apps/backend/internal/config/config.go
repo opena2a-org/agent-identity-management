@@ -13,6 +13,7 @@ import (
 var insecureDevSecrets = []string{
 	"dev-only-jwt-secret-do-not-use-in-production-abc123",
 	"dev-only-keyvault-key-do-not-use-in-prod==",
+	"XfnA4gOf872btnIv8pMyaTBu0bpi4AfbAFDfisQBUt0=",      // docker-compose.yml default
 	"pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=",      // Legacy default
 	"YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=",      // Legacy default
 	"aim-super-secret-jwt-key-2025-development",          // Local .env default

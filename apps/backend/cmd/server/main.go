@@ -903,7 +903,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			services.Audit,
 		),
-		OAuthToken: handlers.NewOAuthTokenHandler(jwtService),
+		OAuthToken: handlers.NewOAuthTokenHandler(jwtService, repos.Agent),
 	}
 }
 

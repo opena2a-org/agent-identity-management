@@ -1,14 +1,18 @@
 package middleware
 
 import (
+	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/google/uuid"
 )
+
+var rateLimitWarningOnce sync.Once
 
 // getClientIP extracts the real client IP, respecting trusted proxy headers
 // SECURITY: Only trust X-Forwarded-For and X-Real-IP headers when behind a trusted proxy
@@ -56,6 +60,10 @@ func getClientIP(c fiber.Ctx) string {
 // Development mode uses higher limits to avoid interfering with integration tests.
 func rateLimitMax(defaultMax int) int {
 	if env := os.Getenv("ENVIRONMENT"); env == "development" || env == "test" {
+		rateLimitWarningOnce.Do(func() {
+			log.Printf("[WARN] Rate limits are 10x higher because ENVIRONMENT=%s. "+
+				"Ensure ENVIRONMENT is set to 'production' in production deployments.", env)
+		})
 		return defaultMax * 10
 	}
 	return defaultMax

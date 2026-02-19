@@ -1,23 +1,28 @@
 package handlers
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // OAuthTokenHandler handles the OAuth 2.0 token endpoint (RFC 6749)
 type OAuthTokenHandler struct {
 	jwtService *auth.JWTService
+	agentRepo  domain.AgentRepository
 }
 
 // NewOAuthTokenHandler creates a new OAuth token handler
-func NewOAuthTokenHandler(jwtService *auth.JWTService) *OAuthTokenHandler {
+func NewOAuthTokenHandler(jwtService *auth.JWTService, agentRepo domain.AgentRepository) *OAuthTokenHandler {
 	return &OAuthTokenHandler{
 		jwtService: jwtService,
+		agentRepo:  agentRepo,
 	}
 }
 
@@ -133,9 +138,65 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
-	// Generate an access token for the service client
-	// Uses clientID as the user identifier for machine-to-machine tokens
-	accessToken, err := h.jwtService.GenerateAccessToken(clientID, clientID, clientID, "service")
+	// SECURITY: Verify the JWT signature against the agent's registered public key.
+	// The client_id must be a registered agent UUID with an Ed25519 public key.
+	agentID, err := uuid.Parse(clientID)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": "client_id must be a valid agent UUID",
+		})
+	}
+
+	agent, err := h.agentRepo.GetByID(agentID)
+	if err != nil || agent == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": "Agent not found",
+		})
+	}
+
+	if agent.PublicKey == nil || *agent.PublicKey == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": "Agent has no registered public key",
+		})
+	}
+
+	// Verify Ed25519 signature: sign(header.payload) must match the signature part
+	signedContent := parts[0] + "." + parts[1]
+	signatureBytes, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_request",
+			"error_description": "Malformed client_assertion: invalid signature encoding",
+		})
+	}
+
+	publicKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Failed to decode agent public key",
+		})
+	}
+
+	if len(publicKeyBytes) != ed25519.PublicKeySize {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Agent public key has invalid size",
+		})
+	}
+
+	if !ed25519.Verify(ed25519.PublicKey(publicKeyBytes), []byte(signedContent), signatureBytes) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": "JWT signature verification failed",
+		})
+	}
+
+	// Generate an access token for the authenticated agent
+	accessToken, err := h.jwtService.GenerateAccessToken(clientID, agent.OrganizationID.String(), clientID, "service")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "server_error",

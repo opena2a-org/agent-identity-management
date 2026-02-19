@@ -69,8 +69,20 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					"error": "Token has been revoked or is invalid",
 				})
 			}
+		} else {
+			// Token NOT found in SDK table - check if it was issued as an SDK token.
+			// SDK tokens have issuer "agent-identity-management-sdk". If a token claims
+			// to be an SDK token but has no database record, it was deleted/purged and
+			// should be rejected to prevent deleted SDK tokens from being refreshed.
+			claims, validateErr := h.jwtService.ValidateToken(req.RefreshToken)
+			if validateErr == nil && claims != nil && claims.Issuer == "agent-identity-management-sdk" {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Token has been revoked or is invalid",
+				})
+			}
+			// Regular login tokens (issuer "agent-identity-management") are not tracked
+			// in the SDK table and are allowed to refresh normally.
 		}
-		// If token is NOT found in SDK table, it's a regular login token - allow refresh
 	}
 
 	// Validate refresh token and generate new tokens (with rotation)

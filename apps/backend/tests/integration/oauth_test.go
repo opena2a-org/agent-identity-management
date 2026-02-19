@@ -2,23 +2,82 @@ package integration
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// buildJWTAssertion creates a minimal JWT-like string for testing.
+// oauthTestAgent holds an agent's ID and Ed25519 keypair for OAuth tests.
+type oauthTestAgent struct {
+	AgentID    string
+	PublicKey  ed25519.PublicKey
+	PrivateKey ed25519.PrivateKey
+}
+
+// createOAuthTestAgent creates an agent with a known Ed25519 public key
+// and returns the agent ID and keypair for signing JWT assertions.
+func createOAuthTestAgent(t *testing.T, tc *TestContext) *oauthTestAgent {
+	t.Helper()
+
+	// Generate Ed25519 keypair
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	pubKeyB64 := base64.StdEncoding.EncodeToString(pub)
+
+	// Create agent with the public key
+	agentName := fmt.Sprintf("oauth-test-agent-%d", time.Now().UnixNano())
+	agentBody := map[string]interface{}{
+		"name":        agentName,
+		"displayName": agentName,
+		"agentType":   "claude",
+		"publicKey":   pubKeyB64,
+	}
+
+	respBody := tc.AssertStatusCode("POST", "/api/v1/agents", agentBody, tc.AdminToken, 201)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(respBody, &result))
+
+	agentID, ok := result["id"].(string)
+	require.True(t, ok, "agent creation should return an id")
+
+	return &oauthTestAgent{
+		AgentID:    agentID,
+		PublicKey:  pub,
+		PrivateKey: priv,
+	}
+}
+
+// buildSignedJWTAssertion creates a properly Ed25519-signed JWT for OAuth testing.
 // Format: base64url(header).base64url(payload).base64url(signature)
-func buildJWTAssertion(sub string) string {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+func buildSignedJWTAssertion(sub string, privateKey ed25519.PrivateKey) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
 	payload, _ := json.Marshal(map[string]interface{}{"sub": sub, "iss": sub, "aud": "aim"})
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
-	sig := base64.RawURLEncoding.EncodeToString([]byte("test-signature"))
+
+	signedContent := header + "." + payloadB64
+	signature := ed25519.Sign(privateKey, []byte(signedContent))
+	sigB64 := base64.RawURLEncoding.EncodeToString(signature)
+
+	return signedContent + "." + sigB64
+}
+
+// buildFakeJWTAssertion creates a JWT-like string with a fake signature for error path testing.
+func buildFakeJWTAssertion(sub string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]interface{}{"sub": sub, "iss": sub, "aud": "aim"})
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+	sig := base64.RawURLEncoding.EncodeToString([]byte("fake-signature-for-testing"))
 	return header + "." + payloadB64 + "." + sig
 }
 
@@ -30,12 +89,14 @@ func TestOAuthTokenEndpointExists(t *testing.T) {
 
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	clientID := "test-agent-id"
+	agent := createOAuthTestAgent(t, tc)
+
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
-		"client_id":        clientID,
-		"client_assertion": buildJWTAssertion(clientID),
+		"client_id":        agent.AgentID,
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -99,7 +160,7 @@ func TestOAuthTokenWithMissingClientId(t *testing.T) {
 
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
-		"client_assertion": buildJWTAssertion("some-client"),
+		"client_assertion": buildFakeJWTAssertion("some-client"),
 	}
 
 	jsonBody, _ := json.Marshal(body)
@@ -131,7 +192,7 @@ func TestOAuthTokenWithInvalidClientAssertion(t *testing.T) {
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
 		"client_id":        "actual-client-id",
-		"client_assertion": buildJWTAssertion("different-client-id"),
+		"client_assertion": buildFakeJWTAssertion("different-client-id"),
 	}
 
 	jsonBody, _ := json.Marshal(body)
@@ -189,12 +250,14 @@ func TestOAuthTokenWithUnsupportedAssertionType(t *testing.T) {
 
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	clientID := "test-client"
+	agent := createOAuthTestAgent(t, tc)
+
 	body := map[string]interface{}{
 		"grant_type":            "urn:ietf:params:oauth:grant-type:jwt-bearer",
-		"client_id":             clientID,
-		"client_assertion":      buildJWTAssertion(clientID),
+		"client_id":             agent.AgentID,
+		"client_assertion":      buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
 		"client_assertion_type": "urn:unsupported:assertion-type",
 	}
 
@@ -272,12 +335,14 @@ func TestOAuthTokenResponseFormat(t *testing.T) {
 
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
+	require.NoError(t, tc.LoginAsAdmin())
 
-	clientID := "response-format-test-agent"
+	agent := createOAuthTestAgent(t, tc)
+
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
-		"client_id":        clientID,
-		"client_assertion": buildJWTAssertion(clientID),
+		"client_id":        agent.AgentID,
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
 	}
 
 	jsonBody, _ := json.Marshal(body)

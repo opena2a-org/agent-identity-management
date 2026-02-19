@@ -756,7 +756,7 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 	require.NoError(t, tc.LoginAsAdmin())
 	userToken := tc.AdminToken
 
-	// Create an MCP server as admin
+	// Create an MCP server as admin (admin is in the default opena2a.org org)
 	uniqueURL := fmt.Sprintf("https://mcp-crossorg-%d.example.com", time.Now().UnixNano())
 	mcpBody := map[string]interface{}{
 		"name": "Cross-Org Test Server",
@@ -768,14 +768,48 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mcpResp, &mcpResult))
 	mcpServerID := mcpResult["id"].(string)
 
-	// Verify that unauthenticated access is denied (authorization boundary test)
-	// This validates the auth middleware protects MCP resources
-	tc.AssertStatusCode("GET", fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID), nil, "", 401)
-	tc.AssertStatusCode("PUT", fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID), nil, "", 401)
-	tc.AssertStatusCode("DELETE", fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID), nil, "", 401)
+	// Create a user in a DIFFERENT organization by using a unique email domain.
+	// The first user from a new domain auto-approves and creates a separate org.
+	crossOrgDomain := fmt.Sprintf("crossorg-%d.test", time.Now().UnixNano())
+	crossOrgEmail := fmt.Sprintf("user@%s", crossOrgDomain)
+	crossOrgPassword := "CrossOrgPass123!"
+
+	// Register directly via public endpoint (auto-approves as first user from domain)
+	regBody := map[string]interface{}{
+		"email":     crossOrgEmail,
+		"password":  crossOrgPassword,
+		"firstName": "Cross",
+		"lastName":  "OrgUser",
+	}
+	regResp, regRespBody := tc.Request("POST", "/api/v1/public/register", regBody, "")
+	require.Equal(t, 201, regResp.StatusCode, "Registration should succeed: %s", string(regRespBody))
+
+	// Login as the cross-org user
+	loginBody := map[string]interface{}{
+		"email":    crossOrgEmail,
+		"password": crossOrgPassword,
+	}
+	loginResp, loginRespBody := tc.Request("POST", "/api/v1/public/login", loginBody, "")
+	require.Equal(t, 200, loginResp.StatusCode, "Login should succeed: %s", string(loginRespBody))
+
+	var loginResult map[string]interface{}
+	require.NoError(t, json.Unmarshal(loginRespBody, &loginResult))
+	crossOrgToken := loginResult["accessToken"].(string)
+	require.NotEmpty(t, crossOrgToken)
+
+	// Cross-org user should NOT be able to access admin's MCP server (expect 403 or 404)
+	getPath := fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID)
+	getResp, _ := tc.Request("GET", getPath, nil, crossOrgToken)
+	assert.True(t, getResp.StatusCode == 403 || getResp.StatusCode == 404,
+		"Cross-org access should be denied with 403 or 404, got %d", getResp.StatusCode)
+
+	// Verify that unauthenticated access is also denied
+	tc.AssertStatusCode("GET", getPath, nil, "", 401)
+	tc.AssertStatusCode("PUT", getPath, nil, "", 401)
+	tc.AssertStatusCode("DELETE", getPath, nil, "", 401)
 
 	// Verify that an invalid token is rejected
-	tc.AssertStatusCode("GET", fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID), nil, "invalid.token.here", 401)
+	tc.AssertStatusCode("GET", getPath, nil, "invalid.token.here", 401)
 
 	// Cleanup
 	tc.AssertStatusCode("DELETE", fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID), nil, userToken, 204)
