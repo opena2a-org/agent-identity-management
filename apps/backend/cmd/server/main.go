@@ -257,6 +257,10 @@ func main() {
 		})
 	})
 
+	// A2A Discovery endpoint at root (no auth required)
+	// Standard A2A protocol requires /.well-known/agent.json at the root
+	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
+
 	// ✅ Action verification for SDK (signature-based auth, NO API key required)
 	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
 	// These endpoints verify Ed25519 signatures instead of requiring API keys
@@ -1295,10 +1299,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// A2A (Agent-to-Agent) Protocol Routes
 	// Google A2A protocol implementation with AIM security enhancements
 	// ============================================================================
-
-	// Public A2A discovery endpoint (no auth required)
-	// /.well-known/agent.json - Standard A2A agent card discovery
-	v1.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
 	// A2A signature verification (no auth - validates incoming A2A requests)
 	v1.Post("/a2a/verify", h.A2A.VerifyRequest)

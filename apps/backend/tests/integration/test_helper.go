@@ -28,11 +28,16 @@ func GetTestConfig() *TestConfig {
 		baseURL = "http://localhost:8080"
 	}
 
+	adminPassword := os.Getenv("TEST_ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "AIM2025!Secure"
+	}
+
 	return &TestConfig{
-		BaseURL:      baseURL,
-		AdminEmail:   "admin@opena2a.org",
-		AdminPassword: "AIM2025!Secure",
-		TestTimeout:  30 * time.Second,
+		BaseURL:       baseURL,
+		AdminEmail:    "admin@opena2a.org",
+		AdminPassword: adminPassword,
+		TestTimeout:   30 * time.Second,
 	}
 }
 

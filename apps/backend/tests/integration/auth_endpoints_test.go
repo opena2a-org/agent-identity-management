@@ -63,8 +63,8 @@ func TestAuthEndpoints(t *testing.T) {
 	t.Run("POST /api/v1/public/login - Login with admin credentials", func(t *testing.T) {
 		// Test login with admin account (already exists)
 		loginBody := map[string]interface{}{
-			"email":    "admin@opena2a.org",
-			"password": "Admin123!@#",
+			"email":    tc.Config.AdminEmail,
+			"password": tc.Config.AdminPassword,
 		}
 
 		respBody := tc.AssertStatusCode("POST", "/api/v1/public/login", loginBody, "", 200)

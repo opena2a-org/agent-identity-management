@@ -52,12 +52,21 @@ func getClientIP(c fiber.Ctx) string {
 	return directIP
 }
 
+// rateLimitMax returns the max requests per minute based on environment.
+// Development mode uses higher limits to avoid interfering with integration tests.
+func rateLimitMax(defaultMax int) int {
+	if env := os.Getenv("ENVIRONMENT"); env == "development" || env == "test" {
+		return defaultMax * 10
+	}
+	return defaultMax
+}
+
 // RateLimitMiddleware implements rate limiting
 // SECURITY: Uses authenticated user ID when available, falls back to real client IP
 func RateLimitMiddleware() fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:        100,             // 100 requests
-		Expiration: 1 * time.Minute, // per minute
+		Max:        rateLimitMax(100), // 100 req/min (1000 in dev/test)
+		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string {
 			// Rate limit by user if authenticated, otherwise by IP
 			if userID := c.Locals("user_id"); userID != nil {
@@ -80,8 +89,8 @@ func RateLimitMiddleware() fiber.Handler {
 // SECURITY: Used for login, registration, password reset, and other sensitive operations
 func StrictRateLimitMiddleware() fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:        10,              // 10 requests
-		Expiration: 1 * time.Minute, // per minute
+		Max:        rateLimitMax(10), // 10 req/min (100 in dev/test)
+		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string {
 			if userID := c.Locals("user_id"); userID != nil {
 				if id, ok := userID.(uuid.UUID); ok {
