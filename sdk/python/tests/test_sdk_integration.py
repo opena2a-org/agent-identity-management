@@ -19,6 +19,8 @@ import json
 import time
 from datetime import datetime
 
+import pytest
+
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'aim_sdk'))
 
@@ -29,15 +31,12 @@ from aim_sdk import secure, track_mcp_call, MCPDetector, auto_detect_protocol
 AIM_URL = os.getenv("AIM_URL", "http://localhost:8080")
 AGENT_NAME = f"sdk-test-agent-{int(time.time())}"
 
-print("=" * 80)
-print("🧪 AIM SDK Comprehensive Integration Test")
-print("=" * 80)
-print(f"⏰ Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print(f"🌐 AIM URL: {AIM_URL}")
-print(f"🤖 Agent Name: {AGENT_NAME}")
-print()
+# Module-level state shared between sequential integration tests
+_agent = None
+_detections = None
 
 
+@pytest.mark.integration
 def test_1_protocol_detection():
     """Test 1: Protocol Auto-Detection"""
     print("\n" + "=" * 80)
@@ -68,9 +67,10 @@ def test_1_protocol_detection():
     print(f"✅ Default protocol (no indicators): {protocol}")
     assert protocol == "mcp", f"Expected default 'mcp', got '{protocol}'"
 
-    print("✅ TEST 1 PASSED: Protocol detection working correctly")
+    print("TEST 1 PASSED: Protocol detection working correctly")
 
 
+@pytest.mark.integration
 def test_2_agent_registration():
     """Test 2: Agent Registration with secure()"""
     print("\n" + "=" * 80)
@@ -99,7 +99,10 @@ def test_2_agent_registration():
         print(f"   - Type: {details.get('agent_type')}")
         print(f"   - Status: {details.get('status')}")
 
-        print("✅ TEST 2 PASSED: Agent registration successful")
+        global _agent
+        _agent = agent
+
+        print("TEST 2 PASSED: Agent registration successful")
         return agent
 
     except Exception as e:
@@ -109,12 +112,14 @@ def test_2_agent_registration():
         return None
 
 
-def test_3_action_verification(agent):
+@pytest.mark.integration
+def test_3_action_verification():
     """Test 3: Action Verification with Protocol"""
     print("\n" + "=" * 80)
-    print("🧪 TEST 3: Action Verification")
+    print("TEST 3: Action Verification")
     print("=" * 80)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (no agent available)")
         return
@@ -150,12 +155,14 @@ def test_3_action_verification(agent):
         traceback.print_exc()
 
 
-def test_4_mcp_auto_discovery(agent):
+@pytest.mark.integration
+def test_4_mcp_auto_discovery():
     """Test 4: MCP Server Auto-Discovery"""
     print("\n" + "=" * 80)
-    print("🧪 TEST 4: MCP Server Auto-Discovery")
+    print("TEST 4: MCP Server Auto-Discovery")
     print("=" * 80)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (no agent available)")
         return
@@ -186,7 +193,10 @@ def test_4_mcp_auto_discovery(agent):
             if detection["detectionMethod"] == "sdk_runtime":
                 print(f"   - {detection['mcpServer']}: {detection['details']['call_count']} calls")
 
-        print("✅ TEST 4 PASSED: MCP auto-discovery tracking works")
+        global _detections
+        _detections = detections
+
+        print("TEST 4 PASSED: MCP auto-discovery tracking works")
         return detections
 
     except Exception as e:
@@ -196,12 +206,15 @@ def test_4_mcp_auto_discovery(agent):
         return []
 
 
-def test_5_detection_reporting(agent, detections):
+@pytest.mark.integration
+def test_5_detection_reporting():
     """Test 5: Report Detections to AIM"""
     print("\n" + "=" * 80)
-    print("🧪 TEST 5: Detection Reporting")
+    print("TEST 5: Detection Reporting")
     print("=" * 80)
 
+    agent = _agent
+    detections = _detections
     if not agent or not detections:
         print("⏭️  Skipping (no agent or detections available)")
         return
@@ -226,12 +239,14 @@ def test_5_detection_reporting(agent, detections):
         traceback.print_exc()
 
 
-def test_6_capability_detection(agent):
+@pytest.mark.integration
+def test_6_capability_detection():
     """Test 6: Capability Auto-Detection"""
     print("\n" + "=" * 80)
-    print("🧪 TEST 6: Capability Auto-Detection")
+    print("TEST 6: Capability Auto-Detection")
     print("=" * 80)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (no agent available)")
         return
@@ -260,12 +275,14 @@ def test_6_capability_detection(agent):
         traceback.print_exc()
 
 
-def test_7_trust_score_retrieval(agent):
+@pytest.mark.integration
+def test_7_trust_score_retrieval():
     """Test 7: Trust Score Retrieval"""
     print("\n" + "=" * 80)
-    print("🧪 TEST 7: Trust Score Retrieval")
+    print("TEST 7: Trust Score Retrieval")
     print("=" * 80)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (no agent available)")
         return
@@ -292,14 +309,14 @@ def run_all_tests():
     detections = []
 
     try:
-        # Run tests sequentially
+        # Run tests sequentially (functions store state in module globals)
         test_1_protocol_detection()
         agent = test_2_agent_registration()
-        test_3_action_verification(agent)
-        detections = test_4_mcp_auto_discovery(agent)
-        test_5_detection_reporting(agent, detections)
-        test_6_capability_detection(agent)
-        test_7_trust_score_retrieval(agent)
+        test_3_action_verification()
+        detections = test_4_mcp_auto_discovery()
+        test_5_detection_reporting()
+        test_6_capability_detection()
+        test_7_trust_score_retrieval()
 
         print("\n" + "=" * 80)
         print("📊 TEST SUMMARY")

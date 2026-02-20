@@ -8,6 +8,8 @@ import sys
 import os
 import json
 
+import pytest
+
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "sdk/python"))
 
@@ -16,6 +18,11 @@ from aim_sdk.integrations.mcp.registration import register_mcp_server
 
 AIM_URL = "http://localhost:8080"
 
+# Module-level state shared between sequential integration tests
+_agent = None
+
+
+@pytest.mark.integration
 def test_1_agent_registration():
     """Test 1: Register an agent"""
     print("\n" + "="*70)
@@ -38,6 +45,9 @@ def test_1_agent_registration():
         print(f"   Name: {agent_name}")
         print(f"   Public Key: {agent.public_key[:20]}...")
 
+        global _agent
+        _agent = agent
+
         return agent
 
     except Exception as e:
@@ -47,12 +57,14 @@ def test_1_agent_registration():
         return None
 
 
-def test_2_mcp_registration(agent):
+@pytest.mark.integration
+def test_2_mcp_registration():
     """Test 2: Register MCP servers"""
     print("\n" + "="*70)
     print("TEST 2: MCP SERVER REGISTRATION")
     print("="*70)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (agent registration failed)")
         return None
@@ -120,12 +132,14 @@ def test_2_mcp_registration(agent):
         return None
 
 
-def test_3_verification_requests(agent):
+@pytest.mark.integration
+def test_3_verification_requests():
     """Test 3: Send verification requests"""
     print("\n" + "="*70)
     print("TEST 3: VERIFICATION REQUESTS")
     print("="*70)
 
+    agent = _agent
     if not agent:
         print("⏭️  Skipping (agent registration failed)")
         return
