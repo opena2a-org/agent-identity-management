@@ -108,7 +108,7 @@ class TestSecureAlias:
 
                 # Verify MCPs were passed
                 call_args = mock_oauth.call_args
-                assert call_args.kwargs['talks_to'] == manual_mcps
+                assert call_args.kwargs['mcp_server_names'] == manual_mcps
 
     def test_secure_auto_detect_capabilities(self):
         """Test secure() with auto-detection of capabilities"""
@@ -151,12 +151,12 @@ class TestSecureAlias:
                     with patch('aim_sdk.client._register_via_oauth') as mock_oauth:
                         mock_oauth.return_value = MagicMock()
 
-                        agent = secure("test-agent", auto_detect=True)
+                        agent = secure("test-agent", auto_detect=True, auto_detect_mcp=True)
 
                         # Verify MCP servers were detected
                         call_args = mock_oauth.call_args
-                        talks_to = call_args.kwargs['talks_to']
-                        assert talks_to == ["filesystem-mcp", "github-mcp"]
+                        mcp_server_names = call_args.kwargs['mcp_server_names']
+                        assert mcp_server_names == ["filesystem-mcp", "github-mcp"]
 
     def test_secure_existing_credentials(self):
         """Test secure() loading existing credentials"""
@@ -179,6 +179,7 @@ class TestSecureAlias:
                     public_key=existing_creds["public_key"],
                     private_key=existing_creds["private_key"],
                     aim_url=existing_creds["aim_url"],
+                    api_key=None,
                     oauth_token_manager=None
                 )
 

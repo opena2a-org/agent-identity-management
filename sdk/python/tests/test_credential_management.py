@@ -11,6 +11,8 @@ import sys
 import json
 from pathlib import Path
 
+import pytest
+
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))
 
@@ -30,6 +32,7 @@ def cleanup_test_credentials(agent_name: str):
             creds_path.unlink()
             print(f"✅ Cleaned up credentials for '{agent_name}'")
 
+@pytest.mark.integration
 def test_from_credentials_nonexistent():
     """Test 1: from_credentials() with non-existent agent should raise FileNotFoundError"""
     print("\n=== Test 1: from_credentials() with non-existent agent ===")
@@ -45,6 +48,7 @@ def test_from_credentials_nonexistent():
         print(f"   Error message: {str(e)[:100]}...")
         return True
 
+@pytest.mark.integration
 def test_auto_register_or_load_first_run():
     """Test 2: auto_register_or_load() on first run should register"""
     print("\n=== Test 2: auto_register_or_load() first run (registration) ===")
@@ -92,6 +96,7 @@ def test_auto_register_or_load_first_run():
         print(f"❌ FAILED: {e}")
         return False
 
+@pytest.mark.integration
 def test_auto_register_or_load_second_run():
     """Test 3: auto_register_or_load() on second run should load from file"""
     print("\n=== Test 3: auto_register_or_load() second run (loading) ===")
@@ -135,6 +140,7 @@ def test_auto_register_or_load_second_run():
         print(f"❌ FAILED: {e}")
         return False
 
+@pytest.mark.integration
 def test_from_credentials_after_registration():
     """Test 4: from_credentials() after registration should work"""
     print("\n=== Test 4: from_credentials() after registration ===")
@@ -150,6 +156,7 @@ def test_from_credentials_after_registration():
         print(f"❌ FAILED: {e}")
         return False
 
+@pytest.mark.integration
 def test_force_register():
     """Test 5: auto_register_or_load() with force_register=True should register new agent"""
     print("\n=== Test 5: auto_register_or_load() with force_register=True ===")
