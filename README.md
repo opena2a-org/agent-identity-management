@@ -21,7 +21,11 @@
 
 </div>
 
-### Recent Updates (v0.5.1) -- 2026-02-19
+### Recent Updates (v0.5.2) -- 2026-02-20
+
+- **Integration Test Fixture Errors Resolved** -- Fixed 11 pytest errors caused by standalone integration test files being auto-discovered by pytest. Marked all integration tests with `@pytest.mark.integration` and converted function parameters to module-level state. Test suite: 318 passed, 0 failures, 0 errors (`993f483`)
+
+### v0.5.1 -- 2026-02-19
 
 - **Python SDK Test Suite Stability** -- Resolved all test failures after implementation refactors: 322 passing, 0 failures (`921b869`, `deffbcf`)
 - **AIMClient Class Methods** -- Added `from_credentials()` and `auto_register_or_load()` classmethods for credential loading and smart registration (`921b869`)
