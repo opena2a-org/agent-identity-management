@@ -70,6 +70,7 @@ Agent Management (Generic SDK Pattern):
 """
 
 from .client import AIMClient, register_agent, AgentType
+from .decorators import aim_verify, aim_verify_database, aim_verify_api_call
 
 # Alias for enterprise security
 secure = register_agent
@@ -189,4 +190,8 @@ __all__ = [
     "A2AConsent",
     "A2AError",
     "create_a2a_client_from_env",
+    # Decorators
+    "aim_verify",
+    "aim_verify_database",
+    "aim_verify_api_call",
 ]
