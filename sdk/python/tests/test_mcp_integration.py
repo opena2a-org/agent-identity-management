@@ -20,6 +20,8 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))
 
@@ -33,12 +35,19 @@ from aim_sdk.integrations.mcp.verification import MCPActionWrapper, log_mcp_acti
 
 AIM_URL = "http://localhost:8080"
 
+# Module-level state shared between sequential integration tests
+_aim_client = None
+_server_id = None
 
+
+@pytest.mark.integration
 def test_mcp_server_registration():
     """Test 1: MCP Server Registration"""
     print("\n" + "="*70)
     print("TEST 1: MCP Server Registration")
     print("="*70)
+
+    global _aim_client, _server_id
 
     try:
         # Register AIM agent
@@ -46,7 +55,7 @@ def test_mcp_server_registration():
             "mcp-test-registration",
             AIM_URL
         )
-        print(f"✅ AIM agent registered: {aim_client.agent_id}")
+        print(f"AIM agent registered: {aim_client.agent_id}")
 
         # Register MCP server
         server_info = register_mcp_server(
@@ -58,26 +67,34 @@ def test_mcp_server_registration():
             description="Test MCP server for integration testing",
             version="1.0.0"
         )
-        print(f"✅ MCP server registered: {server_info['id']}")
+        print(f"MCP server registered: {server_info['id']}")
         print(f"   Name: {server_info['name']}")
         print(f"   Status: {server_info['status']}")
         print(f"   Trust Score: {server_info.get('trust_score', 'N/A')}")
 
-        print("\n🎉 TEST 1 PASSED - MCP server registration works!")
+        _aim_client = aim_client
+        _server_id = server_info['id']
+
+        print("\nTEST 1 PASSED - MCP server registration works!")
         return True, server_info['id']
 
     except Exception as e:
-        print(f"\n❌ TEST 1 FAILED: {e}")
+        print(f"\nTEST 1 FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False, None
 
 
-def test_mcp_server_listing(aim_client):
+@pytest.mark.integration
+def test_mcp_server_listing():
     """Test 2: MCP Server Listing"""
     print("\n" + "="*70)
     print("TEST 2: MCP Server Listing")
     print("="*70)
+
+    aim_client = _aim_client
+    if not aim_client:
+        pytest.skip("No AIM client available (test_mcp_server_registration must run first)")
 
     try:
         # List MCP servers
@@ -97,12 +114,18 @@ def test_mcp_server_listing(aim_client):
         return False
 
 
-def test_mcp_action_verification(aim_client, server_id):
+@pytest.mark.integration
+def test_mcp_action_verification():
     """Test 3: MCP Action Verification"""
     print("\n" + "="*70)
     print("TEST 3: MCP Action Verification")
     print("="*70)
 
+    aim_client = _aim_client
+    server_id = _server_id
+
+    if not aim_client:
+        pytest.skip("No AIM client available (test_mcp_server_registration must run first)")
     if not server_id:
         print("⚠️  Skipping test - no server_id from registration")
         return True
@@ -148,12 +171,18 @@ def test_mcp_action_verification(aim_client, server_id):
         return False
 
 
-def test_mcp_action_wrapper(aim_client, server_id):
+@pytest.mark.integration
+def test_mcp_action_wrapper():
     """Test 4: MCPActionWrapper"""
     print("\n" + "="*70)
     print("TEST 4: MCPActionWrapper")
     print("="*70)
 
+    aim_client = _aim_client
+    server_id = _server_id
+
+    if not aim_client:
+        pytest.skip("No AIM client available (test_mcp_server_registration must run first)")
     if not server_id:
         print("⚠️  Skipping test - no server_id from registration")
         return True

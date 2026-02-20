@@ -18,6 +18,8 @@ import os
 import requests
 from pathlib import Path
 
+import pytest
+
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))
 
@@ -77,12 +79,17 @@ def get_jwt_token_from_oauth():
         return None
 
 
-def test_mcp_with_jwt(jwt_token):
+@pytest.mark.integration
+def test_mcp_with_jwt():
     """Test MCP integration with JWT authentication"""
 
     print("\n" + "="*70)
     print("MCP INTEGRATION TEST (With JWT Authentication)")
     print("="*70)
+
+    jwt_token = os.environ.get('AIM_JWT_TOKEN')
+    if not jwt_token:
+        pytest.skip("AIM_JWT_TOKEN environment variable not set")
 
     # Register AIM agent (this uses agent authentication, not JWT)
     print("\n1. Registering AIM Agent...")
