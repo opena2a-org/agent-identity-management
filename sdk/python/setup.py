@@ -49,6 +49,7 @@ setup(
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
             "pytest-mock>=3.10.0",
+            "responses>=0.23.0",
             "black>=24.3.0",  # CVE-2024-48 fix
             "flake8>=6.0.0",
             "mypy>=1.0.0",
