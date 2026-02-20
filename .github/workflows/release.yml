@@ -33,10 +33,9 @@ jobs:
           cyclonedx-gomod mod -json -output ../../sbom-backend.cdx.json
 
       - name: Generate Frontend SBOM (CycloneDX)
-        working-directory: apps/web
         run: |
           npm ci
-          npx @cyclonedx/cyclonedx-npm --output-file ../../sbom-frontend.cdx.json
+          npx @cyclonedx/cyclonedx-npm --ignore-npm-errors --output-file sbom-frontend.cdx.json
 
       - name: Upload SBOMs to release
         uses: softprops/action-gh-release@v2
