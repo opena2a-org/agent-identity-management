@@ -21,7 +21,13 @@
 
 </div>
 
-### Recent Updates (v0.5.0)
+### Recent Updates (v0.5.1) -- 2026-02-19
+
+- **Python SDK Test Suite Stability** -- Resolved all test failures after implementation refactors: 322 passing, 0 failures (`921b869`, `deffbcf`)
+- **AIMClient Class Methods** -- Added `from_credentials()` and `auto_register_or_load()` classmethods for credential loading and smart registration (`921b869`)
+- **Release Workflow Fix** -- Corrected SBOM generation cache path (`68b945f`)
+
+### v0.5.0 -- 2026-02-19 (`ae4891e`)
 
 - **OAuth 2.0 Token Endpoint** -- `POST /api/v1/oauth/token` with Ed25519 JWT bearer assertions (RFC 7523), enabling machine-to-machine agent authentication
 - **Security Hardening** -- Ed25519 signature verification on OAuth tokens, SDK token revocation hardening, sanitized error responses, insecure secret detection for production deployments
