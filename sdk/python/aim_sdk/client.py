@@ -348,6 +348,77 @@ class AIMClient:
 
         self.session.headers.update(headers)
 
+    @classmethod
+    def from_credentials(cls, agent_name: str, aim_url: str = None) -> "AIMClient":
+        """
+        Load an AIMClient from previously saved credentials.
+
+        Args:
+            agent_name: Name of the agent whose credentials to load
+            aim_url: AIM server URL (overrides stored URL if provided)
+
+        Returns:
+            AIMClient instance configured with the stored credentials
+
+        Raises:
+            FileNotFoundError: If no credentials exist for the agent
+        """
+        creds = _load_credentials(agent_name)
+        if not creds:
+            raise FileNotFoundError(
+                f"No credentials found for agent '{agent_name}'. "
+                f"Register first with register_agent('{agent_name}', ...)"
+            )
+        return cls(
+            agent_id=creds["agent_id"],
+            public_key=creds.get("public_key"),
+            private_key=creds.get("private_key"),
+            aim_url=aim_url or creds.get("aim_url"),
+        )
+
+    @classmethod
+    def auto_register_or_load(
+        cls,
+        name: str,
+        aim_url: str = None,
+        display_name: str = None,
+        description: str = None,
+        agent_type: str = "ai_agent",
+        version: str = "1.0.0",
+        force_register: bool = False,
+        **kwargs,
+    ) -> "AIMClient":
+        """
+        Load existing credentials or register a new agent.
+
+        Convenience method that wraps register_agent(). If credentials
+        already exist for this agent name (and force_register is False),
+        they are loaded. Otherwise, a new registration is performed.
+
+        Args:
+            name: Agent name
+            aim_url: AIM server URL
+            display_name: Human-readable name
+            description: Agent description
+            agent_type: Type of agent
+            version: Agent version
+            force_register: Force new registration even if credentials exist
+            **kwargs: Additional arguments passed to register_agent()
+
+        Returns:
+            AIMClient instance
+        """
+        return register_agent(
+            name=name,
+            aim_url=aim_url,
+            display_name=display_name,
+            description=description,
+            agent_type=agent_type,
+            version=version,
+            force_new=force_register,
+            **kwargs,
+        )
+
     def _sign_message(self, message: str) -> str:
         """
         Sign a message using Ed25519 private key.

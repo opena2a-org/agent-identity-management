@@ -118,12 +118,12 @@ class TestRegisterAgent:
                     with patch('aim_sdk.client._register_via_oauth') as mock_oauth:
                         mock_oauth.return_value = MagicMock()
 
-                        agent = register_agent("test-agent", auto_detect=True)
+                        agent = register_agent("test-agent", auto_detect=True, auto_detect_mcp=True)
 
                         # Verify MCP servers were detected
                         call_args = mock_oauth.call_args
-                        talks_to = call_args.kwargs['talks_to']
-                        assert talks_to == ["filesystem-mcp", "github-mcp"]
+                        mcp_server_names = call_args.kwargs['mcp_server_names']
+                        assert mcp_server_names == ["filesystem-mcp", "github-mcp"]
 
     def test_register_agent_disable_auto_detect(self):
         """Test disabling auto-detection"""
@@ -143,7 +143,7 @@ class TestRegisterAgent:
                 call_args = mock_oauth.call_args
                 registration_data = call_args.kwargs['registration_data']
                 assert 'capabilities' not in registration_data or registration_data['capabilities'] is None
-                assert call_args.kwargs['talks_to'] is None
+                assert call_args.kwargs['mcp_server_names'] == []
 
     def test_register_agent_manual_override(self):
         """Test manual capability and MCP override"""
@@ -170,7 +170,7 @@ class TestRegisterAgent:
                 call_args = mock_oauth.call_args
                 registration_data = call_args.kwargs['registration_data']
                 assert registration_data['capabilities'] == manual_capabilities
-                assert call_args.kwargs['talks_to'] == manual_mcps
+                assert call_args.kwargs['mcp_server_names'] == manual_mcps
 
     def test_register_agent_existing_credentials(self):
         """Test loading existing credentials"""
@@ -193,6 +193,7 @@ class TestRegisterAgent:
                     public_key=existing_creds["public_key"],
                     private_key=existing_creds["private_key"],
                     aim_url=existing_creds["aim_url"],
+                    api_key=None,
                     oauth_token_manager=None
                 )
 

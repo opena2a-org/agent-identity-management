@@ -102,7 +102,7 @@ class TestCapabilityDetector:
         with patch.object(detector, 'detect_from_imports', return_value=["import_cap_1"]):
             with patch.object(detector, 'detect_from_config', return_value=["config_cap_1"]):
                 with patch.object(detector, 'detect_from_decorators', return_value=["decorator_cap_1"]):
-                    capabilities = detector.detect_all()
+                    capabilities = detector.detect_all(include_imports=True)
 
                     assert "import_cap_1" in capabilities
                     assert "config_cap_1" in capabilities
@@ -117,7 +117,7 @@ class TestCapabilityDetector:
         with patch.object(detector, 'detect_from_imports', return_value=["capability_1", "capability_2"]):
             with patch.object(detector, 'detect_from_config', return_value=["capability_2", "capability_3"]):
                 with patch.object(detector, 'detect_from_decorators', return_value=[]):
-                    capabilities = detector.detect_all()
+                    capabilities = detector.detect_all(include_imports=True)
 
                     # Should have unique capabilities only
                     assert capabilities.count("capability_1") == 1
@@ -132,7 +132,7 @@ class TestCapabilityDetector:
         with patch.object(detector, 'detect_from_imports', return_value=["zulu", "alpha"]):
             with patch.object(detector, 'detect_from_config', return_value=["bravo"]):
                 with patch.object(detector, 'detect_from_decorators', return_value=[]):
-                    capabilities = detector.detect_all()
+                    capabilities = detector.detect_all(include_imports=True)
 
                     # Should be sorted alphabetically
                     assert capabilities == ["alpha", "bravo", "zulu"]
@@ -161,10 +161,11 @@ class TestAutoDetectCapabilities:
     """Test auto_detect_capabilities convenience function"""
 
     def test_auto_detect_capabilities(self):
-        """Test auto_detect_capabilities function"""
+        """Test auto_detect_capabilities function with import detection"""
         # Mock sys.modules with known packages
         with patch.dict(sys.modules, {"requests": MagicMock()}):
-            capabilities = auto_detect_capabilities()
+            detector = CapabilityDetector()
+            capabilities = detector.detect_all(include_imports=True)
 
             assert isinstance(capabilities, list)
             assert "make_api_calls" in capabilities

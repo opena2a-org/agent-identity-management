@@ -15,24 +15,19 @@ from aim_sdk import auto_detect_capabilities, auto_detect_mcps, register_agent
 
 
 def test_capability_detection():
-    """Test 1: Capability Auto-Detection"""
-    print("\n📋 Test 1: Capability Auto-Detection")
-    print("=" * 60)
+    """Test 1: Capability Auto-Detection (with import detection enabled)"""
+    from aim_sdk.capability_detection import CapabilityDetector
 
     # Import known packages to trigger detection
     import requests
     import smtplib
 
-    capabilities = auto_detect_capabilities()
-    print(f"✅ Detected {len(capabilities)} capabilities")
-    print(f"   Capabilities: {', '.join(capabilities)}")
+    detector = CapabilityDetector()
+    capabilities = detector.detect_all(include_imports=True)
 
     # Verify expected capabilities
-    assert "make_api_calls" in capabilities, "Should detect requests → make_api_calls"
-    assert "send_email" in capabilities, "Should detect smtplib → send_email"
-
-    print("✅ Capability detection works correctly!\n")
-    return True
+    assert "make_api_calls" in capabilities, "Should detect requests -> make_api_calls"
+    assert "send_email" in capabilities, "Should detect smtplib -> send_email"
 
 
 def test_mcp_detection():
@@ -66,29 +61,15 @@ def test_zero_config_registration():
         "sdk_token_id": "sdk_token_test_123"
     }
 
-    # Mock registration response with valid base64 keys
-    import base64
-    import os
-    from nacl.signing import SigningKey
-    from nacl.encoding import Base64Encoder
-
-    # Generate valid Ed25519 key pair
-    seed = os.urandom(32)
-    signing_key = SigningKey(seed)
-    verify_key = signing_key.verify_key
-
-    public_key_b64 = verify_key.encode(encoder=Base64Encoder).decode('utf-8')
-    private_key_64bytes = seed + bytes(verify_key)  # 64 bytes total
-    private_key_b64 = base64.b64encode(private_key_64bytes).decode('utf-8')
-
+    # Mock registration response
+    # Note: _register_via_oauth generates its own keypair client-side,
+    # so we must NOT return a public_key that would conflict with it.
     mock_registration_response = {
-        "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+        "id": "550e8400-e29b-41d4-a716-446655440000",
         "name": "test-agent-e2e",
-        "public_key": public_key_b64,
-        "private_key": private_key_b64,
         "aim_url": "https://aim-test.example.com",
         "status": "verified",
-        "trust_score": 85.0,
+        "trustScore": 85.0,
         "message": "Agent registered successfully via SDK"
     }
 
@@ -109,20 +90,24 @@ def test_zero_config_registration():
                         mock_response.json.return_value = mock_registration_response
                         mock_post.return_value = mock_response
 
-                        # Mock MCP detection reporting
-                        with patch.object(sys.modules['aim_sdk.client'].AIMClient, 'report_detections'):
-                            print("   🔐 SDK Mode detected")
-                            print("   🔍 Auto-detecting capabilities and MCPs...")
+                        # Mock HTTP GET (used by _register_via_oauth to check if agent exists)
+                        with patch('aim_sdk.client.requests.get') as mock_get:
+                            mock_get_response = MagicMock()
+                            mock_get_response.status_code = 404
+                            mock_get.return_value = mock_get_response
 
-                            # Register agent with zero config!
-                            agent = register_agent("test-agent-e2e")
+                            # Mock MCP detection reporting
+                            with patch.object(sys.modules['aim_sdk.client'].AIMClient, 'report_detections'):
+
+                                # Register agent with zero config!
+                                agent = register_agent("test-agent-e2e")
 
                             print(f"\n   ✅ Registration successful!")
                             print(f"      Agent ID: {agent.agent_id}")
                             print(f"      AIM URL: {agent.aim_url}")
 
                             # Verify agent was created correctly
-                            assert agent.agent_id == mock_registration_response["agent_id"]
+                            assert agent.agent_id == mock_registration_response["id"]
                             assert agent.aim_url == mock_registration_response["aim_url"]
 
     print("\n✅ Zero-config registration works correctly!\n")
