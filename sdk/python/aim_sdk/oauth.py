@@ -483,11 +483,13 @@ class OAuthTokenManager:
         Returns:
             True if revocation successful
         """
-        if not self.credentials or 'refresh_token' not in self.credentials:
+        # Support both camelCase and snake_case for backward compatibility
+        has_refresh_token = 'refreshToken' in self.credentials or 'refresh_token' in self.credentials if self.credentials else False
+        if not self.credentials or not has_refresh_token:
             return False
 
-        aim_url = self.credentials.get('aim_url', 'http://localhost:8080')
-        refresh_token = self.credentials['refresh_token']
+        aim_url = self.credentials.get('aimUrl') or self.credentials.get('aim_url', 'http://localhost:8080')
+        refresh_token = self.credentials.get('refreshToken') or self.credentials.get('refresh_token')
 
         try:
             # Call token revocation endpoint (if implemented)
