@@ -21,14 +21,14 @@
 
 </div>
 
-### Recent Updates
+### Recent Updates (v0.5.0)
 
-- **A2A Protocol Discovery** -- `/.well-known/agent.json` now served at the root path per the A2A specification
-- **Metrics Stability** -- Fixed Prometheus metric collection with HTTP method normalization for Fiber v3
-- **A2A Skill Registration** -- Fixed skill search vector function to handle NULL and non-array tags
-- **Rate Limiting** -- Development and test environments use relaxed rate limits (10x) to avoid interference with test suites
-- **Admin Authentication** -- Fixed default admin password hash alignment across migrations
-- **Integration Tests** -- Improved test helper with admin-approved user creation flow
+- **OAuth 2.0 Token Endpoint** -- `POST /api/v1/oauth/token` with Ed25519 JWT bearer assertions (RFC 7523), enabling machine-to-machine agent authentication
+- **Security Hardening** -- Ed25519 signature verification on OAuth tokens, SDK token revocation hardening, sanitized error responses, insecure secret detection for production deployments
+- **Integration Test Coverage** -- 266 passing, 0 failing, 0 skipped -- every backend endpoint tested end-to-end
+- **MCP Server Keys** -- New `mcp_server_keys` table and endpoints for public key management and verification status
+- **Cross-Organization Isolation** -- Verified tenant boundary enforcement with multi-org integration tests
+- **SDK Compatibility** -- Fixed credential field name handling in Python SDK token revocation
 
 ---
 
@@ -64,9 +64,9 @@ docker compose build && docker compose up -d
 |-----|-------------|
 | `latest` | Latest stable release |
 | `edge` | Built from `main` on every push |
-| `1.22.0` | Specific release version |
-| `1.22` | Latest patch in the 1.22 series |
-| `1` | Latest minor in the 1.x series |
+| `0.5.0` | Specific release version |
+| `0.5` | Latest patch in the 0.5 series |
+| `0` | Latest minor in the 0.x series |
 
 ### Verify Image Signatures
 
