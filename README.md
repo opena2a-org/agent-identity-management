@@ -4,43 +4,14 @@
 
 # Agent Identity Management (AIM)
 
-**The open-source NHI platform for AI agents — cryptographic identity, governance, and access control by default.**
+**Open-source identity, governance, and access control for AI agents.**
 
-> Enterprises manage millions of non-human identities (NHI). AI agents are the fastest-growing — and least-governed — category. AIM fixes that.
-
-[![Security Pipeline](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
 [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
-[![Docker](https://ghcr-badge.egpl.dev/opena2a-org/aim-server/latest_tag?label=docker)](https://github.com/opena2a-org/agent-identity-management/pkgs/container/aim-server)
-[![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-blue)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/release.yml)
-[![Backend Coverage](https://img.shields.io/badge/Backend%20Coverage-70%25+-brightgreen)](apps/backend)
+[![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
+[![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
-[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://python.org/)
-
-[📺 Demo Video](https://youtu.be/meD_LW5fc_A) • [📚 Docs](https://opena2a.org/docs) • [💬 Discord](https://discord.gg/uRZa3KXgEn)
 
 </div>
-
-### Recent Updates (v0.5.2) -- 2026-02-20
-
-- **Integration Test Fixture Errors Resolved** -- Fixed 11 pytest errors caused by standalone integration test files being auto-discovered by pytest. Marked all integration tests with `@pytest.mark.integration` and converted function parameters to module-level state. Test suite: 318 passed, 0 failures, 0 errors (`993f483`)
-
-### v0.5.1 -- 2026-02-19
-
-- **Python SDK Test Suite Stability** -- Resolved all test failures after implementation refactors: 322 passing, 0 failures (`921b869`, `deffbcf`)
-- **AIMClient Class Methods** -- Added `from_credentials()` and `auto_register_or_load()` classmethods for credential loading and smart registration (`921b869`)
-- **Release Workflow Fix** -- Corrected SBOM generation cache path (`68b945f`)
-
-### v0.5.0 -- 2026-02-19 (`ae4891e`)
-
-- **OAuth 2.0 Token Endpoint** -- `POST /api/v1/oauth/token` with Ed25519 JWT bearer assertions (RFC 7523), enabling machine-to-machine agent authentication
-- **Security Hardening** -- Ed25519 signature verification on OAuth tokens, SDK token revocation hardening, sanitized error responses, insecure secret detection for production deployments
-- **Integration Test Coverage** -- 266 passing, 0 failing, 0 skipped -- every backend endpoint tested end-to-end
-- **MCP Server Keys** -- New `mcp_server_keys` table and endpoints for public key management and verification status
-- **Cross-Organization Isolation** -- Verified tenant boundary enforcement with multi-org integration tests
-- **SDK Compatibility** -- Fixed credential field name handling in Python SDK token revocation
-
----
 
 ## Quick Start
 
@@ -48,47 +19,18 @@
 curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
 ```
 
-That's it. Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end — change the password on first login.
+Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.
 
-**Or use AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) — no infrastructure required.
-
-<details>
-<summary><strong>Build from source instead</strong></summary>
+Or pull directly:
 
 ```bash
-git clone https://github.com/opena2a-org/agent-identity-management.git
-cd agent-identity-management
-docker compose build && docker compose up -d
+docker pull opena2a/aim-server
+docker pull opena2a/aim-dashboard
 ```
 
-</details>
+**AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) -- no infrastructure required.
 
-### Docker Images
-
-| Image | Description |
-|-------|-------------|
-| `ghcr.io/opena2a-org/aim-server` | Backend API server |
-| `ghcr.io/opena2a-org/aim-dashboard` | Web dashboard |
-
-| Tag | Description |
-|-----|-------------|
-| `latest` | Latest stable release |
-| `edge` | Built from `main` on every push |
-| `0.5.0` | Specific release version |
-| `0.5` | Latest patch in the 0.5 series |
-| `0` | Latest minor in the 0.x series |
-
-### Verify Image Signatures
-
-```bash
-cosign verify ghcr.io/opena2a-org/aim-server:latest \
-  --certificate-identity-regexp="https://github.com/opena2a-org/agent-identity-management" \
-  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
-```
-
----
-
-## Secure Your Agent (One Line)
+## Secure Your Agent
 
 ```python
 from aim_sdk import secure
@@ -100,222 +42,61 @@ def get_customer(id):
     return db.query(id)
 ```
 
-That's it. Your agent now has:
-- Cryptographic identity (Ed25519)
-- Capability enforcement
-- Full audit trail
-- Real-time monitoring
+Your agent gets cryptographic identity (Ed25519), capability enforcement, and a full audit trail.
 
----
+## What AIM Does
 
-## What AIM Solves
+- **Cryptographic identity** -- Ed25519 keypairs and OAuth 2.0 token endpoint for machine-to-machine auth
+- **Capability enforcement** -- declare what each agent can do; block everything else at runtime
+- **MCP attestation** -- verify Model Context Protocol servers, detect tool drift
+- **NHI governance** -- ownership tracking, lifecycle management, shadow agent discovery, ABOM export
+- **Trust scoring** -- 8-factor algorithm evaluating agent trustworthiness in real time
+- **Security policies** -- monitoring or strict mode, data exfiltration detection, just-in-time access
 
-| Problem | Without AIM | With AIM |
-|---------|-------------|----------|
-| Agent impersonation | Anyone can claim to be your agent | Cryptographic proof required |
-| Prompt injection | Agent tricked into unauthorized actions | Capability enforcement blocks it |
-| No visibility | What are your agents doing? | Complete audit trail |
-| MCP supply chain | Unknown servers, no verification | MCP attestation + drift detection |
-| NHI governance gap | No inventory, no ownership, no lifecycle for agent identities | Full NHI governance — ownership, lifecycle automation, compliance reporting |
+## Docker Images
 
----
+| Image | GHCR | Docker Hub |
+|-------|------|------------|
+| Backend API | `ghcr.io/opena2a-org/aim-server` | `opena2a/aim-server` |
+| Dashboard | `ghcr.io/opena2a-org/aim-dashboard` | `opena2a/aim-dashboard` |
 
-## Features
+| Tag | Description |
+|-----|-------------|
+| `latest` | Latest stable release |
+| `edge` | Built from `main` on every push |
+| `0.5.2` | Specific release version |
+| `0.5` | Latest patch in the 0.5 series |
+| `0` | Latest minor in the 0.x series |
 
-<details>
-<summary><strong>Dashboard & Monitoring</strong></summary>
-
-Real-time visibility into your AI agent fleet:
-
-- **Trust Scoring** — 8-factor algorithm evaluates agent trustworthiness
-- **Security Alerts** — Severity-based alerts with acknowledgment workflow
-- **Activity Timeline** — Every action, verification, and MCP connection
-- **Compliance Checks** — 10 automated checks for security compliance
-
-![Dashboard](docs/images/dashboard-executive.png)
-
-</details>
-
-<details>
-<summary><strong>MCP Server Attestation</strong></summary>
-
-Verify and monitor Model Context Protocol servers:
-
-- **Auto-Attestation** — SDK automatically attests MCP servers on first use
-- **Drift Detection** — Alerts when server tools change unexpectedly
-- **Supply Chain View** — See all MCP servers across your organization
-
-![MCP Attestations](docs/images/mcp-attestations.png)
-
-</details>
-
-<details>
-<summary><strong>Capability-Based Access Control</strong></summary>
-
-Define what each agent can do. Block everything else.
-
-- **Declared Capabilities** — `db:read`, `api:call`, `file:write`, etc.
-- **Runtime Enforcement** — Unauthorized actions blocked at API layer
-- **Risk Level Detection** — Automatic risk assessment from patterns
-
-</details>
-
-<details>
-<summary><strong>Just-In-Time Access</strong></summary>
-
-Sensitive operations require admin approval:
-
-- **Request Workflow** — Agents request elevated access
-- **Time-Limited** — Access expires automatically
-- **Full Audit Trail** — Every request logged
-
-![Capability Requests](docs/images/capability-requests.png)
-
-</details>
-
-<details>
-<summary><strong>Security Policies</strong></summary>
-
-- **MONITORING Mode** — Observe and alert without blocking (development)
-- **STRICT Mode** — Enforce policies and block violations (production)
-- **Data Exfiltration Detection** — Detect unusual data transfer patterns
-
-![Security Policies](docs/images/security-policies.png)
-
-</details>
-
-<details>
-<summary><strong>NHI Governance</strong></summary>
-
-Manage AI agents as first-class non-human identities:
-
-- **Ownership Attribution** — Every agent linked to a human owner and team
-- **Lifecycle Management** — Active, inactive, suspended, revoked states with automated transitions
-- **Shadow Agent Discovery** — Find unregistered agents across your environment
-- **Orphan Detection** — Alert when agent owners leave the organization
-- **ABOM Generation** — Agent Bill of Materials for compliance (CycloneDX export)
-- **Compliance Reports** — NHI inventory exports for SOC 2, HIPAA, GDPR, ISO 27001
-
-</details>
-
----
+All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based). See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for verification and production deployment.
 
 ## SDKs
 
 | SDK | Install | Status |
 |-----|---------|--------|
-| **Python** | `pip install aim-sdk` | ✅ Stable |
-| **Java** | Maven/Gradle | ✅ Stable |
-| **TypeScript** | Coming soon | 🚧 In progress |
+| Python | `pip install aim-sdk` | Stable |
+| Java | Maven / Gradle | Stable |
+| TypeScript | Coming soon | In progress |
 
-### Python Example
+## Links
 
-```python
-from aim_sdk import secure, AgentType
+- [Documentation](https://opena2a.org/docs) -- full guides, tutorials, API reference
+- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) -- secure your first agent
+- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) -- connect MCP servers
+- [Contributing](CONTRIBUTING.md) -- how to contribute
+- [Deployment Guide](infrastructure/DEPLOYMENT.md) -- production deployment (AWS, Azure, GCP, K8s)
 
-agent = secure(
-    "my-agent",
-    agent_type=AgentType.LANGCHAIN,
-    capabilities=["db:read", "api:call"],
-    tags=["production"],
-    metadata={"model": "gpt-4"}
-)
-
-@agent.perform_action(capability="db:read")
-def query_users():
-    return database.get_users()
-```
-
-### Java Example
-
-```java
-AIMClient agent = AIMClient.secure(
-    "my-agent",
-    Arrays.asList("db:read", "api:call"),
-    AgentType.LANGCHAIN
-);
-
-User user = agent.performAction("db:read", "users", () -> {
-    return userRepository.findById(userId);
-});
-```
-
----
-
-## Architecture
-
-AIM uses **direct observation** — not proxies. Unlike traditional NHI platforms that discover service accounts through API integrations, AIM governs AI agents natively. Agents report actions explicitly via SDK decorators while communicating directly with target systems.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  YOUR AGENT                                                 │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ @agent.perform_action(capability="db:read")            │ │
-│  │ def get_data():                                        │ │
-│  │     return database.query()  ─────────────────────────────► Target
-│  └────────────────────────────────────────────────────────┘ │  (Direct)
-│                    │                                        │
-│                    │ Reports action                         │
-│                    ▼                                        │
-│              AIM Backend                                    │
-│         (Verify + Log + Enforce)                            │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Key points:**
-- Zero latency added to agent↔target communication
-- No single point of failure (fail-open mode available)
-- Works with any MCP server, API, or database
-
----
-
-## Deployment
-
-```bash
-# Development
-docker compose up -d
-```
-
-See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for production deployment guides (AWS, Azure, GCP, Kubernetes).
-
----
-
-## Documentation
-
-- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) — Secure your first agent
-- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) — Connect MCP servers
-- [Post-Quantum Cryptography](docs/guides/PQC.md) — ML-DSA signatures
-- [Full Documentation](https://opena2a.org/docs)
-
----
-
-## Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
-
-## OpenA2A Ecosystem
+### Ecosystem
 
 | Project | Description | Install |
 |---------|-------------|---------|
-| [**AIM**](https://github.com/opena2a-org/agent-identity-management) | Agent Identity Management -- identity and access control for AI agents | `pip install aim-sdk` |
-| [**HackMyAgent**](https://github.com/opena2a-org/hackmyagent) | Security scanner -- 147 checks, attack mode, auto-fix | `npx hackmyagent secure` |
-| [**OASB**](https://github.com/opena2a-org/oasb) | Open Agent Security Benchmark -- 182 attack scenarios | `npm install @opena2a/oasb` |
-| [**ARP**](https://github.com/opena2a-org/arp) | Agent Runtime Protection -- process, network, filesystem monitoring | `npm install @opena2a/arp` |
-| [**Secretless AI**](https://github.com/opena2a-org/secretless-ai) | Keep credentials out of AI context windows | `npx secretless-ai init` |
-| [**DVAA**](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Damn Vulnerable AI Agent -- security training and red-teaming | `docker pull opena2a/dvaa` |
-
----
+| [AIM](https://github.com/opena2a-org/agent-identity-management) | Identity and access control for AI agents | `pip install aim-sdk` |
+| [HackMyAgent](https://github.com/opena2a-org/hackmyagent) | Security scanner -- 147 checks, attack mode, auto-fix | `npx hackmyagent secure` |
+| [OASB](https://github.com/opena2a-org/oasb) | Open Agent Security Benchmark -- 182 attack scenarios | `npm install @opena2a/oasb` |
+| [ARP](https://github.com/opena2a-org/arp) | Agent Runtime Protection -- process, network, filesystem monitoring | `npm install @opena2a/arp` |
+| [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Keep credentials out of AI context windows | `npx secretless-ai init` |
+| [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Damn Vulnerable AI Agent -- security training | `docker pull opena2a/dvaa` |
 
 ## License
 
-Apache-2.0 — See [LICENSE](LICENSE)
-
----
-
-<div align="center">
-
-⭐ **Star this repo** if AIM helps secure your AI agents!
-
-</div>
+Apache-2.0 -- See [LICENSE](LICENSE)
