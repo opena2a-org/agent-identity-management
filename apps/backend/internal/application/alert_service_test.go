@@ -209,6 +209,22 @@ func (m *MockAgentRepoForAlerts) MarkAsCompromised(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockAgentRepoForAlerts) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	args := m.Called(ctx, staleSince)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepoForAlerts) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
 // Helper function to create a test alert
 func createTestAlertForAlerts(orgID uuid.UUID) *domain.Alert {
 	return &domain.Alert{

@@ -2180,3 +2180,57 @@ func (s *AgentService) CreateCapabilityViolation(
 
 	return nil
 }
+
+// EnforceKeyExpiry suspends agents with expired keys past grace period
+func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
+	now := time.Now()
+	agents, err := s.agentRepo.List(0, 0) // Get all agents
+	if err != nil {
+		return 0, fmt.Errorf("failed to list agents: %w", err)
+	}
+
+	suspended := 0
+	for _, agent := range agents {
+		if agent.Status == domain.AgentStatusRevoked || agent.Status == domain.AgentStatusSuspended {
+			continue
+		}
+		// Check if key is expired and past grace period
+		if agent.KeyExpiresAt != nil && agent.KeyExpiresAt.Before(now) {
+			// If there's a grace period, check if we're past it
+			if agent.KeyRotationGraceUntil != nil && agent.KeyRotationGraceUntil.After(now) {
+				continue // Still in grace period
+			}
+			// Suspend the agent
+			agent.Status = domain.AgentStatusSuspended
+			agent.UpdatedAt = now
+			if err := s.agentRepo.Update(agent); err != nil {
+				continue // Log but don't fail the whole batch
+			}
+			suspended++
+		}
+	}
+
+	return suspended, nil
+}
+
+// RecordHeartbeat updates the heartbeat timestamp for an agent
+func (s *AgentService) RecordHeartbeat(ctx context.Context, agentID uuid.UUID) (*domain.Agent, error) {
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	now := time.Now()
+	agent.LastHeartbeat = &now
+	agent.UpdatedAt = now
+	if err := s.agentRepo.Update(agent); err != nil {
+		return nil, fmt.Errorf("failed to update heartbeat: %w", err)
+	}
+
+	return agent, nil
+}
+
+// GetAgentsByIDs returns agents matching the given IDs with status and trust info
+func (s *AgentService) GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	return s.agentRepo.GetByIDs(ctx, ids)
+}

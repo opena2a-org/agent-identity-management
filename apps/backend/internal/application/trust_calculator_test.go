@@ -307,6 +307,22 @@ func (m *TrustCalcMockAgentRepository) IncrementViolationCount(agentID uuid.UUID
 	return args.Error(0)
 }
 
+func (m *TrustCalcMockAgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	args := m.Called(ctx, staleSince)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *TrustCalcMockAgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
 // TrustCalcMockAlertRepository mocks the AlertRepository for trust calculator tests
 type TrustCalcMockAlertRepository struct {
 	mock.Mock

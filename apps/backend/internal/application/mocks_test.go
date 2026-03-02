@@ -86,6 +86,22 @@ func (m *SharedMockAgentRepository) UpdateLastActive(ctx context.Context, agentI
 	return args.Error(0)
 }
 
+func (m *SharedMockAgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	args := m.Called(ctx, staleSince)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *SharedMockAgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
 // SharedMockAlertRepository is a mock implementation of AlertRepository
 type SharedMockAlertRepository struct {
 	mock.Mock

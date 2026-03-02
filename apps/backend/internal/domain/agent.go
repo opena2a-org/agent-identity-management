@@ -105,6 +105,8 @@ type Agent struct {
 	Tags                     []Tag                  `json:"tags"`
 	// Track when agent last performed an action (updated on every verify-action call)
 	LastActive               *time.Time             `json:"lastActive"`
+	// Track heartbeat for liveness monitoring
+	LastHeartbeat            *time.Time             `json:"lastHeartbeat"`
 	// Custom metadata for the agent (model, department, owner, etc.)
 	Metadata                 map[string]interface{} `json:"metadata,omitempty"`
 }
@@ -122,4 +124,6 @@ type AgentRepository interface {
 	IncrementViolationCount(id uuid.UUID) error
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
+	GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*Agent, error)
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Agent, error)
 }

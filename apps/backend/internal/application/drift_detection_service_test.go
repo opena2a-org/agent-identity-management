@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -85,6 +86,22 @@ func (m *MockAgentRepository) UpdateLastActive(ctx context.Context, agentID uuid
 func (m *MockAgentRepository) IncrementViolationCount(agentID uuid.UUID) error {
 	args := m.Called(agentID)
 	return args.Error(0)
+}
+
+func (m *MockAgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	args := m.Called(ctx, staleSince)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
 // MockAlertRepository mocks the AlertRepository interface

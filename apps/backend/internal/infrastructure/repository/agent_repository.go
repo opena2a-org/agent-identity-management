@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -990,4 +991,89 @@ func (r *AgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUI
 	}
 
 	return nil
+}
+
+// UpdateHeartbeat updates the last heartbeat timestamp for an agent
+func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) error {
+	query := `UPDATE agents SET last_heartbeat = NOW(), updated_at = NOW() WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, agentID)
+	return err
+}
+
+// GetStaleAgents returns agents whose heartbeat is older than the given time
+func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	query := `
+		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		       last_heartbeat, last_active, created_at, updated_at
+		FROM agents
+		WHERE last_heartbeat IS NOT NULL
+		  AND last_heartbeat < $1
+		  AND status NOT IN ('revoked', 'suspended')
+		ORDER BY last_heartbeat ASC`
+	rows, err := r.db.QueryContext(ctx, query, staleSince)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*domain.Agent
+	for rows.Next() {
+		a := &domain.Agent{}
+		var lastHeartbeat sql.NullTime
+		var lastActive sql.NullTime
+		if err := rows.Scan(&a.ID, &a.OrganizationID, &a.Name, &a.DisplayName, &a.Status,
+			&a.AgentType, &a.TrustScore, &lastHeartbeat, &lastActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if lastHeartbeat.Valid {
+			a.LastHeartbeat = &lastHeartbeat.Time
+		}
+		if lastActive.Valid {
+			a.LastActive = &lastActive.Time
+		}
+		agents = append(agents, a)
+	}
+	return agents, rows.Err()
+}
+
+// GetByIDs returns agents matching the given IDs
+func (r *AgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	// Build query with proper placeholders
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	query := fmt.Sprintf(`
+		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		       last_heartbeat, last_active, created_at, updated_at
+		FROM agents WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*domain.Agent
+	for rows.Next() {
+		a := &domain.Agent{}
+		var lastHeartbeat sql.NullTime
+		var lastActive sql.NullTime
+		if err := rows.Scan(&a.ID, &a.OrganizationID, &a.Name, &a.DisplayName, &a.Status,
+			&a.AgentType, &a.TrustScore, &lastHeartbeat, &lastActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if lastHeartbeat.Valid {
+			a.LastHeartbeat = &lastHeartbeat.Time
+		}
+		if lastActive.Valid {
+			a.LastActive = &lastActive.Time
+		}
+		agents = append(agents, a)
+	}
+	return agents, rows.Err()
 }

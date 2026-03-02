@@ -121,6 +121,22 @@ func (m *MockAgentRepoForAPIKey) MarkAsCompromised(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockAgentRepoForAPIKey) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	args := m.Called(ctx, staleSince)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepoForAPIKey) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
 // MockAPIKeyRepoForAPIKey for API key service tests
 type MockAPIKeyRepoForAPIKey struct {
 	mock.Mock
