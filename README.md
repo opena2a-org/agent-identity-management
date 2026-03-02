@@ -78,6 +78,33 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 | Java | Maven / Gradle | Stable |
 | TypeScript | Coming soon | In progress |
 
+## Usage via OpenA2A CLI
+
+The [OpenA2A CLI](https://github.com/opena2a-org/opena2a) provides an `identity` adapter that wraps the AIM server API, giving you quick terminal access to identity management without writing code or calling the REST API directly.
+
+**Install the CLI:**
+
+```bash
+npm install -g @opena2a/cli
+```
+
+**Commands:**
+
+```bash
+# List all registered agents
+opena2a identity list
+
+# Register a new agent
+opena2a identity register --name my-agent
+
+# Check an agent's trust score
+opena2a identity trust <agent>
+```
+
+The CLI adapter connects to your local AIM server (default `http://localhost:8080`) or AIM Cloud. Configure the target with `opena2a config set aim.endpoint <url>`.
+
+For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs/cli/).
+
 ## Links
 
 - [Documentation](https://opena2a.org/docs) -- full guides, tutorials, API reference
