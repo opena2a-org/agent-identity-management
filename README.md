@@ -118,8 +118,8 @@ For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs
 | Project | Description | Install |
 |---------|-------------|---------|
 | [HackMyAgent](https://github.com/opena2a-org/hackmyagent) | Security scanner -- 147 checks, attack mode, auto-fix | `npx hackmyagent secure` |
-| [OASB](https://github.com/opena2a-org/oasb) | Open Agent Security Benchmark -- 182 attack scenarios | `npm install @opena2a/oasb` |
-| [ARP](https://github.com/opena2a-org/arp) | Agent Runtime Protection -- process, network, filesystem monitoring | `npm install @opena2a/arp` |
+| [OASB](https://github.com/opena2a-org/oasb) | Open Agent Security Benchmark -- 222 attack scenarios | Included in `hackmyagent` |
+| [ARP](https://github.com/opena2a-org/arp) | Agent Runtime Protection -- process, network, filesystem monitoring | Included in `hackmyagent` |
 | [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Keep credentials out of AI context windows | `npx secretless-ai init` |
 | [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Damn Vulnerable AI Agent -- security training | `docker pull opena2a/dvaa` |
 
