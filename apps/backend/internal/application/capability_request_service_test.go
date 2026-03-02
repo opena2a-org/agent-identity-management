@@ -233,6 +233,8 @@ func (m *MockAgentRepositoryForCapReq) UpdateTrustScore(id uuid.UUID, newScore f
 func (m *MockAgentRepositoryForCapReq) IncrementViolationCount(id uuid.UUID) error { return nil }
 func (m *MockAgentRepositoryForCapReq) MarkAsCompromised(id uuid.UUID) error { return nil }
 func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error { return nil }
+func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) { return nil, nil }
+func (m *MockAgentRepositoryForCapReq) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) { return nil, nil }
 
 // MockOrganizationRepositoryForCapReq implements OrganizationRepository for capability request tests
 type MockOrganizationRepositoryForCapReq struct {

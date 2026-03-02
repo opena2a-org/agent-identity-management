@@ -261,6 +261,9 @@ func main() {
 	// Standard A2A protocol requires /.well-known/agent.json at the root
 	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
+	// Revocation list (public, rate-limited, cacheable)
+	app.Get("/api/v1/revocations", middleware.RateLimitMiddleware(), h.Lifecycle.GetRevocationList)
+
 	// ✅ Action verification for SDK (signature-based auth, NO API key required)
 	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
 	// These endpoints verify Ed25519 signatures instead of requiring API keys
@@ -287,6 +290,7 @@ func main() {
 	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)            // SDK record agent-MCP connection (use_mcp_tool)
 	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)         // SDK MCP supply chain usage analytics
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                    // SDK MCP detection and integration reporting
+	sdkAPI.Post("/agents/:id/heartbeat", h.Lifecycle.Heartbeat)                                  // SDK agent heartbeat (liveness)
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
@@ -747,6 +751,7 @@ type Handlers struct {
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
 	A2A                *handlers.A2AHandler                // For A2A (Agent-to-Agent) protocol
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
+	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -904,6 +909,10 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 		),
 		OAuthToken: handlers.NewOAuthTokenHandler(jwtService, repos.Agent),
+		Lifecycle: handlers.NewLifecycleHandler(
+			services.Agent,
+			repos.Agent,
+		),
 	}
 }
 
@@ -1006,6 +1015,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
+	agents.Post("/bulk-status", h.Lifecycle.BulkStatus) // Bulk agent status lookup
 	agents.Post("/", middleware.MemberMiddleware(), h.Agent.CreateAgent)
 	agents.Get("/:id", h.Agent.GetAgent)
 	agents.Put("/:id", middleware.MemberMiddleware(), h.Agent.UpdateAgent)
