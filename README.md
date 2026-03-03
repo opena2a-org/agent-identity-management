@@ -1,4 +1,4 @@
-> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [Secretless](https://github.com/opena2a-org/secretless-ai) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [ABG](https://github.com/opena2a-org/AI-BrowserGuard) · [OASB](https://github.com/opena2a-org/oasb) · [ARP](https://github.com/opena2a-org/arp) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
+> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [Secretless](https://github.com/opena2a-org/secretless-ai) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [AI Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) · [Registry](https://registry.opena2a.org)
 
 <div align="center">
 
@@ -76,7 +76,9 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 |-----|---------|--------|
 | Python | `pip install aim-sdk` | Stable |
 | Java | Maven / Gradle | Stable |
-| TypeScript | Coming soon | In progress |
+| TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
+
+The `@opena2a/aim-core` package provides programmatic access to AIM from Node.js projects. It is the same integration used by HackMyAgent's `--with-aim` flag to add agent identity and audit logging during security remediation.
 
 ## Usage via OpenA2A CLI
 
@@ -85,7 +87,9 @@ The [OpenA2A CLI](https://github.com/opena2a-org/opena2a) provides an `identity`
 **Install the CLI:**
 
 ```bash
-npm install -g @opena2a/cli
+npm install -g opena2a-cli
+# or run without installing:
+npx opena2a
 ```
 
 **Commands:**
@@ -105,6 +109,18 @@ The CLI adapter connects to your local AIM server (default `http://localhost:808
 
 For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs/cli/).
 
+## Ecosystem Integration
+
+AIM connects to the broader OpenA2A security platform through multiple interfaces:
+
+| Method | Command / Package | What It Does |
+|--------|-------------------|--------------|
+| CLI | `opena2a identity list\|register\|trust` | Terminal access to agent identity management |
+| HackMyAgent | `hackmyagent fix-all --with-aim` | Adds agent identity and audit logging during security remediation |
+| Node.js SDK | `npm install @opena2a/aim-core` | Programmatic integration for TypeScript/Node.js projects |
+| Python SDK | `pip install aim-sdk` | Programmatic integration for Python projects |
+| REST API | `http://localhost:8080/api/v1/` | Direct HTTP access to all AIM features |
+
 ## Links
 
 - [Documentation](https://opena2a.org/docs) -- full guides, tutorials, API reference
@@ -117,11 +133,12 @@ For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs
 
 | Project | Description | Install |
 |---------|-------------|---------|
-| [HackMyAgent](https://github.com/opena2a-org/hackmyagent) | Security scanner -- 147 checks, attack mode, auto-fix | `npx hackmyagent secure` |
-| [OASB](https://github.com/opena2a-org/oasb) | Open Agent Security Benchmark -- 222 attack scenarios | Included in `hackmyagent` |
-| [ARP](https://github.com/opena2a-org/arp) | Agent Runtime Protection -- process, network, filesystem monitoring | Included in `hackmyagent` |
-| [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Keep credentials out of AI context windows | `npx secretless-ai init` |
-| [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Damn Vulnerable AI Agent -- security training | `docker pull opena2a/dvaa` |
+| [OpenA2A CLI](https://github.com/opena2a-org/opena2a) | Unified security CLI for all OpenA2A tools | `npx opena2a` |
+| [HackMyAgent](https://github.com/opena2a-org/hackmyagent) | Security scanner and red-team toolkit (includes OASB + ARP) | `npx hackmyagent secure` |
+| [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Credential management -- keep secrets out of AI context | `npx secretless-ai init` |
+| [AI Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) | Browser agent detection and control (Chrome MV3) | Chrome Web Store |
+| [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Deliberately vulnerable AI agent for security training | `docker pull opena2a/dvaa` |
+| [Registry](https://registry.opena2a.org) | Agent trust registry and supply chain verification | [registry.opena2a.org](https://registry.opena2a.org) |
 
 ## License
 
