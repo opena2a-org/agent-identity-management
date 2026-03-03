@@ -6,6 +6,8 @@
 
 **Open-source identity, governance, and access control for AI agents.**
 
+AI agents are non-human identities operating with real permissions. Without identity management, there is no way to audit what they did, control what they can do, or revoke access when something goes wrong.
+
 [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
 [![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
 [![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
@@ -79,6 +81,52 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 | TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
 
 The `@opena2a/aim-core` package provides programmatic access to AIM from Node.js projects. It is the same integration used by HackMyAgent's `--with-aim` flag to add agent identity and audit logging during security remediation.
+
+## aim-core: Local-First Agent Identity
+
+Most AIM features require a running server. `@opena2a/aim-core` is the exception -- a lightweight library that gives any agent cryptographic identity, audit logging, capability enforcement, and trust scoring without a server, database, or network call.
+
+**Why local identity matters**: AI agents execute code on your machine with your permissions. Without identity, there is no audit trail, no capability boundary, and no way to prove which agent did what.
+
+| Feature | aim-core (local) | Full AIM (server) |
+|---------|-----------------|-------------------|
+| Ed25519 identity | Local keypair | Server-issued + OIDC |
+| Audit log | JSON-lines file | PostgreSQL + API |
+| Capability policy | YAML file | REST API + dashboard |
+| Trust scoring | 8-factor local | Real-time + history |
+| Multi-agent | Per-machine | Cross-machine fleet |
+
+```bash
+npm install @opena2a/aim-core
+```
+
+```typescript
+import { AIMCore } from '@opena2a/aim-core';
+
+const aim = new AIMCore({ agentName: 'my-assistant' });
+
+// Ed25519 identity -- created on first run, persisted to ~/.opena2a/aim-core/
+const identity = aim.getOrCreateIdentity();
+console.log('Agent ID:', identity.agentId);
+
+// Capability enforcement -- define what the agent can do
+aim.loadPolicy({ allow: ['db:read', 'api:call'], deny: ['db:write'] });
+aim.checkCapability('db:read');   // passes
+// aim.checkCapability('db:write'); // throws CapabilityDenied
+
+// Audit log -- append-only, tamper-evident
+aim.logEvent({ action: 'db:read', target: 'customers', outcome: 'allowed' });
+
+// Trust scoring -- 8-factor calculation
+const score = aim.calculateTrust();
+console.log('Trust:', score.score, score.grade); // e.g. 85, "B"
+```
+
+<p align="center">
+  <img src="docs/vhs/aim-core.gif" alt="aim-core demo" width="700" />
+</p>
+
+Start local, upgrade to the full AIM platform when you need multi-agent governance.
 
 ## Usage via OpenA2A CLI
 
