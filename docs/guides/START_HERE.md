@@ -23,7 +23,7 @@ Launch a fresh Claude Code session in this directory.
 
 ### Step 3: Say This Exact Command
 ```
-Please start building this product and use git as you see fit
+Please start building this platform and use git as you see fit
 ```
 
 ### That's It! 🎉
@@ -317,7 +317,7 @@ Because:
 
 ### Your Next Step
 1. Open Claude Code in this directory
-2. Say: **"Please start building this product and use git as you see fit"**
+2. Say: **"Please start building this platform and use git as you see fit"**
 3. Let Claude work for 30 hours
 4. Review and launch
 
