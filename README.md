@@ -77,7 +77,7 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 | SDK | Install | Status |
 |-----|---------|--------|
 | Python | `pip install aim-sdk` | Stable |
-| Java | Maven / Gradle | Stable |
+| Java | `org.opena2a:aim-sdk:0.1.0` (Maven / Gradle) | Stable |
 | TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
 
 The `@opena2a/aim-core` package provides programmatic access to AIM from Node.js projects. It is the same integration used by HackMyAgent's `--with-aim` flag to add agent identity and audit logging during security remediation.
@@ -176,7 +176,7 @@ hackmyagent fix-all --json              # JSON output
 | SignCrypt | Ed25519 signing, SHA-256 hash pinning, signature verification |
 | CredVault | Credential detection, env var replacement, AES-256-GCM encrypted store |
 
-**`--with-aim`** adds Ed25519 agent identity, cryptographic audit log, and capability policy enforcement. This is a lightweight way to use AIM without deploying the full server — it uses the [`@opena2a/aim-core`](#aim-core-local-first-agent-identity) library under the hood.
+**`--with-aim`** adds Ed25519 agent identity, cryptographic audit log, and capability policy enforcement. This is a lightweight way to use AIM without deploying the full server — it uses the [`@opena2a/aim-core`](#aim-core-local-first-agent-identity) library under the hood. For Java and Python projects, the same AIM capabilities are available via the [Java SDK (`org.opena2a:aim-sdk`)](#sdks) and [Python SDK (`aim-sdk`)](#sdks).
 
 ## Ecosystem Integration
 
