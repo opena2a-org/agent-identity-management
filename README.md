@@ -157,6 +157,27 @@ The CLI adapter connects to your local AIM server (default `http://localhost:808
 
 For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs/cli/).
 
+## Using with HackMyAgent fix-all
+
+[HackMyAgent](https://github.com/opena2a-org/hackmyagent) `fix-all` runs all security plugins in sequence — credential vault, file signing, skill guard — and can optionally add AIM agent identity without requiring the full server and SDK setup.
+
+```bash
+hackmyagent fix-all                     # scan and fix
+hackmyagent fix-all --dry-run           # preview without modifying
+hackmyagent fix-all --with-aim          # add agent identity + audit logging
+hackmyagent fix-all --json              # JSON output
+```
+
+**Plugins:**
+
+| Plugin | What it does |
+|--------|-------------|
+| SkillGuard | Hash pinning, tamper detection, dangerous pattern scanning |
+| SignCrypt | Ed25519 signing, SHA-256 hash pinning, signature verification |
+| CredVault | Credential detection, env var replacement, AES-256-GCM encrypted store |
+
+**`--with-aim`** adds Ed25519 agent identity, cryptographic audit log, and capability policy enforcement. This is a lightweight way to use AIM without deploying the full server — it uses the [`@opena2a/aim-core`](#aim-core-local-first-agent-identity) library under the hood.
+
 ## Ecosystem Integration
 
 AIM connects to the broader OpenA2A security platform through multiple interfaces:
