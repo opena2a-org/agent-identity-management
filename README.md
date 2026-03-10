@@ -1,4 +1,4 @@
-> **[OpenA2A](https://github.com/opena2a-org)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard)
+> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) · Registry (coming soon)
 
 <div align="center">
 
@@ -207,7 +207,6 @@ AIM connects to the broader OpenA2A security platform through multiple interface
 | [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Credential management -- keep secrets out of AI context | `npx secretless-ai init` |
 | [AI Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) | Browser agent detection and control (Chrome MV3) | Chrome Web Store |
 | [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Deliberately vulnerable AI agent for security training | `docker pull opena2a/dvaa` |
-| [Registry](https://registry.opena2a.org) | Agent trust registry and supply chain verification | [registry.opena2a.org](https://registry.opena2a.org) |
 
 ## License
 
