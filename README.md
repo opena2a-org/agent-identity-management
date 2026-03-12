@@ -13,6 +13,8 @@ AI agents are non-human identities operating with real permissions. Without iden
 [![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+[Website](https://opena2a.org) | [Demos](https://opena2a.org/demos) | [Discord](https://discord.gg/uRZa3KXgEn)
+
 </div>
 
 ## Quick Start
