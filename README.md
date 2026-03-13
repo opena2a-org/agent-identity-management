@@ -145,17 +145,20 @@ npx opena2a
 **Commands:**
 
 ```bash
-# List all registered agents
+# Show local agent identity
 opena2a identity list
 
-# Register a new agent
-opena2a identity register --name my-agent
+# Create a new agent identity
+opena2a identity create --name my-agent
 
-# Check an agent's trust score
-opena2a identity trust <agent>
+# Show trust score for current agent
+opena2a identity trust
+
+# Show recent audit events
+opena2a identity audit --limit 20
 ```
 
-The CLI adapter connects to your local AIM server (default `http://localhost:8080`) or AIM Cloud. Configure the target with `opena2a config set aim.endpoint <url>`.
+The CLI uses aim-core locally (keys stored in `~/.opena2a/aim-core/`). No server required for basic identity operations.
 
 For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs/cli/).
 
