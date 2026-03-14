@@ -79,7 +79,7 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 | SDK | Install | Status |
 |-----|---------|--------|
 | Python | `pip install aim-sdk` | Stable |
-| Java | `org.opena2a:aim-sdk:0.1.0` (Maven / Gradle) | Stable |
+| Java | `org.opena2a:aim-sdk:1.0.0` (Maven / Gradle) | Stable |
 | TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
 
 The `@opena2a/aim-core` package provides programmatic access to AIM from Node.js projects. It is the same integration used by HackMyAgent's `--with-aim` flag to add agent identity and audit logging during security remediation.
@@ -189,7 +189,7 @@ AIM connects to the broader OpenA2A security platform through multiple interface
 
 | Method | Command / Package | What It Does |
 |--------|-------------------|--------------|
-| CLI | `opena2a identity list\|register\|trust` | Terminal access to agent identity management |
+| CLI | `opena2a identity list\|create\|trust` | Terminal access to agent identity management |
 | HackMyAgent | `hackmyagent fix-all --with-aim` | Adds agent identity and audit logging during security remediation |
 | Node.js SDK | `npm install @opena2a/aim-core` | Programmatic integration for TypeScript/Node.js projects |
 | Python SDK | `pip install aim-sdk` | Programmatic integration for Python projects |
