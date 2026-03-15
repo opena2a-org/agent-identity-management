@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/opena2a/identity.git"
+    "url": "https://github.com/opena2a-org/agent-identity-management.git"
   },
   "license": "Apache-2.0",
   "author": "OpenA2A Team",
