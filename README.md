@@ -166,6 +166,18 @@ hackmyagent fix-all --with-aim     # scan, fix, and add agent identity
 hackmyagent fix-all --dry-run      # preview without modifying
 ```
 
+## Use Cases
+
+| Guide | Description | Time |
+|-------|-------------|------|
+| [Register my agent](docs/use-cases/register-my-agent.md) | Create an Ed25519 identity and attach tools | 2 min |
+| [Audit agent actions](docs/use-cases/audit-agent-actions.md) | Track actions with a tamper-evident log | 5 min |
+| [Enforce capabilities](docs/use-cases/enforce-capabilities.md) | Restrict what your agent can do with YAML policies | 5 min |
+| [Embed in my app](docs/use-cases/embed-in-my-app.md) | Use aim-core SDK in your own framework | 10 min |
+| [Fleet governance](docs/use-cases/fleet-governance.md) | Centralized management with AIM Server | 30 min |
+
+See [docs/USE-CASES.md](docs/USE-CASES.md) for the full index.
+
 ## Links
 
 - [Documentation](https://opena2a.org/docs) -- full guides, tutorials, API reference
