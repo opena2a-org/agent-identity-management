@@ -25,6 +25,22 @@ AIM provides one-command deployment scripts for all major cloud providers:
 | **Google Cloud** | Cloud Run | ~20 minutes | ~$40-80 |
 | **AWS** | ECS Fargate | ~25 minutes | ~$60-120 |
 
+## Docker Image Tags
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Latest stable release |
+| `edge` | Built from `main` on every push |
+| `0.5.2` | Specific release version |
+| `0.5` | Latest patch in the 0.5 series |
+| `0` | Latest minor in the 0.x series |
+
+All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based). To verify:
+
+```bash
+cosign verify --certificate-identity-regexp=".*opena2a-org.*" --certificate-oidc-issuer="https://token.actions.githubusercontent.com" ghcr.io/opena2a-org/aim-server:latest
+```
+
 ---
 
 ## 🔵 Azure Deployment

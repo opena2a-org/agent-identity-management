@@ -1,12 +1,8 @@
-> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) · Registry (coming soon)
-
-<div align="center">
+> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) · Registry (April 2026)
 
 # Agent Identity Management (AIM)
 
-**Open-source identity, governance, and access control for AI agents.**
-
-AI agents are non-human identities operating with real permissions. Without identity management, there is no way to audit what they did, control what they can do, or revoke access when something goes wrong.
+No way to audit what an agent did, control what it can do, or revoke access when something goes wrong. AIM fixes that -- open-source identity, governance, and access control for AI agents.
 
 [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
 [![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
@@ -15,64 +11,86 @@ AI agents are non-human identities operating with real permissions. Without iden
 
 [Website](https://opena2a.org) | [Demos](https://opena2a.org/demos) | [Discord](https://discord.gg/uRZa3KXgEn)
 
-</div>
-
 ## Quick Start
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
+npx opena2a-cli identity create --name my-agent
 ```
 
-Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.
+```
+Agent created:
+  ID:         aim_7f3a9c2e
+  Name:       my-agent
+  Public Key: ed25519:x8Kp...mQ4R
+  Stored:     ~/.opena2a/aim-core/identities/my-agent.json
+  Audit Log:  ~/.opena2a/aim-core/audit.jsonl
+```
 
-Or pull directly:
+Your agent now has a cryptographic identity, an append-only audit log, and a trust score -- no server required.
+
+## Two Ways to Start
+
+**Solo developer, single agent, no infrastructure:**
+
+```bash
+npm install @opena2a/aim-core
+```
+
+Local Ed25519 keys, file-based audit log, YAML capability policies. Everything stays on your machine.
+
+**Team, fleet of agents, full governance:**
 
 ```bash
 docker pull opena2a/aim-server
 docker pull opena2a/aim-dashboard
 ```
 
-**AIM Cloud:** [aim.opena2a.org](https://aim.opena2a.org) -- no infrastructure required.
+PostgreSQL-backed audit log, REST API, dashboard, OAuth 2.0 token endpoint, cross-machine fleet management.
 
-## Secure Your Agent
+Or use [AIM Cloud](https://aim.opena2a.org) -- no infrastructure required.
 
-```python
-from aim_sdk import secure
+## CLI Commands
 
-agent = secure("my-assistant", capabilities=["db:read", "api:call"])
+The CLI is the fastest path to managing agent identity. Install once:
 
-@agent.perform_action(capability="db:read")
-def get_customer(id):
-    return db.query(id)
+```bash
+npm install -g opena2a-cli
 ```
 
-Your agent gets cryptographic identity (Ed25519), capability enforcement, and a full audit trail.
+Then:
 
-## What AIM Does
+```bash
+opena2a identity create --name my-agent    # Create identity
+opena2a identity trust                     # Calculate trust score
+opena2a identity sign --data "hello"       # Sign data
+opena2a identity audit                     # View audit log
+opena2a identity attach --all              # Connect to all detected tools
+```
 
-- **Cryptographic identity** -- Ed25519 keypairs and OAuth 2.0 token endpoint for machine-to-machine auth
-- **Capability enforcement** -- declare what each agent can do; block everything else at runtime
-- **MCP attestation** -- verify Model Context Protocol servers, detect tool drift
-- **NHI governance** -- ownership tracking, lifecycle management, shadow agent discovery, ABOM export
-- **Trust scoring** -- 8-factor algorithm evaluating agent trustworthiness in real time
-- **Security policies** -- monitoring or strict mode, data exfiltration detection, just-in-time access
+For a full security dashboard across all your agents:
 
-## Docker Images
+```bash
+npx opena2a-cli review
+```
 
-| Image | GHCR | Docker Hub |
-|-------|------|------------|
-| Backend API | `ghcr.io/opena2a-org/aim-server` | `opena2a/aim-server` |
-| Dashboard | `ghcr.io/opena2a-org/aim-dashboard` | `opena2a/aim-dashboard` |
+```
+Security Review: ~/my-project
+  Identity:     aim_7f3a9c2e (my-agent)
+  Trust Score:  85/100 (B)
+  Capabilities: 3 allowed, 1 denied
+  Audit Events: 47 (last 24h)
+  MCP Servers:  2 verified, 0 drifted
+```
 
-| Tag | Description |
-|-----|-------------|
-| `latest` | Latest stable release |
-| `edge` | Built from `main` on every push |
-| `0.5.2` | Specific release version |
-| `0.5` | Latest patch in the 0.5 series |
-| `0` | Latest minor in the 0.x series |
+## What AIM Provides
 
-All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based). See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for verification and production deployment.
+**Cryptographic identity** -- Ed25519 keypairs and OAuth 2.0 token endpoint for machine-to-machine auth. Every agent gets a verifiable identity on creation.
+
+**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Policies defined in YAML (local) or via REST API (server).
+
+**Audit trail** -- Append-only, tamper-evident log of every action. JSON-lines locally, PostgreSQL with full query API on the server.
+
+**Trust scoring** -- 8-factor algorithm evaluating agent trustworthiness: identity strength, capability compliance, audit completeness, MCP attestation, policy adherence, lifecycle status, ownership verification, and behavioral analysis.
 
 ## SDKs
 
@@ -82,21 +100,9 @@ All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless
 | Java | `org.opena2a:aim-sdk:1.0.0` (Maven / Gradle) | Stable |
 | TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
 
-The `@opena2a/aim-core` package provides programmatic access to AIM from Node.js projects. It is the same integration used by HackMyAgent's `--with-aim` flag to add agent identity and audit logging during security remediation.
+## aim-core: For Library Developers
 
-## aim-core: Local-First Agent Identity
-
-Most AIM features require a running server. `@opena2a/aim-core` is the exception -- a lightweight library that gives any agent cryptographic identity, audit logging, capability enforcement, and trust scoring without a server, database, or network call.
-
-**Why local identity matters**: AI agents execute code on your machine with your permissions. Without identity, there is no audit trail, no capability boundary, and no way to prove which agent did what.
-
-| Feature | aim-core (local) | Full AIM (server) |
-|---------|-----------------|-------------------|
-| Ed25519 identity | Local keypair | Server-issued + OIDC |
-| Audit log | JSON-lines file | PostgreSQL + API |
-| Capability policy | YAML file | REST API + dashboard |
-| Trust scoring | 8-factor local | Real-time + history |
-| Multi-agent | Per-machine | Cross-machine fleet |
+If you are building a tool or framework that needs to embed agent identity, `@opena2a/aim-core` provides programmatic access without requiring a running server.
 
 ```bash
 npm install @opena2a/aim-core
@@ -124,76 +130,41 @@ const score = aim.calculateTrust();
 console.log('Trust:', score.score, score.grade); // e.g. 85, "B"
 ```
 
-<p align="center">
-  <img src="docs/vhs/aim-core.gif" alt="aim-core demo" width="700" />
-</p>
+| Feature | aim-core (local) | Full AIM (server) |
+|---------|-----------------|-------------------|
+| Ed25519 identity | Local keypair | Server-issued + OIDC |
+| Audit log | JSON-lines file | PostgreSQL + API |
+| Capability policy | YAML file | REST API + dashboard |
+| Trust scoring | 8-factor local | Real-time + history |
+| Multi-agent | Per-machine | Cross-machine fleet |
 
-Start local, upgrade to the full AIM platform when you need multi-agent governance.
+This is the same library used by HackMyAgent's `--with-aim` flag to add agent identity during security remediation.
 
-## Usage via OpenA2A CLI
+## Server Deployment
 
-The [OpenA2A CLI](https://github.com/opena2a-org/opena2a) provides an `identity` adapter that wraps the AIM server API, giving you quick terminal access to identity management without writing code or calling the REST API directly.
-
-**Install the CLI:**
-
-```bash
-npm install -g opena2a-cli
-# or run without installing:
-npx opena2a
-```
-
-**Commands:**
+For team and fleet deployments, the AIM server provides a REST API, dashboard, and PostgreSQL-backed storage.
 
 ```bash
-# Show local agent identity
-opena2a identity list
-
-# Create a new agent identity
-opena2a identity create --name my-agent
-
-# Show trust score for current agent
-opena2a identity trust
-
-# Show recent audit events
-opena2a identity audit --limit 20
+curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
 ```
 
-The CLI uses aim-core locally (keys stored in `~/.opena2a/aim-core/`). No server required for basic identity operations.
+Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.
 
-For the full CLI reference, see the [CLI documentation](https://opena2a.org/docs/cli/).
+| Image | GHCR | Docker Hub |
+|-------|------|------------|
+| Backend API | `ghcr.io/opena2a-org/aim-server` | `opena2a/aim-server` |
+| Dashboard | `ghcr.io/opena2a-org/aim-dashboard` | `opena2a/aim-dashboard` |
 
-## Using with HackMyAgent fix-all
+For production deployment (AWS, Azure, GCP, Kubernetes), image signing verification, and tag conventions, see [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
-[HackMyAgent](https://github.com/opena2a-org/hackmyagent) `fix-all` runs all security plugins in sequence — credential vault, file signing, skill guard — and can optionally add AIM agent identity without requiring the full server and SDK setup.
+## Using with HackMyAgent
+
+[HackMyAgent](https://github.com/opena2a-org/hackmyagent) can add AIM agent identity as part of its security remediation flow:
 
 ```bash
-hackmyagent fix-all                     # scan and fix
-hackmyagent fix-all --dry-run           # preview without modifying
-hackmyagent fix-all --with-aim          # add agent identity + audit logging
-hackmyagent fix-all --json              # JSON output
+hackmyagent fix-all --with-aim     # scan, fix, and add agent identity
+hackmyagent fix-all --dry-run      # preview without modifying
 ```
-
-**Plugins:**
-
-| Plugin | What it does |
-|--------|-------------|
-| SkillGuard | Hash pinning, tamper detection, dangerous pattern scanning |
-| SignCrypt | Ed25519 signing, SHA-256 hash pinning, signature verification |
-| CredVault | Credential detection, env var replacement, AES-256-GCM encrypted store |
-
-**`--with-aim`** adds Ed25519 agent identity, cryptographic audit log, and capability policy enforcement. This is a lightweight way to use AIM without deploying the full server — it uses the [`@opena2a/aim-core`](#aim-core-local-first-agent-identity) library under the hood. For Java and Python projects, the same AIM capabilities are available via the [Java SDK (`org.opena2a:aim-sdk`)](#sdks) and [Python SDK (`aim-sdk`)](#sdks).
-
-## Ecosystem Integration
-
-AIM connects to the broader OpenA2A security platform through multiple interfaces:
-
-| Method | Command / Package | What It Does |
-|--------|-------------------|--------------|
-| CLI | `opena2a identity list\|create\|trust` | Terminal access to agent identity management |
-| HackMyAgent | `hackmyagent fix-all --with-aim` | Adds agent identity and audit logging during security remediation |
-| Node.js SDK | `npm install @opena2a/aim-core` | Programmatic integration for TypeScript/Node.js projects |
-| Python SDK | `pip install aim-sdk` | Programmatic integration for Python projects |
-| REST API | `http://localhost:8080/api/v1/` | Direct HTTP access to all AIM features |
 
 ## Links
 
@@ -201,17 +172,9 @@ AIM connects to the broader OpenA2A security platform through multiple interface
 - [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) -- secure your first agent
 - [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) -- connect MCP servers
 - [Contributing](CONTRIBUTING.md) -- how to contribute
-- [Deployment Guide](infrastructure/DEPLOYMENT.md) -- production deployment (AWS, Azure, GCP, K8s)
+- [Deployment Guide](infrastructure/DEPLOYMENT.md) -- production deployment
 
-### Ecosystem
-
-| Project | Description | Install |
-|---------|-------------|---------|
-| [OpenA2A CLI](https://github.com/opena2a-org/opena2a) | Unified security CLI for all OpenA2A tools | `npx opena2a` |
-| [HackMyAgent](https://github.com/opena2a-org/hackmyagent) | Security scanner and red-team toolkit (includes OASB + ARP) | `npx hackmyagent secure` |
-| [Secretless AI](https://github.com/opena2a-org/secretless-ai) | Credential management -- keep secrets out of AI context | `npx secretless-ai init` |
-| [AI Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) | Browser agent detection and control (Chrome MV3) | Chrome Web Store |
-| [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent) | Deliberately vulnerable AI agent for security training | `docker pull opena2a/dvaa` |
+Part of the [OpenA2A](https://opena2a.org) security platform. See all tools at [opena2a.org](https://opena2a.org).
 
 ## License
 
