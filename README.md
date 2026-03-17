@@ -76,7 +76,7 @@ npx opena2a-cli review
 ```
 Security Review: ~/my-project
   Identity:     aim_7f3a9c2e (my-agent)
-  Trust Score:  85/100 (B)
+  Trust Score:  0.85 (strong)
   Capabilities: 3 allowed, 1 denied
   Audit Events: 47 (last 24h)
   MCP Servers:  2 verified, 0 drifted
@@ -96,7 +96,7 @@ Security Review: ~/my-project
 
 | SDK | Install | Status |
 |-----|---------|--------|
-| Python | `pip install aim-sdk` | Stable |
+| Python | `pip install -e sdk/python/` (local) or download from [AIM dashboard](https://aim.opena2a.org) | Stable |
 | Java | `org.opena2a:aim-sdk:1.0.0` (Maven / Gradle) | Stable |
 | TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
 
@@ -114,7 +114,7 @@ import { AIMCore } from '@opena2a/aim-core';
 const aim = new AIMCore({ agentName: 'my-assistant' });
 
 // Ed25519 identity -- created on first run, persisted to ~/.opena2a/aim-core/
-const identity = aim.getOrCreateIdentity();
+const identity = aim.getIdentity();
 console.log('Agent ID:', identity.agentId);
 
 // Capability enforcement -- define what the agent can do
@@ -123,11 +123,11 @@ aim.checkCapability('db:read');   // passes
 // aim.checkCapability('db:write'); // throws CapabilityDenied
 
 // Audit log -- append-only, tamper-evident
-aim.logEvent({ action: 'db:read', target: 'customers', outcome: 'allowed' });
+aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin: 'my-assistant' });
 
 // Trust scoring -- 8-factor calculation
 const score = aim.calculateTrust();
-console.log('Trust:', score.score, score.grade); // e.g. 85, "B"
+console.log('Trust:', score.overall); // e.g. 0.45
 ```
 
 | Feature | aim-core (local) | Full AIM (server) |

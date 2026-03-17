@@ -166,7 +166,7 @@ Trust: 0.72
 ### Install
 
 ```bash
-pip install aim-sdk
+pip install -e sdk/python/
 ```
 
 ### Full Example

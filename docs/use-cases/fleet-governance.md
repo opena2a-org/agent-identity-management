@@ -135,7 +135,7 @@ Expected output:
       "agentName": "data-processor",
       "action": "identity:create",
       "target": "data-processor",
-      "outcome": "allowed",
+      "result": "allowed",
       "timestamp": "2026-03-16T14:00:00Z",
       "hash": "sha256:f8a1..."
     },
@@ -145,7 +145,7 @@ Expected output:
       "agentName": "code-reviewer",
       "action": "identity:create",
       "target": "code-reviewer",
-      "outcome": "allowed",
+      "result": "allowed",
       "timestamp": "2026-03-16T14:01:00Z",
       "hash": "sha256:c2d4..."
     }
@@ -286,7 +286,7 @@ Code Reviewer Trust: 0.68
 ### Python
 
 ```bash
-pip install aim-sdk
+pip install -e sdk/python/
 ```
 
 ```python

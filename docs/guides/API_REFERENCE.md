@@ -1,4 +1,4 @@
-# 🔌 API Reference
+# API Reference
 
 Complete API reference for Agent Identity Management platform.
 
@@ -33,7 +33,7 @@ GET /api/v1/auth/login/:provider
 **Response:**
 ```json
 {
-  "redirect_url": "https://accounts.google.com/o/oauth2/v2/auth?..."
+  "redirectUrl": "https://accounts.google.com/o/oauth2/v2/auth?..."
 }
 ```
 
@@ -75,11 +75,11 @@ Authorization: Bearer <access_token>
 {
   "id": "123e4567-e89b-12d3-a456-426614174000",
   "email": "user@example.com",
-  "display_name": "John Doe",
+  "name": "John Doe",
   "role": "admin",
-  "organization_id": "789e4567-e89b-12d3-a456-426614174000",
-  "organization_name": "Acme Corp",
-  "created_at": "2025-01-01T00:00:00Z"
+  "organizationId": "789e4567-e89b-12d3-a456-426614174000",
+  "provider": "google",
+  "createdAt": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -111,6 +111,63 @@ Authorization: Bearer <access_token>
 
 ---
 
+### Public Login
+
+```http
+POST /api/v1/public/login
+```
+
+**Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "your-password"
+}
+```
+
+**Response (approved user):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "user": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "role": "admin",
+    "organizationId": "789e4567-e89b-12d3-a456-426614174000"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+  "isApproved": true
+}
+```
+
+**Response (pending approval):**
+```json
+{
+  "success": true,
+  "message": "Your registration is pending admin approval",
+  "isApproved": false
+}
+```
+
+**Errors:**
+- `400` - Missing or empty email/password
+- `401` - Invalid credentials or deactivated account
+
+**Example:**
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "your-password"}' \
+  http://localhost:8080/api/v1/public/login
+```
+
+**Note:** This endpoint does not require authentication. It is the primary login method for users created via the public registration flow or the admin dashboard.
+
+---
+
 ## Agents
 
 ### List Agents
@@ -136,21 +193,21 @@ Authorization: Bearer <access_token>
   "agents": [
     {
       "id": "456e4567-e89b-12d3-a456-426614174000",
-      "organization_id": "789e4567-e89b-12d3-a456-426614174000",
+      "organizationId": "789e4567-e89b-12d3-a456-426614174000",
       "name": "code-reviewer",
-      "display_name": "Code Review Assistant",
+      "displayName": "Code Review Assistant",
       "description": "AI agent for code review and suggestions",
-      "agent_type": "ai_agent",
+      "agentType": "ai_agent",
       "status": "verified",
       "version": "1.0.0",
-      "trust_score": 0.85,
-      "repository_url": "https://github.com/org/agent",
-      "documentation_url": "https://docs.example.com",
-      "public_key": "-----BEGIN PUBLIC KEY-----\n...",
-      "certificate_url": "https://certs.example.com/agent.pem",
-      "created_at": "2025-01-01T00:00:00Z",
-      "updated_at": "2025-01-02T00:00:00Z",
-      "verified_at": "2025-01-02T00:00:00Z"
+      "trustScore": 0.85,
+      "repositoryUrl": "https://github.com/org/agent",
+      "documentationUrl": "https://docs.example.com",
+      "publicKey": "-----BEGIN PUBLIC KEY-----\n...",
+      "certificateUrl": "https://certs.example.com/agent.pem",
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-02T00:00:00Z",
+      "verifiedAt": "2025-01-02T00:00:00Z"
     }
   ],
   "total": 10,
@@ -183,36 +240,36 @@ Content-Type: application/json
 ```json
 {
   "name": "code-reviewer",
-  "display_name": "Code Review Assistant",
+  "displayName": "Code Review Assistant",
   "description": "AI agent for code review and suggestions",
-  "agent_type": "ai_agent",
+  "agentType": "ai_agent",
   "version": "1.0.0",
-  "repository_url": "https://github.com/org/agent",
-  "documentation_url": "https://docs.example.com",
-  "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANB..."
+  "repositoryUrl": "https://github.com/org/agent",
+  "documentationUrl": "https://docs.example.com",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANB..."
 }
 ```
 
 **Field Requirements:**
 - `name` (required) - Unique identifier (alphanumeric, hyphens, underscores)
-- `display_name` (required) - Human-readable name
+- `displayName` (required) - Human-readable name
 - `description` (required) - Detailed description
-- `agent_type` (required) - `ai_agent` or `mcp_server`
+- `agentType` (required) - `ai_agent` or `mcp_server`
 - `version` (optional) - Semantic version (e.g., "1.0.0")
-- `repository_url` (optional) - GitHub/GitLab repository
-- `documentation_url` (optional) - Documentation URL
-- `public_key` (optional) - PEM-formatted RSA public key
-- `certificate_url` (optional) - X.509 certificate URL
+- `repositoryUrl` (optional) - GitHub/GitLab repository
+- `documentationUrl` (optional) - Documentation URL
+- `publicKey` (optional) - PEM-formatted RSA public key
+- `certificateUrl` (optional) - X.509 certificate URL
 
 **Response:**
 ```json
 {
   "id": "456e4567-e89b-12d3-a456-426614174000",
-  "organization_id": "789e4567-e89b-12d3-a456-426614174000",
+  "organizationId": "789e4567-e89b-12d3-a456-426614174000",
   "name": "code-reviewer",
   "status": "pending",
-  "trust_score": 0.0,
-  "created_at": "2025-01-01T00:00:00Z"
+  "trustScore": 0.0,
+  "createdAt": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -223,9 +280,9 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "name": "code-reviewer",
-    "display_name": "Code Review Assistant",
+    "displayName": "Code Review Assistant",
     "description": "AI agent for code review",
-    "agent_type": "ai_agent"
+    "agentType": "ai_agent"
   }' \
   http://localhost:8080/api/v1/agents
 ```
@@ -288,8 +345,8 @@ POST /api/v1/agents/:id/verify
 ```json
 {
   "verified": true,
-  "trust_score": 0.75,
-  "verified_at": "2025-01-02T00:00:00Z"
+  "trustScore": 0.75,
+  "verifiedAt": "2025-01-02T00:00:00Z"
 }
 ```
 
@@ -306,23 +363,22 @@ GET /api/v1/api-keys
 ```
 
 **Query Parameters:**
-- `agent_id` (optional) - Filter by agent
-- `is_active` (optional) - Filter by active status (true/false)
+- `agentId` (optional) - Filter by agent
+- `isActive` (optional) - Filter by active status (true/false)
 
 **Response:**
 ```json
 {
-  "api_keys": [
+  "apiKeys": [
     {
       "id": "789e4567-e89b-12d3-a456-426614174000",
-      "agent_id": "456e4567-e89b-12d3-a456-426614174000",
+      "agentId": "456e4567-e89b-12d3-a456-426614174000",
       "name": "Production API Key",
       "prefix": "aim_live_",
-      "last_4": "a1b2",
-      "is_active": true,
-      "expires_at": "2026-01-01T00:00:00Z",
-      "last_used_at": "2025-01-05T12:30:00Z",
-      "created_at": "2025-01-01T00:00:00Z"
+      "isActive": true,
+      "expiresAt": "2026-01-01T00:00:00Z",
+      "lastUsedAt": "2025-01-05T12:30:00Z",
+      "createdAt": "2025-01-01T00:00:00Z"
     }
   ]
 }
@@ -341,9 +397,9 @@ POST /api/v1/api-keys
 **Body:**
 ```json
 {
-  "agent_id": "456e4567-e89b-12d3-a456-426614174000",
+  "agentId": "456e4567-e89b-12d3-a456-426614174000",
   "name": "Production API Key",
-  "expires_at": "2026-01-01T00:00:00Z"
+  "expiresAt": "2026-01-01T00:00:00Z"
 }
 ```
 
@@ -351,14 +407,14 @@ POST /api/v1/api-keys
 ```json
 {
   "id": "789e4567-e89b-12d3-a456-426614174000",
-  "api_key": "aim_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
-  "agent_id": "456e4567-e89b-12d3-a456-426614174000",
+  "apiKey": "aim_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "agentId": "456e4567-e89b-12d3-a456-426614174000",
   "name": "Production API Key",
-  "created_at": "2025-01-01T00:00:00Z"
+  "createdAt": "2025-01-01T00:00:00Z"
 }
 ```
 
-**⚠️ Important:** Save the `api_key` value immediately. It cannot be retrieved again.
+**Important:** Save the `apiKey` value immediately. It cannot be retrieved again.
 
 **Example:**
 ```bash
@@ -366,7 +422,7 @@ curl -X POST \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_id": "456e4567-e89b-12d3-a456-426614174000",
+    "agentId": "456e4567-e89b-12d3-a456-426614174000",
     "name": "Production API Key"
   }' \
   http://localhost:8080/api/v1/api-keys
@@ -400,19 +456,19 @@ GET /api/v1/trust-score/agents/:id
 **Response:**
 ```json
 {
-  "agent_id": "456e4567-e89b-12d3-a456-426614174000",
-  "trust_score": 0.85,
+  "agentId": "456e4567-e89b-12d3-a456-426614174000",
+  "trustScore": 0.85,
   "factors": {
-    "verification_status": 1.0,
-    "certificate_validity": 0.9,
-    "repository_quality": 0.8,
-    "documentation_score": 0.7,
-    "community_trust": 0.8,
-    "security_audit": 0.9,
-    "update_frequency": 0.85,
-    "age_score": 0.6
+    "verificationStatus": 1.0,
+    "certificateValidity": 0.9,
+    "repositoryQuality": 0.8,
+    "documentationScore": 0.7,
+    "communityTrust": 0.8,
+    "securityAudit": 0.9,
+    "updateFrequency": 0.85,
+    "ageScore": 0.6
   },
-  "calculated_at": "2025-01-02T00:00:00Z"
+  "calculatedAt": "2025-01-02T00:00:00Z"
 }
 ```
 
@@ -427,10 +483,10 @@ POST /api/v1/trust-score/calculate/:id
 **Response:**
 ```json
 {
-  "agent_id": "456e4567-e89b-12d3-a456-426614174000",
-  "previous_score": 0.80,
-  "new_score": 0.85,
-  "calculated_at": "2025-01-05T00:00:00Z"
+  "agentId": "456e4567-e89b-12d3-a456-426614174000",
+  "previousScore": 0.80,
+  "newScore": 0.85,
+  "calculatedAt": "2025-01-05T00:00:00Z"
 }
 ```
 
@@ -451,12 +507,12 @@ GET /api/v1/trust-score/agents/:id/history
 {
   "history": [
     {
-      "trust_score": 0.85,
-      "created_at": "2025-01-05T00:00:00Z"
+      "trustScore": 0.85,
+      "createdAt": "2025-01-05T00:00:00Z"
     },
     {
-      "trust_score": 0.80,
-      "created_at": "2025-01-02T00:00:00Z"
+      "trustScore": 0.80,
+      "createdAt": "2025-01-02T00:00:00Z"
     }
   ]
 }
@@ -475,7 +531,7 @@ GET /api/v1/admin/users
 ```
 
 **Query Parameters:**
-- `organization_id` (optional) - Filter by organization
+- `organizationId` (optional) - Filter by organization
 - `role` (optional) - Filter by role
 - `limit` (optional) - Number of results
 - `offset` (optional) - Pagination offset
@@ -487,13 +543,12 @@ GET /api/v1/admin/users
     {
       "id": "123e4567-e89b-12d3-a456-426614174000",
       "email": "user@example.com",
-      "display_name": "John Doe",
+      "name": "John Doe",
       "role": "admin",
       "provider": "google",
-      "organization_id": "789e4567-e89b-12d3-a456-426614174000",
-      "organization_name": "Acme Corp",
-      "created_at": "2025-01-01T00:00:00Z",
-      "last_login_at": "2025-01-05T12:00:00Z"
+      "organizationId": "789e4567-e89b-12d3-a456-426614174000",
+      "createdAt": "2025-01-01T00:00:00Z",
+      "lastLoginAt": "2025-01-05T12:00:00Z"
     }
   ]
 }
@@ -525,7 +580,7 @@ PUT /api/v1/admin/users/:id/role
 {
   "id": "123e4567-e89b-12d3-a456-426614174000",
   "role": "manager",
-  "updated_at": "2025-01-05T00:00:00Z"
+  "updatedAt": "2025-01-05T00:00:00Z"
 }
 ```
 
@@ -538,11 +593,11 @@ GET /api/v1/admin/audit-logs
 ```
 
 **Query Parameters:**
-- `user_id` (optional) - Filter by user
+- `userId` (optional) - Filter by user
 - `action` (optional) - Filter by action type
-- `resource_type` (optional) - Filter by resource type
-- `start_date` (optional) - ISO 8601 datetime
-- `end_date` (optional) - ISO 8601 datetime
+- `resourceType` (optional) - Filter by resource type
+- `startDate` (optional) - ISO 8601 datetime
+- `endDate` (optional) - ISO 8601 datetime
 - `limit` (optional) - Number of results (default: 100)
 - `offset` (optional) - Pagination offset
 
@@ -552,16 +607,16 @@ GET /api/v1/admin/audit-logs
   "logs": [
     {
       "id": "999e4567-e89b-12d3-a456-426614174000",
-      "user_id": "123e4567-e89b-12d3-a456-426614174000",
-      "user_email": "user@example.com",
+      "userId": "123e4567-e89b-12d3-a456-426614174000",
+      "userEmail": "user@example.com",
       "action": "create",
-      "resource_type": "agent",
-      "resource_id": "456e4567-e89b-12d3-a456-426614174000",
-      "ip_address": "192.168.1.1",
-      "user_agent": "Mozilla/5.0...",
+      "resourceType": "agent",
+      "resourceId": "456e4567-e89b-12d3-a456-426614174000",
+      "ipAddress": "192.168.1.1",
+      "userAgent": "Mozilla/5.0...",
       "metadata": {
-        "agent_name": "code-reviewer",
-        "agent_type": "ai_agent"
+        "agentName": "code-reviewer",
+        "agentType": "ai_agent"
       },
       "timestamp": "2025-01-05T12:00:00Z"
     }
@@ -580,7 +635,7 @@ GET /api/v1/admin/alerts
 
 **Query Parameters:**
 - `severity` (optional) - `info`, `warning`, `critical`
-- `is_acknowledged` (optional) - true/false
+- `isAcknowledged` (optional) - true/false
 - `limit` (optional)
 - `offset` (optional)
 
@@ -590,14 +645,14 @@ GET /api/v1/admin/alerts
   "alerts": [
     {
       "id": "888e4567-e89b-12d3-a456-426614174000",
-      "alert_type": "api_key_expiring",
+      "alertType": "apiKeyExpiring",
       "severity": "warning",
       "title": "API Key 'Production API Key' Expiring Soon",
       "description": "API key will expire in 5 days",
-      "resource_type": "api_key",
-      "resource_id": "789e4567-e89b-12d3-a456-426614174000",
-      "is_acknowledged": false,
-      "created_at": "2025-01-05T00:00:00Z"
+      "resourceType": "apiKey",
+      "resourceId": "789e4567-e89b-12d3-a456-426614174000",
+      "isAcknowledged": false,
+      "createdAt": "2025-01-05T00:00:00Z"
     }
   ]
 }
@@ -615,9 +670,9 @@ POST /api/v1/admin/alerts/:id/acknowledge
 ```json
 {
   "id": "888e4567-e89b-12d3-a456-426614174000",
-  "is_acknowledged": true,
-  "acknowledged_by": "123e4567-e89b-12d3-a456-426614174000",
-  "acknowledged_at": "2025-01-05T13:00:00Z"
+  "isAcknowledged": true,
+  "acknowledgedBy": "123e4567-e89b-12d3-a456-426614174000",
+  "acknowledgedAt": "2025-01-05T13:00:00Z"
 }
 ```
 
@@ -634,45 +689,45 @@ POST /api/v1/compliance/generate
 **Body:**
 ```json
 {
-  "period_days": 30
+  "periodDays": 30
 }
 ```
 
 **Response:**
 ```json
 {
-  "organization_id": "789e4567-e89b-12d3-a456-426614174000",
-  "generated_at": "2025-01-05T00:00:00Z",
+  "organizationId": "789e4567-e89b-12d3-a456-426614174000",
+  "generatedAt": "2025-01-05T00:00:00Z",
   "period": "Last 30 days",
   "summary": {
-    "total_agents": 25,
-    "verified_agents": 20,
-    "pending_agents": 3,
-    "average_trust_score": 0.78,
-    "active_api_keys": 15,
-    "total_audit_logs": 5432,
-    "unacknowledged_alerts": 2
+    "totalAgents": 25,
+    "verifiedAgents": 20,
+    "pendingAgents": 3,
+    "averageTrustScore": 0.78,
+    "activeApiKeys": 15,
+    "totalAuditLogs": 5432,
+    "unacknowledgedAlerts": 2
   },
   "agents": [
     {
       "id": "456e4567-e89b-12d3-a456-426614174000",
       "name": "Code Reviewer",
-      "type": "ai_agent",
+      "agentType": "ai_agent",
       "status": "verified",
-      "trust_score": 0.85,
-      "has_certificate": true,
-      "last_verified": "2025-01-02"
+      "trustScore": 0.85,
+      "hasCertificate": true,
+      "lastVerified": "2025-01-02"
     }
   ],
-  "audit_activity": {
-    "total_actions": 5432,
-    "unique_users": 12,
-    "top_actions": {
+  "auditActivity": {
+    "totalActions": 5432,
+    "uniqueUsers": 12,
+    "topActions": {
       "create": 234,
       "update": 156,
       "verify": 45
     },
-    "recent_actions_24h": 87
+    "recentActions24h": 87
   },
   "recommendations": [
     "Verify 3 pending agent(s) to improve security posture",
@@ -692,14 +747,14 @@ GET /api/v1/compliance/export
 
 **Query Parameters:**
 - `format` (required) - `json`, `csv`, or `pdf`
-- `period_days` (optional) - Default: 30
+- `periodDays` (optional) - Default: 30
 
 **Response:** File download
 
 **Example:**
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8080/api/v1/compliance/export?format=json&period_days=30" \
+  "http://localhost:8080/api/v1/compliance/export?format=json&periodDays=30" \
   -o compliance_report.json
 ```
 
@@ -763,7 +818,7 @@ X-RateLimit-Reset: 1640995200
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
     "message": "Too many requests, please try again later",
-    "retry_after": 30
+    "retryAfter": 30
   }
 }
 ```
@@ -785,7 +840,7 @@ All list endpoints support pagination:
   "total": 250,
   "limit": 50,
   "offset": 0,
-  "has_more": true
+  "hasMore": true
 }
 ```
 
