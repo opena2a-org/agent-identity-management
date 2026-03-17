@@ -191,16 +191,35 @@ export class AIMClient {
 
     this.log('Registering agent:', options.name);
 
-    const response = await this.request<{ agent: Agent; credentials: { agentId: string } }>(
+    const response = await this.request<Record<string, unknown>>(
       'POST',
       '/api/v1/agents',
       payload,
       true // Use API key for registration
     );
 
+    // Handle both response formats:
+    // 1. Wrapped format: { agent: {...}, credentials: { agentId: "..." } }
+    // 2. Flat format (actual server): { id, name, displayName, trustScore, ... }
+    let agentData: Agent;
+    let agentId: string;
+
+    if (response.agent && typeof response.agent === 'object') {
+      // Wrapped format
+      agentData = response.agent as Agent;
+      const creds = response.credentials as { agentId: string } | undefined;
+      agentId = creds?.agentId ?? agentData.id;
+    } else if (response.id || response.agentId) {
+      // Flat format from the actual AIM server
+      agentId = (response.id ?? response.agentId) as string;
+      agentData = response as unknown as Agent;
+    } else {
+      throw new AIMError('Unexpected response format from server: missing agent data');
+    }
+
     // Store credentials
     this.credentials = {
-      agentId: response.credentials.agentId,
+      agentId,
       privateKey,
       publicKey,
       organizationId: this.config.organizationId,
@@ -210,7 +229,7 @@ export class AIMClient {
     // Initialize token manager
     this.tokenManager = new OAuthTokenManager(this.config.baseUrl, this.credentials);
 
-    this.agent = response.agent;
+    this.agent = agentData;
     this.log('Agent registered:', this.agent.id);
 
     return this.agent;
