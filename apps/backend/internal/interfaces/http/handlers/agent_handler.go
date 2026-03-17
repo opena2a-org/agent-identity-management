@@ -227,6 +227,12 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	// SECURITY: No error logging to prevent information leakage
 	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID, userEmail)
 	if err != nil {
+		// Return 409 Conflict for duplicate agent name instead of leaking database internals
+		if err.Error() == "an agent with this name already exists" {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})

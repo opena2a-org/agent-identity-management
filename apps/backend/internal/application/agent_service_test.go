@@ -1745,6 +1745,37 @@ func TestAgentService_CreateAgent_RepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create agent")
 }
 
+func TestAgentService_CreateAgent_DuplicateName(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		capabilityRepo: mockCapabilityRepo,
+	}
+
+	req := &CreateAgentRequest{
+		Name:        "duplicate-agent",
+		DisplayName: "Duplicate Agent",
+		AgentType:   domain.AgentTypeAI,
+		PublicKey:    "test-key",
+	}
+
+	// Simulate PostgreSQL unique constraint violation
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).
+		Return(errors.New("pq: duplicate key value violates unique constraint \"agents_organization_id_name_key\""))
+
+	ctx := context.Background()
+	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
+
+	assert.Error(t, err)
+	assert.Nil(t, agent)
+	assert.Equal(t, "an agent with this name already exists", err.Error())
+	// Verify the raw PostgreSQL error is NOT leaked
+	assert.NotContains(t, err.Error(), "pq:")
+	assert.NotContains(t, err.Error(), "duplicate key value")
+}
+
 func TestAgentService_CreateAgent_WithSDKToken(t *testing.T) {
 	mockAgentRepo := new(MockAgentRepository)
 	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)

@@ -255,6 +255,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	if err := s.agentRepo.Create(agent); err != nil {
+		// Detect PostgreSQL unique constraint violation to avoid leaking database internals
+		if strings.Contains(err.Error(), "duplicate key value") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, fmt.Errorf("an agent with this name already exists")
+		}
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
