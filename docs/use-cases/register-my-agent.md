@@ -96,6 +96,83 @@ Factors:
 Recoverable: +30 by loading a capability policy
 ```
 
+## Using the SDK
+
+You can perform all the steps above programmatically using the TypeScript or Python SDKs.
+
+### TypeScript
+
+```bash
+npm install @opena2a/aim-core
+```
+
+```typescript
+import { AIMCore } from '@opena2a/aim-core';
+
+const aim = new AIMCore({ agentName: 'my-agent' });
+
+// Step 1: Create an identity
+const identity = aim.getOrCreateIdentity();
+console.log('Agent ID:', identity.agentId);
+console.log('Public Key:', identity.publicKey);
+
+// Step 2: Calculate trust score
+const trust = aim.calculateTrust();
+console.log(`Trust: ${trust.score}/100 (${trust.grade})`);
+console.log('Factors:', JSON.stringify(trust.factors, null, 2));
+```
+
+Expected output:
+
+```
+Agent ID: aim_7f3a9c2e
+Public Key: ed25519:x8Kp...mQ4R
+Trust: 35/100 (D)
+Factors: {
+  "identityStrength": 10,
+  "capabilityCompliance": 0,
+  "auditCompleteness": 5,
+  "mcpAttestation": 0,
+  "policyAdherence": 0,
+  "lifecycleStatus": 10,
+  "ownershipVerification": 5,
+  "behavioralAnalysis": 5
+}
+```
+
+### Python
+
+```bash
+pip install aim-sdk
+```
+
+```python
+from aim_sdk import AIMCore
+
+aim = AIMCore(agent_name="my-agent")
+
+# Step 1: Create an identity
+identity = aim.get_or_create_identity()
+print(f"Agent ID: {identity.agent_id}")
+print(f"Public Key: {identity.public_key}")
+
+# Step 2: Calculate trust score
+trust = aim.calculate_trust()
+print(f"Trust: {trust.score}/100 ({trust.grade})")
+print(f"Factors: {trust.factors}")
+```
+
+Expected output:
+
+```
+Agent ID: aim_7f3a9c2e
+Public Key: ed25519:x8Kp...mQ4R
+Trust: 35/100 (D)
+Factors: {'identity_strength': 10, 'capability_compliance': 0, ...}
+```
+
+For a full SDK walkthrough including policies and event logging, see [Embed in my app](embed-in-my-app.md).
+
 ## What You Now Have
 
 - An Ed25519 keypair stored locally

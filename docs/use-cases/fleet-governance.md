@@ -204,6 +204,136 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. The dashboa
 - **Policy status** -- which agents have policies loaded, any violations
 - **Trust trends** -- score history per agent over time
 
+## Option B: SDK Approach
+
+If you prefer to manage fleet identities programmatically instead of through the CLI, use the TypeScript or Python SDKs with the `server` parameter.
+
+### TypeScript
+
+```bash
+npm install @opena2a/aim-core
+```
+
+```typescript
+import { AIMCore } from '@opena2a/aim-core';
+
+// Connect to your AIM Server
+const dataProcessor = new AIMCore({
+  agentName: 'data-processor',
+  server: 'http://localhost:8080'
+});
+
+const codeReviewer = new AIMCore({
+  agentName: 'code-reviewer',
+  server: 'http://localhost:8080'
+});
+
+// Create identities (registered on the server)
+const dpIdentity = dataProcessor.getOrCreateIdentity();
+console.log('Data Processor:', dpIdentity.agentId);
+
+const crIdentity = codeReviewer.getOrCreateIdentity();
+console.log('Code Reviewer:', crIdentity.agentId);
+
+// Load policies per agent
+dataProcessor.loadPolicy({
+  allow: ['db:read', 'api:call'],
+  deny: ['db:delete', 'file:execute']
+});
+
+codeReviewer.loadPolicy({
+  allow: ['file:read', 'api:call'],
+  deny: ['db:write', 'db:delete']
+});
+
+// Log events (sent to the central server)
+dataProcessor.logEvent({
+  action: 'db:read',
+  target: 'customers',
+  outcome: 'allowed'
+});
+
+// Calculate trust (server-side with history)
+const dpTrust = dataProcessor.calculateTrust();
+console.log(`Data Processor Trust: ${dpTrust.score}/100 (${dpTrust.grade})`);
+
+const crTrust = codeReviewer.calculateTrust();
+console.log(`Code Reviewer Trust: ${crTrust.score}/100 (${crTrust.grade})`);
+```
+
+Expected output:
+
+```
+Data Processor: aim_9c4b2e1f
+Code Reviewer: aim_2d8f5a3c
+Data Processor Trust: 85/100 (B)
+Code Reviewer Trust: 80/100 (B)
+```
+
+### Python
+
+```bash
+pip install aim-sdk
+```
+
+```python
+from aim_sdk import AIMCore
+
+# Connect to your AIM Server
+data_processor = AIMCore(
+    agent_name="data-processor",
+    server="http://localhost:8080"
+)
+
+code_reviewer = AIMCore(
+    agent_name="code-reviewer",
+    server="http://localhost:8080"
+)
+
+# Create identities (registered on the server)
+dp_identity = data_processor.get_or_create_identity()
+print(f"Data Processor: {dp_identity.agent_id}")
+
+cr_identity = code_reviewer.get_or_create_identity()
+print(f"Code Reviewer: {cr_identity.agent_id}")
+
+# Load policies per agent
+data_processor.load_policy(
+    allow=["db:read", "api:call"],
+    deny=["db:delete", "file:execute"]
+)
+
+code_reviewer.load_policy(
+    allow=["file:read", "api:call"],
+    deny=["db:write", "db:delete"]
+)
+
+# Log events (sent to the central server)
+data_processor.log_event(
+    action="db:read",
+    target="customers",
+    outcome="allowed"
+)
+
+# Calculate trust (server-side with history)
+dp_trust = data_processor.calculate_trust()
+print(f"Data Processor Trust: {dp_trust.score}/100 ({dp_trust.grade})")
+
+cr_trust = code_reviewer.calculate_trust()
+print(f"Code Reviewer Trust: {cr_trust.score}/100 ({cr_trust.grade})")
+```
+
+Expected output:
+
+```
+Data Processor: aim_9c4b2e1f
+Code Reviewer: aim_2d8f5a3c
+Data Processor Trust: 85/100 (B)
+Code Reviewer Trust: 80/100 (B)
+```
+
+When the `server` parameter is set, all identities, audit events, and trust calculations are routed through the AIM Server and stored in the central PostgreSQL database. The SDK handles authentication and local key caching automatically.
+
 ## Architecture
 
 ```
