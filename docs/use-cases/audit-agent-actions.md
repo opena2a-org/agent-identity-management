@@ -103,15 +103,15 @@ npm install @opena2a/aim-core
 import { AIMCore } from '@opena2a/aim-core';
 
 const aim = new AIMCore({ agentName: 'my-agent' });
-aim.getOrCreateIdentity();
+aim.getIdentity();
 
-// Log events
-aim.logEvent({ action: 'db:read', target: 'customers', outcome: 'allowed' });
-aim.logEvent({ action: 'api:call', target: 'weather-svc', outcome: 'allowed' });
-aim.logEvent({ action: 'file:write', target: '/tmp/report', outcome: 'denied' });
+// Log events (plugin and result are required fields)
+aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin: 'my-agent' });
+aim.logEvent({ action: 'api:call', target: 'weather-svc', result: 'allowed', plugin: 'my-agent' });
+aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', plugin: 'my-agent' });
 
 // Each event is appended to the local audit log with a SHA-256 hash chain.
-// When connected to an AIM Server, events are also sent to the central database.
+// When connected to an AIM Server (via serverUrl), events are also sent to the central database.
 ```
 
 ### Python
@@ -121,21 +121,25 @@ pip install aim-sdk
 ```
 
 ```python
-from aim_sdk import AIMCore
+from aim_sdk import secure
 
-aim = AIMCore(agent_name="my-agent")
-aim.get_or_create_identity()
+# Register the agent (creates identity automatically)
+agent = secure("my-agent")
 
-# Log events
-aim.log_event(action="db:read", target="customers", outcome="allowed")
-aim.log_event(action="api:call", target="weather-svc", outcome="allowed")
-aim.log_event(action="file:write", target="/tmp/report", outcome="denied")
+# Log events using the decorator pattern
+@agent.perform_action("db:read", resource="customers")
+def read_customers():
+    return db.query("SELECT * FROM customers")
 
-# Each event is appended to the local audit log with a SHA-256 hash chain.
-# When connected to an AIM Server, events are also sent to the central database.
+@agent.perform_action("api:call", resource="weather-svc")
+def call_weather():
+    return requests.get("https://weather-svc.example.com/forecast")
+
+# Each decorated call is automatically logged with the agent's identity.
+# When connected to an AIM Server (via aim_url), events are also sent to the central database.
 ```
 
-Events logged via the SDK follow the same hash chain format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
+Events logged via the TypeScript SDK follow the same hash chain format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
 
 ## What You Now Have
 
