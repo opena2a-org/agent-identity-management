@@ -44,6 +44,20 @@ class AIMConsole:
         if not self.quiet:
             print(message)
 
+    @staticmethod
+    def _normalize_trust_score(score: float) -> float:
+        """Normalize trust score to a 0-1 float.
+
+        The server may return trust scores as either a 0-1 float (e.g. 0.55)
+        or a 0-100 integer (e.g. 55). Python's :.0% format expects 0-1, so
+        values > 1 are divided by 100 to normalize.
+        """
+        if score is None:
+            return 0.0
+        if score > 1:
+            return score / 100.0
+        return float(score)
+
     # ═══════════════════════════════════════════════════════════════════════════
     # AGENT REGISTRATION OUTPUT
     # ═══════════════════════════════════════════════════════════════════════════
@@ -62,6 +76,8 @@ class AIMConsole:
         """Display beautiful agent registration success message."""
         if self.quiet:
             return
+
+        trust_score = self._normalize_trust_score(trust_score)
 
         if RICH_AVAILABLE:
             self._agent_registered_rich(
@@ -146,6 +162,7 @@ class AIMConsole:
         """Format trust score with color based on value."""
         if score is None:
             return "[dim]N/A[/]"
+        score = self._normalize_trust_score(score)
         if score >= 0.8:
             return f"[bold green]{score:.0%}[/] [dim]Excellent[/]"
         elif score >= 0.6:
@@ -159,6 +176,7 @@ class AIMConsole:
         """Format trust score inline (no label, just colored value)."""
         if score is None:
             return "[dim]N/A[/]"
+        score = self._normalize_trust_score(score)
         if score >= 0.8:
             return f"[green]{score:.0%}[/]"
         elif score >= 0.6:
@@ -182,6 +200,8 @@ class AIMConsole:
         """Display message when existing agent credentials are found."""
         if self.quiet:
             return
+
+        trust_score = self._normalize_trust_score(trust_score)
 
         if RICH_AVAILABLE:
             # Status indicator
