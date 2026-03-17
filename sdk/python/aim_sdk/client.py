@@ -609,34 +609,37 @@ class AIMClient:
         # Create verification request payload
         timestamp = datetime.utcnow().isoformat() + 'Z'  # Match backend expected format
 
-
-        # Create signature for Ed25519 verification
-        # The backend verifies the signature by reconstructing the JSON payload
-        # We need to create a signature of the JSON payload itself
-        # NOTE: Backend expects "action_type" not "capability" for signature verification
-        signature_payload = {
-            "action_type": capability,  # Backend expects action_type for signature
-            "agent_id": self.agent_id,
-            "context": context or {},
-            "resource": resource,
-            "timestamp": timestamp
-        }
-
-        # Create deterministic JSON (sorted keys, spaces after colons and commas)
-        signature_message = json.dumps(signature_payload, sort_keys=True, separators=(', ', ': '))
-
-        # Sign with Ed25519
-        signature = self._sign_message(signature_message)
-
+        # Build base request payload
         request_payload = {
-            "agentId": self.agent_id,  # camelCase for backend
+            "agentId": self.agent_id,
             "capability": capability,
             "resource": resource,
             "context": context or {},
             "timestamp": timestamp,
-            "signature": signature,  # Ed25519 signature in body
-            "publicKey": self.public_key  # camelCase for backend
         }
+
+        if self.signing_key:
+            # Ed25519 cryptographic signing mode
+            # Backend expects "action_type" not "capability" for signature verification
+            signature_payload = {
+                "action_type": capability,
+                "agent_id": self.agent_id,
+                "context": context or {},
+                "resource": resource,
+                "timestamp": timestamp
+            }
+            signature_message = json.dumps(
+                signature_payload, sort_keys=True, separators=(', ', ': ')
+            )
+            signature = self._sign_message(signature_message)
+            request_payload["signature"] = signature
+            request_payload["publicKey"] = self.public_key
+        elif not self.api_key:
+            raise ConfigurationError(
+                "Ed25519 keys required for action verification. "
+                "Initialize with private_key/public_key or use "
+                "register_agent() to generate keys automatically."
+            )
 
         # SDK API endpoint
         endpoint = "/api/v1/sdk-api/verifications"
@@ -645,12 +648,15 @@ class AIMClient:
         try:
             url = f"{self.aim_url}{endpoint}"
 
-            # Prepare headers - NO AUTH TOKENS for verification endpoint!
-            # Verification uses cryptographic signature authentication (Ed25519)
+            # Prepare headers based on authentication mode
             headers = {
                 'Content-Type': 'application/json',
                 'User-Agent': f'AIM-Python-SDK/1.0.0'
             }
+
+            # Add API key header for API-key-only mode
+            if self.api_key and not self.signing_key:
+                headers['X-API-Key'] = self.api_key
 
             # Add SDK token header if available (for usage tracking only, not auth)
             if self.sdk_token_id:
@@ -4297,11 +4303,14 @@ def _register_single_mcp(
         endpoint = f"/api/v1/sdk-api/agents/{agent_id}/mcp-servers"
         url = f"{client.aim_url}{endpoint}"
 
-        # Build Ed25519 authentication headers
+        # Pre-serialize JSON body (needed for both auth modes and the POST call)
+        json_body_str = json_module.dumps(mcp_data, sort_keys=True)
+
+        # Build authentication headers
         headers = {'Content-Type': 'application/json'}
         if client.signing_key and client.public_key:
+            # Ed25519 signature authentication
             timestamp = str(int(time.time()))
-            json_body_str = json_module.dumps(mcp_data, sort_keys=True)
             message = '\n'.join(['POST', endpoint, timestamp, json_body_str])
             signature = client.signing_key.sign(message.encode('utf-8')).signature
             signature_b64 = Base64Encoder.encode(signature).decode('utf-8')
@@ -4309,6 +4318,9 @@ def _register_single_mcp(
             headers['X-Signature'] = signature_b64
             headers['X-Timestamp'] = timestamp
             headers['X-Public-Key'] = client.public_key
+        elif client.api_key:
+            # API-key-only authentication
+            headers['X-API-Key'] = client.api_key
 
         try:
             response = requests.post(url, data=json_body_str, headers=headers, timeout=15)
