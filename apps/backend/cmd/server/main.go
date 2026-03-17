@@ -419,6 +419,7 @@ type Repositories struct {
 	A2ARevokedAgent       *repository.A2ARevokedAgentRepository
 	A2ASecuritySettings   *repository.A2ASecuritySettingsRepository
 	A2ASecurityViolation  *repository.A2ASecurityViolationRepository
+	DeviceCode            *repository.DeviceCodeRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -464,6 +465,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		A2ARevokedAgent:       repository.NewA2ARevokedAgentRepository(db),
 		A2ASecuritySettings:   repository.NewA2ASecuritySettingsRepository(db),
 		A2ASecurityViolation:  repository.NewA2ASecurityViolationRepository(db),
+		DeviceCode:            repository.NewDeviceCodeRepository(db),
 	}, oauthRepo
 }
 
@@ -491,6 +493,7 @@ type Services struct {
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
+	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -694,6 +697,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		keyVault,
 	)
 
+	// Device Authorization Grant (RFC 8628) for CLI login
+	aimBaseURL := os.Getenv("AIM_BASE_URL")
+	if aimBaseURL == "" {
+		aimBaseURL = "http://localhost:8080"
+	}
+	deviceAuthService := application.NewDeviceAuthService(
+		repos.DeviceCode,
+		jwtService,
+		authService,
+		aimBaseURL,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -718,6 +733,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
 		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
+		DeviceAuth:        deviceAuthService,        // For OAuth Device Authorization Grant (RFC 8628)
 	}, keyVault
 }
 
@@ -752,6 +768,7 @@ type Handlers struct {
 	A2A                *handlers.A2AHandler                // For A2A (Agent-to-Agent) protocol
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
+	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -913,6 +930,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Agent,
 			repos.Agent,
 		),
+		DeviceAuth: handlers.NewDeviceAuthHandler(
+			services.DeviceAuth,
+		),
 	}
 }
 
@@ -965,6 +985,18 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	oauth := v1.Group("/oauth")
 	oauth.Use(middleware.StrictRateLimitMiddleware())
 	oauth.Post("/token", h.OAuthToken.HandleTokenRequest)
+
+	// Device Authorization Grant (RFC 8628) for CLI login
+	deviceAuth := v1.Group("/oauth/device")
+	deviceAuth.Use(middleware.StrictRateLimitMiddleware())
+	deviceAuth.Post("/code", h.DeviceAuth.RequestDeviceCode)
+	deviceAuth.Post("/token", h.DeviceAuth.PollDeviceToken)
+	deviceAuth.Get("/verify", h.DeviceAuth.GetDeviceVerification)
+
+	// Device approval requires authentication (user must be logged in)
+	deviceAuthProtected := v1.Group("/oauth/device")
+	deviceAuthProtected.Use(middleware.AuthMiddleware(jwtService))
+	deviceAuthProtected.Post("/approve", h.DeviceAuth.ApproveDevice)
 
 	// Auth routes (no authentication required, strict rate limiting)
 	auth := v1.Group("/auth")
