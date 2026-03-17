@@ -393,8 +393,22 @@ class SecurityLogger:
         message: str,
         **kwargs
     ) -> SecurityEvent:
-        """Create a security event with common fields populated."""
+        """Create a security event with common fields populated.
+
+        Merges persistent agent context with per-call kwargs. When the same
+        field (e.g. agent_id) appears in both _agent_context and kwargs,
+        the per-call kwarg takes precedence, preventing duplicate keyword
+        argument errors in the SecurityEvent constructor.
+        """
         event_type_str = event_type.value if isinstance(event_type, Enum) else event_type
+
+        # Merge agent context with kwargs. Explicit non-None kwargs take
+        # precedence over context values, preventing both duplicate keyword
+        # errors and accidental overwrite of context with default None values.
+        merged_context = {**self._agent_context}
+        for key, value in kwargs.items():
+            if value is not None or key not in merged_context:
+                merged_context[key] = value
 
         event = SecurityEvent(
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -407,8 +421,7 @@ class SecurityLogger:
             hostname=socket.gethostname(),
             process_id=os.getpid(),
             session_id=self._session_id,
-            **self._agent_context,
-            **kwargs
+            **merged_context
         )
         return event
 
