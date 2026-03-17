@@ -124,32 +124,39 @@ npm install @opena2a/aim-core
 import { AIMCore } from '@opena2a/aim-core';
 
 const aim = new AIMCore({ agentName: 'my-agent' });
-aim.getOrCreateIdentity();
+aim.getIdentity();
 
-// Load policy (equivalent to the YAML policy file above)
-aim.loadPolicy({
-  allow: ['db:read', 'api:call', 'file:read'],
-  deny: ['db:write', 'db:delete', 'network:fetch', 'file:execute']
+// Save policy (equivalent to the YAML policy file above)
+aim.savePolicy({
+  version: '1.0',
+  defaultAction: 'deny',
+  rules: [
+    { capability: 'db:read', action: 'allow' },
+    { capability: 'api:call', action: 'allow' },
+    { capability: 'file:read', action: 'allow' },
+    { capability: 'db:write', action: 'deny' },
+    { capability: 'db:delete', action: 'deny' },
+    { capability: 'network:fetch', action: 'deny' },
+    { capability: 'file:execute', action: 'deny' }
+  ]
 });
 
-// Check with exception on denial
-try {
-  aim.checkCapability('db:read');
+// checkCapability returns a boolean (does not throw)
+if (aim.checkCapability('db:read')) {
   console.log('db:read is allowed');
-} catch (err) {
+} else {
   console.log('db:read is denied');
 }
 
-// Check with boolean
-if (aim.isAllowed('network:fetch')) {
+if (aim.checkCapability('network:fetch')) {
   // proceed with network call
 } else {
   console.log('network:fetch is denied by policy');
 }
 
-// Trust score reflects loaded policy
+// Trust score reflects loaded policy (overall is 0-1, not a grade)
 const trust = aim.calculateTrust();
-console.log(`Trust: ${trust.score}/100 (${trust.grade})`);
+console.log(`Trust: ${trust.overall}`);
 ```
 
 Expected output:
@@ -157,7 +164,7 @@ Expected output:
 ```
 db:read is allowed
 network:fetch is denied by policy
-Trust: 85/100 (B)
+Trust: 0.72
 ```
 
 ### Python
@@ -167,33 +174,37 @@ pip install aim-sdk
 ```
 
 ```python
-from aim_sdk import AIMCore
+from aim_sdk import register_agent, AgentType
 
-aim = AIMCore(agent_name="my-agent")
-aim.get_or_create_identity()
-
-# Load policy (equivalent to the YAML policy file above)
-aim.load_policy(
-    allow=["db:read", "api:call", "file:read"],
-    deny=["db:write", "db:delete", "network:fetch", "file:execute"]
+# Register agent with allowed capabilities
+agent = register_agent(
+    name="my-agent",
+    capabilities=["db:read", "api:call", "file:read"],
+    agent_type=AgentType.CLAUDE
 )
 
-# Check with exception on denial
+# Use the decorator pattern to enforce capabilities at runtime
+@agent.perform_action("db:read", resource="users_table")
+def read_users():
+    return db.query("SELECT * FROM users")
+
+# Actions not in the capabilities list are denied automatically
+@agent.perform_action("network:fetch", resource="external-api")
+def fetch_external():
+    return requests.get("https://external.example.com")
+
+# Calling read_users() succeeds; calling fetch_external() raises ActionDeniedError
 try:
-    aim.check_capability("db:read")
+    read_users()
     print("db:read is allowed")
 except Exception:
     print("db:read is denied")
 
-# Check with boolean
-if aim.is_allowed("network:fetch"):
-    pass  # proceed with network call
-else:
+try:
+    fetch_external()
+    print("network:fetch is allowed")
+except Exception:
     print("network:fetch is denied by policy")
-
-# Trust score reflects loaded policy
-trust = aim.calculate_trust()
-print(f"Trust: {trust.score}/100 ({trust.grade})")
 ```
 
 Expected output:
@@ -201,10 +212,9 @@ Expected output:
 ```
 db:read is allowed
 network:fetch is denied by policy
-Trust: 85/100 (B)
 ```
 
-The SDK policy enforcement uses the same deny-by-default model as the CLI. Actions not listed in `allow` are denied, and `checkCapability()` / `check_capability()` raises an exception on denial so you can integrate it into your application's control flow.
+The TypeScript SDK uses `checkCapability()` which returns a boolean. The Python SDK uses the `@agent.perform_action()` decorator which raises `ActionDeniedError` when a capability is not in the agent's registered capabilities list.
 
 ## Policy Format Reference
 
