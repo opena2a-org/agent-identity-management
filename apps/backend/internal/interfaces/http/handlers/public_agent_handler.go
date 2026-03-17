@@ -111,13 +111,13 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 	// Validate required fields
 	if req.Name == "" || req.DisplayName == "" || req.Description == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "name, display_name, and description are required",
+			"error": "name, displayName, and description are required",
 		})
 	}
 
 	if !isValidAgentTypeForPublicAPI(req.AgentType) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("invalid agent_type: %s", req.AgentType),
+			"error": fmt.Sprintf("invalid agentType: %s", req.AgentType),
 		})
 	}
 
@@ -228,9 +228,9 @@ func (h *PublicAgentHandler) calculateInitialTrustScore(req *PublicRegisterReque
 func (h *PublicAgentHandler) buildRegistrationMessage(status domain.AgentStatus) string {
 	switch status {
 	case domain.AgentStatusVerified:
-		return "✅ Agent registered and auto-verified! You can start using it immediately."
+		return "Agent registered and auto-verified. You can start using it immediately."
 	case domain.AgentStatusPending:
-		return "⏳ Agent registered. Pending manual verification by administrator."
+		return "Agent registered. Pending manual verification by administrator."
 	default:
 		return "Agent registered successfully."
 	}

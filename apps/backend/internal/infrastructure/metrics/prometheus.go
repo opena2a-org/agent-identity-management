@@ -211,9 +211,12 @@ var validHTTPMethods = map[string]bool{
 
 // normalizeMethod ensures the HTTP method is a valid standard method.
 // Returns "UNKNOWN" for garbled or non-standard methods to prevent label explosion.
+// Trims whitespace and normalizes case before lookup to handle Fiber v3 beta
+// returning garbled method strings (e.g. "GETT", "get\n").
 func normalizeMethod(method string) string {
-	if validHTTPMethods[method] {
-		return method
+	m := strings.TrimSpace(strings.ToUpper(method))
+	if validHTTPMethods[m] {
+		return m
 	}
 	return "UNKNOWN"
 }

@@ -261,10 +261,10 @@ func main() {
 	// Standard A2A protocol requires /.well-known/agent.json at the root
 	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
-	// Revocation list (public, rate-limited, cacheable)
-	app.Get("/api/v1/revocations", middleware.RateLimitMiddleware(), h.Lifecycle.GetRevocationList)
+	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
+	// route shadowing when the /api/v1 group is registered with middleware.
 
-	// ✅ Action verification for SDK (signature-based auth, NO API key required)
+	// Action verification for SDK (signature-based auth, NO API key required)
 	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
 	// These endpoints verify Ed25519 signatures instead of requiring API keys
 	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
@@ -944,7 +944,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	sdkTokenTrackingMiddleware := middleware.NewSDKTokenTrackingMiddleware(sdkTokenRepo)
 	v1.Use(sdkTokenTrackingMiddleware.Handler()) // Apply to all API routes
 
-	// ✅ Public routes (NO authentication required) - Self-registration API
+	// Revocation list (public, rate-limited, cacheable, no auth required)
+	// Registered inside the v1 group to avoid Fiber v3 beta route shadowing
+	// when the /api/v1 group is registered with middleware on the app.
+	v1.Get("/revocations", middleware.RateLimitMiddleware(), h.Lifecycle.GetRevocationList)
+
+	// Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
 	public.Use(middleware.OptionalAuthMiddleware(jwtService))                               // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)                                 // 🚀 ONE-LINE agent registration
