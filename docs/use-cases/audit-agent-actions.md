@@ -89,6 +89,54 @@ Chain integrity: VALID (50 events shown of 128 total, 0 breaks)
 Showing 50 of 128 events.
 ```
 
+## Using the SDK
+
+You can log and query audit events programmatically using the TypeScript or Python SDKs.
+
+### TypeScript
+
+```bash
+npm install @opena2a/aim-core
+```
+
+```typescript
+import { AIMCore } from '@opena2a/aim-core';
+
+const aim = new AIMCore({ agentName: 'my-agent' });
+aim.getOrCreateIdentity();
+
+// Log events
+aim.logEvent({ action: 'db:read', target: 'customers', outcome: 'allowed' });
+aim.logEvent({ action: 'api:call', target: 'weather-svc', outcome: 'allowed' });
+aim.logEvent({ action: 'file:write', target: '/tmp/report', outcome: 'denied' });
+
+// Each event is appended to the local audit log with a SHA-256 hash chain.
+// When connected to an AIM Server, events are also sent to the central database.
+```
+
+### Python
+
+```bash
+pip install aim-sdk
+```
+
+```python
+from aim_sdk import AIMCore
+
+aim = AIMCore(agent_name="my-agent")
+aim.get_or_create_identity()
+
+# Log events
+aim.log_event(action="db:read", target="customers", outcome="allowed")
+aim.log_event(action="api:call", target="weather-svc", outcome="allowed")
+aim.log_event(action="file:write", target="/tmp/report", outcome="denied")
+
+# Each event is appended to the local audit log with a SHA-256 hash chain.
+# When connected to an AIM Server, events are also sent to the central database.
+```
+
+Events logged via the SDK follow the same hash chain format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
+
 ## What You Now Have
 
 - An append-only log of every agent action

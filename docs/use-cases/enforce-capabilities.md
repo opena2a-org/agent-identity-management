@@ -110,6 +110,102 @@ Factors:
   Behavioral Analysis:    10/10  (consistent behavior)
 ```
 
+## Using the SDK
+
+You can load policies and enforce capabilities programmatically using the TypeScript or Python SDKs.
+
+### TypeScript
+
+```bash
+npm install @opena2a/aim-core
+```
+
+```typescript
+import { AIMCore } from '@opena2a/aim-core';
+
+const aim = new AIMCore({ agentName: 'my-agent' });
+aim.getOrCreateIdentity();
+
+// Load policy (equivalent to the YAML policy file above)
+aim.loadPolicy({
+  allow: ['db:read', 'api:call', 'file:read'],
+  deny: ['db:write', 'db:delete', 'network:fetch', 'file:execute']
+});
+
+// Check with exception on denial
+try {
+  aim.checkCapability('db:read');
+  console.log('db:read is allowed');
+} catch (err) {
+  console.log('db:read is denied');
+}
+
+// Check with boolean
+if (aim.isAllowed('network:fetch')) {
+  // proceed with network call
+} else {
+  console.log('network:fetch is denied by policy');
+}
+
+// Trust score reflects loaded policy
+const trust = aim.calculateTrust();
+console.log(`Trust: ${trust.score}/100 (${trust.grade})`);
+```
+
+Expected output:
+
+```
+db:read is allowed
+network:fetch is denied by policy
+Trust: 85/100 (B)
+```
+
+### Python
+
+```bash
+pip install aim-sdk
+```
+
+```python
+from aim_sdk import AIMCore
+
+aim = AIMCore(agent_name="my-agent")
+aim.get_or_create_identity()
+
+# Load policy (equivalent to the YAML policy file above)
+aim.load_policy(
+    allow=["db:read", "api:call", "file:read"],
+    deny=["db:write", "db:delete", "network:fetch", "file:execute"]
+)
+
+# Check with exception on denial
+try:
+    aim.check_capability("db:read")
+    print("db:read is allowed")
+except Exception:
+    print("db:read is denied")
+
+# Check with boolean
+if aim.is_allowed("network:fetch"):
+    pass  # proceed with network call
+else:
+    print("network:fetch is denied by policy")
+
+# Trust score reflects loaded policy
+trust = aim.calculate_trust()
+print(f"Trust: {trust.score}/100 ({trust.grade})")
+```
+
+Expected output:
+
+```
+db:read is allowed
+network:fetch is denied by policy
+Trust: 85/100 (B)
+```
+
+The SDK policy enforcement uses the same deny-by-default model as the CLI. Actions not listed in `allow` are denied, and `checkCapability()` / `check_capability()` raises an exception on denial so you can integrate it into your application's control flow.
+
 ## Policy Format Reference
 
 ```yaml
