@@ -117,7 +117,7 @@ aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', pl
 ### Python
 
 ```bash
-pip install aim-sdk
+pip install -e sdk/python/
 ```
 
 ```python

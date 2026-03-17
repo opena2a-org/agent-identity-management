@@ -97,7 +97,7 @@ opena2a identity trust
 Expected output:
 
 ```
-Trust Score: 85/100 (B)
+Trust Score: 0.85 (strong)
 
 Factors:
   Identity Strength:      10/15  (Ed25519 key present)
@@ -170,7 +170,7 @@ Trust: 0.72
 ### Python
 
 ```bash
-pip install aim-sdk
+pip install -e sdk/python/
 ```
 
 ```python

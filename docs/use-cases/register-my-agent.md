@@ -35,7 +35,7 @@ opena2a identity trust
 Expected output:
 
 ```
-Trust Score: 35/100 (D)
+Trust Score: 0.35 (needs-attention)
 
 Factors:
   Identity Strength:      10/15  (Ed25519 key present)
@@ -81,7 +81,7 @@ opena2a identity trust
 Expected output:
 
 ```
-Trust Score: 55/100 (C)
+Trust Score: 0.55 (moderate)
 
 Factors:
   Identity Strength:      10/15  (Ed25519 key present)
@@ -142,9 +142,13 @@ Factors: {
 
 ### Python
 
+For local development, install the SDK from the repository:
+
 ```bash
-pip install aim-sdk
+pip install -e sdk/python/
 ```
+
+For production deployments, download the SDK with pre-configured credentials from the [AIM dashboard](https://aim.opena2a.org).
 
 ```python
 from aim_sdk import register_agent, AgentType
