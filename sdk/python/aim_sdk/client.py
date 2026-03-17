@@ -4036,6 +4036,27 @@ def _register_via_api_key(
 
     credentials = response.json()
 
+    # Map camelCase server response keys to snake_case for SDK consistency
+    _camel_to_snake_map = {
+        "agentId": "agent_id",
+        "publicKey": "public_key",
+        "privateKey": "private_key",
+        "aimUrl": "aim_url",
+        "trustScore": "trust_score",
+        "displayName": "display_name",
+    }
+    for camel, snake in _camel_to_snake_map.items():
+        if camel in credentials and snake not in credentials:
+            credentials[snake] = credentials[camel]
+
+    # Backend may return 'id' instead of 'agent_id'
+    if "id" in credentials and "agent_id" not in credentials:
+        credentials["agent_id"] = credentials["id"]
+
+    # Ensure aim_url is present in credentials
+    if "aim_url" not in credentials:
+        credentials["aim_url"] = aim_url
+
     # Save credentials locally
     _save_credentials(name, credentials)
 

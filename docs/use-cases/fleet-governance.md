@@ -290,25 +290,34 @@ pip install aim-sdk
 ```
 
 ```python
-from aim_sdk import register_agent, AgentType
+from aim_sdk import secure, register_agent, AIMClient, AgentType
 
-# Register agents against the AIM Server
-data_processor = register_agent(
+# One-line registration (recommended)
+data_processor = secure(
     name="data-processor",
     capabilities=["db:read", "api:call"],
     agent_type=AgentType.LANGCHAIN,
-    aim_url="http://localhost:8080"
+    aim_url="http://localhost:8080",
+    api_key="your-api-key"
 )
 
-code_reviewer = register_agent(
+code_reviewer = secure(
     name="code-reviewer",
     capabilities=["file:read", "api:call"],
     agent_type=AgentType.CLAUDE,
-    aim_url="http://localhost:8080"
+    aim_url="http://localhost:8080",
+    api_key="your-api-key"
 )
 
 print(f"Data Processor: {data_processor.agent_id}")
 print(f"Code Reviewer: {code_reviewer.agent_id}")
+
+# Manual client for existing agents
+client = AIMClient(
+    agent_id="aim_9c4b2e1f",
+    aim_url="http://localhost:8080",
+    api_key="your-api-key"
+)
 ```
 
 Expected output:
@@ -318,7 +327,48 @@ Data Processor: aim_9c4b2e1f
 Code Reviewer: aim_2d8f5a3c
 ```
 
-When the `serverUrl` (TypeScript) or `aim_url` (Python) parameter is set, identities and audit events are routed through the AIM Server and stored in the central PostgreSQL database. The SDKs handle authentication and local key caching automatically.
+### Java
+
+```xml
+<dependency>
+    <groupId>org.opena2a</groupId>
+    <artifactId>aim-sdk</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+```java
+import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.client.AgentType;
+import java.util.List;
+
+// Builder pattern for manual client
+AIMClient client = AIMClient.builder()
+    .baseUrl("http://localhost:8080")
+    .apiKey("your-api-key")
+    .build();
+
+// One-line registration
+var dataProcessor = AIMClient.secure("data-processor",
+    List.of("db:read", "api:call"),
+    AgentType.LANGCHAIN);
+
+var codeReviewer = AIMClient.secure("code-reviewer",
+    List.of("file:read", "api:call"),
+    AgentType.CLAUDE);
+
+System.out.println("Data Processor: " + dataProcessor.getAgentId());
+System.out.println("Code Reviewer: " + codeReviewer.getAgentId());
+```
+
+Expected output:
+
+```
+Data Processor: aim_9c4b2e1f
+Code Reviewer: aim_2d8f5a3c
+```
+
+When the `serverUrl` (TypeScript), `aim_url` (Python), or `baseUrl` (Java) parameter is set, identities and audit events are routed through the AIM Server and stored in the central PostgreSQL database. The SDKs handle authentication and local key caching automatically.
 
 ## Architecture
 

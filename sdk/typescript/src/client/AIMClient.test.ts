@@ -173,6 +173,141 @@ describe('AIMClient', () => {
       expect(typeof client.registerAgent).toBe('function');
     });
 
+    it('should handle flat response format from actual AIM server', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      const client = new AIMClient({ apiKey: 'test-api-key' });
+
+      // Mock the flat response that the actual AIM server returns
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            id: 'agent-uuid-123',
+            organizationId: 'org-456',
+            name: 'test-agent',
+            displayName: 'Test Agent',
+            description: '',
+            agentType: 'custom',
+            status: 'pending',
+            version: '1.0.0',
+            publicKey: 'base64-public-key',
+            trustScore: 0.5,
+            capabilities: [],
+            talksTo: [],
+            metadata: {},
+            createdAt: '2026-03-17T00:00:00Z',
+            updatedAt: '2026-03-17T00:00:00Z',
+          }),
+      });
+
+      const agent = await client.registerAgent({
+        name: 'test-agent',
+        displayName: 'Test Agent',
+      });
+
+      expect(agent.id).toBe('agent-uuid-123');
+      expect(agent.name).toBe('test-agent');
+      expect(agent.displayName).toBe('Test Agent');
+      expect(agent.trustScore).toBe(0.5);
+
+      // Credentials should be set with the flat id
+      const creds = client.getCredentials();
+      expect(creds).not.toBeNull();
+      expect(creds!.agentId).toBe('agent-uuid-123');
+      expect(client.isAuthenticated()).toBe(true);
+    });
+
+    it('should handle wrapped response format for backward compatibility', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      const client = new AIMClient({ apiKey: 'test-api-key' });
+
+      // Mock the wrapped response format: { agent: {...}, credentials: { agentId: "..." } }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            agent: {
+              id: 'agent-wrapped-789',
+              organizationId: 'org-456',
+              name: 'wrapped-agent',
+              displayName: 'Wrapped Agent',
+              agentType: 'langchain',
+              status: 'verified',
+              version: '2.0.0',
+              trustScore: 0.9,
+              capabilities: ['db:read'],
+              talksTo: [],
+              createdAt: '2026-03-17T00:00:00Z',
+              updatedAt: '2026-03-17T00:00:00Z',
+            },
+            credentials: {
+              agentId: 'agent-wrapped-789',
+            },
+          }),
+      });
+
+      const agent = await client.registerAgent({
+        name: 'wrapped-agent',
+        displayName: 'Wrapped Agent',
+        agentType: 'langchain',
+      });
+
+      expect(agent.id).toBe('agent-wrapped-789');
+      expect(agent.name).toBe('wrapped-agent');
+      expect(agent.trustScore).toBe(0.9);
+
+      const creds = client.getCredentials();
+      expect(creds).not.toBeNull();
+      expect(creds!.agentId).toBe('agent-wrapped-789');
+    });
+
+    it('should handle flat response with agentId field instead of id', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      const client = new AIMClient({ apiKey: 'test-api-key' });
+
+      // Some server versions might use agentId instead of id
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            agentId: 'agent-alt-456',
+            name: 'alt-agent',
+            displayName: 'Alt Agent',
+            agentType: 'custom',
+            status: 'pending',
+            version: '1.0.0',
+            trustScore: 0.5,
+            capabilities: [],
+            talksTo: [],
+            createdAt: '2026-03-17T00:00:00Z',
+            updatedAt: '2026-03-17T00:00:00Z',
+          }),
+      });
+
+      const agent = await client.registerAgent({
+        name: 'alt-agent',
+      });
+
+      const creds = client.getCredentials();
+      expect(creds).not.toBeNull();
+      expect(creds!.agentId).toBe('agent-alt-456');
+    });
+
+    it('should throw AIMError when response has no agent data', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      const client = new AIMClient({ apiKey: 'test-api-key' });
+
+      // Response with neither wrapper nor flat id
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ error: 'unexpected' }),
+      });
+
+      await expect(
+        client.registerAgent({ name: 'bad-agent' })
+      ).rejects.toThrow('Unexpected response format from server: missing agent data');
+    });
+
     it('should accept registration options', () => {
       // Verify the method signature accepts proper options
       const client = new AIMClient({ apiKey: 'test-api-key' });
