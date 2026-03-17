@@ -95,7 +95,9 @@ class LiveBackendTest {
     @Order(2)
     @DisplayName("Should register agent with MCP servers using AIMClient.secure()")
     void registerAgent() throws Exception {
-        System.out.println("🔍 Starting registerAgent test...");
+        Assumptions.assumeTrue(backendAvailable, "Backend not available");
+        Assumptions.assumeTrue(credentialsAvailable, "Credentials not available");
+        System.out.println("Starting registerAgent test...");
 
         List<String> capabilities = Arrays.asList("db:read", "db:write", "api:call", "file:read", "file:write");
         List<String> mcpServers = Arrays.asList("filesystem", "github");

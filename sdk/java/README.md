@@ -1,26 +1,16 @@
 # AIM Java SDK
 
-**Open Source AI Agent Security - One line of code. Complete protection.**
+Agent Identity Management SDK for Java. Provides cryptographic identity verification, capability-based access control, and security logging for AI agents.
 
-Cryptographic verification with zero configuration for Java applications.
-
----
-
-## Quick Start - Zero Configuration
-
-### One Line. Complete Security.
+## Quick Start
 
 ```java
 import org.opena2a.aim.client.AIMClient;
 
-// ONE LINE - Complete security
+// Register an agent with cryptographic identity
 AIMClient agent = AIMClient.secure("my-agent");
 
-// That's it. Your agent now has:
-// ✅ Ed25519 cryptographic signatures
-// ✅ Real-time trust scoring
-// ✅ Complete audit trail
-// ✅ Zero configuration
+// Ed25519 signatures, trust scoring, and audit trail are configured automatically
 ```
 
 ### With Capabilities
@@ -85,24 +75,19 @@ export AIM_CLIENT_SECRET=your-client-secret
 export AIM_ORG_ID=your-org-id
 ```
 
-## Why AIM?
+## Features
 
-**Before AIM:** 50+ lines of boilerplate for basic agent security
-**After AIM:** 1 line
-
-### What You Get
-
-| Feature | Description | Zero Config? |
-|---------|-------------|--------------|
-| **Cryptographic Identity** | Ed25519 signatures on every action | ✅ Automatic |
-| **Trust Scoring** | Real-time ML risk assessment | ✅ Automatic |
-| **Audit Trail** | SOC 2 compliant logging | ✅ Automatic |
-| **Action Verification** | Every API call cryptographically signed | ✅ Automatic |
-| **AspectJ Integration** | Declarative security with annotations | ✅ Automatic |
+| Feature | Description |
+|---------|-------------|
+| Cryptographic Identity | Ed25519 signatures on every action |
+| Trust Scoring | Risk assessment for agent operations |
+| Audit Trail | Structured security event logging |
+| Action Verification | Capability-based access control |
+| AspectJ Integration | Declarative security with `@SecureAction` annotations |
 
 ## Usage Examples
 
-### 1. Basic Agent Registration
+### Basic Agent Registration
 
 ```java
 import org.opena2a.aim.client.AIMClient;
@@ -114,7 +99,7 @@ AIMClient agent = AIMClient.secure("my-agent");
 System.out.println("Agent registered: " + agent.getAgentName());
 ```
 
-### 2. Verify Capabilities Before Actions
+### Verify Capabilities Before Actions
 
 ```java
 import org.opena2a.aim.client.VerificationResult;
@@ -132,7 +117,7 @@ if (result.isVerified()) {
 }
 ```
 
-### 3. Automatic Verification with performAction
+### Automatic Verification with performAction
 
 ```java
 // Execute action with automatic verification
@@ -149,7 +134,7 @@ PaymentResult payment = agent.performAction(
 );
 ```
 
-### 4. Using @SecureAction Annotation (AspectJ)
+### Using @SecureAction Annotation (AspectJ)
 
 For declarative security, use the `@SecureAction` annotation with AspectJ:
 
@@ -215,7 +200,7 @@ public class SecurityConfig {
 }
 ```
 
-### 5. MCP Server Integration
+### MCP Server Integration
 
 ```java
 import org.opena2a.aim.integrations.mcp.MCPIntegration;
@@ -248,7 +233,7 @@ System.out.println("Attestation confidence: " + attestation.getConfidenceScore()
 MCPIntegration.recordToolUsage(agent, server.getId(), "read_file");
 ```
 
-### 6. Request Additional Capabilities
+### Request Additional Capabilities
 
 ```java
 import java.util.Map;
@@ -424,7 +409,7 @@ The SDK uses the following libraries:
 |------------|---------|
 | OkHttp 4.12 | HTTP client |
 | Jackson 2.16 | JSON processing |
-| BouncyCastle 1.77 | Ed25519 cryptography |
+| BouncyCastle 1.79 | Ed25519 cryptography |
 | AspectJ 1.9.21 | AOP for @SecureAction |
 | SLF4J 2.0 | Logging |
 
