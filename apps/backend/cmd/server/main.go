@@ -1061,6 +1061,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agent lifecycle management endpoints
 	agents.Post("/:id/suspend", middleware.ManagerMiddleware(), h.Agent.SuspendAgent)
 	agents.Post("/:id/reactivate", middleware.ManagerMiddleware(), h.Agent.ReactivateAgent)
+	agents.Post("/:id/revoke", middleware.ManagerMiddleware(), h.Agent.RevokeAgent)
 	agents.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
 	agents.Put("/:id/keys", middleware.MemberMiddleware(), h.Agent.UpdateAgentKeys) // SDK key registration
 	// Runtime verification endpoints - CORE functionality

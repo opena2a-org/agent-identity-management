@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -1897,6 +1898,83 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
 		"agent":      agent,
+	})
+}
+
+// RevokeAgent revokes an agent with 30-day data retention
+// @Summary Revoke agent
+// @Description Revoke an agent. Data is retained for 30 days and can be restored via reactivate.
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 403 {object} ErrorResponse "Access denied"
+// @Router /agents/{id}/revoke [post]
+func (h *AgentHandler) RevokeAgent(c fiber.Ctx) error {
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
+
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to organization first
+	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Revoke the agent
+	if err := h.agentService.RevokeAgent(c.Context(), agentID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Get updated agent to return in response
+	agent, _ = h.agentService.GetAgent(c.Context(), agentID)
+
+	// Log audit
+	h.auditService.LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"agent",
+		agent.ID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"action":     "revoked",
+			"agentName":  agent.Name,
+			"status":     agent.Status,
+			"trustScore": agent.TrustScore,
+		},
+	)
+
+	retentionUntil := time.Now().AddDate(0, 0, 30)
+
+	return c.JSON(fiber.Map{
+		"success":        true,
+		"message":        "Agent revoked. Data retained for 30 days. Run reactivate within 30 days to restore.",
+		"retentionUntil": retentionUntil.Format(time.RFC3339),
+		"status":         agent.Status,
+		"trustScore":     agent.TrustScore,
+		"agent":          agent,
 	})
 }
 

@@ -1861,6 +1861,36 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
+// RevokeAgent permanently revokes an agent. Data is retained for 30 days before cleanup.
+// During the retention period, the agent can be reactivated with ReactivateAgent.
+func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
+	agent, err := s.agentRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+
+	if agent.Status == domain.AgentStatusRevoked {
+		return fmt.Errorf("agent is already revoked")
+	}
+
+	// Set status to revoked
+	agent.Status = domain.AgentStatusRevoked
+
+	if err := s.agentRepo.Update(agent); err != nil {
+		return fmt.Errorf("failed to revoke agent: %w", err)
+	}
+
+	// Recalculate trust score (revocation drops trust to 0)
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
+	}
+
+	return nil
+}
+
 // RotateCredentials rotates an agent's cryptographic credentials by generating new Ed25519 keypair
 func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error) {
 	// 1. Fetch agent

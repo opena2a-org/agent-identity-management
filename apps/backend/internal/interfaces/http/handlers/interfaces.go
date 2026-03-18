@@ -26,6 +26,7 @@ type AgentServicer interface {
 	VerifyAgent(ctx context.Context, id uuid.UUID) error
 	SuspendAgent(ctx context.Context, id uuid.UUID) error
 	ReactivateAgent(ctx context.Context, id uuid.UUID) error
+	RevokeAgent(ctx context.Context, id uuid.UUID) error
 	RecalculateTrustScore(ctx context.Context, id uuid.UUID) (*domain.TrustScore, error)
 	UpdateTrustScore(ctx context.Context, agentID uuid.UUID, newScore float64) error
 	RotateCredentials(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error)
