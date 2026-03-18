@@ -836,6 +836,14 @@ func (m *MockOrgRepoForRegistration) Delete(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockOrgRepoForRegistration) ListAll() ([]*domain.Organization, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Organization), args.Error(1)
+}
+
 // MockEmailServiceForRegistration implements domain.EmailService
 type MockEmailServiceForRegistration struct {
 	mock.Mock

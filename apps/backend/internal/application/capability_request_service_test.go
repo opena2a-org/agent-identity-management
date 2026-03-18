@@ -268,6 +268,7 @@ func (m *MockOrganizationRepositoryForCapReq) Create(org *domain.Organization) e
 func (m *MockOrganizationRepositoryForCapReq) Update(org *domain.Organization) error { return nil }
 func (m *MockOrganizationRepositoryForCapReq) Delete(id uuid.UUID) error { return nil }
 func (m *MockOrganizationRepositoryForCapReq) List(limit, offset int) ([]*domain.Organization, error) { return nil, nil }
+func (m *MockOrganizationRepositoryForCapReq) ListAll() ([]*domain.Organization, error) { return nil, nil }
 func (m *MockOrganizationRepositoryForCapReq) GetByDomain(domain string) (*domain.Organization, error) { return nil, nil }
 
 // Test cases

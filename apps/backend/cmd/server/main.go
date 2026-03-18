@@ -306,10 +306,16 @@ func main() {
 		log.Printf("💾 Redis: disabled (running without caching)")
 	}
 
-	// ✅ Start background job for automatic JIT access expiration
+	// Start background job for automatic JIT access expiration
 	// This ensures expired verifications are marked as such even if not queried
 	stopExpirationJob := startExpirationCleanupJob(db)
 	defer close(stopExpirationJob)
+
+	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
+	if services.RegistryBridge != nil {
+		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
+		defer close(stopRegistryBridge)
+	}
 
 	// Graceful shutdown
 	go func() {
@@ -494,6 +500,7 @@ type Services struct {
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
+	RegistryBridge    *application.RegistryBridgeService    // For OpenA2A Registry attestation contribution
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -709,6 +716,23 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		aimBaseURL,
 	)
 
+	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry
+	registryURL := os.Getenv("REGISTRY_BRIDGE_URL")
+	if registryURL == "" {
+		registryURL = "https://api.oa2a.org"
+	}
+	var registryBridgeService *application.RegistryBridgeService
+	if os.Getenv("REGISTRY_BRIDGE_ENABLED") == "true" {
+		registryBridgeService = application.NewRegistryBridgeService(
+			repos.Organization,
+			repos.Agent,
+			repos.MCPAttestation,
+			repos.MCPServer,
+			repos.AuditLog,
+			registryURL,
+		)
+	}
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -734,6 +758,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
 		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
 		DeviceAuth:        deviceAuthService,        // For OAuth Device Authorization Grant (RFC 8628)
+		RegistryBridge:    registryBridgeService,    // For OpenA2A Registry attestation contribution
 	}, keyVault
 }
 
@@ -769,6 +794,7 @@ type Handlers struct {
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
+	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -932,6 +958,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		DeviceAuth: handlers.NewDeviceAuthHandler(
 			services.DeviceAuth,
+		),
+		RegistryBridge: handlers.NewRegistryBridgeHandler(
+			services.RegistryBridge,
 		),
 	}
 }
@@ -1178,6 +1207,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	admin.Get("/verifications/pending", h.Verification.ListPendingVerifications)
 	admin.Post("/verifications/:id/approve", h.Verification.ApproveVerification)
 	admin.Post("/verifications/:id/deny", h.Verification.DenyVerification)
+
+	// Registry Bridge (admin only - manual trigger for OpenA2A Registry contribution)
+	admin.Post("/registry-bridge/push", h.RegistryBridge.TriggerPush)
 
 	// Compliance routes (admin only)
 	// SOC 2 and HIPAA compliance features
@@ -1697,4 +1729,32 @@ func expireOldVerifications(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+// startRegistryBridgeJob starts a background goroutine that periodically
+// aggregates anonymized attestation data and pushes it to the OpenA2A Registry.
+// The bridge runs every 6 hours and is opt-in via REGISTRY_BRIDGE_ENABLED=true.
+// Returns a channel that should be closed to stop the bridge job.
+func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) chan struct{} {
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(6 * time.Hour)
+
+	go func() {
+		log.Println("Registry bridge enabled (runs every 6 hours)")
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := bridgeService.AggregateAndPush(context.Background()); err != nil {
+					log.Printf("Registry bridge error: %v", err)
+				}
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("Registry bridge stopped")
+				return
+			}
+		}
+	}()
+
+	return stopChan
 }

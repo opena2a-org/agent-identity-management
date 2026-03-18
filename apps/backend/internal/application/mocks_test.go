@@ -688,6 +688,14 @@ func (m *SharedMockOrganizationRepository) Delete(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *SharedMockOrganizationRepository) ListAll() ([]*domain.Organization, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Organization), args.Error(1)
+}
+
 // SharedMockSDKTokenRepository is a mock implementation of SDKTokenRepository
 type SharedMockSDKTokenRepository struct {
 	mock.Mock

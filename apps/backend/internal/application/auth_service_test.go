@@ -125,6 +125,14 @@ func (m *MockOrganizationRepository) Delete(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockOrganizationRepository) ListAll() ([]*domain.Organization, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Organization), args.Error(1)
+}
+
 // MockAPIKeyRepository for testing
 type MockAPIKeyRepository struct {
 	mock.Mock

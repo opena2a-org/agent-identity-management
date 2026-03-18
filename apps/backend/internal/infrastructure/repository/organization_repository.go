@@ -145,6 +145,44 @@ func (r *OrganizationRepository) Update(org *domain.Organization) error {
 	return err
 }
 
+// ListAll returns all active organizations
+func (r *OrganizationRepository) ListAll() ([]*domain.Organization, error) {
+	query := `
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), created_at, updated_at
+		FROM organizations
+		WHERE is_active = true
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orgs []*domain.Organization
+	for rows.Next() {
+		org := &domain.Organization{}
+		if err := rows.Scan(
+			&org.ID,
+			&org.Name,
+			&org.Domain,
+			&org.PlanType,
+			&org.MaxAgents,
+			&org.MaxUsers,
+			&org.IsActive,
+			&org.EnforcementMode,
+			&org.CreatedAt,
+			&org.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		orgs = append(orgs, org)
+	}
+
+	return orgs, rows.Err()
+}
+
 // Delete deletes an organization
 func (r *OrganizationRepository) Delete(id uuid.UUID) error {
 	query := `DELETE FROM organizations WHERE id = $1`

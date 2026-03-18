@@ -583,6 +583,10 @@ func (m *MockOrganizationRepository) Delete(id uuid.UUID) error {
 	return nil
 }
 
+func (m *MockOrganizationRepository) ListAll() ([]*domain.Organization, error) {
+	return nil, nil
+}
+
 // ===========================
 // Additional Mock Implementations for AdminHandler
 // ===========================

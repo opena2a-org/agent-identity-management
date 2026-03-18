@@ -39,6 +39,7 @@ type OrganizationRepository interface {
 	Create(org *Organization) error
 	GetByID(id uuid.UUID) (*Organization, error)
 	GetByDomain(domain string) (*Organization, error)
+	ListAll() ([]*Organization, error)
 	Update(org *Organization) error
 	Delete(id uuid.UUID) error
 }

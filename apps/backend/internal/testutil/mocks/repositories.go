@@ -209,6 +209,14 @@ func (m *MockOrganizationRepository) List(limit, offset int) ([]*domain.Organiza
 	return args.Get(0).([]*domain.Organization), args.Error(1)
 }
 
+func (m *MockOrganizationRepository) ListAll() ([]*domain.Organization, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.Organization), args.Error(1)
+}
+
 // MockUserRepository is a mock implementation of UserRepository
 type MockUserRepository struct {
 	mock.Mock

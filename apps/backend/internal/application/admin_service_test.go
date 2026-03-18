@@ -184,6 +184,14 @@ func (m *MockOrgRepository) Delete(id uuid.UUID) error {
 	return nil
 }
 
+func (m *MockOrgRepository) ListAll() ([]*domain.Organization, error) {
+	var orgs []*domain.Organization
+	for _, org := range m.orgs {
+		orgs = append(orgs, org)
+	}
+	return orgs, nil
+}
+
 // Helper to create test user
 func createAdminTestUser(orgID uuid.UUID, status domain.UserStatus) *domain.User {
 	return &domain.User{
