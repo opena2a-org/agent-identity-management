@@ -94,6 +94,11 @@ Security Review: ~/my-project
 
 ## What AIM Provides
 
+Cryptographic identity, OAuth 2.0 auth, capability enforcement, audit trail, 8-factor trust scoring, MCP attestation, lifecycle management, policy engine, tag/MCP management, and a full web dashboard.
+
+<details>
+<summary>See all features</summary>
+
 **Cryptographic identity** -- Ed25519 keypairs generated on agent creation. Every agent gets a verifiable identity with signing and verification capabilities. Post-quantum (ML-DSA-44/65/87) and hybrid Ed25519+ML-DSA modes available server-side.
 
 **OAuth 2.0 and machine-to-machine auth** -- JWT-bearer grant for agent-to-server authentication. Device authorization flow (RFC 8628) for CLI login via browser. No API key management needed after `opena2a login`.
@@ -106,13 +111,15 @@ Security Review: ~/my-project
 
 **MCP attestation** -- Agents attest to the quality and security of MCP servers they use. Multi-agent consensus protocol: 3+ unique attesters across 2+ owners = verified. Supply chain visualization on the dashboard.
 
-**Lifecycle management** -- Full agent state machine: pending, verified, suspended, revoked. Suspend agents instantly when compromised, revoke permanently. Status affects trust score automatically.
+**Lifecycle management** -- Full agent state machine: pending, verified, suspended, revoked. Suspend agents instantly when compromised, revoke permanently (30-day data retention). Status affects trust score automatically.
 
 **Policy management** -- YAML-based local policies or server-managed via REST API. Default-deny or default-allow with granular capability rules. Plugin-scoped policies for per-tool control.
 
 **Tag and MCP management** -- Organize agents with tags, attach/detach MCP server connections. Manageable via CLI (`identity tag add`, `identity mcp add`), REST API, or dashboard.
 
 **Dashboard** -- Web UI for fleet management at [aim.opena2a.org](https://aim.opena2a.org). Agent overview, trust score breakdowns, MCP network graph, audit timeline, security violations, capability requests, and policy editor.
+
+</details>
 
 ## SDKs
 
