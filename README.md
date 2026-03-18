@@ -60,11 +60,21 @@ npm install -g opena2a-cli
 Then:
 
 ```bash
-opena2a identity create --name my-agent    # Create identity
+# Local identity
+opena2a identity create --name my-agent    # Create Ed25519 identity
 opena2a identity trust                     # Calculate trust score
 opena2a identity sign --data "hello"       # Sign data
 opena2a identity audit                     # View audit log
 opena2a identity attach --all              # Connect to all detected tools
+
+# Cloud (aim.opena2a.org)
+opena2a login                              # Authenticate via browser
+opena2a identity create --name my-agent --server cloud   # Register on server
+opena2a identity list --server cloud       # List all agents
+opena2a identity tag add production --server cloud       # Tag agents
+opena2a identity mcp list --server cloud   # View MCP connections
+opena2a identity activity --server cloud   # View activity log
+opena2a whoami                             # Check auth status
 ```
 
 For a full security dashboard across all your agents:
@@ -84,13 +94,25 @@ Security Review: ~/my-project
 
 ## What AIM Provides
 
-**Cryptographic identity** -- Ed25519 keypairs and OAuth 2.0 token endpoint for machine-to-machine auth. Every agent gets a verifiable identity on creation.
+**Cryptographic identity** -- Ed25519 keypairs generated on agent creation. Every agent gets a verifiable identity with signing and verification capabilities. Post-quantum (ML-DSA-44/65/87) and hybrid Ed25519+ML-DSA modes available server-side.
 
-**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Policies defined in YAML (local) or via REST API (server).
+**OAuth 2.0 and machine-to-machine auth** -- JWT-bearer grant for agent-to-server authentication. Device authorization flow (RFC 8628) for CLI login via browser. No API key management needed after `opena2a login`.
 
-**Audit trail** -- Append-only, tamper-evident log of every action. JSON-lines locally, PostgreSQL with full query API on the server.
+**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Policies defined in YAML (local) or via REST API (server). Dashboard includes a visual policy rule builder.
 
-**Trust scoring** -- 8-factor algorithm evaluating agent trustworthiness: identity strength, capability compliance, audit completeness, MCP attestation, policy adherence, lifecycle status, ownership verification, and behavioral analysis.
+**Audit trail** -- Append-only, tamper-evident log of every action. JSON-lines locally, PostgreSQL with full query API on the server. Audit events include action, target, result, timestamp, and tool attribution.
+
+**Trust scoring** -- 8-factor weighted algorithm: verification status (25%), uptime (15%), action success rate (15%), security alerts (15%), compliance (10%), agent age (10%), drift detection (5%), and user feedback (5%). Historical trends and confidence levels tracked.
+
+**MCP attestation** -- Agents attest to the quality and security of MCP servers they use. Multi-agent consensus protocol: 3+ unique attesters across 2+ owners = verified. Supply chain visualization on the dashboard.
+
+**Lifecycle management** -- Full agent state machine: pending, verified, suspended, revoked. Suspend agents instantly when compromised, revoke permanently. Status affects trust score automatically.
+
+**Policy management** -- YAML-based local policies or server-managed via REST API. Default-deny or default-allow with granular capability rules. Plugin-scoped policies for per-tool control.
+
+**Tag and MCP management** -- Organize agents with tags, attach/detach MCP server connections. Manageable via CLI (`identity tag add`, `identity mcp add`), REST API, or dashboard.
+
+**Dashboard** -- Web UI for fleet management at [aim.opena2a.org](https://aim.opena2a.org). Agent overview, trust score breakdowns, MCP network graph, audit timeline, security violations, capability requests, and policy editor.
 
 ## SDKs
 
@@ -130,13 +152,18 @@ const score = aim.calculateTrust();
 console.log('Trust:', score.overall); // e.g. 0.45
 ```
 
-| Feature | aim-core (local) | Full AIM (server) |
-|---------|-----------------|-------------------|
-| Ed25519 identity | Local keypair | Server-issued + OIDC |
-| Audit log | JSON-lines file | PostgreSQL + API |
-| Capability policy | YAML file | REST API + dashboard |
-| Trust scoring | 8-factor local | Real-time + history |
+| Feature | aim-core (local) | Full AIM (server + dashboard) |
+|---------|-----------------|-------------------------------|
+| Ed25519 identity | Local keypair | Server-issued + PQC (ML-DSA) |
+| OAuth 2.0 auth | N/A | JWT-bearer + device flow |
+| Audit log | JSON-lines file | PostgreSQL + query API |
+| Capability policy | YAML file | REST API + visual editor |
+| Trust scoring | 8-factor local | Real-time + history + trends |
+| MCP attestation | N/A | Multi-agent consensus |
+| Lifecycle | N/A | Suspend, revoke, verify |
+| Tags + MCPs | N/A | Organize + attach via CLI/API |
 | Multi-agent | Per-machine | Cross-machine fleet |
+| Dashboard | N/A | Full web UI |
 
 This is the same library used by HackMyAgent's `--with-aim` flag to add agent identity during security remediation.
 
