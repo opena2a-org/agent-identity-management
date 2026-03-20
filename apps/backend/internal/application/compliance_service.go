@@ -503,6 +503,15 @@ func (s *ComplianceService) RunComplianceCheck(
 		Checks:    []map[string]interface{}{},
 	}
 
+	// No agents = no data to assess. Return 0% compliance, not vacuous 100%.
+	if len(agents) == 0 {
+		result.Total = 0
+		result.Passed = 0
+		result.Failed = 0
+		result.ComplianceRate = 0
+		return result, nil
+	}
+
 	// Run different checks based on type
 	checks := s.getComplianceChecks(checkType)
 
