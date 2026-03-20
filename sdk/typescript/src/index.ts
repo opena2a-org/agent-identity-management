@@ -121,6 +121,23 @@ export {
   type KeyPair,
 } from './crypto/ed25519';
 
+// Delegation chain (cross-engine interop)
+export {
+  publicKeyToDidKey,
+  didKeyToPublicKey,
+  canonicalJSONDeep,
+  createDelegation,
+  verifyDelegation,
+  verifyDelegatorIdentity,
+  verifyScopeNarrowing,
+  verifyDelegationChain,
+  exportDelegationChain,
+  delegationSignablePayload,
+  type Delegation,
+  type DelegationChainEntry,
+  type DelegationChainExport,
+} from './crypto/delegation';
+
 // A2A Protocol
 export {
   A2AClient,
