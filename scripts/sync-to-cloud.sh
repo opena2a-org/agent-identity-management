@@ -199,7 +199,11 @@ rewrite_imports() {
 
   while IFS= read -r -d '' gofile; do
     if grep -q "$SRC_IMPORT" "$gofile" 2>/dev/null; then
-      sed -i '' "s|${SRC_IMPORT}|${DST_IMPORT}|g" "$gofile"
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|${SRC_IMPORT}|${DST_IMPORT}|g" "$gofile"
+      else
+        sed -i "s|${SRC_IMPORT}|${DST_IMPORT}|g" "$gofile"
+      fi
       IMPORT_REWRITES=$((IMPORT_REWRITES + 1))
     fi
   done < <(find "$dst_backend" -name '*.go' -print0)

@@ -81,7 +81,12 @@ paths = [
   '''(.*/)?sdk/.*\.test\.(ts|js)$''',
   '''(.*/)?sdk/.*\.integration\.test\.(ts|js)$''',
   '''(.*/)?sdks/.*test.*$''',
+  '''(.*/)?scripts/.*$''',
   '''\.gitleaks\.toml$''',
   '''go\.sum$''',
   '''package-lock\.json$''',
+]
+# did:key identifiers are public keys (not secrets) used in cross-engine interop verification
+regexes = [
+  '''did:key:z6Mk[A-Za-z0-9]+''',
 ]
