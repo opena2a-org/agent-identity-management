@@ -602,16 +602,19 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 	//    - Fewer pending items relative to fleet size = better
 	//    - Normalized to fleet size (large orgs have more alerts)
 
+	// If no agents exist, score is 0 — an empty fleet is not a secure fleet
+	if agentsTotal == 0 {
+		metrics.SecurityScore = 0
+		metrics.SecurityGrade = "—"
+		metrics.SecurityStatus = "No Agents"
+	} else {
 	// 1. Trust Health (40 points)
 	trustComponent := metrics.AverageTrustScore * 40
 
 	// 2. Fleet Coverage (25 points)
-	var fleetComponent float64 = 25
-	if agentsTotal > 0 {
-		// % of agents that are trusted (trust > 80%)
-		trustedRatio := float64(agentsTrusted) / float64(agentsTotal)
-		fleetComponent = trustedRatio * 25
-	}
+	// % of agents that are trusted (trust > 80%)
+	trustedRatio := float64(agentsTrusted) / float64(agentsTotal)
+	fleetComponent := trustedRatio * 25
 
 	// 3. Threat Response (25 points)
 	var threatComponent float64 = 25 // Full points if no violations (nothing bad attempted)
@@ -624,18 +627,13 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 
 	// 4. Operational Health (10 points)
 	// Scale penalty based on fleet size - large orgs naturally have more alerts
-	var opsComponent float64 = 10
-	if agentsTotal > 0 {
-		// Normalize pending items to fleet size
-		// If pending items < 10% of agent count, full points
-		// If pending items > 100% of agent count, 0 points
-		pendingRatio := float64(metrics.RequiresAttention) / float64(agentsTotal)
-		if pendingRatio > 1.0 {
-			pendingRatio = 1.0
-		}
-		// Invert: fewer pending = higher score
-		opsComponent = (1.0 - pendingRatio) * 10
+	// Normalize pending items to fleet size
+	pendingRatio := float64(metrics.RequiresAttention) / float64(agentsTotal)
+	if pendingRatio > 1.0 {
+		pendingRatio = 1.0
 	}
+	// Invert: fewer pending = higher score
+	opsComponent := (1.0 - pendingRatio) * 10
 
 	// Calculate final score
 	score := int(trustComponent + fleetComponent + threatComponent + opsComponent)
@@ -665,6 +663,7 @@ func (r *SecurityRepository) GetSecurityMetrics(orgID uuid.UUID) (*domain.Securi
 		metrics.SecurityGrade = "F"
 		metrics.SecurityStatus = "Critical"
 	}
+	} // end else (agentsTotal > 0)
 
 	// ============================================
 	// PROTECTION TIMELINE (last 30 days)
