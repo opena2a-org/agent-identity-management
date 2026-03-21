@@ -80,6 +80,7 @@ from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 from .attestation_cache import AttestationCache
+from .auto_hooks import PolicyCache, activate_hooks
 
 # Credential management utilities
 from .credentials import (
@@ -160,6 +161,9 @@ __all__ = [
     "ProtocolDetector",
     "auto_detect_protocol",
     "AttestationCache",
+    # Auto-hook activation
+    "PolicyCache",
+    "activate_hooks",
     # Credential management
     "load_sdk_credentials",
     "save_sdk_credentials",
