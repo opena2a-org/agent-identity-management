@@ -3550,6 +3550,15 @@ def register_agent(
                         _mcp_names, _mcp_defs, existing_creds["agent_id"]
                     )
 
+                # Auto-activate framework hooks (LangChain, CrewAI, OpenAI, Anthropic)
+                try:
+                    from .auto_hooks import activate_hooks
+                    hooked = activate_hooks(client)
+                    if hooked:
+                        console.info(f"Auto-instrumented: {', '.join(hooked)}")
+                except Exception:
+                    pass  # Never fail registration due to hook activation errors
+
                 return client
 
     # 2. Detect authentication mode (SDK vs Manual)
@@ -3714,7 +3723,7 @@ def register_agent(
     try:
         if auth_mode == "oauth":
             # OAuth Mode: Use authenticated endpoint with OAuth token
-            return _register_via_oauth(
+            client = _register_via_oauth(
                 name=name,
                 aim_url=aim_url,
                 sdk_creds=sdk_creds,
@@ -3725,7 +3734,7 @@ def register_agent(
             )
         else:
             # API Key Mode: Use public endpoint with API key header
-            return _register_via_api_key(
+            client = _register_via_api_key(
                 name=name,
                 aim_url=aim_url,
                 api_key=api_key,
@@ -3734,6 +3743,17 @@ def register_agent(
                 mcp_server_names=mcp_server_names,
                 mcp_full_definitions=mcp_full_definitions
             )
+
+        # Auto-activate framework hooks (LangChain, CrewAI, OpenAI, Anthropic)
+        try:
+            from .auto_hooks import activate_hooks
+            hooked = activate_hooks(client)
+            if hooked:
+                console.info(f"Auto-instrumented: {', '.join(hooked)}")
+        except Exception:
+            pass  # Never fail registration due to hook activation errors
+
+        return client
 
     except requests.RequestException as e:
         raise ConfigurationError(f"Failed to connect to AIM server: {e}")
