@@ -20,6 +20,7 @@ type TrustCalculator struct {
 	agentRepo              domain.AgentRepository
 	alertRepo              domain.AlertRepository
 	verificationEventRepo  domain.VerificationEventRepository
+	snapshotRepo           domain.ComplianceSnapshotRepository
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -60,6 +61,12 @@ func NewTrustCalculatorWithVerification(
 		alertRepo:              alertRepo,
 		verificationEventRepo:  verificationEventRepo,
 	}
+}
+
+// SetSnapshotRepo sets the compliance snapshot repository for compliance factor calculation.
+// This is optional; when not set, the compliance factor returns a neutral 0.5 score.
+func (c *TrustCalculator) SetSnapshotRepo(repo domain.ComplianceSnapshotRepository) {
+	c.snapshotRepo = repo
 }
 
 // Calculate calculates trust score for an agent
@@ -327,11 +334,23 @@ func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
 
 // Factor 5: Compliance Score (10% weight)
 // Measures adherence to compliance policies (SOC 2, HIPAA, GDPR)
+// Queries the latest compliance snapshot for the agent's organization.
+// Snapshot score is 0-100, normalized to 0.0-1.0.
+// Returns 0.5 (neutral) when no snapshot data is available.
 func (c *TrustCalculator) calculateCompliance(agent *domain.Agent) float64 {
-	// TODO: Query agent_compliance_events table
-	// Calculate: compliant_actions / total_actions_requiring_compliance
-	// For MVP: Return baseline score
-	return 1.0 // Assume full compliance for MVP
+	if c.snapshotRepo == nil {
+		return 0.5 // Neutral when snapshot repo not configured
+	}
+
+	// Query the latest AIM compliance snapshot for the agent's organization
+	snapshot, err := c.snapshotRepo.GetLatest(agent.OrganizationID, domain.FrameworkAIM)
+	if err != nil || snapshot == nil {
+		return 0.5 // Neutral when no compliance data exists
+	}
+
+	// Snapshot score is 0-100, normalize to 0.0-1.0
+	normalized := snapshot.Score / 100.0
+	return math.Max(0.0, math.Min(1.0, normalized))
 }
 
 // Factor 6: Age & History (10% weight)
@@ -355,25 +374,73 @@ func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 }
 
 // Factor 7: Drift Detection (5% weight)
-// Measures changes in agent behavior patterns
+// Measures changes in agent behavior patterns by checking for
+// configuration drift alerts. No alerts = 1.0 (perfect).
+// Each drift alert reduces the score proportionally by severity.
 func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
-	// TODO: Query agent_behavioral_baselines table
-	// Check if is_anomaly = true for recent records
-	// For MVP: Return baseline (no drift detected)
-	return 1.0
+	if c.alertRepo == nil {
+		return 0.5 // Neutral when alert repo not available
+	}
+
+	// Query recent alerts for this agent
+	alerts, err := c.alertRepo.GetByResourceID(agent.ID, 100, 0)
+	if err != nil {
+		return 0.5 // Neutral on error
+	}
+
+	if len(alerts) == 0 {
+		return 1.0 // No alerts = no drift = perfect score
+	}
+
+	// Filter for drift-related alerts from the last 30 days
+	score := 1.0
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+
+	for _, alert := range alerts {
+		if alert.CreatedAt.Before(thirtyDaysAgo) {
+			continue
+		}
+
+		// Only consider drift-related alert types
+		if alert.AlertType != domain.AlertTypeConfigurationDrift &&
+			alert.AlertType != domain.AlertMCPCapabilityDrift {
+			continue
+		}
+
+		// Reduce score based on severity
+		switch alert.Severity {
+		case domain.AlertSeverityCritical:
+			score -= 0.30
+		case domain.AlertSeverityHigh:
+			score -= 0.15
+		case domain.AlertSeverityWarning:
+			score -= 0.05
+		default:
+			score -= 0.02
+		}
+	}
+
+	return math.Max(0.0, score)
 }
 
 // Factor 8: User Feedback (5% weight)
-// Measures explicit feedback from users
+// Measures explicit feedback from users.
+//
+// Currently returns 0.5 (neutral) because no user feedback collection
+// mechanism exists yet. To implement real feedback scoring:
+//   - Add a UserFeedback domain entity with agent_id, rating (1-5), comment
+//   - Add a UserFeedbackRepository with GetByAgentID, GetAverageRating
+//   - Wire the repository into TrustCalculator
+//   - Scoring formula from documentation:
+//     negative_feedback > 5: 0.0
+//     negative_feedback > 2: 0.50
+//     positive_feedback > 10: 1.0
+//     else: 0.75
 func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) float64 {
-	// TODO: Query agent_user_feedback table
-	// Implementation from documentation:
-	// - negative_feedback > 5: 0.0
-	// - negative_feedback > 2: 0.50
-	// - positive_feedback > 10: 1.0
-	// - else: 0.75
-	// For MVP: Return baseline score
-	return 0.75
+	// No user feedback collection mechanism exists yet.
+	// Return neutral score so agents are not penalized or rewarded
+	// without actual feedback data.
+	return 0.5
 }
 
 // calculateConfidence determines confidence level based on available data

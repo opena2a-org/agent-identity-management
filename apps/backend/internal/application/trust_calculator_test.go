@@ -744,8 +744,8 @@ func TestTrustCalculator_CalculateUserFeedback_Baseline(t *testing.T) {
 
 	feedback := calculator.calculateUserFeedback(agent)
 
-	// Should return baseline feedback value
-	assert.Equal(t, 0.75, feedback, "User feedback should return baseline")
+	// Should return neutral 0.5 when no feedback collection mechanism exists
+	assert.Equal(t, 0.5, feedback, "User feedback should return neutral 0.5 when no feedback data exists")
 }
 
 // ===========================
