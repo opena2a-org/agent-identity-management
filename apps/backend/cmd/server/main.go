@@ -261,6 +261,14 @@ func main() {
 	// Standard A2A protocol requires /.well-known/agent.json at the root
 	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
+	// AIP Discovery endpoint (no auth required)
+	// Returns provider capabilities, supported agent types, and endpoint directory
+	app.Get("/.well-known/aip", h.AIP.WellKnownAIP)
+
+	// DID Resolution endpoint (no auth required)
+	// Resolves did:aip:aim_<uuid> to a W3C DID Document
+	app.Get("/api/v1/did/*", h.AIP.ResolveDID)
+
 	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
 	// route shadowing when the /api/v1 group is registered with middleware.
 
@@ -795,6 +803,7 @@ type Handlers struct {
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
 	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
+	AIP                *handlers.AIPHandler                // For AIP discovery and DID resolution
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -961,6 +970,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,
+		),
+		AIP: handlers.NewAIPHandler(
+			repos.Agent,
 		),
 	}
 }
