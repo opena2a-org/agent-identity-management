@@ -33,11 +33,12 @@ import langchain  # SDK auto-detects your framework!
 agent = secure("my-agent")  # Auto-detected as "langchain" agent
 
 # That's it. Your agent now has:
-# ✅ Agent type auto-detected from imports
-# ✅ Ed25519 cryptographic signatures
-# ✅ Real-time trust scoring
-# ✅ Complete audit trail
-# ✅ Zero configuration
+# - Agent type auto-detected from imports
+# - Ed25519 cryptographic signatures
+# - Real-time trust scoring
+# - Complete audit trail
+# - Auto-instrumented frameworks (LangChain, CrewAI, OpenAI, Anthropic)
+# - Zero configuration
 ```
 
 ### Manual Mode (With API Key)
@@ -47,6 +48,40 @@ from aim_sdk import secure
 
 # Still one line - just add your API key
 agent = secure("my-agent", api_key="aim_abc123")
+```
+
+### Auto-Instrumentation
+
+After `secure()` registers your agent, the SDK automatically detects and hooks into your AI frameworks:
+
+```python
+from aim_sdk import secure
+import openai  # SDK detects this
+
+agent = secure("my-agent")
+# Console: "Auto-instrumented: openai"
+
+# All OpenAI calls are now logged to AIM automatically
+client = openai.OpenAI()
+client.chat.completions.create(model="gpt-4", messages=[...])
+# ^ This call is logged to your AIM audit trail
+```
+
+Supported frameworks: LangChain, CrewAI, OpenAI, Anthropic. Hooks are fail-safe and never block your code.
+
+To disable: `secure("my-agent", auto_hooks=False)`
+
+### Offline Policy Enforcement
+
+```python
+from aim_sdk import secure, PolicyCache
+
+agent = secure("my-agent")
+cache = PolicyCache(agent, ttl_seconds=300)  # 5-min cache
+
+if cache.check("db:write"):
+    # Capability allowed by cached policy
+    perform_write()
 ```
 
 ## Installation
