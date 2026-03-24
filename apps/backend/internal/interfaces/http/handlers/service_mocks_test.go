@@ -24,6 +24,7 @@ type MockAgentServiceImpl struct {
 	DeleteAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	VerifyAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	SuspendAgentFunc                func(ctx context.Context, id uuid.UUID) error
+	RevokeAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	ReactivateAgentFunc             func(ctx context.Context, id uuid.UUID) error
 	RecalculateTrustScoreFunc       func(ctx context.Context, id uuid.UUID) (*domain.TrustScore, error)
 	UpdateTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID, newScore float64) error
@@ -95,6 +96,13 @@ func (m *MockAgentServiceImpl) VerifyAgent(ctx context.Context, id uuid.UUID) er
 func (m *MockAgentServiceImpl) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	if m.SuspendAgentFunc != nil {
 		return m.SuspendAgentFunc(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockAgentServiceImpl) RevokeAgent(ctx context.Context, id uuid.UUID) error {
+	if m.RevokeAgentFunc != nil {
+		return m.RevokeAgentFunc(ctx, id)
 	}
 	return nil
 }
