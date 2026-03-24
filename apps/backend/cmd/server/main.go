@@ -677,6 +677,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Capability,
 		repos.Agent,
 		repos.AuditLog,
+		repos.Alert,
 		trustCalculator,
 		repos.TrustScore,
 	)

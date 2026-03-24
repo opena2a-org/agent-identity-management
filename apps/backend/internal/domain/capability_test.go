@@ -237,3 +237,41 @@ func TestCapabilityViolationStruct(t *testing.T) {
 	assert.Equal(t, 10, violation.TrustScoreImpact)
 	assert.True(t, violation.IsBlocked)
 }
+
+func TestDefaultMinTrustScoreForRiskLevel(t *testing.T) {
+	assert.Equal(t, 0.0, DefaultMinTrustScoreForRiskLevel(RiskLevelLow))
+	assert.Equal(t, 0.3, DefaultMinTrustScoreForRiskLevel(RiskLevelMedium))
+	assert.Equal(t, 0.5, DefaultMinTrustScoreForRiskLevel(RiskLevelHigh))
+	assert.Equal(t, 0.7, DefaultMinTrustScoreForRiskLevel(RiskLevelCritical))
+	assert.Equal(t, 0.0, DefaultMinTrustScoreForRiskLevel("unknown"))
+}
+
+func TestDefaultExecutionModeForRiskLevel(t *testing.T) {
+	assert.Equal(t, ExecutionModeAuto, DefaultExecutionModeForRiskLevel(RiskLevelLow))
+	assert.Equal(t, ExecutionModeAuto, DefaultExecutionModeForRiskLevel(RiskLevelMedium))
+	assert.Equal(t, ExecutionModeNotify, DefaultExecutionModeForRiskLevel(RiskLevelHigh))
+	assert.Equal(t, ExecutionModeReview, DefaultExecutionModeForRiskLevel(RiskLevelCritical))
+	assert.Equal(t, ExecutionModeAuto, DefaultExecutionModeForRiskLevel("unknown"))
+}
+
+func TestCapabilityDefinition_MinTrustScore(t *testing.T) {
+	def := CapabilityDefinition{
+		Namespace:     "system",
+		Action:        "admin",
+		RiskLevel:     RiskLevelCritical,
+		MinTrustScore: 0.7,
+	}
+	assert.Equal(t, 0.7, def.MinTrustScore)
+	assert.Equal(t, "system:admin", def.Type())
+}
+
+func TestAgentCapability_ExecutionMode(t *testing.T) {
+	cap := AgentCapability{
+		CapabilityType: "file:read",
+		ExecutionMode:  ExecutionModeAuto,
+	}
+	assert.Equal(t, ExecutionModeAuto, cap.ExecutionMode)
+
+	cap.ExecutionMode = ExecutionModeReview
+	assert.Equal(t, ExecutionModeReview, cap.ExecutionMode)
+}

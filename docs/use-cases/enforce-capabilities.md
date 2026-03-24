@@ -234,9 +234,47 @@ capabilities:
 
 Wildcards (`*`) match any suffix after the colon. `api:*` allows `api:call`, `api:list`, `api:delete`, etc.
 
+## Per-Capability Trust Thresholds
+
+Each capability can require a minimum trust score. The defaults are based on risk level:
+
+| Risk Level | Min Trust Score | Example Capabilities |
+|------------|----------------|---------------------|
+| low        | 0% (no gate)   | `file:read`, `api:call` |
+| medium     | 30%            | `db:write`, `file:write` |
+| high       | 50%            | `db:delete`, `data:export` |
+| critical   | 70%            | `system:admin`, `user:impersonate` |
+
+When an agent's trust score drops below the threshold, the action is denied even if the capability is granted. This prevents compromised agents from executing high-risk actions.
+
+On the server, trust thresholds are set per `CapabilityDefinition` and can be customized via the REST API.
+
+## Execution Modes
+
+Each granted capability has an execution mode that controls how actions are processed:
+
+| Mode     | Behavior | Default For |
+|----------|----------|-------------|
+| `auto`   | Execute immediately | low, medium risk |
+| `notify` | Execute + create alert | high risk |
+| `review` | Queue for human approval | critical risk |
+
+Set the execution mode when granting a capability via API:
+
+```json
+{
+  "capabilityType": "payment:process",
+  "executionMode": "review"
+}
+```
+
+When `review` mode is active, `VerifyAction` returns `isAuthorized: false` with `denialReason: "pending_human_review"`. A capability request is created for admin approval.
+
 ## What You Now Have
 
 - A declarative policy controlling what your agent can do
+- Per-capability trust thresholds gating high-risk actions
+- Execution modes for granular control (auto, notify, review)
 - Runtime enforcement with non-zero exit codes on denial
 - Every capability check recorded in the audit log
 

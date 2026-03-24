@@ -24,6 +24,7 @@ type MockAgentServiceImpl struct {
 	DeleteAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	VerifyAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	SuspendAgentFunc                func(ctx context.Context, id uuid.UUID) error
+	RevokeAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	ReactivateAgentFunc             func(ctx context.Context, id uuid.UUID) error
 	RecalculateTrustScoreFunc       func(ctx context.Context, id uuid.UUID) (*domain.TrustScore, error)
 	UpdateTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID, newScore float64) error
@@ -95,6 +96,13 @@ func (m *MockAgentServiceImpl) VerifyAgent(ctx context.Context, id uuid.UUID) er
 func (m *MockAgentServiceImpl) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	if m.SuspendAgentFunc != nil {
 		return m.SuspendAgentFunc(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockAgentServiceImpl) RevokeAgent(ctx context.Context, id uuid.UUID) error {
+	if m.RevokeAgentFunc != nil {
+		return m.RevokeAgentFunc(ctx, id)
 	}
 	return nil
 }
@@ -358,7 +366,7 @@ func (m *MockAuditServiceImpl) GetByID(ctx context.Context, id uuid.UUID) (*doma
 // MockCapabilityServiceImpl implements CapabilityServicer interface
 type MockCapabilityServiceImpl struct {
 	VerifyActionFunc                  func(ctx context.Context, agentID uuid.UUID, requestedCapability string, signature []byte, payload []byte, sourceIP *string, metadata map[string]interface{}) (*application.VerificationResult, error)
-	GrantCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID) (*domain.AgentCapability, error)
+	GrantCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error)
 	RevokeCapabilityFunc              func(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
 	GetAgentCapabilitiesFunc          func(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
 	ListCapabilitiesFunc              func(ctx context.Context, orgID uuid.UUID) ([]application.CapabilityDefinition, error)
@@ -376,11 +384,11 @@ func (m *MockCapabilityServiceImpl) VerifyAction(ctx context.Context, agentID uu
 	return &application.VerificationResult{IsValid: true, IsAuthorized: true, InScope: true}, nil
 }
 
-func (m *MockCapabilityServiceImpl) GrantCapability(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID) (*domain.AgentCapability, error) {
+func (m *MockCapabilityServiceImpl) GrantCapability(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error) {
 	if m.GrantCapabilityFunc != nil {
-		return m.GrantCapabilityFunc(ctx, agentID, capabilityType, scope, grantedBy)
+		return m.GrantCapabilityFunc(ctx, agentID, capabilityType, scope, grantedBy, executionMode)
 	}
-	return &domain.AgentCapability{ID: uuid.New(), AgentID: agentID, CapabilityType: capabilityType}, nil
+	return &domain.AgentCapability{ID: uuid.New(), AgentID: agentID, CapabilityType: capabilityType, ExecutionMode: executionMode}, nil
 }
 
 func (m *MockCapabilityServiceImpl) RevokeCapability(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error {

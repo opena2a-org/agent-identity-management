@@ -467,7 +467,7 @@ func TestCapabilityHandler_GrantCapability_Success(t *testing.T) {
 		ValidateAndRegisterCapabilityFunc: func(ctx context.Context, capability string, oID uuid.UUID) error {
 			return nil
 		},
-		GrantCapabilityFunc: func(ctx context.Context, aID uuid.UUID, capType string, scope map[string]interface{}, grantedBy *uuid.UUID) (*domain.AgentCapability, error) {
+		GrantCapabilityFunc: func(ctx context.Context, aID uuid.UUID, capType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error) {
 			return &domain.AgentCapability{
 				ID:             uuid.New(),
 				AgentID:        aID,

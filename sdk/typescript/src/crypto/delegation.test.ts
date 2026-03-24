@@ -438,3 +438,99 @@ describe('Cross-engine verification compatibility', () => {
     expect(recovered).toEqual(kp.publicKey);
   });
 });
+
+describe('Trust attenuation through delegation hops', () => {
+  it('should track effective trust across a 3-hop chain', async () => {
+    const human = await generateKeyPair();
+    const coordinator = await generateKeyPair();
+    const researcher = await generateKeyPair();
+
+    const d1 = await createDelegation({
+      delegatorKeyPair: human,
+      delegatePublicKey: coordinator.publicKey,
+      scopes: ['search', 'memory.read'],
+    });
+    // Set trust attenuation on root delegation
+    d1.trustAttenuation = 0.8;
+    d1.minDelegatedTrust = 0.3;
+
+    const d2 = await createDelegation({
+      delegatorKeyPair: coordinator,
+      delegatePublicKey: researcher.publicKey,
+      scopes: ['search'],
+    });
+
+    const result = await verifyDelegationChain([d1, d2], { rootTrustScore: 1.0 });
+    expect(result.valid).toBe(true);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].effectiveTrust).toBe(1.0);
+    expect(result.results[1].effectiveTrust).toBeCloseTo(0.8, 4);
+  });
+
+  it('should fail when trust drops below minimum threshold', async () => {
+    const a = await generateKeyPair();
+    const b = await generateKeyPair();
+    const c = await generateKeyPair();
+    const d = await generateKeyPair();
+
+    const d1 = await createDelegation({
+      delegatorKeyPair: a,
+      delegatePublicKey: b.publicKey,
+      scopes: ['search', 'read', 'write'],
+    });
+    d1.trustAttenuation = 0.5;
+    d1.minDelegatedTrust = 0.3;
+
+    const d2 = await createDelegation({
+      delegatorKeyPair: b,
+      delegatePublicKey: c.publicKey,
+      scopes: ['search', 'read'],
+    });
+    d2.trustAttenuation = 0.5;
+    d2.minDelegatedTrust = 0.3;
+
+    const d3 = await createDelegation({
+      delegatorKeyPair: c,
+      delegatePublicKey: d.publicKey,
+      scopes: ['search'],
+    });
+
+    // Trust: 1.0 -> 0.5 -> 0.25 (below 0.3 minimum)
+    const result = await verifyDelegationChain([d1, d2, d3], { rootTrustScore: 1.0 });
+    expect(result.valid).toBe(false);
+    expect(result.results[1].effectiveTrust).toBeCloseTo(0.5, 4);
+    expect(result.results[2].effectiveTrust).toBeCloseTo(0.25, 4);
+    expect(result.results[2].error).toMatch(/below minimum threshold/);
+  });
+
+  it('should use default attenuation values when not specified', async () => {
+    const human = await generateKeyPair();
+    const agent = await generateKeyPair();
+
+    const d1 = await createDelegation({
+      delegatorKeyPair: human,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+    });
+    // No trustAttenuation or minDelegatedTrust set — defaults should apply (0.8, 0.3)
+
+    const result = await verifyDelegationChain([d1], { rootTrustScore: 0.9 });
+    expect(result.valid).toBe(true);
+    expect(result.results[0].effectiveTrust).toBe(0.9);
+  });
+
+  it('should include effective trust in chain export', async () => {
+    const human = await generateKeyPair();
+    const agent = await generateKeyPair();
+
+    const d1 = await createDelegation({
+      delegatorKeyPair: human,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+    });
+
+    const verifyResult = await verifyDelegationChain([d1], { rootTrustScore: 0.95 });
+    const exported = exportDelegationChain([d1], undefined, verifyResult.results);
+    expect(exported.chain[0].effectiveTrust).toBe(0.95);
+  });
+});

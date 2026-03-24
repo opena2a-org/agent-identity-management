@@ -102,11 +102,13 @@ Cryptographic identity, OAuth 2.0 auth, capability enforcement, audit trail, 8-f
 
 **OAuth 2.0 and machine-to-machine auth** -- JWT-bearer grant for agent-to-server authentication. Device authorization flow (RFC 8628) for CLI login via browser. No API key management needed after `opena2a login`.
 
-**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Policies defined in YAML (local) or via REST API (server). Dashboard includes a visual policy rule builder.
+**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Per-capability trust thresholds (e.g., `system:admin` requires 70% trust, `file:read` requires 0%). Per-capability execution modes: `auto` (immediate), `notify` (execute + alert), `review` (queue for human approval). Policies defined in YAML (local) or via REST API (server).
 
 **Audit trail** -- Append-only, tamper-evident log of every action. JSON-lines locally, PostgreSQL with full query API on the server. Audit events include action, target, result, timestamp, and tool attribution.
 
-**Trust scoring** -- 8-factor weighted algorithm: verification status (25%), uptime (15%), action success rate (15%), security alerts (15%), compliance (10%), agent age (10%), drift detection (5%), and user feedback (5%). Historical trends and confidence levels tracked.
+**Trust scoring** -- 8-factor weighted algorithm: verification status (25%), uptime (15%), action success rate (15%), security alerts (15%), compliance (10%), agent age (10%), drift detection (5%), and user feedback (5%). Historical trends and confidence levels tracked. Trust scores gate capability access via per-capability thresholds.
+
+**Delegation chains** -- Cryptographically signed delegation with Ed25519. Scope narrowing enforced at each hop. Trust attenuation: each delegation hop reduces effective trust by a configurable factor (default 0.8x per hop, minimum floor of 0.3). Prevents deep delegation chains from bypassing trust requirements.
 
 **MCP attestation** -- Agents attest to the quality and security of MCP servers they use. Multi-agent consensus protocol: 3+ unique attesters across 2+ owners = verified. Supply chain visualization on the dashboard.
 
