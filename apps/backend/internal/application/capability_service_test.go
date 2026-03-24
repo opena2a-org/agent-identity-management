@@ -605,7 +605,7 @@ func TestCapabilityViolation_AllSeverities(t *testing.T) {
 // ===========================
 
 func TestNewCapabilityService(t *testing.T) {
-	service := NewCapabilityService(nil, nil, nil, nil, nil)
+	service := NewCapabilityService(nil, nil, nil, nil, nil, nil)
 
 	assert.NotNil(t, service)
 	assert.Nil(t, service.capabilityRepo)
@@ -618,7 +618,7 @@ func TestNewCapabilityService(t *testing.T) {
 func TestNewCapabilityService_WithMocks(t *testing.T) {
 	mockAgentRepo := new(MockAgentRepoForCapability)
 
-	service := NewCapabilityService(nil, mockAgentRepo, nil, nil, nil)
+	service := NewCapabilityService(nil, mockAgentRepo, nil, nil, nil, nil)
 
 	assert.NotNil(t, service)
 	assert.NotNil(t, service.agentRepo)
@@ -971,7 +971,7 @@ func (m *MockTrustScoreRepoForCapability) UpdateScore(agentID uuid.UUID, newScor
 
 func TestCapabilityService_GetAgentCapabilities_ActiveOnly(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	expectedCaps := []*domain.AgentCapability{
@@ -990,7 +990,7 @@ func TestCapabilityService_GetAgentCapabilities_ActiveOnly(t *testing.T) {
 
 func TestCapabilityService_GetAgentCapabilities_All(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	now := time.Now()
@@ -1010,7 +1010,7 @@ func TestCapabilityService_GetAgentCapabilities_All(t *testing.T) {
 
 func TestCapabilityService_GetViolationsByAgent_Success(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	expectedViolations := []*domain.CapabilityViolation{
@@ -1029,7 +1029,7 @@ func TestCapabilityService_GetViolationsByAgent_Success(t *testing.T) {
 
 func TestCapabilityService_GetViolationsByOrganization_Success(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	expectedViolations := []*domain.CapabilityViolation{
@@ -1049,7 +1049,7 @@ func TestCapabilityService_GetViolationsByOrganization_Success(t *testing.T) {
 
 func TestCapabilityService_GetRecentViolations_Success(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	expectedViolations := []*domain.CapabilityViolation{
@@ -1067,7 +1067,7 @@ func TestCapabilityService_GetRecentViolations_Success(t *testing.T) {
 
 func TestCapabilityService_ListCapabilities_Success(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	expectedDefs := []*domain.CapabilityDefinition{
@@ -1088,7 +1088,7 @@ func TestCapabilityService_ListCapabilities_Success(t *testing.T) {
 
 func TestCapabilityService_ListCapabilitiesWithMetadata_Success(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	expectedDefs := []*domain.CapabilityDefinition{
@@ -1114,7 +1114,7 @@ func TestCapabilityService_GrantCapability_Success(t *testing.T) {
 	mockTrustCalc := new(MockTrustCalculatorForCapability)
 	mockTrustScoreRepo := new(MockTrustScoreRepoForCapability)
 
-	service := NewCapabilityService(mockCapRepo, mockAgentRepo, mockAuditRepo, mockTrustCalc, mockTrustScoreRepo)
+	service := NewCapabilityService(mockCapRepo, mockAgentRepo, mockAuditRepo, nil, mockTrustCalc, mockTrustScoreRepo)
 
 	agentID := uuid.New()
 	orgID := uuid.New()
@@ -1127,13 +1127,14 @@ func TestCapabilityService_GrantCapability_Success(t *testing.T) {
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockCapRepo.On("GetCapabilityDefinition", "file", "read", mock.AnythingOfType("*uuid.UUID")).Return(&domain.CapabilityDefinition{RiskLevel: domain.RiskLevelLow}, nil)
 	mockCapRepo.On("CreateCapability", mock.AnythingOfType("*domain.AgentCapability")).Return(nil)
 	mockAuditRepo.On("Create", mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	mockTrustCalc.On("Calculate", agent).Return(&domain.TrustScore{Score: 0.90}, nil)
 	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
 	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
 
-	result, err := service.GrantCapability(context.Background(), agentID, "file:read", nil, &grantedBy)
+	result, err := service.GrantCapability(context.Background(), agentID, "file:read", nil, &grantedBy, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -1147,14 +1148,14 @@ func TestCapabilityService_GrantCapability_AgentNotFound(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
 	mockAgentRepo := new(MockAgentRepoForCapability)
 
-	service := NewCapabilityService(mockCapRepo, mockAgentRepo, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, mockAgentRepo, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	grantedBy := uuid.New()
 
 	mockAgentRepo.On("GetByID", agentID).Return(nil, assert.AnError)
 
-	result, err := service.GrantCapability(context.Background(), agentID, "file:read", nil, &grantedBy)
+	result, err := service.GrantCapability(context.Background(), agentID, "file:read", nil, &grantedBy, "")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -1169,7 +1170,7 @@ func TestCapabilityService_RevokeCapability_Success(t *testing.T) {
 	mockTrustCalc := new(MockTrustCalculatorForCapability)
 	mockTrustScoreRepo := new(MockTrustScoreRepoForCapability)
 
-	service := NewCapabilityService(mockCapRepo, mockAgentRepo, mockAuditRepo, mockTrustCalc, mockTrustScoreRepo)
+	service := NewCapabilityService(mockCapRepo, mockAgentRepo, mockAuditRepo, nil, mockTrustCalc, mockTrustScoreRepo)
 
 	capID := uuid.New()
 	agentID := uuid.New()
@@ -1206,7 +1207,7 @@ func TestCapabilityService_RevokeCapability_Success(t *testing.T) {
 func TestCapabilityService_RevokeCapability_NotFound(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
 
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	capID := uuid.New()
 	revokedBy := uuid.New()
@@ -1222,7 +1223,7 @@ func TestCapabilityService_RevokeCapability_NotFound(t *testing.T) {
 
 func TestCapabilityService_AutoDetectCapabilities_WithTools(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	mcpMetadata := map[string]interface{}{
@@ -1248,7 +1249,7 @@ func TestCapabilityService_AutoDetectCapabilities_WithTools(t *testing.T) {
 
 func TestCapabilityService_AutoDetectCapabilities_NoTools(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	agentID := uuid.New()
 	mcpMetadata := map[string]interface{}{
@@ -1264,7 +1265,7 @@ func TestCapabilityService_AutoDetectCapabilities_NoTools(t *testing.T) {
 
 func TestCapabilityService_ValidateAndRegisterCapability_CoreCapability(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	capability := "file:read"
@@ -1279,7 +1280,7 @@ func TestCapabilityService_ValidateAndRegisterCapability_CoreCapability(t *testi
 
 func TestCapabilityService_ValidateAndRegisterCapability_InvalidFormat(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil)
+	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
 
 	orgID := uuid.New()
 	capability := "invalid" // No colon

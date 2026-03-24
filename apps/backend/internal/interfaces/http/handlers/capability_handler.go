@@ -129,6 +129,7 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		req.CapabilityType,
 		req.Scope,
 		userIDPtr,
+		req.ExecutionMode,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
@@ -240,6 +241,7 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 			req.CapabilityType,
 			nil, // No scope
 			nil, // System auto-grant
+			"",  // Default execution mode based on risk level
 		)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
@@ -661,6 +663,7 @@ func (h *CapabilityHandler) getUserIDFromContext(c fiber.Ctx) (uuid.UUID, error)
 type GrantCapabilityRequest struct {
 	CapabilityType string                 `json:"capabilityType" validate:"required"`
 	Scope          map[string]interface{} `json:"scope,omitempty"`
+	ExecutionMode  string                 `json:"executionMode,omitempty"` // auto, notify, review
 }
 
 type VerifyActionRequest struct {

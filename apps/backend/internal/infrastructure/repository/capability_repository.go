@@ -26,19 +26,23 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 
 	query := `
 		INSERT INTO agent_capabilities (
-			id, agent_id, capability_type, capability_scope, granted_by, granted_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	capability.ID = uuid.New()
 	capability.CreatedAt = time.Now()
 	capability.UpdatedAt = time.Now()
+	if capability.ExecutionMode == "" {
+		capability.ExecutionMode = domain.ExecutionModeAuto
+	}
 
 	_, err := r.db.Exec(query,
 		capability.ID,
 		capability.AgentID,
 		capability.CapabilityType,
 		scopeJSON,
+		capability.ExecutionMode,
 		capability.GrantedBy,
 		capability.GrantedAt,
 		capability.CreatedAt,
@@ -51,7 +55,7 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 // GetCapabilityByID retrieves a capability by ID
 func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
 		FROM agent_capabilities
 		WHERE id = $1
 	`
@@ -66,6 +70,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.
 		&capability.AgentID,
 		&capability.CapabilityType,
 		&scopeJSON,
+		&capability.ExecutionMode,
 		&grantedBy,
 		&capability.GrantedAt,
 		&revokedAt,
@@ -93,7 +98,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.
 // GetCapabilitiesByAgentID retrieves all capabilities for an agent
 func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUID) ([]*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
 		FROM agent_capabilities
 		WHERE agent_id = $1
 		ORDER BY created_at DESC
@@ -117,6 +122,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUI
 			&capability.AgentID,
 			&capability.CapabilityType,
 			&scopeJSON,
+			&capability.ExecutionMode,
 			&grantedBy,
 			&capability.GrantedAt,
 			&revokedAt,
@@ -147,7 +153,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUI
 // GetActiveCapabilitiesByAgentID retrieves only non-revoked capabilities
 func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uuid.UUID) ([]*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
 		FROM agent_capabilities
 		WHERE agent_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at DESC
@@ -171,6 +177,7 @@ func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uu
 			&capability.AgentID,
 			&capability.CapabilityType,
 			&scopeJSON,
+			&capability.ExecutionMode,
 			&grantedBy,
 			&capability.GrantedAt,
 			&revokedAt,
@@ -429,7 +436,7 @@ func (r *CapabilityRepositoryPostgres) scanViolations(rows *sql.Rows) []*domain.
 // ListCapabilityDefinitions returns all capability definitions (core + org-specific)
 func (r *CapabilityRepositoryPostgres) ListCapabilityDefinitions(orgID *uuid.UUID) ([]*domain.CapabilityDefinition, error) {
 	query := `
-		SELECT id, namespace, action, capability_type, risk_level, display_name,
+		SELECT id, namespace, action, capability_type, risk_level, min_trust_score, display_name,
 			   description, category, organization_id, created_at, updated_at
 		FROM capability_definitions
 		WHERE organization_id IS NULL
@@ -458,7 +465,7 @@ func (r *CapabilityRepositoryPostgres) ListCapabilityDefinitions(orgID *uuid.UUI
 // GetCapabilityDefinition retrieves a specific capability definition
 func (r *CapabilityRepositoryPostgres) GetCapabilityDefinition(namespace, action string, orgID *uuid.UUID) (*domain.CapabilityDefinition, error) {
 	query := `
-		SELECT id, namespace, action, capability_type, risk_level, display_name,
+		SELECT id, namespace, action, capability_type, risk_level, min_trust_score, display_name,
 			   description, category, organization_id, created_at, updated_at
 		FROM capability_definitions
 		WHERE namespace = $1 AND action = $2
@@ -479,6 +486,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityDefinition(namespace, action
 		&def.Action,
 		&def.CapabilityType,
 		&def.RiskLevel,
+		&def.MinTrustScore,
 		&def.DisplayName,
 		&description,
 		&category,
@@ -508,9 +516,9 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityDefinition(namespace, action
 func (r *CapabilityRepositoryPostgres) CreateCapabilityDefinition(def *domain.CapabilityDefinition) error {
 	query := `
 		INSERT INTO capability_definitions (
-			id, namespace, action, capability_type, risk_level, display_name,
+			id, namespace, action, capability_type, risk_level, min_trust_score, display_name,
 			description, category, organization_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (namespace, action, organization_id) DO NOTHING
 	`
 
@@ -524,6 +532,7 @@ func (r *CapabilityRepositoryPostgres) CreateCapabilityDefinition(def *domain.Ca
 		def.Action,
 		def.CapabilityType,
 		def.RiskLevel,
+		def.MinTrustScore,
 		def.DisplayName,
 		def.Description,
 		def.Category,
@@ -539,15 +548,16 @@ func (r *CapabilityRepositoryPostgres) CreateCapabilityDefinition(def *domain.Ca
 func (r *CapabilityRepositoryPostgres) UpdateCapabilityDefinition(def *domain.CapabilityDefinition) error {
 	query := `
 		UPDATE capability_definitions
-		SET risk_level = $1, display_name = $2, description = $3,
-			category = $4, updated_at = $5
-		WHERE id = $6
+		SET risk_level = $1, min_trust_score = $2, display_name = $3, description = $4,
+			category = $5, updated_at = $6
+		WHERE id = $7
 	`
 
 	def.UpdatedAt = time.Now()
 
 	_, err := r.db.Exec(query,
 		def.RiskLevel,
+		def.MinTrustScore,
 		def.DisplayName,
 		def.Description,
 		def.Category,
@@ -570,6 +580,7 @@ func (r *CapabilityRepositoryPostgres) scanCapabilityDefinition(rows *sql.Rows) 
 		&def.Action,
 		&def.CapabilityType,
 		&def.RiskLevel,
+		&def.MinTrustScore,
 		&def.DisplayName,
 		&description,
 		&category,

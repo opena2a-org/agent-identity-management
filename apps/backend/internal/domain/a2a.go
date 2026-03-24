@@ -821,6 +821,10 @@ type A2ADelegation struct {
 	SkillIDs      []string `json:"skillIds,omitempty"`
 	MaxChainDepth int      `json:"maxChainDepth"`
 
+	// Trust attenuation
+	TrustAttenuationFactor float64 `json:"trustAttenuationFactor"` // Multiplier per hop (0.0-1.0, default 0.8)
+	MinDelegatedTrustScore float64 `json:"minDelegatedTrustScore"` // Floor below which chain is invalid (0.0-1.0, default 0.3)
+
 	// Permissions
 	CanDelegateFurther bool `json:"canDelegateFurther"`
 	RequiresConsent    bool `json:"requiresConsent"`

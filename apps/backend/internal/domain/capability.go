@@ -6,12 +6,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// Execution mode constants for per-capability enforcement
+const (
+	ExecutionModeAuto   = "auto"   // Execute immediately (default)
+	ExecutionModeNotify = "notify" // Execute + create alert
+	ExecutionModeReview = "review" // Queue for human approval before execution
+)
+
 // AgentCapability represents a registered capability for an agent
 type AgentCapability struct {
 	ID              uuid.UUID              `json:"id"`
 	AgentID         uuid.UUID              `json:"agentId"`
 	CapabilityType  string                 `json:"capabilityType"`
 	CapabilityScope map[string]interface{} `json:"capabilityScope,omitempty"`
+	ExecutionMode   string                 `json:"executionMode"`
 	GrantedBy       *uuid.UUID             `json:"grantedBy,omitempty"`
 	GrantedAt       time.Time              `json:"grantedAt"`
 	RevokedAt       *time.Time             `json:"revokedAt,omitempty"`
@@ -65,12 +73,43 @@ type CapabilityDefinition struct {
 	Action         string     `json:"action"`
 	CapabilityType string     `json:"capabilityType"` // "core" or "custom"
 	RiskLevel      string     `json:"riskLevel"`      // "low", "medium", "high", "critical"
+	MinTrustScore  float64    `json:"minTrustScore"`  // Minimum trust score (0.0-1.0) required
 	DisplayName    string     `json:"displayName"`
 	Description    string     `json:"description,omitempty"`
 	Category       string     `json:"category,omitempty"`
 	OrganizationID *uuid.UUID `json:"organizationId,omitempty"` // NULL for core capabilities
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
+}
+
+// DefaultMinTrustScoreForRiskLevel returns the default minimum trust score for a risk level
+func DefaultMinTrustScoreForRiskLevel(riskLevel string) float64 {
+	switch riskLevel {
+	case RiskLevelLow:
+		return 0.0
+	case RiskLevelMedium:
+		return 0.3
+	case RiskLevelHigh:
+		return 0.5
+	case RiskLevelCritical:
+		return 0.7
+	default:
+		return 0.0
+	}
+}
+
+// DefaultExecutionModeForRiskLevel returns the default execution mode for a risk level
+func DefaultExecutionModeForRiskLevel(riskLevel string) string {
+	switch riskLevel {
+	case RiskLevelLow, RiskLevelMedium:
+		return ExecutionModeAuto
+	case RiskLevelHigh:
+		return ExecutionModeNotify
+	case RiskLevelCritical:
+		return ExecutionModeReview
+	default:
+		return ExecutionModeAuto
+	}
 }
 
 // Type returns the full capability type string (namespace:action)

@@ -149,12 +149,16 @@ export interface Delegation {
   signature: string;
   publicKey: string;
   parentDelegation?: string;
+  trustAttenuation?: number;  // Multiplier per hop (0.0-1.0, default 0.8)
+  minDelegatedTrust?: number; // Floor below which chain is invalid (0.0-1.0, default 0.3)
 }
 
 /**
  * Fields excluded from the signed payload (per interop spec section 4.3).
+ * Trust attenuation fields are metadata about the trust relationship,
+ * not part of the signed delegation contract.
  */
-const EXCLUDED_FROM_SIGNING = new Set(['signature', 'publicKey']);
+const EXCLUDED_FROM_SIGNING = new Set(['signature', 'publicKey', 'trustAttenuation', 'minDelegatedTrust']);
 
 /**
  * Extract the signable payload from a delegation object.
@@ -176,6 +180,7 @@ export function delegationSignablePayload(delegation: Omit<Delegation, 'signatur
 export interface DelegationChainEntry {
   delegation: Delegation;
   label: string;
+  effectiveTrust?: number;
 }
 
 export interface DelegationChainExport {
@@ -264,6 +269,20 @@ export function verifyScopeNarrowing(parent: Delegation, child: Delegation): boo
   return child.scopes.every((scope) => parent.scopes.includes(scope));
 }
 
+export interface DelegationChainVerificationOptions {
+  rootTrustScore?: number; // Trust score of the root delegator (default 1.0)
+}
+
+export interface DelegationChainResult {
+  index: number;
+  label: string;
+  signatureValid: boolean;
+  identityValid: boolean;
+  scopeValid: boolean;
+  effectiveTrust: number;
+  error?: string;
+}
+
 /**
  * Verify a delegation chain (array of delegations from root to leaf).
  * Checks:
@@ -271,16 +290,21 @@ export function verifyScopeNarrowing(parent: Delegation, child: Delegation): boo
  * 2. Each delegator's publicKey matches their DID
  * 3. Each sub-delegation's delegator matches the parent's delegate
  * 4. Scope narrowing is enforced
+ * 5. Trust attenuation: effective trust decays per hop and must stay above minimum
  */
-export async function verifyDelegationChain(chain: Delegation[]): Promise<{
+export async function verifyDelegationChain(
+  chain: Delegation[],
+  options?: DelegationChainVerificationOptions,
+): Promise<{
   valid: boolean;
-  results: Array<{ index: number; label: string; signatureValid: boolean; identityValid: boolean; scopeValid: boolean; error?: string }>;
+  results: DelegationChainResult[];
 }> {
   if (chain.length === 0) {
-    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, error: 'Empty delegation chain' }] };
+    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, effectiveTrust: 0, error: 'Empty delegation chain' }] };
   }
 
-  const results: Array<{ index: number; label: string; signatureValid: boolean; identityValid: boolean; scopeValid: boolean; error?: string }> = [];
+  const results: DelegationChainResult[] = [];
+  let effectiveTrust = options?.rootTrustScore ?? 1.0;
 
   for (let i = 0; i < chain.length; i++) {
     const delegation = chain[i];
@@ -294,12 +318,31 @@ export async function verifyDelegationChain(chain: Delegation[]): Promise<{
       scopeValid = verifyScopeNarrowing(chain[i - 1], delegation);
       // Also verify chain linkage: this delegator should be the parent's delegate
       if (delegation.delegator !== chain[i - 1].delegate) {
-        results.push({ index: i, label, signatureValid, identityValid, scopeValid: false, error: 'Chain broken: delegator does not match parent delegate' });
+        results.push({ index: i, label, signatureValid, identityValid, scopeValid: false, effectiveTrust, error: 'Chain broken: delegator does not match parent delegate' });
+        continue;
+      }
+
+      // Apply trust attenuation from the parent delegation
+      const attenuation = chain[i - 1].trustAttenuation ?? 0.8;
+      effectiveTrust = effectiveTrust * attenuation;
+
+      // Check minimum trust threshold
+      const minTrust = chain[i - 1].minDelegatedTrust ?? 0.3;
+      if (effectiveTrust < minTrust) {
+        results.push({
+          index: i,
+          label,
+          signatureValid,
+          identityValid,
+          scopeValid,
+          effectiveTrust,
+          error: `Effective trust ${effectiveTrust.toFixed(4)} is below minimum threshold ${minTrust}`,
+        });
         continue;
       }
     }
 
-    results.push({ index: i, label, signatureValid, identityValid, scopeValid });
+    results.push({ index: i, label, signatureValid, identityValid, scopeValid, effectiveTrust });
   }
 
   return {
@@ -310,8 +353,13 @@ export async function verifyDelegationChain(chain: Delegation[]): Promise<{
 
 /**
  * Export a delegation chain in the interop format for posting to the verification thread.
+ * If verificationResults are provided, effective trust scores are included per entry.
  */
-export function exportDelegationChain(chain: Delegation[], labels?: string[]): DelegationChainExport {
+export function exportDelegationChain(
+  chain: Delegation[],
+  labels?: string[],
+  verificationResults?: DelegationChainResult[],
+): DelegationChainExport {
   return {
     engine: 'AIM',
     sdk: '@opena2a/aim-sdk (TypeScript)',
@@ -319,6 +367,7 @@ export function exportDelegationChain(chain: Delegation[], labels?: string[]): D
     chain: chain.map((d, i) => ({
       delegation: d,
       label: labels?.[i] ?? (i === 0 ? 'root' : `subdelegation_${i}`),
+      effectiveTrust: verificationResults?.[i]?.effectiveTrust,
     })),
     verification: {
       algorithm: 'Ed25519',

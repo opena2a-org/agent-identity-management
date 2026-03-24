@@ -13,11 +13,13 @@ import (
 
 // VerificationResult represents the result of an action verification
 type VerificationResult struct {
-	IsValid      bool    `json:"isValid"`
-	IsAuthorized bool    `json:"isAuthorized"`
-	InScope      bool    `json:"inScope"`
-	TrustScore   float64 `json:"trustScore"`
-	Message      string  `json:"message,omitempty"`
+	IsValid       bool    `json:"isValid"`
+	IsAuthorized  bool    `json:"isAuthorized"`
+	InScope       bool    `json:"inScope"`
+	TrustScore    float64 `json:"trustScore"`
+	ExecutionMode string  `json:"executionMode,omitempty"`
+	DenialReason  string  `json:"denialReason,omitempty"`
+	Message       string  `json:"message,omitempty"`
 }
 
 // CapabilityService handles capability verification and management
@@ -25,6 +27,7 @@ type CapabilityService struct {
 	capabilityRepo domain.CapabilityRepository
 	agentRepo      domain.AgentRepository
 	auditRepo      domain.AuditLogRepository
+	alertRepo      domain.AlertRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
 }
@@ -34,6 +37,7 @@ func NewCapabilityService(
 	capabilityRepo domain.CapabilityRepository,
 	agentRepo domain.AgentRepository,
 	auditRepo domain.AuditLogRepository,
+	alertRepo domain.AlertRepository,
 	trustCalc domain.TrustScoreCalculator,
 	trustScoreRepo domain.TrustScoreRepository,
 ) *CapabilityService {
@@ -41,6 +45,7 @@ func NewCapabilityService(
 		capabilityRepo: capabilityRepo,
 		agentRepo:      agentRepo,
 		auditRepo:      auditRepo,
+		alertRepo:      alertRepo,
 		trustCalc:      trustCalc,
 		trustScoreRepo: trustScoreRepo,
 	}
@@ -169,7 +174,62 @@ func (s *CapabilityService) VerifyAction(
 		}, nil
 	}
 
-	// Action is within scope - update last capability check timestamp
+	// Action is within scope - check per-capability trust threshold
+	namespace, action, parseErr := domain.ParseCapability(requestedCapability)
+	if parseErr == nil {
+		capDef, defErr := s.capabilityRepo.GetCapabilityDefinition(namespace, action, &agent.OrganizationID)
+		if defErr == nil && capDef.MinTrustScore > 0 && agent.TrustScore < capDef.MinTrustScore {
+			return &VerificationResult{
+				IsValid:      true,
+				IsAuthorized: false,
+				InScope:      true,
+				TrustScore:   agent.TrustScore,
+				DenialReason: "trust_below_capability_threshold",
+				Message:      fmt.Sprintf("Action denied: agent trust score %.0f%% is below the %.0f%% required for capability '%s'", agent.TrustScore*100, capDef.MinTrustScore*100, requestedCapability),
+			}, nil
+		}
+	}
+
+	// Find the matched capability for execution mode check
+	matchedCapability := s.findMatchedCapability(capabilities, requestedCapability)
+	executionMode := domain.ExecutionModeAuto
+	if matchedCapability != nil && matchedCapability.ExecutionMode != "" {
+		executionMode = matchedCapability.ExecutionMode
+	}
+
+	// Enforce execution mode
+	switch executionMode {
+	case domain.ExecutionModeNotify:
+		// Execute but create an info alert
+		if s.alertRepo != nil {
+			alert := &domain.Alert{
+				OrganizationID: agent.OrganizationID,
+				AlertType:      domain.AlertUnusualActivity,
+				Severity:       domain.AlertSeverityInfo,
+				Title:          fmt.Sprintf("Capability executed (notify mode): %s", requestedCapability),
+				Description:    fmt.Sprintf("Agent '%s' executed capability '%s' in notify mode", agent.DisplayName, requestedCapability),
+				ResourceType:   "agent",
+				ResourceID:     agentID,
+				AgentName:      agent.DisplayName,
+			}
+			if err := s.alertRepo.Create(alert); err != nil {
+				fmt.Printf("Warning: failed to create notify alert: %v\n", err)
+			}
+		}
+	case domain.ExecutionModeReview:
+		// Deny - requires human approval
+		return &VerificationResult{
+			IsValid:       true,
+			IsAuthorized:  false,
+			InScope:       true,
+			TrustScore:    agent.TrustScore,
+			ExecutionMode: executionMode,
+			DenialReason:  "pending_human_review",
+			Message:       fmt.Sprintf("Action requires human approval: capability '%s' is set to review mode", requestedCapability),
+		}, nil
+	}
+
+	// Update last capability check timestamp
 	now := time.Now()
 	agent.LastCapabilityCheckAt = &now
 	if err := s.agentRepo.Update(agent); err != nil {
@@ -178,12 +238,23 @@ func (s *CapabilityService) VerifyAction(
 	}
 
 	return &VerificationResult{
-		IsValid:      true,
-		IsAuthorized: true,
-		InScope:      true,
-		TrustScore:   agent.TrustScore,
-		Message:      "Action authorized",
+		IsValid:       true,
+		IsAuthorized:  true,
+		InScope:       true,
+		TrustScore:    agent.TrustScore,
+		ExecutionMode: executionMode,
+		Message:       "Action authorized",
 	}, nil
+}
+
+// findMatchedCapability finds the capability that matches the requested capability type
+func (s *CapabilityService) findMatchedCapability(capabilities []*domain.AgentCapability, requestedCapability string) *domain.AgentCapability {
+	for _, cap := range capabilities {
+		if cap.CapabilityType == requestedCapability {
+			return cap
+		}
+	}
+	return nil
 }
 
 // GrantCapability grants a new capability to an agent
@@ -193,6 +264,7 @@ func (s *CapabilityService) GrantCapability(
 	capabilityType string,
 	scope map[string]interface{},
 	grantedBy *uuid.UUID,
+	executionMode string,
 ) (*domain.AgentCapability, error) {
 	// Verify agent exists
 	agent, err := s.agentRepo.GetByID(agentID)
@@ -200,11 +272,24 @@ func (s *CapabilityService) GrantCapability(
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
 
+	// Default execution mode based on risk level if not specified
+	if executionMode == "" {
+		executionMode = domain.ExecutionModeAuto
+		namespace, action, parseErr := domain.ParseCapability(capabilityType)
+		if parseErr == nil {
+			capDef, defErr := s.capabilityRepo.GetCapabilityDefinition(namespace, action, &agent.OrganizationID)
+			if defErr == nil {
+				executionMode = domain.DefaultExecutionModeForRiskLevel(capDef.RiskLevel)
+			}
+		}
+	}
+
 	// Create capability
 	capability := &domain.AgentCapability{
 		AgentID:         agentID,
 		CapabilityType:  capabilityType,
 		CapabilityScope: scope,
+		ExecutionMode:   executionMode,
 		GrantedBy:       grantedBy,
 		GrantedAt:       time.Now(),
 	}
@@ -458,11 +543,13 @@ func (s *CapabilityService) ValidateAndRegisterCapability(ctx context.Context, c
 	_, err = s.capabilityRepo.GetCapabilityDefinition(namespace, action, &orgID)
 	if err != nil {
 		// Create new custom capability
+		riskLevel := domain.RiskLevelMedium
 		def := &domain.CapabilityDefinition{
 			Namespace:      namespace,
 			Action:         action,
 			CapabilityType: "custom",
-			RiskLevel:      domain.RiskLevelMedium, // Default risk level for custom
+			RiskLevel:      riskLevel,
+			MinTrustScore:  domain.DefaultMinTrustScoreForRiskLevel(riskLevel),
 			DisplayName:    fmt.Sprintf("%s:%s", namespace, action),
 			Description:    fmt.Sprintf("Custom capability: %s:%s", namespace, action),
 			Category:       "custom",
