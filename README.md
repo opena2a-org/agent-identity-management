@@ -27,6 +27,25 @@ Agent created:
 
 Your agent now has a cryptographic identity, an append-only audit log, and a trust score -- no server required.
 
+<details>
+<summary>Dashboard screenshots</summary>
+
+![Security Dashboard](docs/images/dashboard-security.png)
+*Fleet overview — 298 agents monitored, 24 actions blocked, risk by category*
+
+![Agent Registry](docs/images/agents.png)
+*Agent registry with trust scores, verification status, and type classification*
+
+![Trust Score Breakdown](docs/images/agent-trust-score.png)
+*8-factor trust score — verification, compliance, uptime, action success, security alerts*
+
+![MCP Supply Chain](docs/images/supply-chain.png)
+*MCP server dependencies with attestation status and confidence scores*
+
+</details>
+
+[See all demos](https://opena2a.org/demos)
+
 ## Two Ways to Start
 
 **Solo developer, single agent, no infrastructure:**
@@ -185,12 +204,7 @@ curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-managemen
 
 Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.
 
-| Image | GHCR | Docker Hub |
-|-------|------|------------|
-| Backend API | `ghcr.io/opena2a-org/aim-server` | `opena2a/aim-server` |
-| Dashboard | `ghcr.io/opena2a-org/aim-dashboard` | `opena2a/aim-dashboard` |
-
-For production deployment (AWS, Azure, GCP, Kubernetes), image signing verification, and tag conventions, see [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
+Images on [Docker Hub](https://hub.docker.com/u/opena2a). See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for tag conventions and production deployment.
 
 ## Using with HackMyAgent
 
