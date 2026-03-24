@@ -229,6 +229,30 @@ for i in range(1, 5):
     )
 ```
 
+### Delegation Trust Attenuation
+
+When agents delegate authority to other agents, trust decays through the chain. This prevents deep delegation chains from bypassing trust requirements.
+
+Each delegation specifies:
+- `trustAttenuationFactor` (default 0.8): multiplied at each hop
+- `minDelegatedTrustScore` (default 0.3): floor below which the chain is invalid
+
+```
+Human (trust: 1.0)
+  └─ Orchestrator (effective: 0.8)    # 1.0 × 0.8
+       └─ Researcher (effective: 0.64) # 0.8 × 0.8
+            └─ Sub-agent (effective: 0.51) # 0.64 × 0.8
+```
+
+If any hop drops below the minimum, the delegation chain is rejected. Combined with per-capability trust thresholds, this means a deeply-delegated agent cannot execute high-risk capabilities even if it has been granted them.
+
+The TypeScript SDK enforces this in `verifyDelegationChain()`:
+
+```typescript
+const result = await verifyDelegationChain(chain, { rootTrustScore: 0.95 });
+// result.results[i].effectiveTrust shows trust at each hop
+```
+
 ## Supply Chain Analytics
 
 AIM provides comprehensive visibility into your agent ecosystem:

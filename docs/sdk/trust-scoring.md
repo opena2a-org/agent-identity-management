@@ -602,6 +602,32 @@ improve_trust_score()
 
 ## Trust Score Thresholds
 
+### Per-Capability Trust Enforcement (Server)
+
+On the AIM server, each capability definition has a `minTrustScore` field. When an agent attempts an action, the server checks the agent's trust score against the capability's threshold. If the agent's score is too low, the action is denied — even if the capability is granted.
+
+Default thresholds by risk level:
+
+| Risk Level | Min Trust Score |
+|------------|----------------|
+| low        | 0.0 (no gate)  |
+| medium     | 0.3            |
+| high       | 0.5            |
+| critical   | 0.7            |
+
+Admins can customize thresholds per capability via the REST API (`PUT /capabilities/:id`).
+
+### Delegation Trust Attenuation
+
+When agents delegate to other agents, trust decays through the chain. Each delegation hop multiplies the effective trust by an attenuation factor (default: 0.8). The chain becomes invalid if trust drops below a minimum floor (default: 0.3).
+
+Example: Agent A (trust 1.0) delegates to Agent B, which delegates to Agent C:
+- Agent A: 1.0
+- Agent B: 1.0 x 0.8 = 0.8
+- Agent C: 0.8 x 0.8 = 0.64
+
+Both `trustAttenuationFactor` and `minDelegatedTrustScore` are configurable per delegation.
+
 ### Production Readiness
 
 ```python
