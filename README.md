@@ -141,6 +141,83 @@ Cryptographic identity, OAuth 2.0 auth, capability enforcement, audit trail, 8-f
 
 </details>
 
+## Fine-Grained Authorization (FGA)
+
+5-step authorization pipeline that evaluates every agent action before execution:
+
+1. **Capability check** -- does the agent have the required capability?
+2. **Attribute check** -- do agent attributes satisfy the policy conditions?
+3. **Context check** -- does the runtime context (time, location, risk level) permit the action?
+4. **Chain check** -- if delegated, is the delegation chain valid and within scope?
+5. **Intent check** -- does the declared intent match the action being performed?
+
+All five steps must pass. Any failure returns a typed denial with the specific step that blocked the action.
+
+```typescript
+const decision = await aim.authorize({
+  agent: 'billing-agent',
+  action: 'db:write',
+  resource: 'invoices',
+  context: { riskLevel: 'elevated' }
+});
+// { allowed: false, deniedAt: 'context', reason: 'elevated risk requires human approval' }
+```
+
+## Privileged Access Management (PAM)
+
+Three privilege tiers with escalating controls:
+
+| Tier | Examples | Controls |
+|------|----------|----------|
+| STANDARD | `file:read`, `api:call` | Normal capability enforcement |
+| PRIVILEGED | `db:write`, `deploy:staging` | Time-bound session, audit-intensive logging |
+| SUPER_PRIVILEGED | `infra:destroy`, `secrets:rotate` | Human approval gate, dual authorization |
+
+**Human approval gates** -- SUPER_PRIVILEGED actions queue for human review. Configurable approval timeout (default 5 minutes), automatic denial on expiry.
+
+**Break-glass** -- emergency override for blocked critical actions. Requires a break-glass token, logs to a separate tamper-evident audit stream, and triggers immediate review notification.
+
+**Certification campaigns** -- periodic review of agent privilege assignments. Managers approve or revoke each privilege. Unreviewed privileges expire automatically.
+
+## CyberArk Integration
+
+CCP (Central Credential Provider) bridge for retrieving vaulted credentials at runtime without exposing secrets to the agent context. PSM (Privileged Session Manager) streaming for recording and auditing privileged agent sessions.
+
+```typescript
+const aim = new AIMCore({
+  agentName: 'billing-agent',
+  vault: {
+    provider: 'cyberark',
+    ccpUrl: process.env.CYBERARK_CCP_URL,
+    appId: 'aim-agents',
+    safe: 'AgentCredentials'
+  }
+});
+
+// Agent requests credential by reference, never sees the value
+const cred = await aim.getCredential('db-connection-string');
+```
+
+## SIEM Integration
+
+Built-in adapters for forwarding audit events to enterprise SIEM platforms:
+
+- **Splunk** -- HTTP Event Collector (HEC) adapter. Sends structured JSON events with AIM-specific source type and index configuration.
+- **Microsoft Sentinel** -- Data Collector API adapter. Maps AIM audit events to custom log tables with workspace ID routing.
+
+Both adapters support buffered batch delivery, automatic retry with backoff, and event filtering by severity.
+
+```yaml
+# aim-config.yaml
+siem:
+  adapter: splunk
+  hecUrl: https://splunk.internal:8088
+  token: ${SPLUNK_HEC_TOKEN}
+  index: aim_agent_audit
+  sourcetype: aim:audit
+  minSeverity: warning
+```
+
 ## SDKs
 
 | SDK | Install | Status |
