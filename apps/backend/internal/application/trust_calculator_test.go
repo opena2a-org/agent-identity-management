@@ -1001,6 +1001,169 @@ func TestTrustCalculator_GetTrustScoreHistoryAuditTrail_Error(t *testing.T) {
 	assert.Nil(t, auditTrail)
 }
 
+// ============================================================================
+// TEST: 9-Factor Weights and Execution Isolation
+// ============================================================================
+
+func TestTrustCalculator_NineFactorWeightsSum(t *testing.T) {
+	// The 9 weights from Calculate() must sum to exactly 1.0
+	weights := map[string]float64{
+		"verification":        0.25,
+		"uptime":              0.15,
+		"success_rate":        0.15,
+		"security_alerts":     0.15,
+		"compliance":          0.10,
+		"age":                 0.05,
+		"drift_detection":     0.03,
+		"user_feedback":       0.02,
+		"execution_isolation": 0.10,
+	}
+
+	sum := 0.0
+	for _, w := range weights {
+		sum += w
+	}
+
+	assert.InDelta(t, 1.0, sum, 0.0001, "9-factor weights must sum to exactly 1.0")
+	assert.Len(t, weights, 9, "There must be exactly 9 factors")
+}
+
+// MockIsolationAttestationRepository mocks the IsolationAttestationRepository for trust calculator tests
+type MockIsolationAttestationRepository struct {
+	mock.Mock
+}
+
+func (m *MockIsolationAttestationRepository) Create(attestation *domain.IsolationAttestation) error {
+	args := m.Called(attestation)
+	return args.Error(0)
+}
+
+func (m *MockIsolationAttestationRepository) GetLatest(agentID uuid.UUID) (*domain.IsolationAttestation, error) {
+	args := m.Called(agentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.IsolationAttestation), args.Error(1)
+}
+
+func (m *MockIsolationAttestationRepository) GetHistory(agentID uuid.UUID, limit int) ([]*domain.IsolationAttestation, error) {
+	args := m.Called(agentID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.IsolationAttestation), args.Error(1)
+}
+
+func TestTrustCalculator_VerifiedAgentWithIsolation_HigherScore(t *testing.T) {
+	// Build two calculators: one with isolation, one without
+	mockTrustRepo := new(AgentServiceMockTrustScoreRepository)
+	mockAPIKeyRepo := new(MockAPIKeyRepository)
+	mockAuditRepo := new(AgentServiceMockAuditLogRepository)
+	mockCapabilityRepo := new(MockCapabilityRepository)
+	mockAgentRepo := new(TrustCalcMockAgentRepository)
+	mockAlertRepo := new(TrustCalcMockAlertRepository)
+	mockIsolationRepo := new(MockIsolationAttestationRepository)
+
+	calcWithoutIsolation := NewTrustCalculator(
+		mockTrustRepo, mockAPIKeyRepo, mockAuditRepo,
+		mockCapabilityRepo, mockAgentRepo, mockAlertRepo,
+	)
+
+	calcWithIsolation := NewTrustCalculator(
+		mockTrustRepo, mockAPIKeyRepo, mockAuditRepo,
+		mockCapabilityRepo, mockAgentRepo, mockAlertRepo,
+	)
+	calcWithIsolation.SetIsolationRepo(mockIsolationRepo)
+
+	agentID := uuid.New()
+	agent := &domain.Agent{
+		ID:        agentID,
+		Status:    domain.AgentStatusVerified,
+		CreatedAt: time.Now().Add(-90 * 24 * time.Hour),
+		UpdatedAt: time.Now(),
+	}
+
+	// Mock dependencies for both calculators
+	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agentID).Return([]*domain.AgentCapability{}, nil).Maybe()
+	mockCapabilityRepo.On("GetViolationsByAgentID", agentID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockAlertRepo.On("GetUnacknowledgedByResourceID", agentID).Return([]*domain.Alert{}, nil).Maybe()
+	mockAlertRepo.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
+
+	// Mock isolation repo to return a high-isolation attestation
+	mockIsolationRepo.On("GetLatest", agentID).Return(&domain.IsolationAttestation{
+		ID:        uuid.New(),
+		AgentID:   agentID,
+		Sandbox:   domain.SandboxFirecracker,
+		Network:   domain.NetworkAirgap,
+		Filesystem: domain.FilesystemReadOnly,
+		Process:   domain.ProcessFull,
+		Score:     1.0, // Max isolation
+	}, nil)
+
+	// Calculate without isolation repo (defaults to 0.3 baseline)
+	scoreWithout, err := calcWithoutIsolation.Calculate(agent)
+	assert.NoError(t, err)
+	assert.NotNil(t, scoreWithout)
+
+	// Calculate with isolation repo returning perfect isolation (1.0)
+	scoreWith, err := calcWithIsolation.Calculate(agent)
+	assert.NoError(t, err)
+	assert.NotNil(t, scoreWith)
+
+	// Agent with perfect isolation should score higher
+	assert.Greater(t, scoreWith.Score, scoreWithout.Score,
+		"Agent with perfect isolation (1.0) should score higher than baseline (0.3)")
+
+	// Verify ExecutionIsolation factor is populated
+	assert.Equal(t, 1.0, scoreWith.Factors.ExecutionIsolation,
+		"ExecutionIsolation factor should be 1.0 with max isolation attestation")
+	assert.Equal(t, 0.3, scoreWithout.Factors.ExecutionIsolation,
+		"ExecutionIsolation factor should be 0.3 baseline without isolation repo")
+}
+
+func TestTrustCalculator_ExecutionIsolation_NoRepo(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	agent := &domain.Agent{ID: uuid.New()}
+	isolation := calculator.calculateExecutionIsolation(agent)
+
+	assert.Equal(t, 0.3, isolation, "Without isolation repo, should return 0.3 baseline")
+}
+
+func TestTrustCalculator_ExecutionIsolation_NoAttestation(t *testing.T) {
+	mockIsolationRepo := new(MockIsolationAttestationRepository)
+	calculator := &TrustCalculator{}
+	calculator.SetIsolationRepo(mockIsolationRepo)
+
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID}
+
+	mockIsolationRepo.On("GetLatest", agentID).Return(nil, nil)
+
+	isolation := calculator.calculateExecutionIsolation(agent)
+
+	assert.Equal(t, 0.3, isolation, "Without attestation, should return 0.3 baseline")
+}
+
+func TestTrustCalculator_ExecutionIsolation_WithAttestation(t *testing.T) {
+	mockIsolationRepo := new(MockIsolationAttestationRepository)
+	calculator := &TrustCalculator{}
+	calculator.SetIsolationRepo(mockIsolationRepo)
+
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID}
+
+	mockIsolationRepo.On("GetLatest", agentID).Return(&domain.IsolationAttestation{
+		ID:      uuid.New(),
+		AgentID: agentID,
+		Score:   0.72,
+	}, nil)
+
+	isolation := calculator.calculateExecutionIsolation(agent)
+
+	assert.Equal(t, 0.72, isolation, "Should return the pre-computed attestation score")
+}
+
 // Helper function for time pointer
 func timePtr(t time.Time) *time.Time {
 	return &t

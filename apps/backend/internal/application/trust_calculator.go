@@ -11,7 +11,7 @@ import (
 )
 
 // TrustCalculator implements domain.TrustScoreCalculator
-// Implements 8-factor trust scoring algorithm (see documentation)
+// Implements 9-factor trust scoring algorithm (see documentation)
 type TrustCalculator struct {
 	trustScoreRepo         domain.TrustScoreRepository
 	apiKeyRepo             domain.APIKeyRepository
@@ -21,6 +21,8 @@ type TrustCalculator struct {
 	alertRepo              domain.AlertRepository
 	verificationEventRepo  domain.VerificationEventRepository
 	snapshotRepo           domain.ComplianceSnapshotRepository
+	isolationRepo          domain.IsolationAttestationRepository
+	tmeProvider            NanoMindTMEProvider
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -63,10 +65,30 @@ func NewTrustCalculatorWithVerification(
 	}
 }
 
+// NanoMindTMEProvider supplies Threat Model Evaluation scores from NanoMind.
+// TME scores modify the security alerts factor as a behavioral signal.
+type NanoMindTMEProvider interface {
+	// GetLatestTMEScore returns the latest TME score for an agent (0-1, higher = safer).
+	// Returns -1 if no evaluation exists.
+	GetLatestTMEScore(agentID uuid.UUID) (float64, error)
+}
+
 // SetSnapshotRepo sets the compliance snapshot repository for compliance factor calculation.
 // This is optional; when not set, the compliance factor returns a neutral 0.5 score.
 func (c *TrustCalculator) SetSnapshotRepo(repo domain.ComplianceSnapshotRepository) {
 	c.snapshotRepo = repo
+}
+
+// SetIsolationRepo sets the isolation attestation repository for execution isolation factor.
+// Optional; when not set, the execution isolation factor returns a neutral 0.3 score.
+func (c *TrustCalculator) SetIsolationRepo(repo domain.IsolationAttestationRepository) {
+	c.isolationRepo = repo
+}
+
+// SetTMEProvider sets the NanoMind TME provider for behavioral trust enrichment.
+// Optional; when not set, TME has no effect on scoring.
+func (c *TrustCalculator) SetTMEProvider(provider NanoMindTMEProvider) {
+	c.tmeProvider = provider
 }
 
 // Calculate calculates trust score for an agent
@@ -77,26 +99,31 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		return nil, err
 	}
 
-	// 8-factor weighted average (totaling 100%)
-	// Formula from documentation:
+	// 9-factor weighted average (totaling 100%)
+	// Formula:
 	// Trust Score =
 	//     (0.25 × Verification Status) +
 	//     (0.15 × Uptime & Availability) +
 	//     (0.15 × Action Success Rate) +
 	//     (0.15 × Security Alerts) +
 	//     (0.10 × Compliance Score) +
-	//     (0.10 × Age & History) +
-	//     (0.05 × Drift Detection) +
-	//     (0.05 × User Feedback)
+	//     (0.05 × Age & History) +
+	//     (0.03 × Drift Detection) +
+	//     (0.02 × User Feedback) +
+	//     (0.10 × Execution Isolation)
+	//
+	// Weight rebalance: Age reduced from 10% to 5%, Drift from 5% to 3%,
+	// User Feedback from 5% to 2% to make room for 10% Execution Isolation.
 	weights := map[string]float64{
-		"verification":    0.25, // Factor 1
-		"uptime":          0.15, // Factor 2
-		"success_rate":    0.15, // Factor 3
-		"security_alerts": 0.15, // Factor 4
-		"compliance":      0.10, // Factor 5
-		"age":             0.10, // Factor 6
-		"drift_detection": 0.05, // Factor 7
-		"user_feedback":   0.05, // Factor 8
+		"verification":         0.25, // Factor 1
+		"uptime":               0.15, // Factor 2
+		"success_rate":         0.15, // Factor 3
+		"security_alerts":      0.15, // Factor 4
+		"compliance":           0.10, // Factor 5
+		"age":                  0.05, // Factor 6 (reduced from 0.10)
+		"drift_detection":      0.03, // Factor 7 (reduced from 0.05)
+		"user_feedback":        0.02, // Factor 8 (reduced from 0.05)
+		"execution_isolation":  0.10, // Factor 9 (new)
 	}
 
 	score := factors.VerificationStatus*weights["verification"] +
@@ -106,7 +133,8 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		factors.Compliance*weights["compliance"] +
 		factors.Age*weights["age"] +
 		factors.DriftDetection*weights["drift_detection"] +
-		factors.UserFeedback*weights["user_feedback"]
+		factors.UserFeedback*weights["user_feedback"] +
+		factors.ExecutionIsolation*weights["execution_isolation"]
 
 	// Ensure score is within bounds [0, 1]
 	score = math.Max(0.0, math.Min(1.0, score))
@@ -149,17 +177,34 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 	// SOC 2, HIPAA, GDPR adherence
 	factors.Compliance = c.calculateCompliance(agent)
 
-	// Factor 6: Age & History (10% weight)
+	// Factor 6: Age & History (5% weight)
 	// How long agent has been operating successfully
 	factors.Age = c.calculateAge(agent)
 
-	// Factor 7: Drift Detection (5% weight)
+	// Factor 7: Drift Detection (3% weight)
 	// Behavioral pattern changes
 	factors.DriftDetection = c.calculateDriftDetection(agent)
 
-	// Factor 8: User Feedback (5% weight)
+	// Factor 8: User Feedback (2% weight)
 	// Explicit user ratings
 	factors.UserFeedback = c.calculateUserFeedback(agent)
+
+	// Factor 9: Execution Isolation (10% weight)
+	// Runtime isolation posture (sandbox, network, filesystem, process)
+	factors.ExecutionIsolation = c.calculateExecutionIsolation(agent)
+
+	// NanoMind TME enrichment: adjust security alerts factor based on threat model evaluation
+	if c.tmeProvider != nil {
+		tmeScore, err := c.tmeProvider.GetLatestTMEScore(agent.ID)
+		if err == nil && tmeScore >= 0 {
+			// TME score (0-1, higher = safer) blends into security alerts factor
+			// Weight: 30% TME influence on the security alerts component
+			factors.SecurityAlerts = factors.SecurityAlerts*0.7 + tmeScore*0.3
+			if factors.SecurityAlerts > 1.0 {
+				factors.SecurityAlerts = 1.0
+			}
+		}
+	}
 
 	return factors, nil
 }
@@ -353,7 +398,7 @@ func (c *TrustCalculator) calculateCompliance(agent *domain.Agent) float64 {
 	return math.Max(0.0, math.Min(1.0, normalized))
 }
 
-// Factor 6: Age & History (10% weight)
+// Factor 6: Age & History (5% weight)
 // Measures how long agent has been operating successfully
 func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 	// Implementation from documentation:
@@ -373,7 +418,7 @@ func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 	return 1.0
 }
 
-// Factor 7: Drift Detection (5% weight)
+// Factor 7: Drift Detection (3% weight)
 // Measures changes in agent behavior patterns by checking for
 // configuration drift alerts. No alerts = 1.0 (perfect).
 // Each drift alert reduces the score proportionally by severity.
@@ -423,7 +468,7 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 	return math.Max(0.0, score)
 }
 
-// Factor 8: User Feedback (5% weight)
+// Factor 8: User Feedback (2% weight)
 // Measures explicit feedback from users.
 //
 // Currently returns 0.5 (neutral) because no user feedback collection
@@ -443,11 +488,31 @@ func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) float64 {
 	return 0.5
 }
 
+// Factor 9: Execution Isolation (10% weight)
+// Measures the runtime isolation posture of the agent.
+// Agents self-report their isolation via SDK; the score is computed from
+// sandbox type, network isolation, filesystem isolation, and process isolation.
+// Returns 0.3 (low baseline) when no attestation exists, incentivizing agents
+// to report their isolation posture for a higher score.
+func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) float64 {
+	if c.isolationRepo == nil {
+		return 0.3 // Low baseline when no isolation data available
+	}
+
+	attestation, err := c.isolationRepo.GetLatest(agent.ID)
+	if err != nil || attestation == nil {
+		return 0.3 // No attestation submitted yet
+	}
+
+	// Use the pre-computed score from the attestation
+	return attestation.Score
+}
+
 // calculateConfidence determines confidence level based on available data
 func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors) float64 {
 	// Count available data points (each real data source adds confidence)
 	dataPoints := 0.0
-	total := 8.0 // 8 factors
+	total := 9.0 // 9 factors
 
 	// Base data points from agent properties
 	if agent.Status != "" {
@@ -489,6 +554,22 @@ func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *doma
 			if len(alerts) > 0 {
 				dataPoints += 0.5 // More data = more confidence in the score
 			}
+		}
+	}
+
+	// Check if we have isolation attestation data
+	if c.isolationRepo != nil {
+		att, err := c.isolationRepo.GetLatest(agent.ID)
+		if err == nil && att != nil {
+			dataPoints++ // Isolation attestation submitted
+		}
+	}
+
+	// Check if we have NanoMind TME data
+	if c.tmeProvider != nil {
+		tmeScore, err := c.tmeProvider.GetLatestTMEScore(agent.ID)
+		if err == nil && tmeScore >= 0 {
+			dataPoints += 0.5 // TME data enriches security alerts confidence
 		}
 	}
 

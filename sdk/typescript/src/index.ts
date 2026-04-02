@@ -198,5 +198,17 @@ export {
   type EncodedHybridPublicKey,
 } from './crypto/pqc';
 
+// Isolation attestation
+export {
+  SandboxType,
+  NetworkIsolation,
+  FilesystemIsolation,
+  ProcessIsolation,
+  type IsolationPosture,
+  type IsolationAttestationResult,
+  scoreIsolation,
+  autoDetectIsolation,
+} from './isolation/index.js';
+
 // Version
 export const VERSION = '1.0.0';
