@@ -97,6 +97,8 @@ export interface RegisterAgentOptions {
   talksTo?: string[];
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Enable anonymous community intelligence telemetry (default: false) */
+  communityIntelligenceOptIn?: boolean;
 }
 
 /**

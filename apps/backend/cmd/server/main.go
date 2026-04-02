@@ -325,6 +325,12 @@ func main() {
 		defer close(stopRegistryBridge)
 	}
 
+	// Start Community Intelligence background job (pushes every 6 hours for opted-in orgs)
+	if services.CommunityIntelligence != nil {
+		stopCI := startCommunityIntelligenceJob(services.CommunityIntelligence)
+		defer close(stopCI)
+	}
+
 	// Graceful shutdown
 	go func() {
 		if err := app.Listen(":" + port); err != nil {
@@ -433,7 +439,9 @@ type Repositories struct {
 	A2ARevokedAgent       *repository.A2ARevokedAgentRepository
 	A2ASecuritySettings   *repository.A2ASecuritySettingsRepository
 	A2ASecurityViolation  *repository.A2ASecurityViolationRepository
-	DeviceCode            *repository.DeviceCodeRepository
+	DeviceCode              *repository.DeviceCodeRepository
+	CommunityIntelligence   *repository.CommunityIntelligenceRepository // For community intelligence opt-in telemetry
+	Remediation             *repository.RemediationRepository            // For remediation tracking (agentpwn + HMA)
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -480,6 +488,8 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		A2ASecuritySettings:   repository.NewA2ASecuritySettingsRepository(db),
 		A2ASecurityViolation:  repository.NewA2ASecurityViolationRepository(db),
 		DeviceCode:            repository.NewDeviceCodeRepository(db),
+		CommunityIntelligence: repository.NewCommunityIntelligenceRepository(db),
+		Remediation:           repository.NewRemediationRepository(db),
 	}, oauthRepo
 }
 
@@ -508,7 +518,9 @@ type Services struct {
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge    *application.RegistryBridgeService    // For OpenA2A Registry attestation contribution
+	RegistryBridge          *application.RegistryBridgeService          // For OpenA2A Registry attestation contribution
+	CommunityIntelligence   *application.CommunityIntelligenceService   // For community intelligence opt-in telemetry
+	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -742,6 +754,15 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		)
 	}
 
+	// Community Intelligence: opt-in anonymized trust factor telemetry
+	ciService := application.NewCommunityIntelligenceService(
+		repos.Organization,
+		repos.Agent,
+		repos.TrustScore,
+		repos.CommunityIntelligence,
+		registryURL,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -767,7 +788,9 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
 		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
 		DeviceAuth:        deviceAuthService,        // For OAuth Device Authorization Grant (RFC 8628)
-		RegistryBridge:    registryBridgeService,    // For OpenA2A Registry attestation contribution
+		RegistryBridge:          registryBridgeService,    // For OpenA2A Registry attestation contribution
+		CommunityIntelligence:   ciService,                 // For community intelligence opt-in telemetry
+		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
 	}, keyVault
 }
 
@@ -803,8 +826,10 @@ type Handlers struct {
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
-	AIP                *handlers.AIPHandler                // For AIP discovery and DID resolution
+	RegistryBridge          *handlers.RegistryBridgeHandler          // For OpenA2A Registry attestation contribution
+	CommunityIntelligence   *handlers.CommunityIntelligenceHandler   // For community intelligence opt-in telemetry
+	AIP                     *handlers.AIPHandler                     // For AIP discovery and DID resolution
+	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -972,8 +997,14 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,
 		),
+		CommunityIntelligence: handlers.NewCommunityIntelligenceHandler(
+			services.CommunityIntelligence,
+		),
 		AIP: handlers.NewAIPHandler(
 			repos.Agent,
+		),
+		Remediation: handlers.NewRemediationHandler(
+			services.Remediation,
 		),
 	}
 }
@@ -1158,6 +1189,23 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	trust.Get("/agents/:id/breakdown", h.TrustScore.GetTrustScoreBreakdown) // Detailed breakdown with weights and contributions
 	trust.Get("/agents/:id/history", h.TrustScore.GetTrustScoreHistory)
 
+	// Remediation tracking (public, rate-limited, no auth -- receives reports from agentpwn and HMA)
+	remediation := v1.Group("/remediation")
+	remediation.Use(middleware.RateLimitMiddleware())
+	remediation.Post("/track", h.Remediation.RecordFinding)
+	remediation.Post("/remediated", h.Remediation.RecordRemediation)
+	remediation.Get("/stats", h.Remediation.GetStats)
+	remediation.Get("/recent", h.Remediation.ListRecent)
+
+	// Community Intelligence opt-in telemetry (authentication required)
+	ci := v1.Group("/community-intelligence")
+	ci.Use(middleware.AuthMiddleware(jwtService))
+	ci.Use(middleware.RateLimitMiddleware())
+	ci.Post("/enable", h.CommunityIntelligence.EnableOptIn)
+	ci.Post("/disable", h.CommunityIntelligence.DisableOptIn)
+	ci.Get("/status", h.CommunityIntelligence.GetOptInStatus)
+	ci.Get("/benchmarks", h.CommunityIntelligence.GetCommunityBenchmarks)
+
 	// Admin routes (admin only)
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AuthMiddleware(jwtService))
@@ -1223,6 +1271,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Registry Bridge (admin only - manual trigger for OpenA2A Registry contribution)
 	admin.Post("/registry-bridge/push", h.RegistryBridge.TriggerPush)
+
+	// Community Intelligence (admin only - manual trigger for CI data push)
+	admin.Post("/community-intelligence/push", h.CommunityIntelligence.TriggerPush)
 
 	// Compliance routes (admin only)
 	// SOC 2 and HIPAA compliance features
@@ -1764,6 +1815,34 @@ func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) ch
 			case <-stopChan:
 				ticker.Stop()
 				log.Println("Registry bridge stopped")
+				return
+			}
+		}
+	}()
+
+	return stopChan
+}
+
+// startCommunityIntelligenceJob starts a background goroutine that periodically
+// collects anonymized trust factor distributions from opted-in organizations
+// and pushes them to the OpenA2A Registry. Runs every 6 hours.
+// Returns a channel that should be closed to stop the job.
+func startCommunityIntelligenceJob(ciService *application.CommunityIntelligenceService) chan struct{} {
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(6 * time.Hour)
+
+	go func() {
+		log.Println("Community intelligence job enabled (runs every 6 hours)")
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := ciService.CollectAndPushTelemetry(context.Background()); err != nil {
+					log.Printf("Community intelligence job error: %v", err)
+				}
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("Community intelligence job stopped")
 				return
 			}
 		}

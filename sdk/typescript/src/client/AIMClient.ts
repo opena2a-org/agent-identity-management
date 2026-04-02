@@ -186,6 +186,7 @@ export class AIMClient {
       capabilities: options.capabilities ?? [],
       talksTo: options.talksTo ?? [],
       metadata: options.metadata ?? {},
+      communityIntelligenceOptIn: options.communityIntelligenceOptIn ?? false,
       publicKey,
     };
 

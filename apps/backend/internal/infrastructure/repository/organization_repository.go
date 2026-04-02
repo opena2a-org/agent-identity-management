@@ -22,8 +22,8 @@ func NewOrganizationRepository(db *sql.DB) *OrganizationRepository {
 // Create creates a new organization
 func (r *OrganizationRepository) Create(org *domain.Organization) error {
 	query := `
-		INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active, enforcement_mode, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active, enforcement_mode, community_intelligence_enabled, community_intelligence_consented_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	now := time.Now()
@@ -45,6 +45,8 @@ func (r *OrganizationRepository) Create(org *domain.Organization) error {
 		org.MaxUsers,
 		org.IsActive,
 		org.EnforcementMode,
+		org.CommunityIntelligenceEnabled,
+		org.CommunityIntelligenceConsentedAt,
 		org.CreatedAt,
 		org.UpdatedAt,
 	)
@@ -55,7 +57,7 @@ func (r *OrganizationRepository) Create(org *domain.Organization) error {
 // GetByID retrieves an organization by ID
 func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), created_at, updated_at
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), community_intelligence_enabled, community_intelligence_consented_at, created_at, updated_at
 		FROM organizations
 		WHERE id = $1
 	`
@@ -70,6 +72,8 @@ func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, er
 		&org.MaxUsers,
 		&org.IsActive,
 		&org.EnforcementMode,
+		&org.CommunityIntelligenceEnabled,
+		&org.CommunityIntelligenceConsentedAt,
 		&org.CreatedAt,
 		&org.UpdatedAt,
 	)
@@ -87,7 +91,7 @@ func (r *OrganizationRepository) GetByID(id uuid.UUID) (*domain.Organization, er
 // GetByDomain retrieves an organization by domain
 func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), created_at, updated_at
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), community_intelligence_enabled, community_intelligence_consented_at, created_at, updated_at
 		FROM organizations
 		WHERE domain = $1
 	`
@@ -102,6 +106,8 @@ func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organiz
 		&org.MaxUsers,
 		&org.IsActive,
 		&org.EnforcementMode,
+		&org.CommunityIntelligenceEnabled,
+		&org.CommunityIntelligenceConsentedAt,
 		&org.CreatedAt,
 		&org.UpdatedAt,
 	)
@@ -120,8 +126,8 @@ func (r *OrganizationRepository) GetByDomain(domainName string) (*domain.Organiz
 func (r *OrganizationRepository) Update(org *domain.Organization) error {
 	query := `
 		UPDATE organizations
-		SET name = $1, plan_type = $2, max_agents = $3, max_users = $4, is_active = $5, enforcement_mode = $6, updated_at = $7
-		WHERE id = $8
+		SET name = $1, plan_type = $2, max_agents = $3, max_users = $4, is_active = $5, enforcement_mode = $6, community_intelligence_enabled = $7, community_intelligence_consented_at = $8, updated_at = $9
+		WHERE id = $10
 	`
 
 	org.UpdatedAt = time.Now()
@@ -138,6 +144,8 @@ func (r *OrganizationRepository) Update(org *domain.Organization) error {
 		org.MaxUsers,
 		org.IsActive,
 		org.EnforcementMode,
+		org.CommunityIntelligenceEnabled,
+		org.CommunityIntelligenceConsentedAt,
 		org.UpdatedAt,
 		org.ID,
 	)
@@ -148,7 +156,7 @@ func (r *OrganizationRepository) Update(org *domain.Organization) error {
 // ListAll returns all active organizations
 func (r *OrganizationRepository) ListAll() ([]*domain.Organization, error) {
 	query := `
-		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), created_at, updated_at
+		SELECT id, name, domain, plan_type, max_agents, max_users, is_active, COALESCE(enforcement_mode, 'monitoring'), community_intelligence_enabled, community_intelligence_consented_at, created_at, updated_at
 		FROM organizations
 		WHERE is_active = true
 		ORDER BY created_at ASC
@@ -172,6 +180,8 @@ func (r *OrganizationRepository) ListAll() ([]*domain.Organization, error) {
 			&org.MaxUsers,
 			&org.IsActive,
 			&org.EnforcementMode,
+			&org.CommunityIntelligenceEnabled,
+			&org.CommunityIntelligenceConsentedAt,
 			&org.CreatedAt,
 			&org.UpdatedAt,
 		); err != nil {
