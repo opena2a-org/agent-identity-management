@@ -793,10 +793,13 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	if !ok || len(issuerPubKey) != ed25519.PublicKeySize {
 		log.Fatalf("server signing key is not a valid Ed25519 public key")
 	}
+	// Defensive copy: isolate from any future mutation of the source key.
+	issuerPubKeyCopy := make([]byte, ed25519.PublicKeySize)
+	copy(issuerPubKeyCopy, issuerPubKey)
 	trustedIssuers := []atcdomain.TrustedIssuer{
 		{
 			URI:       issuerURI,
-			PublicKey: []byte(issuerPubKey),
+			PublicKey: issuerPubKeyCopy,
 		},
 	}
 	realATCVerifier := infraatc.NewRealATCVerifier(trustedIssuers, crlClient)

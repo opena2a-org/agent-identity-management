@@ -125,13 +125,12 @@ func (c *CachedCRLClient) Refresh() error {
 		return fmt.Errorf("CRL endpoint returned %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB limit
-	if err != nil {
-		return fmt.Errorf("CRL read failed: %w", err)
-	}
-
+	// Use streaming JSON decoder with entry counting to bound memory allocation
+	// before the full slice is materialized. LimitReader caps I/O at 1 MiB.
+	limitedBody := io.LimitReader(resp.Body, 1<<20)
 	var crlResp atcdomain.CRLResponse
-	if err := json.Unmarshal(body, &crlResp); err != nil {
+	decoder := json.NewDecoder(limitedBody)
+	if err := decoder.Decode(&crlResp); err != nil {
 		return fmt.Errorf("CRL parse failed: %w", err)
 	}
 

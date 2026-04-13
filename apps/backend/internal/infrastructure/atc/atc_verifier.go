@@ -68,8 +68,8 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 	// Step 1: DECODE — base64url decode
 	raw, err := base64.RawURLEncoding.DecodeString(rawToken)
 	if err != nil {
-		// Negative cache: prevent CPU DoS from repeated malformed tokens
-		v.cache.Store(rawToken, &realCacheEntry{claims: nil, expiresAt: time.Now().Add(30 * time.Second)})
+		// Negative cache: prevent CPU DoS from repeated malformed tokens (short TTL for transient errors)
+		v.cache.Store(rawToken, &realCacheEntry{claims: nil, expiresAt: time.Now().Add(5 * time.Second)})
 		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "base64url decode failed"}
 	}
 
