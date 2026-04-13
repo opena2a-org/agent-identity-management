@@ -1,11 +1,18 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
+)
+
+const (
+	// maxATCHeaderSize limits the raw Authorization header token length before any decoding.
+	// MaxATCSize is 8 KiB decoded; base64 expands ~4/3x, so 16 KiB encoded is generous.
+	maxATCHeaderSize = 16 * 1024
 )
 
 // ATCAuthMiddleware verifies Authorization: ATC <base64url> headers.
@@ -39,6 +46,14 @@ func ATCAuthMiddleware(verifier atcdomain.ATCVerifier) fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error":   atcdomain.ErrCodeMalformed,
 				"message": "empty ATC token",
+			})
+		}
+
+		// Reject oversized tokens before any decoding to prevent allocation DoS
+		if len(rawToken) > maxATCHeaderSize {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+				"error":   atcdomain.ErrCodeOversized,
+				"message": fmt.Sprintf("ATC token size %d exceeds maximum %d", len(rawToken), maxATCHeaderSize),
 			})
 		}
 

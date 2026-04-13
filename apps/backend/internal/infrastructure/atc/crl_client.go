@@ -5,10 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
+)
+
+const (
+	// maxCRLEntries bounds the number of revoked ATCs to prevent memory exhaustion.
+	maxCRLEntries = 100_000
 )
 
 const (
@@ -35,16 +42,27 @@ type CachedCRLClient struct {
 	revokedIDs  map[string]bool
 	fetchedAt   time.Time
 	version     int
-	refreshing  bool
+	refreshing  int32 // atomic flag to prevent concurrent refreshes
 }
 
 // NewCachedCRLClient creates a CRL client that caches results.
-func NewCachedCRLClient(endpoint string) *CachedCRLClient {
+// Returns an error if the endpoint URL is invalid or uses a non-HTTPS scheme.
+func NewCachedCRLClient(endpoint string) (*CachedCRLClient, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CRL endpoint URL: %w", err)
+	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("CRL endpoint must use HTTPS, got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return nil, fmt.Errorf("CRL endpoint must have a host")
+	}
 	return &CachedCRLClient{
 		endpoint:   endpoint,
 		client:     &http.Client{Timeout: crlHTTPTimeout},
 		revokedIDs: make(map[string]bool),
-	}
+	}, nil
 }
 
 // IsRevoked checks whether the given ATC ID is on the CRL.
@@ -82,19 +100,14 @@ func (c *CachedCRLClient) IsRevoked(atcID string) (bool, error) {
 		return revoked, nil
 	}
 
-	// Background refresh if approaching expiry
+	// Background refresh if approaching expiry (atomic CAS prevents concurrent goroutines)
 	if age > crlCacheTTL-crlRefreshBefore {
-		c.mu.Lock()
-		if !c.refreshing {
-			c.refreshing = true
+		if atomic.CompareAndSwapInt32(&c.refreshing, 0, 1) {
 			go func() {
 				_ = c.Refresh()
-				c.mu.Lock()
-				c.refreshing = false
-				c.mu.Unlock()
+				atomic.StoreInt32(&c.refreshing, 0)
 			}()
 		}
-		c.mu.Unlock()
 	}
 
 	return revoked, nil
@@ -120,6 +133,10 @@ func (c *CachedCRLClient) Refresh() error {
 	var crlResp atcdomain.CRLResponse
 	if err := json.Unmarshal(body, &crlResp); err != nil {
 		return fmt.Errorf("CRL parse failed: %w", err)
+	}
+
+	if len(crlResp.RevokedATCs) > maxCRLEntries {
+		return fmt.Errorf("CRL contains %d entries, exceeds maximum %d", len(crlResp.RevokedATCs), maxCRLEntries)
 	}
 
 	newIDs := make(map[string]bool, len(crlResp.RevokedATCs))

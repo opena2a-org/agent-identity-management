@@ -50,14 +50,26 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 	if entry, ok := v.cache.Load(rawToken); ok {
 		ce := entry.(*realCacheEntry)
 		if time.Now().Before(ce.expiresAt) {
+			if ce.claims == nil {
+				// Negative cache entry — previously failed verification
+				return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "previously rejected ATC"}
+			}
 			return ce.claims, nil
 		}
 		v.cache.Delete(rawToken)
 	}
 
+	// Step 0: INPUT SIZE — reject oversized base64url before decoding to prevent allocation DoS.
+	// Base64 expands ~4/3x, so MaxATCSize * 2 is a safe upper bound for encoded form.
+	if len(rawToken) > atcdomain.MaxATCSize*2 {
+		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeOversized, Message: fmt.Sprintf("encoded ATC size %d exceeds limit", len(rawToken))}
+	}
+
 	// Step 1: DECODE — base64url decode
 	raw, err := base64.RawURLEncoding.DecodeString(rawToken)
 	if err != nil {
+		// Negative cache: prevent CPU DoS from repeated malformed tokens
+		v.cache.Store(rawToken, &realCacheEntry{claims: nil, expiresAt: time.Now().Add(30 * time.Second)})
 		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "base64url decode failed"}
 	}
 
@@ -245,8 +257,11 @@ func (v *RealATCVerifier) verifyDelegationChain(payload *atcdomain.ATCPayload) *
 		var signedData []byte
 		if i < len(payload.DelegationChain)-1 {
 			next := payload.DelegationChain[i+1]
-			var err error
-			signedData, err = cbor.Marshal(next)
+			encMode, err := cbor.CanonicalEncOptions().EncMode()
+			if err != nil {
+				return &atcdomain.ATCError{Code: atcdomain.ErrCodeChainInvalid, Message: fmt.Sprintf("chain entry %d: failed to create canonical encoder", i)}
+			}
+			signedData, err = encMode.Marshal(next)
 			if err != nil {
 				return &atcdomain.ATCError{Code: atcdomain.ErrCodeChainInvalid, Message: fmt.Sprintf("chain entry %d: failed to encode next entry", i)}
 			}

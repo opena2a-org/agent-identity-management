@@ -785,11 +785,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	// Real ATC verifier with trusted issuers and CRL client
 	issuerURI := getEnvOrDefault("ATC_ISSUER_URI", "https://aim.opena2a.org")
 	crlEndpoint := getEnvOrDefault("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest")
-	crlClient := infraatc.NewCachedCRLClient(crlEndpoint)
+	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
+	if err != nil {
+		log.Fatalf("invalid CRL endpoint: %v", err)
+	}
+	issuerPubKey, ok := keyVault.GetServerSigningKey().Public().(ed25519.PublicKey)
+	if !ok || len(issuerPubKey) != ed25519.PublicKeySize {
+		log.Fatalf("server signing key is not a valid Ed25519 public key")
+	}
 	trustedIssuers := []atcdomain.TrustedIssuer{
 		{
 			URI:       issuerURI,
-			PublicKey: []byte(keyVault.GetServerSigningKey().Public().(ed25519.PublicKey)),
+			PublicKey: []byte(issuerPubKey),
 		},
 	}
 	realATCVerifier := infraatc.NewRealATCVerifier(trustedIssuers, crlClient)
