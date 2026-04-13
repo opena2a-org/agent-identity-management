@@ -1187,6 +1187,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
+	public.Use(middleware.StrictRateLimitMiddleware())                                       // SECURITY: Strict rate limiting on public endpoints
 	public.Use(middleware.OptionalAuthMiddleware(jwtService))                               // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)                                 // 🚀 ONE-LINE agent registration
 	public.Post("/register", h.PublicRegistration.RegisterUser)                             // 🚀 User registration
