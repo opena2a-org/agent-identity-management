@@ -94,7 +94,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
       - uses: actions/setup-node@v4
@@ -140,7 +140,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run gosec
@@ -222,7 +222,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
       - uses: actions/setup-node@v4
@@ -263,7 +263,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run golangci-lint
