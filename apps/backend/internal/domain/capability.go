@@ -119,7 +119,7 @@ func (c *CapabilityDefinition) Type() string {
 
 // Reserved namespaces that only core capabilities can use
 var ReservedNamespaces = []string{
-	"file", "db", "api", "network", "system", "user", "mcp", "data",
+	"file", "db", "api", "network", "system", "user", "mcp", "data", "secrets",
 }
 
 // CapabilityValidationPattern is the regex pattern for valid capability strings
@@ -149,6 +149,12 @@ const (
 	CapabilitySystemAdmin     = "system:admin"
 	CapabilityMCPToolUse      = "mcp:tool_use"
 	CapabilityMCPResourceRead = "mcp:resource_read"
+
+	// Secrets management capabilities
+	CapabilitySecretsResolve = "secrets:resolve"
+	CapabilitySecretsStore   = "secrets:store"
+	CapabilitySecretsRotate  = "secrets:rotate"
+	CapabilitySecretsDelete  = "secrets:delete"
 )
 
 // Violation severity levels

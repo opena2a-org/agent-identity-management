@@ -24,9 +24,12 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
+	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
@@ -442,6 +445,11 @@ type Repositories struct {
 	DeviceCode              *repository.DeviceCodeRepository
 	CommunityIntelligence   *repository.CommunityIntelligenceRepository // For community intelligence opt-in telemetry
 	Remediation             *repository.RemediationRepository            // For remediation tracking (agentpwn + HMA)
+	// Secrets management repositories
+	SecretNamespace     *repository.SecretNamespaceRepository
+	SecretCredential    *repository.SecretCredentialRepository
+	SecretAudit         *repository.SecretAuditRepository
+	SecretBackendConfig *repository.SecretBackendConfigRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -490,6 +498,11 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		DeviceCode:            repository.NewDeviceCodeRepository(db),
 		CommunityIntelligence: repository.NewCommunityIntelligenceRepository(db),
 		Remediation:           repository.NewRemediationRepository(db),
+		// Secrets management
+		SecretNamespace:     repository.NewSecretNamespaceRepository(db),
+		SecretCredential:    repository.NewSecretCredentialRepository(db),
+		SecretAudit:         repository.NewSecretAuditRepository(db),
+		SecretBackendConfig: repository.NewSecretBackendConfigRepository(db),
 	}, oauthRepo
 }
 
@@ -521,6 +534,7 @@ type Services struct {
 	RegistryBridge          *application.RegistryBridgeService          // For OpenA2A Registry attestation contribution
 	CommunityIntelligence   *application.CommunityIntelligenceService   // For community intelligence opt-in telemetry
 	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
+	Secrets                 *application.SecretsService                 // For identity-native secrets management
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -763,6 +777,21 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		registryURL,
 	)
 
+	// Secrets management: ATC verifier (JWT shim) + AIM native backend + service
+	atcVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
+	aimNativeBackend := infrasecrets.NewAIMNativeBackend(repos.SecretCredential)
+	secretsBackends := map[domainsecrets.BackendType]domainsecrets.SecretsBackend{
+		domainsecrets.BackendTypeAIMNative: aimNativeBackend,
+	}
+	secretsService := application.NewSecretsService(
+		repos.SecretNamespace,
+		repos.SecretAudit,
+		repos.Agent,
+		repos.Capability,
+		atcVerifier,
+		secretsBackends,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -791,6 +820,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		RegistryBridge:          registryBridgeService,    // For OpenA2A Registry attestation contribution
 		CommunityIntelligence:   ciService,                 // For community intelligence opt-in telemetry
 		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
+		Secrets:                 secretsService,                                       // For identity-native secrets management
 	}, keyVault
 }
 
@@ -830,6 +860,7 @@ type Handlers struct {
 	CommunityIntelligence   *handlers.CommunityIntelligenceHandler   // For community intelligence opt-in telemetry
 	AIP                     *handlers.AIPHandler                     // For AIP discovery and DID resolution
 	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
+	Secrets                 *handlers.SecretsHandler                 // For identity-native secrets management
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1005,6 +1036,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Remediation: handlers.NewRemediationHandler(
 			services.Remediation,
+		),
+		Secrets: handlers.NewSecretsHandler(
+			services.Secrets,
 		),
 	}
 }
@@ -1196,6 +1230,24 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	remediation.Post("/remediated", h.Remediation.RecordRemediation)
 	remediation.Get("/stats", h.Remediation.GetStats)
 	remediation.Get("/recent", h.Remediation.ListRecent)
+
+	// Secrets management routes
+	// POST /resolve uses PQCAgentMiddleware (agent auth), all others use JWT
+	secretsResolve := v1.Group("/secrets")
+	secretsResolve.Use(middleware.PQCAgentMiddleware(services.Agent))
+	secretsResolve.Use(middleware.RateLimitMiddleware())
+	secretsResolve.Post("/resolve", h.Secrets.ResolveCredential)
+
+	secretsMgmt := v1.Group("/secrets")
+	secretsMgmt.Use(middleware.AuthMiddleware(jwtService))
+	secretsMgmt.Use(middleware.RateLimitMiddleware())
+	secretsMgmt.Post("/namespaces", middleware.MemberMiddleware(), h.Secrets.CreateNamespace)
+	secretsMgmt.Get("/namespaces", h.Secrets.ListNamespaces)
+	secretsMgmt.Get("/namespaces/:id", h.Secrets.GetNamespace)
+	secretsMgmt.Delete("/namespaces/:id", middleware.MemberMiddleware(), h.Secrets.DeleteNamespace)
+	secretsMgmt.Post("/namespaces/:id/credentials", middleware.MemberMiddleware(), h.Secrets.StoreCredential)
+	secretsMgmt.Post("/namespaces/:id/rotate", middleware.MemberMiddleware(), h.Secrets.RotateCredential)
+	secretsMgmt.Get("/audit", h.Secrets.GetAuditLog)
 
 	// Community Intelligence opt-in telemetry (authentication required)
 	ci := v1.Group("/community-intelligence")

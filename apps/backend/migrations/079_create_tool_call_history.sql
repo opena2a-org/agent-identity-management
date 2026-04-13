@@ -16,5 +16,7 @@ CREATE TABLE IF NOT EXISTS tool_call_history (
 
 CREATE INDEX IF NOT EXISTS idx_tool_call_history_agent_time
     ON tool_call_history (agent_id, called_at DESC);
+-- Note: partial index with NOW() is not allowed (non-IMMUTABLE).
+-- Pruning uses a plain index; the background job filters by time at query time.
 CREATE INDEX IF NOT EXISTS idx_tool_call_history_prune
-    ON tool_call_history (called_at) WHERE called_at < NOW() - INTERVAL '24 hours';
+    ON tool_call_history (called_at);
