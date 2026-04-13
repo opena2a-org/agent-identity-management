@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"fmt"
 	"log"
@@ -24,6 +25,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
@@ -777,8 +779,33 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		registryURL,
 	)
 
-	// Secrets management: ATC verifier (JWT shim) + backends + service
-	atcVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
+	// Secrets management: ATC verifier (real + JWT shim composite) + backends + service
+	jwtShimVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
+
+	// Real ATC verifier with trusted issuers and CRL client
+	issuerURI := getEnvOrDefault("ATC_ISSUER_URI", "https://aim.opena2a.org")
+	crlEndpoint := getEnvOrDefault("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest")
+	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
+	if err != nil {
+		log.Fatalf("invalid CRL endpoint: %v", err)
+	}
+	issuerPubKey, ok := keyVault.GetServerSigningKey().Public().(ed25519.PublicKey)
+	if !ok || len(issuerPubKey) != ed25519.PublicKeySize {
+		log.Fatalf("server signing key is not a valid Ed25519 public key")
+	}
+	// Defensive copy: isolate from any future mutation of the source key.
+	issuerPubKeyCopy := make([]byte, ed25519.PublicKeySize)
+	copy(issuerPubKeyCopy, issuerPubKey)
+	trustedIssuers := []atcdomain.TrustedIssuer{
+		{
+			URI:       issuerURI,
+			PublicKey: issuerPubKeyCopy,
+		},
+	}
+	realATCVerifier := infraatc.NewRealATCVerifier(trustedIssuers, crlClient)
+
+	// Composite verifier: tries real ATC first, falls back to JWT shim
+	atcVerifier := infraatc.NewCompositeVerifier(realATCVerifier, jwtShimVerifier)
 	aimNativeBackend := infrasecrets.NewAIMNativeBackend(repos.SecretCredential)
 	secretsBackends := map[domainsecrets.BackendType]domainsecrets.SecretsBackend{
 		domainsecrets.BackendTypeAIMNative: aimNativeBackend,
@@ -1234,9 +1261,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
-	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
+	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
+	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
 	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
@@ -1314,8 +1342,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	remediation.Get("/recent", h.Remediation.ListRecent)
 
 	// Secrets management routes
-	// POST /resolve uses PQCAgentMiddleware (agent auth), all others use JWT
+	// POST /resolve uses ATCAuthMiddleware -> PQCAgentMiddleware (agent auth), all others use JWT
 	secretsResolve := v1.Group("/secrets")
+	secretsResolve.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier()))
 	secretsResolve.Use(middleware.PQCAgentMiddleware(services.Agent))
 	secretsResolve.Use(middleware.RateLimitMiddleware())
 	secretsResolve.Post("/resolve", h.Secrets.ResolveCredential)

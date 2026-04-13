@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"errors"
 	"time"
 
@@ -93,7 +94,8 @@ type ResolutionRequest struct {
 	Nonce          string `json:"nonce"`
 	Signature      []byte `json:"signature"`
 	AgentPublicKey []byte `json:"agentPublicKey"`
-	ATCID          string `json:"atcId,omitempty"`
+	ATCID          string                `json:"atcId,omitempty"`
+	ATCClaims      *atcdomain.ATCClaims  `json:"-"` // Set by ATCAuthMiddleware when ATC auth is used
 }
 
 // ResolutionResult is returned after a successful resolution.

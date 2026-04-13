@@ -123,12 +123,26 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	}
 
 	// Step 2: Verify ATC
-	if req.ATCID != "" {
+	// If ATCClaims were set by ATCAuthMiddleware, use them directly (already verified).
+	// Otherwise, verify the ATCID from the request body (legacy JWT shim path).
+	var atcClaims *atcdomain.ATCClaims
+	if req.ATCClaims != nil {
+		// ATC was verified by middleware — use directly
+		atcClaims = req.ATCClaims
+		atcID = atcClaims.ATCID
+
+		if atcClaims.AgentID != agentID {
+			denyReason = "ATC agent ID mismatch"
+			return nil, fmt.Errorf("ATC agent ID %s does not match requesting agent %s", atcClaims.AgentID, agentID)
+		}
+	} else if req.ATCID != "" {
+		// Legacy path: verify ATC token from request body
 		claims, err := s.atcVerifier.Verify(req.ATCID)
 		if err != nil {
 			denyReason = "ATC verification failed: " + err.Error()
 			return nil, fmt.Errorf("ATC verification failed: %w", err)
 		}
+		atcClaims = claims
 		atcID = claims.ATCID
 
 		revoked, err := s.atcVerifier.IsRevoked(claims.ATCID)
@@ -174,16 +188,29 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		return nil, fmt.Errorf("operation %s not in namespace %s allowed operations", req.Operation, req.Namespace)
 	}
 
-	// Step 4: Check AIM capability (secrets:resolve)
-	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
-	if err != nil {
-		denyReason = "capability lookup failed"
-		return nil, fmt.Errorf("failed to check capabilities: %w", err)
-	}
+	// Step 4: Check capability (ATC-scoped or AIM capability table)
+	if atcClaims != nil {
+		// ATC path: check ATC capabilities for the requested operation
+		requiredCap := CapabilitySecretsResolve
+		if req.Namespace != "" {
+			requiredCap = CapabilitySecretsResolve + ":" + req.Namespace
+		}
+		if !atcClaims.HasCapability(requiredCap) && !atcClaims.HasCapability(CapabilitySecretsResolve) {
+			denyReason = fmt.Sprintf("ATC lacks required capability: %s", requiredCap)
+			return nil, fmt.Errorf("ATC for agent %s lacks capability %s", agentID, requiredCap)
+		}
+	} else {
+		// Legacy path: check AIM capability table
+		capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+		if err != nil {
+			denyReason = "capability lookup failed"
+			return nil, fmt.Errorf("failed to check capabilities: %w", err)
+		}
 
-	if !s.hasCapability(capabilities, CapabilitySecretsResolve) {
-		denyReason = "missing secrets:resolve capability"
-		return nil, fmt.Errorf("agent %s lacks %s capability", agentID, CapabilitySecretsResolve)
+		if !s.hasCapability(capabilities, CapabilitySecretsResolve) {
+			denyReason = "missing secrets:resolve capability"
+			return nil, fmt.Errorf("agent %s lacks %s capability", agentID, CapabilitySecretsResolve)
+		}
 	}
 
 	// Step 5: Retrieve encrypted blob from backend
@@ -219,6 +246,12 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		EphemeralPubKey: ephemeralPub,
 		EncryptionAlg:   "X25519-ChaCha20-Poly1305",
 	}, nil
+}
+
+// ATCVerifier returns the ATC verifier used by this service.
+// Exposed so middleware can verify ATC tokens before the handler runs.
+func (s *SecretsService) ATCVerifier() atcdomain.ATCVerifier {
+	return s.atcVerifier
 }
 
 // CreateNamespace creates a new secret namespace for an agent.

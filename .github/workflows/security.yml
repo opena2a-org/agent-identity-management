@@ -228,8 +228,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
 
       - name: Check Go licenses
         working-directory: apps/backend
