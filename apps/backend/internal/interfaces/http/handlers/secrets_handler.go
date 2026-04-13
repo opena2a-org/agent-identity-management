@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/base64"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -227,10 +228,13 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 
 	alg := req.EncryptionAlg
 	if alg == "" {
-		alg = "X25519-XSalsa20-Poly1305"
+		alg = "X25519-ChaCha20-Poly1305"
 	}
 
 	if err := h.secretsService.StoreCredential(nsID, blob, alg); err != nil {
+		if strings.Contains(err.Error(), "exceeds maximum size") {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -261,10 +265,13 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 
 	alg := req.EncryptionAlg
 	if alg == "" {
-		alg = "X25519-XSalsa20-Poly1305"
+		alg = "X25519-ChaCha20-Poly1305"
 	}
 
 	if err := h.secretsService.RotateCredential(nsID, blob, alg); err != nil {
+		if strings.Contains(err.Error(), "exceeds maximum size") {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 

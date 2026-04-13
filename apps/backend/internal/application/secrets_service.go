@@ -261,6 +261,10 @@ func (s *SecretsService) DeleteNamespace(id uuid.UUID) error {
 
 // StoreCredential stores an encrypted credential blob in a namespace.
 func (s *SecretsService) StoreCredential(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
+	if len(blob) > maxCredentialBlobSize {
+		return fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
+	}
+
 	ns, err := s.nsRepo.GetByID(namespaceID)
 	if err != nil || ns == nil {
 		return fmt.Errorf("namespace not found")
@@ -276,6 +280,10 @@ func (s *SecretsService) StoreCredential(namespaceID uuid.UUID, blob []byte, enc
 
 // RotateCredential stores a new version of the credential.
 func (s *SecretsService) RotateCredential(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
+	if len(blob) > maxCredentialBlobSize {
+		return fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
+	}
+
 	ns, err := s.nsRepo.GetByID(namespaceID)
 	if err != nil || ns == nil {
 		return fmt.Errorf("namespace not found")
