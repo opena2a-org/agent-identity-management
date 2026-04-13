@@ -15,8 +15,14 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // API and backend-proxied routes — let rewrites handle them
+  const backendRoutes = ['/api/', '/health', '/.well-known/', '/metrics']
+  if (backendRoutes.some(route => pathname.startsWith(route))) {
+    return NextResponse.next()
+  }
+
   // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/auth/callback', '/auth/login', '/auth/register', '/auth/registration-pending', '/auth/forgot-password', '/auth/change-password', '/auth/reset-password']
+  const publicRoutes = ['/login', '/auth/callback', '/auth/login', '/auth/register', '/auth/registration-pending', '/auth/forgot-password', '/auth/change-password', '/auth/reset-password', '/get-started']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   // If accessing a public route, allow it
