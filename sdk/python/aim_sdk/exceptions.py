@@ -26,3 +26,8 @@ class ActionDeniedError(AIMError):
 class ConfigurationError(AIMError):
     """Raised when SDK is misconfigured"""
     pass
+
+
+class SecretsError(AIMError):
+    """Raised when a secrets operation fails"""
+    pass

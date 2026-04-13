@@ -348,6 +348,17 @@ class AIMClient:
 
         self.session.headers.update(headers)
 
+        # Lazy-initialized secrets client
+        self._secrets = None
+
+    @property
+    def secrets(self):
+        """Identity-native secrets client for credential resolution and management."""
+        if self._secrets is None:
+            from .secrets import SecretsClient
+            self._secrets = SecretsClient(self)
+        return self._secrets
+
     @classmethod
     def from_credentials(cls, agent_name: str, aim_url: str = None) -> "AIMClient":
         """
