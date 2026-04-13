@@ -777,12 +777,49 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		registryURL,
 	)
 
-	// Secrets management: ATC verifier (JWT shim) + AIM native backend + service
+	// Secrets management: ATC verifier (JWT shim) + backends + service
 	atcVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
 	aimNativeBackend := infrasecrets.NewAIMNativeBackend(repos.SecretCredential)
 	secretsBackends := map[domainsecrets.BackendType]domainsecrets.SecretsBackend{
 		domainsecrets.BackendTypeAIMNative: aimNativeBackend,
 	}
+
+	// Register external secrets backends from environment config.
+	// HashiCorp Vault: enabled when VAULT_ADDR is set.
+	if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
+		vaultCfg := &infrasecrets.VaultConfig{
+			Address:   vaultAddr,
+			MountPath: getEnvOrDefault("VAULT_MOUNT_PATH", "secret"),
+			AuthPath:  getEnvOrDefault("VAULT_AUTH_PATH", "jwt"),
+			Role:      os.Getenv("VAULT_ROLE"),
+			Token:     os.Getenv("VAULT_TOKEN"),
+			Namespace: os.Getenv("VAULT_NAMESPACE"),
+		}
+		vaultBackend, err := infrasecrets.NewHashiCorpVaultBackend(vaultCfg)
+		if err != nil {
+			log.Printf("WARNING: HashiCorp Vault backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeVault] = vaultBackend
+			log.Printf("HashiCorp Vault backend registered at %s", vaultAddr)
+		}
+	}
+
+	// AWS Secrets Manager: enabled when AWS_SECRETS_REGION is set.
+	if awsRegion := os.Getenv("AWS_SECRETS_REGION"); awsRegion != "" {
+		awsCfg := &infrasecrets.AWSConfig{
+			Region:   awsRegion,
+			KMSKeyID: os.Getenv("AWS_SECRETS_KMS_KEY_ID"),
+			Prefix:   getEnvOrDefault("AWS_SECRETS_PREFIX", "aim-secrets/"),
+		}
+		awsBackend, err := infrasecrets.NewAWSSecretsBackend(awsCfg)
+		if err != nil {
+			log.Printf("WARNING: AWS Secrets Manager backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeAWSKMS] = awsBackend
+			log.Printf("AWS Secrets Manager backend registered in %s", awsRegion)
+		}
+	}
+
 	secretsService := application.NewSecretsService(
 		repos.SecretNamespace,
 		repos.SecretAudit,
