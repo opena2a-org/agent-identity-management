@@ -1261,9 +1261,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
-	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
+	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
+	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
 	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
