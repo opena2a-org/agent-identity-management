@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"log"
@@ -107,6 +108,7 @@ func main() {
 			Port:     cfg.Redis.Port,
 			Password: cfg.Redis.Password,
 			DB:       cfg.Redis.DB,
+			UseTLS:   cfg.Redis.UseTLS,
 		})
 		if err != nil {
 			log.Printf("⚠️  Cache initialization failed: %v", err)
@@ -391,11 +393,19 @@ func initDatabase(cfg *config.Config) (*sql.DB, error) {
 }
 
 func initRedis(cfg *config.Config) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
-	})
+	}
+
+	if cfg.Redis.UseTLS {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

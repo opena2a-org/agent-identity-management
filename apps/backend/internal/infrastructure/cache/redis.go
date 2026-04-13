@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -20,15 +21,24 @@ type CacheConfig struct {
 	Port     int
 	Password string
 	DB       int
+	UseTLS   bool
 }
 
 // NewRedisCache creates a new Redis cache client
 func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", config.Host, config.Port),
 		Password: config.Password,
 		DB:       config.DB,
-	})
+	}
+
+	if config.UseTLS {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
