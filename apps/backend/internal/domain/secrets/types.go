@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +16,12 @@ const (
 	BackendTypeVault     BackendType = "hashicorp_vault"
 	BackendTypeAzureKV   BackendType = "azure_keyvault"
 	BackendTypeGCPSM     BackendType = "gcp_secret_manager"
+	BackendType1Password BackendType = "1password"
 )
+
+// ErrBackendUnavailable is returned when a backend cannot be reached.
+// Callers must NOT fall back to another backend or return plaintext.
+var ErrBackendUnavailable = errors.New("secrets backend unavailable")
 
 // NamespaceStatus represents the lifecycle state of a secret namespace.
 type NamespaceStatus string

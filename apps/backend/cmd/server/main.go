@@ -820,6 +820,51 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		}
 	}
 
+
+	// Azure Key Vault: enabled when AZURE_KEYVAULT_URL is set.
+	if azureVaultURL := os.Getenv("AZURE_KEYVAULT_URL"); azureVaultURL != "" {
+		azureCfg := &infrasecrets.AzureKeyVaultConfig{
+			VaultURL: azureVaultURL,
+		}
+		azureBackend, err := infrasecrets.NewAzureKeyVaultBackend(azureCfg)
+		if err != nil {
+			log.Printf("WARNING: Azure Key Vault backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeAzureKV] = azureBackend
+			log.Printf("Azure Key Vault backend registered at %s", azureVaultURL)
+		}
+	}
+
+	// GCP Secret Manager: enabled when GCP_SECRETS_PROJECT is set.
+	if gcpProject := os.Getenv("GCP_SECRETS_PROJECT"); gcpProject != "" {
+		gcpCfg := &infrasecrets.GCPSecretConfig{
+			ProjectID: gcpProject,
+		}
+		gcpBackend, err := infrasecrets.NewGCPSecretBackend(gcpCfg)
+		if err != nil {
+			log.Printf("WARNING: GCP Secret Manager backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeGCPSM] = gcpBackend
+			log.Printf("GCP Secret Manager backend registered for project %s", gcpProject)
+		}
+	}
+
+	// 1Password: enabled when OP_CONNECT_HOST is set.
+	if opHost := os.Getenv("OP_CONNECT_HOST"); opHost != "" {
+		opCfg := &infrasecrets.OnePasswordConfig{
+			ConnectHost:  opHost,
+			ConnectToken: os.Getenv("OP_CONNECT_TOKEN"),
+			VaultUUID:    os.Getenv("OP_VAULT_UUID"),
+		}
+		opBackend, err := infrasecrets.NewOnePasswordBackend(opCfg)
+		if err != nil {
+			log.Printf("WARNING: 1Password backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendType1Password] = opBackend
+			log.Printf("1Password backend registered at %s", opHost)
+		}
+	}
+
 	secretsService := application.NewSecretsService(
 		repos.SecretNamespace,
 		repos.SecretAudit,
