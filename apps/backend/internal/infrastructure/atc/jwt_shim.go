@@ -116,6 +116,7 @@ func (v *JWTShimVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 		IssuedAt:     jwtClaims.IssuedAt.Time,
 		ExpiresAt:    jwtClaims.ExpiresAt.Time,
 		ATCID:        jwtClaims.ATCID,
+		AuthMethod:   "jwt",
 	}
 
 	// Cache the verified claims (CR-007)

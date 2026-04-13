@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 )
 
@@ -59,7 +60,14 @@ type rotateCredentialRequest struct {
 // --- Handlers ---
 
 // ResolveCredential handles POST /api/v1/secrets/resolve
-// Auth: PQCAgentMiddleware (Ed25519 signature)
+// Auth: ATCAuthMiddleware (ATC) or PQCAgentMiddleware (Ed25519 signature)
+//
+// When authenticated via ATC:
+//   - ATC capabilities are checked instead of AIM capability table
+//   - Body signature + nonce still required (defense in depth)
+//
+// When authenticated via Ed25519/JWT:
+//   - Falls back to existing flow (body signature + capability table)
 func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 	agentIDValue := c.Locals("agent_id")
 	if agentIDValue == nil {
@@ -93,6 +101,13 @@ func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 		Signature:      sig,
 		AgentPublicKey: pubKey,
 		ATCID:          req.ATCID,
+	}
+
+	// Pass ATC claims if agent authenticated via ATC middleware
+	if atcClaimsVal := c.Locals("atc_claims"); atcClaimsVal != nil {
+		if atcClaims, ok := atcClaimsVal.(*atcdomain.ATCClaims); ok {
+			domainReq.ATCClaims = atcClaims
+		}
 	}
 
 	result, err := h.secretsService.Resolve(agentID, domainReq)
