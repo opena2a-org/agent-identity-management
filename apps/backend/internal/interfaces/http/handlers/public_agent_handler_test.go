@@ -72,21 +72,52 @@ func TestPublicAgentHandler_Register_InvalidAgentType(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
-func TestPublicAgentHandler_Register_MissingAPIKey(t *testing.T) {
+func TestPublicAgentHandler_Register_NoAuthRequired(t *testing.T) {
 	handler := &PublicAgentHandler{}
 	app := fiber.New()
+	// Add recover middleware so nil agentService panic returns 500 instead of crashing
+	app.Use(func(c fiber.Ctx) error {
+		defer func() {
+			if r := recover(); r != nil {
+				_ = c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "internal server error",
+				})
+			}
+		}()
+		return c.Next()
+	})
 	app.Post("/public/agents/register", handler.Register)
 
 	body := `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"claude"}`
 	req := httptest.NewRequest("POST", "/public/agents/register", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	// No X-AIM-API-Key header
+	// No X-AIM-API-Key header -- endpoint is public, should NOT return 401
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	// Without a real agentService wired up, we expect 500 (nil pointer on service call),
+	// but critically NOT 401 -- the endpoint no longer requires authentication
+	assert.NotEqual(t, fiber.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestPublicAgentHandler_Register_MissingAgentType(t *testing.T) {
+	handler := &PublicAgentHandler{}
+	app := fiber.New()
+	app.Post("/public/agents/register", handler.Register)
+
+	// Has name, displayName, description but missing agentType
+	body := `{"name":"test","displayName":"Test Agent","description":"A test agent"}`
+	req := httptest.NewRequest("POST", "/public/agents/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
 // ===========================
