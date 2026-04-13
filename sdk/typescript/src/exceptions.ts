@@ -137,6 +137,16 @@ export class RateLimitError extends AIMError {
 }
 
 /**
+ * Secrets operation failed
+ */
+export class SecretsError extends AIMError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'SECRETS_ERROR', undefined, details);
+    this.name = 'SecretsError';
+  }
+}
+
+/**
  * Parse API error response
  */
 export function parseAPIError(statusCode: number, body: unknown): AIMError {
