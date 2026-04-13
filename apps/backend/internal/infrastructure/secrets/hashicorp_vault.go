@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"os"
+
 	vault "github.com/hashicorp/vault/api"
 	"github.com/google/uuid"
 
@@ -80,13 +82,21 @@ func NewHashiCorpVaultBackend(cfg *VaultConfig) (*HashiCorpVaultBackend, error) 
 	if cfg.Token != "" {
 		client.SetToken(cfg.Token)
 	} else if cfg.Role != "" {
-		// JWT auth — the JWT is expected as an env var or service account token.
-		// In production, this would come from a mounted service account JWT.
-		// The actual JWT value should be injected via environment, not stored in config.
+		// JWT auth — read JWT from VAULT_JWT env var or Kubernetes service account token.
+		jwt := os.Getenv("VAULT_JWT")
+		if jwt == "" {
+			// Fall back to Kubernetes-mounted service account token.
+			if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token"); err == nil {
+				jwt = string(data)
+			}
+		}
+		if jwt == "" {
+			return nil, fmt.Errorf("vault JWT auth requires VAULT_JWT env var or mounted service account token")
+		}
 		loginPath := fmt.Sprintf("auth/%s/login", cfg.AuthPath)
 		secret, err := client.Logical().Write(loginPath, map[string]interface{}{
 			"role": cfg.Role,
-			"jwt":  "", // Will be set by caller or from env
+			"jwt":  jwt,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("vault JWT auth failed: %w", err)
@@ -95,6 +105,8 @@ func NewHashiCorpVaultBackend(cfg *VaultConfig) (*HashiCorpVaultBackend, error) 
 			return nil, fmt.Errorf("vault JWT auth returned no token")
 		}
 		client.SetToken(secret.Auth.ClientToken)
+	} else {
+		return nil, fmt.Errorf("vault authentication required: provide either Token or Role")
 	}
 
 	return &HashiCorpVaultBackend{

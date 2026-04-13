@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"encoding/json"
+	"time"
 	"fmt"
 	"strconv"
 
@@ -104,6 +105,9 @@ type secretPayload struct {
 	Version       int    `json:"version"`
 }
 
+// apiTimeout is the deadline for individual AWS API calls.
+const apiTimeout = 30 * time.Second
+
 func (b *AWSSecretsBackend) Store(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
 	payload := secretPayload{
 		Blob:          blob,
@@ -123,7 +127,9 @@ func (b *AWSSecretsBackend) Store(namespaceID uuid.UUID, blob []byte, encryption
 		input.KmsKeyId = aws.String(b.kmsKeyID)
 	}
 
-	_, err = b.client.CreateSecret(context.Background(), input)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	_, err = b.client.CreateSecret(ctx, input)
 	if err != nil {
 		return fmt.Errorf("AWS create secret failed: %w", err)
 	}
@@ -135,7 +141,9 @@ func (b *AWSSecretsBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.Secr
 		SecretId: aws.String(b.secretName(namespaceID)),
 	}
 
-	result, err := b.client.GetSecretValue(context.Background(), input)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	result, err := b.client.GetSecretValue(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("AWS get secret failed: %w", err)
 	}
@@ -181,7 +189,9 @@ func (b *AWSSecretsBackend) Rotate(namespaceID uuid.UUID, blob []byte, encryptio
 		SecretBinary: payloadBytes,
 	}
 
-	_, err = b.client.PutSecretValue(context.Background(), input)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	_, err = b.client.PutSecretValue(ctx, input)
 	if err != nil {
 		return fmt.Errorf("AWS rotate secret failed: %w", err)
 	}
@@ -194,7 +204,9 @@ func (b *AWSSecretsBackend) Delete(namespaceID uuid.UUID) error {
 		ForceDeleteWithoutRecovery: aws.Bool(true),
 	}
 
-	_, err := b.client.DeleteSecret(context.Background(), input)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	_, err := b.client.DeleteSecret(ctx, input)
 	if err != nil {
 		return fmt.Errorf("AWS delete secret failed: %w", err)
 	}
