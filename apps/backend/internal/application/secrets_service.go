@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/chacha20poly1305"
+
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -20,6 +22,10 @@ import (
 const (
 	// maxNonceAge is the maximum age of a nonce before it's considered replayed (CR-003).
 	maxNonceAge = 30 * time.Second
+
+	// maxCredentialBlobSize is the maximum size of a credential blob (1 MiB).
+	// Prevents DoS via oversized blobs in encryption/decryption.
+	maxCredentialBlobSize = 1 << 20
 )
 
 // SecretsService implements identity-native secrets management.
@@ -211,7 +217,7 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	return &secrets.ResolutionResult{
 		EncryptedBlob:   encryptedResult,
 		EphemeralPubKey: ephemeralPub,
-		EncryptionAlg:   "X25519-XSalsa20-Poly1305",
+		EncryptionAlg:   "X25519-ChaCha20-Poly1305",
 	}, nil
 }
 
@@ -314,17 +320,30 @@ func (s *SecretsService) encryptForAgent(rawBlob []byte, agentEd25519PubKey []by
 		return nil, nil, fmt.Errorf("ECDH failed: %w", err)
 	}
 
-	// Derive encryption key from shared secret via SHA-256
-	encKey := sha256.Sum256(sharedSecret)
-
-	// XOR-based encryption (simplified — production would use XSalsa20-Poly1305)
-	// For Phase 1b, using AES-256-GCM-like approach with the derived key
-	encrypted := make([]byte, len(rawBlob))
-	for i := range rawBlob {
-		encrypted[i] = rawBlob[i] ^ encKey[i%32]
+	// Bound blob size to prevent DoS
+	if len(rawBlob) > maxCredentialBlobSize {
+		return nil, nil, fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
 	}
 
-	return encrypted, ephemeralPriv.PublicKey().Bytes(), nil
+	// Derive 256-bit encryption key from shared secret via SHA-256
+	encKey := sha256.Sum256(sharedSecret)
+
+	// Authenticated encryption using ChaCha20-Poly1305 (IETF variant, 256-bit key)
+	aead, err := chacha20poly1305.New(encKey[:])
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
+	}
+
+	// Generate random nonce
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Encrypt and authenticate: nonce || ciphertext || tag
+	ciphertext := aead.Seal(nonce, nonce, rawBlob, nil)
+
+	return ciphertext, ephemeralPriv.PublicKey().Bytes(), nil
 }
 
 // ed25519PublicToX25519 converts an Ed25519 public key to X25519.

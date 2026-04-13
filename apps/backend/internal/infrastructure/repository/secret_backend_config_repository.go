@@ -68,7 +68,9 @@ func (r *SecretBackendConfigRepository) GetByAgentAndType(agentID uuid.UUID, bac
 
 	config.BackendType = secrets.BackendType(bt)
 	if len(configJSON) > 0 {
-		json.Unmarshal(configJSON, &config.ConfigJSON)
+		if err := json.Unmarshal(configJSON, &config.ConfigJSON); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal backend config JSON: %w", err)
+		}
 	}
 	return config, nil
 }
@@ -99,7 +101,9 @@ func (r *SecretBackendConfigRepository) ListByAgent(agentID uuid.UUID) ([]*secre
 
 		config.BackendType = secrets.BackendType(bt)
 		if len(configJSON) > 0 {
-			json.Unmarshal(configJSON, &config.ConfigJSON)
+			if err := json.Unmarshal(configJSON, &config.ConfigJSON); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal backend config JSON: %w", err)
+			}
 		}
 		result = append(result, config)
 	}
