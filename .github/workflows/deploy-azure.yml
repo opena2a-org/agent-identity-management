@@ -1,0 +1,131 @@
+name: Deploy to Azure
+
+on:
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      backend_image:
+        description: "Backend image tag (default: latest)"
+        default: "latest"
+      frontend_image:
+        description: "Frontend image tag (default: latest)"
+        default: "latest"
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  RESOURCE_GROUP: aim-production-rg
+  LOCATION: canadacentral
+  BACKEND_APP: aim-prod-backend
+  FRONTEND_APP: aim-prod-frontend
+  BACKEND_IMAGE: ghcr.io/opena2a-org/aim-server
+  FRONTEND_IMAGE: ghcr.io/opena2a-org/aim-dashboard
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend_tag=${{ github.event.inputs.backend_image || 'latest' }}" >> $GITHUB_OUTPUT
+            echo "frontend_tag=${{ github.event.inputs.frontend_image || 'latest' }}" >> $GITHUB_OUTPUT
+          else
+            echo "backend_tag=latest" >> $GITHUB_OUTPUT
+            echo "frontend_tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy backend
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.BACKEND_APP }}
+          imageToDeploy: ${{ env.BACKEND_IMAGE }}:${{ steps.tags.outputs.backend_tag }}
+          registryUrl: ghcr.io
+          registryUsername: ${{ github.actor }}
+          registryPassword: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy frontend
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.FRONTEND_APP }}
+          imageToDeploy: ${{ env.FRONTEND_IMAGE }}:${{ steps.tags.outputs.frontend_tag }}
+          registryUrl: ghcr.io
+          registryUsername: ${{ github.actor }}
+          registryPassword: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for backend health
+        run: |
+          BACKEND_URL=$(az containerapp show \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          echo "Backend URL: https://${BACKEND_URL}"
+
+          for i in $(seq 1 30); do
+            if curl -sf "https://${BACKEND_URL}/health" > /dev/null 2>&1; then
+              echo "Backend is healthy"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 10
+          done
+
+          # Final check
+          curl -sf "https://${BACKEND_URL}/health" || (echo "Backend health check failed" && exit 1)
+
+      - name: Verify deployment
+        run: |
+          BACKEND_URL=$(az containerapp show \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          echo "=== Health ==="
+          curl -s "https://${BACKEND_URL}/health" | jq .
+
+          echo "=== Status ==="
+          curl -s "https://${BACKEND_URL}/api/v1/status" | jq .
+
+          echo "=== AIP Discovery ==="
+          curl -s "https://${BACKEND_URL}/.well-known/aip" | jq .version
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          BACKEND_URL=$(az containerapp show \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "unknown")
+
+          FRONTEND_URL=$(az containerapp show \
+            --name ${{ env.FRONTEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "unknown")
+
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | https://${BACKEND_URL} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | https://${FRONTEND_URL} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Image | ${{ env.BACKEND_IMAGE }}:${{ steps.tags.outputs.backend_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Image | ${{ env.FRONTEND_IMAGE }}:${{ steps.tags.outputs.frontend_tag }} |" >> $GITHUB_STEP_SUMMARY
