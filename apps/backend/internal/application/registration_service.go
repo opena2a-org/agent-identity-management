@@ -84,9 +84,13 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Check if this is the first user from this email domain (auto-approve if yes)
+	// SECURITY: Auto-approve ONLY for platform admins listed in AIM_PLATFORM_ADMINS env var.
+	// Per-domain auto-approval was removed in PR-A (2026-04-14) because it allowed
+	// domain squatting — anyone could claim "first registrant" of a victim's domain
+	// and become admin of that org. Domain claims now require explicit DNS verification
+	// (see PR-B) and team creation is an explicit user action (see PR-C).
 	emailDomain := extractEmailDomain(email)
-	shouldAutoApprove := s.shouldAutoApproveFirstUser(ctx, emailDomain)
+	shouldAutoApprove := isPlatformAdmin(email)
 
 	// Create new manual registration request
 	req := domain.NewUserRegistrationRequestManual(
@@ -96,13 +100,12 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		hashedPassword,
 	)
 
-	// Auto-approve if first user from this domain
 	if shouldAutoApprove {
 		req.Status = domain.RegistrationStatusApproved
 		now := time.Now()
 		req.ReviewedAt = &now
-		req.ReviewedBy = nil // System auto-approval (no reviewer)
-		fmt.Printf("✅ Auto-approving first user from domain: %s\n", emailDomain)
+		req.ReviewedBy = nil // System auto-approval (platform admin allowlist)
+		fmt.Printf("✅ Auto-approving platform admin: %s\n", email)
 	}
 
 	// Save registration request
@@ -643,25 +646,25 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 	return newOrg.ID, nil
 }
 
-// shouldAutoApproveFirstUser checks if this is the first user from a domain
-// Returns true if:
-// 1. No organization exists for this domain, OR
-// 2. Organization exists but has zero users
-func (s *RegistrationService) shouldAutoApproveFirstUser(ctx context.Context, emailDomain string) bool {
-	// Check if organization exists
-	org, err := s.orgRepo.GetByDomain(emailDomain)
-	if err != nil || org == nil {
-		// Organization doesn't exist - this is the first user from this domain
-		return true
-	}
-
-	// Organization exists - check if it has any users
-	existingUsers, err := s.userRepo.GetByOrganization(org.ID)
-	if err != nil {
-		// Can't determine, be conservative and require approval
+// isPlatformAdmin returns true if the email is in the AIM_PLATFORM_ADMINS allowlist.
+// Platform admins are AIM Cloud operators (e.g., the OpenA2A team), distinct from
+// customer org admins. The allowlist is a comma-separated env var, e.g.:
+//
+//	AIM_PLATFORM_ADMINS=info@opena2a.org,ops@opena2a.org
+//
+// Email comparison is case-insensitive and trims whitespace. Empty env var means
+// no platform admins exist (safe default — only approved-by-existing-admin users
+// can register).
+func isPlatformAdmin(email string) bool {
+	allowlist := os.Getenv("AIM_PLATFORM_ADMINS")
+	if allowlist == "" {
 		return false
 	}
-
-	// Auto-approve if no existing users in the organization
-	return len(existingUsers) == 0
+	target := strings.ToLower(strings.TrimSpace(email))
+	for _, entry := range strings.Split(allowlist, ",") {
+		if strings.ToLower(strings.TrimSpace(entry)) == target {
+			return true
+		}
+	}
+	return false
 }
