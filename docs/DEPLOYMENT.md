@@ -2,6 +2,8 @@
 
 Complete guide for deploying AIM (Agent Identity Management) in development, staging, and production environments.
 
+> **Note on the hosted service.** This repository is the open-source source of truth for AIM and this guide targets **self-hosters**. The hosted service at `aim.opena2a.org` deploys from a separate private mirror (`opena2a-org/aim-cloud`) that layers cloud-only features (Stripe billing, Google OAuth) on top of this repo via a one-directional sync. If you're here to deploy your own AIM instance, continue below. If you're looking for how the hosted service works, the mirror's `aim-cloud/.github/workflows/deploy.yml` is the canonical pipeline.
+
 ---
 
 ## 📋 Table of Contents
