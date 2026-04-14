@@ -50,64 +50,113 @@ jobs:
 
       - name: Determine input image tags
         id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BACKEND_INPUT: ${{ github.event.inputs.backend_image }}
+          FRONTEND_INPUT: ${{ github.event.inputs.frontend_image }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "backend_tag=${{ github.event.inputs.backend_image || 'latest' }}" >> $GITHUB_OUTPUT
-            echo "frontend_tag=${{ github.event.inputs.frontend_image || 'latest' }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BACKEND_TAG="${BACKEND_INPUT:-latest}"
+            FRONTEND_TAG="${FRONTEND_INPUT:-latest}"
           else
-            echo "backend_tag=latest" >> $GITHUB_OUTPUT
-            echo "frontend_tag=latest" >> $GITHUB_OUTPUT
+            BACKEND_TAG="latest"
+            FRONTEND_TAG="latest"
           fi
+          # Defend against injection: restrict tag charset
+          if ! [[ "$BACKEND_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid backend tag: $BACKEND_TAG" >&2
+            exit 1
+          fi
+          if ! [[ "$FRONTEND_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid frontend tag: $FRONTEND_TAG" >&2
+            exit 1
+          fi
+          echo "backend_tag=$BACKEND_TAG" >> "$GITHUB_OUTPUT"
+          echo "frontend_tag=$FRONTEND_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Resolve image digests
         id: digests
+        env:
+          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          BACKEND_TAG: ${{ steps.tags.outputs.backend_tag }}
+          FRONTEND_TAG: ${{ steps.tags.outputs.frontend_tag }}
         run: |
           set -euo pipefail
 
-          BACKEND_REF="${{ env.BACKEND_IMAGE }}:${{ steps.tags.outputs.backend_tag }}"
-          FRONTEND_REF="${{ env.FRONTEND_IMAGE }}:${{ steps.tags.outputs.frontend_tag }}"
+          BACKEND_REF="${BACKEND_IMAGE}:${BACKEND_TAG}"
+          FRONTEND_REF="${FRONTEND_IMAGE}:${FRONTEND_TAG}"
 
           echo "Resolving backend digest for $BACKEND_REF"
           BACKEND_DIGEST=$(docker buildx imagetools inspect "$BACKEND_REF" --format '{{.Manifest.Digest}}')
           echo "backend_digest=$BACKEND_DIGEST"
-          echo "backend_digest=$BACKEND_DIGEST" >> $GITHUB_OUTPUT
 
           echo "Resolving frontend digest for $FRONTEND_REF"
           FRONTEND_DIGEST=$(docker buildx imagetools inspect "$FRONTEND_REF" --format '{{.Manifest.Digest}}')
           echo "frontend_digest=$FRONTEND_DIGEST"
-          echo "frontend_digest=$FRONTEND_DIGEST" >> $GITHUB_OUTPUT
+
+          # Sanity-check digest format: sha256:<64 hex>
+          if ! [[ "$BACKEND_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Invalid backend digest: $BACKEND_DIGEST" >&2
+            exit 1
+          fi
+          if ! [[ "$FRONTEND_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Invalid frontend digest: $FRONTEND_DIGEST" >&2
+            exit 1
+          fi
+
+          echo "backend_digest=$BACKEND_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "frontend_digest=$FRONTEND_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Compute revision suffix
         id: suffix
         run: |
+          set -euo pipefail
           SHORT_SHA="${GITHUB_SHA::7}"
           SUFFIX="sha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
           echo "suffix=$SUFFIX"
-          echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
+          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
 
       - name: Deploy backend (digest-pinned, unique revision)
+        env:
+          APP: ${{ env.BACKEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
+          IMAGE: ${{ env.BACKEND_IMAGE }}
+          DIGEST: ${{ steps.digests.outputs.backend_digest }}
+          SUFFIX: ${{ steps.suffix.outputs.suffix }}
         run: |
           set -euo pipefail
           az containerapp update \
-            --name "${{ env.BACKEND_APP }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --image "${{ env.BACKEND_IMAGE }}@${{ steps.digests.outputs.backend_digest }}" \
-            --revision-suffix "${{ steps.suffix.outputs.suffix }}"
+            --name "$APP" \
+            --resource-group "$RG" \
+            --image "${IMAGE}@${DIGEST}" \
+            --revision-suffix "$SUFFIX"
 
       - name: Deploy frontend (digest-pinned, unique revision)
+        env:
+          APP: ${{ env.FRONTEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
+          IMAGE: ${{ env.FRONTEND_IMAGE }}
+          DIGEST: ${{ steps.digests.outputs.frontend_digest }}
+          SUFFIX: ${{ steps.suffix.outputs.suffix }}
         run: |
           set -euo pipefail
           az containerapp update \
-            --name "${{ env.FRONTEND_APP }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --image "${{ env.FRONTEND_IMAGE }}@${{ steps.digests.outputs.frontend_digest }}" \
-            --revision-suffix "${{ steps.suffix.outputs.suffix }}"
+            --name "$APP" \
+            --resource-group "$RG" \
+            --image "${IMAGE}@${DIGEST}" \
+            --revision-suffix "$SUFFIX"
 
       - name: Wait for backend health
+        env:
+          APP: ${{ env.BACKEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
         run: |
+          set -euo pipefail
           BACKEND_URL=$(az containerapp show \
-            --name ${{ env.BACKEND_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name "$APP" \
+            --resource-group "$RG" \
             --query "properties.configuration.ingress.fqdn" -o tsv)
 
           echo "Backend URL: https://${BACKEND_URL}"
@@ -121,14 +170,17 @@ jobs:
             sleep 10
           done
 
-          # Final check
           curl -sf "https://${BACKEND_URL}/health" || (echo "Backend health check failed" && exit 1)
 
       - name: Verify deployment
+        env:
+          APP: ${{ env.BACKEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
         run: |
+          set -euo pipefail
           BACKEND_URL=$(az containerapp show \
-            --name ${{ env.BACKEND_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name "$APP" \
+            --resource-group "$RG" \
             --query "properties.configuration.ingress.fqdn" -o tsv)
 
           echo "=== Health ==="
@@ -142,22 +194,33 @@ jobs:
 
       - name: Post deployment summary
         if: always()
+        env:
+          BACKEND_APP: ${{ env.BACKEND_APP }}
+          FRONTEND_APP: ${{ env.FRONTEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
+          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ steps.digests.outputs.frontend_digest }}
+          SUFFIX: ${{ steps.suffix.outputs.suffix }}
         run: |
           BACKEND_URL=$(az containerapp show \
-            --name ${{ env.BACKEND_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name "$BACKEND_APP" \
+            --resource-group "$RG" \
             --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "unknown")
 
           FRONTEND_URL=$(az containerapp show \
-            --name ${{ env.FRONTEND_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name "$FRONTEND_APP" \
+            --resource-group "$RG" \
             --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "unknown")
 
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend URL | https://${BACKEND_URL} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend URL | https://${FRONTEND_URL} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend image | ${{ env.BACKEND_IMAGE }}@${{ steps.digests.outputs.backend_digest }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend image | ${{ env.FRONTEND_IMAGE }}@${{ steps.digests.outputs.frontend_digest }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Revision suffix | ${{ steps.suffix.outputs.suffix }} |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Deployment Summary"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Backend URL | https://${BACKEND_URL} |"
+            echo "| Frontend URL | https://${FRONTEND_URL} |"
+            echo "| Backend image | ${BACKEND_IMAGE}@${BACKEND_DIGEST} |"
+            echo "| Frontend image | ${FRONTEND_IMAGE}@${FRONTEND_DIGEST} |"
+            echo "| Revision suffix | ${SUFFIX} |"
+          } >> "$GITHUB_STEP_SUMMARY"
