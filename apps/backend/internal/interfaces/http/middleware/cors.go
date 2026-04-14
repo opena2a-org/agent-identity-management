@@ -8,6 +8,12 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 )
 
+var (
+	corsAllowMethods  = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	corsAllowHeaders  = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Agent-ID", "X-Signature", "X-Timestamp", "X-Public-Key", "X-API-Key"}
+	corsExposeHeaders = []string{"Content-Disposition", "Content-Length"}
+)
+
 // ValidateAndSanitizeCORSOrigins validates CORS origins and rejects dangerous configurations
 // SECURITY: Prevents wildcard "*" and validates origin format
 func ValidateAndSanitizeCORSOrigins(origins []string) []string {
@@ -57,10 +63,10 @@ func CORSMiddleware(allowedOrigins []string) fiber.Handler {
 	safeOrigins := ValidateAndSanitizeCORSOrigins(allowedOrigins)
 
 	return cors.New(cors.Config{
-		AllowOrigins:     strings.Join(safeOrigins, ","),
-		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Agent-ID,X-Signature,X-Timestamp,X-Public-Key,X-API-Key",
-		ExposeHeaders:    "Content-Disposition,Content-Length", // Allow frontend to read these headers
+		AllowOrigins:     safeOrigins,
+		AllowMethods:     corsAllowMethods,
+		AllowHeaders:     corsAllowHeaders,
+		ExposeHeaders:    corsExposeHeaders,
 		AllowCredentials: true,
 		MaxAge:           3600,
 	})

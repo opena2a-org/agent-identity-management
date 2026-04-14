@@ -557,7 +557,7 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	}
 
 	orgID := agent.OrganizationID
-	startTime := c.Context().Time()
+	startTime := time.Now()
 
 	// Fetch agent and verify capabilities
 	decision, reason, auditID, err := h.agentService.VerifyCapability(
@@ -576,7 +576,7 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	}
 
 	// Calculate duration
-	durationMs := int(c.Context().Time().Sub(startTime).Milliseconds())
+	durationMs := int(time.Since(startTime).Milliseconds())
 
 	// 1. LOG AUDIT ENTRY (for all verification attempts)
 	auditMetadata := map[string]interface{}{
