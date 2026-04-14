@@ -118,6 +118,22 @@ jobs:
           echo "suffix=$SUFFIX"
           echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
 
+      - name: Refresh GHCR pull credential on backend app
+        env:
+          APP: ${{ env.BACKEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
+          REG_USER: ${{ github.actor }}
+          REG_PASS: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          az containerapp registry set \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --server ghcr.io \
+            --username "$REG_USER" \
+            --password "$REG_PASS" \
+            --output none
+
       - name: Deploy backend (digest-pinned, unique revision)
         env:
           APP: ${{ env.BACKEND_APP }}
@@ -132,6 +148,22 @@ jobs:
             --resource-group "$RG" \
             --image "${IMAGE}@${DIGEST}" \
             --revision-suffix "$SUFFIX"
+
+      - name: Refresh GHCR pull credential on frontend app
+        env:
+          APP: ${{ env.FRONTEND_APP }}
+          RG: ${{ env.RESOURCE_GROUP }}
+          REG_USER: ${{ github.actor }}
+          REG_PASS: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          az containerapp registry set \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --server ghcr.io \
+            --username "$REG_USER" \
+            --password "$REG_PASS" \
+            --output none
 
       - name: Deploy frontend (digest-pinned, unique revision)
         env:
