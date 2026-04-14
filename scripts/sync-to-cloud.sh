@@ -396,6 +396,44 @@ sync_sdk() {
   fi
 }
 
+# -- Dependency reconciliation -------------------------------------------------
+# Public repo and aim-cloud keep independent go.mod files (`.sync-protect`-ed):
+# public has AIM Secrets backends (cloud.google.com/secretmanager, Azure
+# keyvault, HashiCorp vault, etc.); aim-cloud has Stripe. When the sync copies
+# Go source that imports a dep public has added, aim-cloud's go.mod is missing
+# it and `go build` reports `updates to go.mod needed`. Running `go mod tidy`
+# in aim-cloud's tree pulls in the new transitive deps while keeping Stripe
+# (because protected main.go + internal/infrastructure/stripe/ still reference
+# it). Without this, every public dependency bump breaks the sync pipeline.
+
+reconcile_go_deps() {
+  if $DRY_RUN; then
+    log_info "--- Dry run: skipping go mod tidy ---"
+    return
+  fi
+
+  log_info "--- Reconciling aim-cloud go.mod with synced code ---"
+
+  local dst_backend="$TARGET/apps/backend"
+
+  if [[ ! -f "$dst_backend/go.mod" ]]; then
+    log_info "No go.mod in target backend, skipping tidy"
+    return
+  fi
+
+  if (cd "$dst_backend" && go mod tidy 2>&1); then
+    log_info "go mod tidy: DONE"
+  else
+    echo ""
+    echo "========================================="
+    echo "go mod tidy FAILED -- aim-cloud cannot reconcile deps."
+    echo "Likely cause: synced code imports a package public added but"
+    echo "the module proxy cannot resolve from aim-cloud's module path."
+    echo "========================================="
+    exit 1
+  fi
+}
+
 # -- Build verification --------------------------------------------------------
 
 verify_build() {
@@ -446,6 +484,7 @@ rewrite_imports
 sync_frontend
 sync_migrations
 sync_sdk
+reconcile_go_deps
 verify_build
 
 echo ""
