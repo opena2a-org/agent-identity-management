@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -379,7 +380,7 @@ func TestComplianceHandler_ExportComplianceReport_Integration_JSON(t *testing.T)
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	if contentType != "application/json" {
+	if !strings.HasPrefix(contentType, "application/json") {
 		t.Errorf("Expected Content-Type application/json, got %s", contentType)
 	}
 }
@@ -417,7 +418,7 @@ func TestComplianceHandler_ExportComplianceReport_Integration_CSV(t *testing.T) 
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	if contentType != "text/csv" {
+	if !strings.HasPrefix(contentType, "text/csv") {
 		t.Errorf("Expected Content-Type text/csv, got %s", contentType)
 	}
 }
