@@ -81,6 +81,14 @@ from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
 from .attestation_cache import AttestationCache
+from .isolation import (
+    SandboxType,
+    NetworkIsolation,
+    FilesystemIsolation,
+    ProcessIsolation,
+    score_isolation,
+    auto_detect_isolation,
+)
 from .auto_hooks import PolicyCache, activate_hooks
 
 # Credential management utilities
@@ -195,6 +203,13 @@ __all__ = [
     "A2AConsent",
     "A2AError",
     "create_a2a_client_from_env",
+    # Isolation attestation types
+    "SandboxType",
+    "NetworkIsolation",
+    "FilesystemIsolation",
+    "ProcessIsolation",
+    "score_isolation",
+    "auto_detect_isolation",
     # Decorators
     "aim_verify",
     "aim_verify_database",

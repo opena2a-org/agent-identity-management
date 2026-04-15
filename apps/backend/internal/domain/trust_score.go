@@ -7,7 +7,7 @@ import (
 )
 
 // TrustScoreFactors contains the individual factors contributing to trust score
-// Based on 8-factor trust scoring algorithm (see documentation)
+// Based on 9-factor trust scoring algorithm (see documentation)
 type TrustScoreFactors struct {
 	// Factor 1: Verification Status (25% weight) - Ed25519 signature verification
 	VerificationStatus float64 `json:"verificationStatus"` // 0-1
@@ -24,14 +24,17 @@ type TrustScoreFactors struct {
 	// Factor 5: Compliance Score (10% weight) - SOC 2, HIPAA, GDPR adherence
 	Compliance float64 `json:"compliance"` // 0-1
 
-	// Factor 6: Age & History (10% weight) - How long agent has been operating
+	// Factor 6: Age & History (5% weight) - How long agent has been operating
 	Age float64 `json:"age"` // 0-1
 
-	// Factor 7: Drift Detection (5% weight) - Behavioral pattern changes
+	// Factor 7: Drift Detection (3% weight) - Behavioral pattern changes
 	DriftDetection float64 `json:"driftDetection"` // 0-1
 
-	// Factor 8: User Feedback (5% weight) - Explicit user ratings
+	// Factor 8: User Feedback (2% weight) - Explicit user ratings
 	UserFeedback float64 `json:"userFeedback"` // 0-1
+
+	// Factor 9: Execution Isolation (10% weight) - Runtime isolation posture
+	ExecutionIsolation float64 `json:"executionIsolation"` // 0-1
 }
 
 // TrustScore represents a calculated trust score for an agent

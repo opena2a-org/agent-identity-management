@@ -199,6 +199,18 @@ export {
   type EncodedHybridPublicKey,
 } from './crypto/pqc';
 
+// Isolation attestation
+export {
+  SandboxType,
+  NetworkIsolation,
+  FilesystemIsolation,
+  ProcessIsolation,
+  type IsolationPosture,
+  type IsolationAttestationResult,
+  scoreIsolation,
+  autoDetectIsolation,
+} from './isolation/index.js';
+
 // Secrets (identity-native credential management)
 export {
   SecretsClient,

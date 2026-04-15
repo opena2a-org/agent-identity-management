@@ -20,6 +20,15 @@ import {
   NetworkError,
   parseAPIError,
 } from '../exceptions';
+import {
+  SandboxType,
+  NetworkIsolation,
+  FilesystemIsolation,
+  ProcessIsolation,
+  autoDetectIsolation,
+  type IsolationPosture,
+  type IsolationAttestationResult,
+} from '../isolation/index';
 import type { SecretsClient } from '../secrets';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
@@ -414,6 +423,50 @@ export class AIMClient {
   setCredentials(credentials: AgentCredentials): void {
     this.credentials = credentials;
     this.tokenManager = new OAuthTokenManager(this.config.baseUrl, credentials);
+  }
+
+  /**
+   * Submit an isolation attestation reporting the agent's runtime isolation posture.
+   * Contributes to the Execution Isolation trust factor (Factor 9).
+   */
+  async attestIsolation(options: {
+    sandbox?: SandboxType;
+    network?: NetworkIsolation;
+    filesystem?: FilesystemIsolation;
+    process?: ProcessIsolation;
+    autoDetect?: boolean;
+  } = {}): Promise<IsolationAttestationResult> {
+    let posture: IsolationPosture;
+
+    if (options.autoDetect) {
+      posture = await autoDetectIsolation();
+    } else {
+      posture = {
+        sandbox: options.sandbox ?? SandboxType.None,
+        network: options.network ?? NetworkIsolation.None,
+        filesystem: options.filesystem ?? FilesystemIsolation.None,
+        process: options.process ?? ProcessIsolation.None,
+      };
+    }
+
+    const payload: Record<string, string> = {
+      sandbox: posture.sandbox,
+      network: posture.network,
+      filesystem: posture.filesystem,
+      process: posture.process,
+    };
+
+    if (!this.credentials) {
+      throw new AuthenticationError('No credentials available. Register an agent first.');
+    }
+
+    const response = await this.request<IsolationAttestationResult>(
+      'POST',
+      `/api/v1/sdk-api/agents/${this.credentials.agentId}/isolation-attestation`,
+      payload,
+    );
+
+    return response;
   }
 
   /**

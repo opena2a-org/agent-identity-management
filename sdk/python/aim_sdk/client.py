@@ -1623,6 +1623,61 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"MCP attestation failed: {e}")
 
+    def attest_isolation(
+        self,
+        sandbox: str = "none",
+        network: str = "none",
+        filesystem: str = "none",
+        process: str = "none",
+        auto_detect: bool = False,
+    ) -> Dict:
+        """Submit an isolation attestation for this agent.
+
+        Reports the agent's runtime isolation posture (sandbox, network,
+        filesystem, process isolation) to AIM. This contributes to the
+        Execution Isolation trust factor (Factor 9).
+
+        Args:
+            sandbox: Sandbox type (none, docker, vm, gvisor, firecracker, wasm, kata)
+            network: Network isolation (none, firewall, namespace, vpc, airgap)
+            filesystem: Filesystem isolation (none, chroot, tmpfs, readonly, overlay)
+            process: Process isolation (none, pidns, seccomp, apparmor, selinux, full)
+            auto_detect: If True, auto-detect isolation posture instead of using provided values
+
+        Returns:
+            Dict with attestation ID and computed isolation score
+        """
+        if auto_detect:
+            from aim_sdk.isolation import auto_detect_isolation
+            detected = auto_detect_isolation()
+            sandbox = detected["sandbox"].value
+            network = detected["network"].value
+            filesystem = detected["filesystem"].value
+            process = detected["process"].value
+
+        payload = {
+            "sandbox": sandbox,
+            "network": network,
+            "filesystem": filesystem,
+            "process": process,
+        }
+
+        # Sign the attestation if we have a signing key
+        if self.signing_key:
+            import json
+            import time
+            message = json.dumps({**payload, "agentId": self.agent_id, "timestamp": int(time.time())})
+            signature = self._sign_message(message)
+            payload["signature"] = signature
+            payload["signedMessage"] = message
+
+        result = self._make_request(
+            method="POST",
+            endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/isolation-attestation",
+            data=payload,
+        )
+        return result
+
     def use_mcp_tool(
         self,
         server_id: str,

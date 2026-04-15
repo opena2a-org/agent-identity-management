@@ -13,6 +13,7 @@ import org.bouncycastle.crypto.signers.Ed25519Signer;
 import org.opena2a.aim.credentials.CredentialManager;
 import org.opena2a.aim.crypto.pqc.*;
 import org.opena2a.aim.exceptions.*;
+import org.opena2a.aim.isolation.*;
 import org.opena2a.aim.exceptions.ConfigurationException;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryService;
@@ -1666,6 +1667,41 @@ public class AIMClient implements AutoCloseable {
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to attest MCP server: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Submit an isolation attestation for this agent.
+     * Reports the agent's runtime isolation posture (sandbox, network, filesystem, process)
+     * to AIM. Contributes to the Execution Isolation trust factor (Factor 9).
+     *
+     * @param sandbox    Sandbox type
+     * @param network    Network isolation level
+     * @param filesystem Filesystem isolation level
+     * @param process    Process isolation level
+     * @return Map containing attestation ID and computed isolation score
+     */
+    public Map<String, Object> attestIsolation(
+            SandboxType sandbox,
+            NetworkIsolation network,
+            FilesystemIsolation filesystem,
+            ProcessIsolation process) {
+        try {
+            String agentId = getAgentId();
+
+            Map<String, String> payload = new HashMap<>();
+            payload.put("sandbox", sandbox.getValue());
+            payload.put("network", network.getValue());
+            payload.put("filesystem", filesystem.getValue());
+            payload.put("process", process.getValue());
+
+            String path = "/api/v1/sdk-api/agents/" + agentId + "/isolation-attestation";
+            String jsonPayload = objectMapper.writeValueAsString(payload);
+            String response = post(path, jsonPayload);
+            logger.info("Submitted isolation attestation for agent: {}", agentId);
+            return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new AIMException("Failed to submit isolation attestation: " + e.getMessage(), e);
         }
     }
 
