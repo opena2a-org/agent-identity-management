@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -49,7 +50,7 @@ type PublicRegisterResponse struct {
 	Name        string  `json:"name"`
 	DisplayName string  `json:"displayName"`
 	PublicKey   string  `json:"publicKey"`
-	PrivateKey  string  `json:"privateKey"` // ⚠️ ONLY returned on registration
+	PrivateKey  string  `json:"privateKey"` // ONLY returned on registration
 	AIMURL      string  `json:"aimUrl"`
 	Status      string  `json:"status"`
 	TrustScore  float64 `json:"trustScore"`
@@ -109,9 +110,9 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 	}
 
 	// Validate required fields
-	if req.Name == "" || req.DisplayName == "" || req.Description == "" {
+	if req.Name == "" || req.DisplayName == "" || req.Description == "" || req.AgentType == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "name, displayName, and description are required",
+			"error": "name, displayName, description, and agentType are required",
 		})
 	}
 
@@ -121,31 +122,24 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	// Extract API key from header
-	apiKey := c.Get("X-AIM-API-Key")
-	if apiKey == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "X-AIM-API-Key header is required for agent registration",
-		})
-	}
+	// Use authenticated user/org if available (set by OptionalAuthMiddleware),
+	// otherwise use zero UUIDs for truly public (unauthenticated) registration.
+	var userID, orgID uuid.UUID
+	var userEmail string
 
-	// Validate API key and extract user identity
-	validation, err := h.authService.ValidateAPIKey(c.Context(), apiKey)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid API key: %v", err),
-		})
+	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
+		userID = uid
 	}
-
-	// Use real user and organization from API key
-	userID := validation.User.ID
-	orgID := validation.Organization.ID
-	userEmail := validation.User.Email
+	if oid, ok := c.Locals("organization_id").(uuid.UUID); ok {
+		orgID = oid
+	}
+	if req.UserEmail != "" {
+		userEmail = req.UserEmail
+	}
 
 	// Create agent (keys generated automatically by AgentService)
-	// Note: Public registration validates API key manually above but doesn't track the key ID
-	// Since validation happens inline (not via middleware), we don't have the API key ID here
-	// Both sdkTokenID and apiKeyID are nil for this flow
+	// Public registration has no API key or SDK token to track.
+	// Both sdkTokenID and apiKeyID are nil for this flow.
 	agent, err := h.agentService.CreateAgent(c.Context(), &application.CreateAgentRequest{
 		Name:             req.Name,
 		DisplayName:      req.DisplayName,
@@ -178,7 +172,7 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		Name:        agent.Name,
 		DisplayName: agent.DisplayName,
 		PublicKey:   publicKey,
-		PrivateKey:  privateKey, // ⚠️ CRITICAL: Only returned ONCE
+		PrivateKey:  privateKey, // CRITICAL: Only returned ONCE
 		AIMURL:      c.BaseURL(),
 		Status:      string(agent.Status),
 		TrustScore:  trustScore,
@@ -211,11 +205,6 @@ func (h *PublicAgentHandler) calculateInitialTrustScore(req *PublicRegisterReque
 	if strings.Contains(req.RepositoryURL, "github.com") || strings.Contains(req.RepositoryURL, "gitlab.com") {
 		score += 10.0
 	}
-
-	// TODO: Add more sophisticated trust scoring
-	// - Organization reputation
-	// - Email domain verification
-	// - Code signing verification
 
 	if score > 100.0 {
 		score = 100.0

@@ -61,6 +61,36 @@ func TestNormalizePath(t *testing.T) {
 	}
 }
 
+func TestRegistryGatherNoDuplicates(t *testing.T) {
+	// Record some metrics to exercise collectors with realistic label combinations
+	httpRequestsTotal.WithLabelValues("GET", "/api/v1/agents", "200").Inc()
+	httpRequestsTotal.WithLabelValues("POST", "/api/v1/agents", "201").Inc()
+	httpRequestDuration.WithLabelValues("GET", "/api/v1/agents", "200").Observe(0.05)
+	RecordSecurityAlert("high", "brute_force")
+	RecordAgentOperation("create", "success")
+	RecordComplianceCheck("policy", "pass")
+	RecordAuditLog("create", "agent")
+
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("registry.Gather() returned error (duplicate registration?): %v", err)
+	}
+
+	if len(families) == 0 {
+		t.Fatal("registry.Gather() returned zero metric families")
+	}
+
+	// Verify no duplicate metric family names
+	seen := make(map[string]bool)
+	for _, f := range families {
+		name := f.GetName()
+		if seen[name] {
+			t.Errorf("duplicate metric family: %s", name)
+		}
+		seen[name] = true
+	}
+}
+
 func TestIsNumeric(t *testing.T) {
 	tests := []struct {
 		name     string

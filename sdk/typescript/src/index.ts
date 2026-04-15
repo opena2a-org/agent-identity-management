@@ -98,6 +98,7 @@ export {
   NetworkError,
   NotFoundError,
   RateLimitError,
+  SecretsError,
 } from './exceptions';
 
 // Auth utilities
@@ -209,6 +210,17 @@ export {
   scoreIsolation,
   autoDetectIsolation,
 } from './isolation/index.js';
+
+// Secrets (identity-native credential management)
+export {
+  SecretsClient,
+  edwardsToMontgomeryPrivate,
+  type SecretsClientHost,
+  type ResolvedCredential,
+  type CreateNamespaceOptions,
+  type StoreCredentialOptions,
+  type AuditLogOptions,
+} from './secrets';
 
 // Version
 export const VERSION = '1.0.0';

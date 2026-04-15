@@ -30,6 +30,9 @@ type Organization struct {
 	// Post-Quantum Cryptography (PQC) settings
 	DefaultPQCAlgorithm *string                `json:"defaultPqcAlgorithm,omitempty"` // ML-DSA-44, ML-DSA-65, ML-DSA-87
 	RequirePQC          bool                   `json:"requirePqc"`                    // Require PQC keys for new agents
+	// Community Intelligence opt-in
+	CommunityIntelligenceEnabled     bool       `json:"communityIntelligenceEnabled"`
+	CommunityIntelligenceConsentedAt *time.Time `json:"communityIntelligenceConsentedAt,omitempty"`
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
 }

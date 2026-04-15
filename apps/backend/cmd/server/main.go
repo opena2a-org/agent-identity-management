@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"log"
@@ -24,9 +26,13 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
+	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
+	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
@@ -102,6 +108,7 @@ func main() {
 			Port:     cfg.Redis.Port,
 			Password: cfg.Redis.Password,
 			DB:       cfg.Redis.DB,
+			UseTLS:   cfg.Redis.UseTLS,
 		})
 		if err != nil {
 			log.Printf("⚠️  Cache initialization failed: %v", err)
@@ -249,7 +256,7 @@ func main() {
 				"email":    emailStatus,
 			},
 			"features": fiber.Map{
-				"oauth":              false, // OAuth disabled
+				"oauth":              os.Getenv("GOOGLE_CLIENT_ID") != "",
 				"email_registration": true,
 				"mcp_auto_detection": true,
 				"trust_scoring":      true,
@@ -325,6 +332,12 @@ func main() {
 		defer close(stopRegistryBridge)
 	}
 
+	// Start Community Intelligence background job (pushes every 6 hours for opted-in orgs)
+	if services.CommunityIntelligence != nil {
+		stopCI := startCommunityIntelligenceJob(services.CommunityIntelligence)
+		defer close(stopCI)
+	}
+
 	// Graceful shutdown
 	go func() {
 		if err := app.Listen(":" + port); err != nil {
@@ -380,11 +393,19 @@ func initDatabase(cfg *config.Config) (*sql.DB, error) {
 }
 
 func initRedis(cfg *config.Config) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
-	})
+	}
+
+	if cfg.Redis.UseTLS {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -433,7 +454,14 @@ type Repositories struct {
 	A2ARevokedAgent       *repository.A2ARevokedAgentRepository
 	A2ASecuritySettings   *repository.A2ASecuritySettingsRepository
 	A2ASecurityViolation  *repository.A2ASecurityViolationRepository
-	DeviceCode            *repository.DeviceCodeRepository
+	DeviceCode              *repository.DeviceCodeRepository
+	CommunityIntelligence   *repository.CommunityIntelligenceRepository // For community intelligence opt-in telemetry
+	Remediation             *repository.RemediationRepository            // For remediation tracking (agentpwn + HMA)
+	// Secrets management repositories
+	SecretNamespace     *repository.SecretNamespaceRepository
+	SecretCredential    *repository.SecretCredentialRepository
+	SecretAudit         *repository.SecretAuditRepository
+	SecretBackendConfig *repository.SecretBackendConfigRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -480,6 +508,13 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		A2ASecuritySettings:   repository.NewA2ASecuritySettingsRepository(db),
 		A2ASecurityViolation:  repository.NewA2ASecurityViolationRepository(db),
 		DeviceCode:            repository.NewDeviceCodeRepository(db),
+		CommunityIntelligence: repository.NewCommunityIntelligenceRepository(db),
+		Remediation:           repository.NewRemediationRepository(db),
+		// Secrets management
+		SecretNamespace:     repository.NewSecretNamespaceRepository(db),
+		SecretCredential:    repository.NewSecretCredentialRepository(db),
+		SecretAudit:         repository.NewSecretAuditRepository(db),
+		SecretBackendConfig: repository.NewSecretBackendConfigRepository(db),
 	}, oauthRepo
 }
 
@@ -508,7 +543,10 @@ type Services struct {
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge    *application.RegistryBridgeService    // For OpenA2A Registry attestation contribution
+	RegistryBridge          *application.RegistryBridgeService          // For OpenA2A Registry attestation contribution
+	CommunityIntelligence   *application.CommunityIntelligenceService   // For community intelligence opt-in telemetry
+	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
+	Secrets                 *application.SecretsService                 // For identity-native secrets management
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -742,6 +780,137 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		)
 	}
 
+	// Community Intelligence: opt-in anonymized trust factor telemetry
+	ciService := application.NewCommunityIntelligenceService(
+		repos.Organization,
+		repos.Agent,
+		repos.TrustScore,
+		repos.CommunityIntelligence,
+		registryURL,
+	)
+
+	// Secrets management: ATC verifier (real + JWT shim composite) + backends + service
+	jwtShimVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
+
+	// Real ATC verifier with trusted issuers and CRL client
+	issuerURI := getEnvOrDefault("ATC_ISSUER_URI", "https://aim.opena2a.org")
+	crlEndpoint := getEnvOrDefault("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest")
+	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
+	if err != nil {
+		log.Fatalf("invalid CRL endpoint: %v", err)
+	}
+	issuerPubKey, ok := keyVault.GetServerSigningKey().Public().(ed25519.PublicKey)
+	if !ok || len(issuerPubKey) != ed25519.PublicKeySize {
+		log.Fatalf("server signing key is not a valid Ed25519 public key")
+	}
+	// Defensive copy: isolate from any future mutation of the source key.
+	issuerPubKeyCopy := make([]byte, ed25519.PublicKeySize)
+	copy(issuerPubKeyCopy, issuerPubKey)
+	trustedIssuers := []atcdomain.TrustedIssuer{
+		{
+			URI:       issuerURI,
+			PublicKey: issuerPubKeyCopy,
+		},
+	}
+	realATCVerifier := infraatc.NewRealATCVerifier(trustedIssuers, crlClient)
+
+	// Composite verifier: tries real ATC first, falls back to JWT shim
+	atcVerifier := infraatc.NewCompositeVerifier(realATCVerifier, jwtShimVerifier)
+	aimNativeBackend := infrasecrets.NewAIMNativeBackend(repos.SecretCredential)
+	secretsBackends := map[domainsecrets.BackendType]domainsecrets.SecretsBackend{
+		domainsecrets.BackendTypeAIMNative: aimNativeBackend,
+	}
+
+	// Register external secrets backends from environment config.
+	// HashiCorp Vault: enabled when VAULT_ADDR is set.
+	if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
+		vaultCfg := &infrasecrets.VaultConfig{
+			Address:   vaultAddr,
+			MountPath: getEnvOrDefault("VAULT_MOUNT_PATH", "secret"),
+			AuthPath:  getEnvOrDefault("VAULT_AUTH_PATH", "jwt"),
+			Role:      os.Getenv("VAULT_ROLE"),
+			Token:     os.Getenv("VAULT_TOKEN"),
+			Namespace: os.Getenv("VAULT_NAMESPACE"),
+		}
+		vaultBackend, err := infrasecrets.NewHashiCorpVaultBackend(vaultCfg)
+		if err != nil {
+			log.Printf("WARNING: HashiCorp Vault backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeVault] = vaultBackend
+			log.Printf("HashiCorp Vault backend registered at %s", vaultAddr)
+		}
+	}
+
+	// AWS Secrets Manager: enabled when AWS_SECRETS_REGION is set.
+	if awsRegion := os.Getenv("AWS_SECRETS_REGION"); awsRegion != "" {
+		awsCfg := &infrasecrets.AWSConfig{
+			Region:   awsRegion,
+			KMSKeyID: os.Getenv("AWS_SECRETS_KMS_KEY_ID"),
+			Prefix:   getEnvOrDefault("AWS_SECRETS_PREFIX", "aim-secrets/"),
+		}
+		awsBackend, err := infrasecrets.NewAWSSecretsBackend(awsCfg)
+		if err != nil {
+			log.Printf("WARNING: AWS Secrets Manager backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeAWSKMS] = awsBackend
+			log.Printf("AWS Secrets Manager backend registered in %s", awsRegion)
+		}
+	}
+
+
+	// Azure Key Vault: enabled when AZURE_KEYVAULT_URL is set.
+	if azureVaultURL := os.Getenv("AZURE_KEYVAULT_URL"); azureVaultURL != "" {
+		azureCfg := &infrasecrets.AzureKeyVaultConfig{
+			VaultURL: azureVaultURL,
+		}
+		azureBackend, err := infrasecrets.NewAzureKeyVaultBackend(azureCfg)
+		if err != nil {
+			log.Printf("WARNING: Azure Key Vault backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeAzureKV] = azureBackend
+			log.Printf("Azure Key Vault backend registered at %s", azureVaultURL)
+		}
+	}
+
+	// GCP Secret Manager: enabled when GCP_SECRETS_PROJECT is set.
+	if gcpProject := os.Getenv("GCP_SECRETS_PROJECT"); gcpProject != "" {
+		gcpCfg := &infrasecrets.GCPSecretConfig{
+			ProjectID: gcpProject,
+		}
+		gcpBackend, err := infrasecrets.NewGCPSecretBackend(gcpCfg)
+		if err != nil {
+			log.Printf("WARNING: GCP Secret Manager backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendTypeGCPSM] = gcpBackend
+			log.Printf("GCP Secret Manager backend registered for project %s", gcpProject)
+		}
+	}
+
+	// 1Password: enabled when OP_CONNECT_HOST is set.
+	if opHost := os.Getenv("OP_CONNECT_HOST"); opHost != "" {
+		opCfg := &infrasecrets.OnePasswordConfig{
+			ConnectHost:  opHost,
+			ConnectToken: os.Getenv("OP_CONNECT_TOKEN"),
+			VaultUUID:    os.Getenv("OP_VAULT_UUID"),
+		}
+		opBackend, err := infrasecrets.NewOnePasswordBackend(opCfg)
+		if err != nil {
+			log.Printf("WARNING: 1Password backend configured but failed to initialize: %v", err)
+		} else {
+			secretsBackends[domainsecrets.BackendType1Password] = opBackend
+			log.Printf("1Password backend registered at %s", opHost)
+		}
+	}
+
+	secretsService := application.NewSecretsService(
+		repos.SecretNamespace,
+		repos.SecretAudit,
+		repos.Agent,
+		repos.Capability,
+		atcVerifier,
+		secretsBackends,
+	)
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -767,7 +936,10 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
 		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
 		DeviceAuth:        deviceAuthService,        // For OAuth Device Authorization Grant (RFC 8628)
-		RegistryBridge:    registryBridgeService,    // For OpenA2A Registry attestation contribution
+		RegistryBridge:          registryBridgeService,    // For OpenA2A Registry attestation contribution
+		CommunityIntelligence:   ciService,                 // For community intelligence opt-in telemetry
+		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
+		Secrets:                 secretsService,                                       // For identity-native secrets management
 	}, keyVault
 }
 
@@ -803,8 +975,11 @@ type Handlers struct {
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
-	AIP                *handlers.AIPHandler                // For AIP discovery and DID resolution
+	RegistryBridge          *handlers.RegistryBridgeHandler          // For OpenA2A Registry attestation contribution
+	CommunityIntelligence   *handlers.CommunityIntelligenceHandler   // For community intelligence opt-in telemetry
+	AIP                     *handlers.AIPHandler                     // For AIP discovery and DID resolution
+	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
+	Secrets                 *handlers.SecretsHandler                 // For identity-native secrets management
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -972,8 +1147,17 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,
 		),
+		CommunityIntelligence: handlers.NewCommunityIntelligenceHandler(
+			services.CommunityIntelligence,
+		),
 		AIP: handlers.NewAIPHandler(
 			repos.Agent,
+		),
+		Remediation: handlers.NewRemediationHandler(
+			services.Remediation,
+		),
+		Secrets: handlers.NewSecretsHandler(
+			services.Secrets,
 		),
 	}
 }
@@ -1013,6 +1197,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
+	public.Use(middleware.StrictRateLimitMiddleware())                                       // SECURITY: Strict rate limiting on public endpoints
 	public.Use(middleware.OptionalAuthMiddleware(jwtService))                               // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)                                 // 🚀 ONE-LINE agent registration
 	public.Post("/register", h.PublicRegistration.RegisterUser)                             // 🚀 User registration
@@ -1087,9 +1272,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
 	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
-	// Agents routes - All other agent endpoints with triple authentication (API key, Ed25519, or JWT)
+	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key first (for dashboard-generated keys)
+	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
 	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.RateLimitMiddleware())
@@ -1158,6 +1344,42 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	trust.Get("/agents/:id/breakdown", h.TrustScore.GetTrustScoreBreakdown) // Detailed breakdown with weights and contributions
 	trust.Get("/agents/:id/history", h.TrustScore.GetTrustScoreHistory)
 
+	// Remediation tracking (public, rate-limited, no auth -- receives reports from agentpwn and HMA)
+	remediation := v1.Group("/remediation")
+	remediation.Use(middleware.RateLimitMiddleware())
+	remediation.Post("/track", h.Remediation.RecordFinding)
+	remediation.Post("/remediated", h.Remediation.RecordRemediation)
+	remediation.Get("/stats", h.Remediation.GetStats)
+	remediation.Get("/recent", h.Remediation.ListRecent)
+
+	// Secrets management routes
+	// POST /resolve uses ATCAuthMiddleware -> PQCAgentMiddleware (agent auth), all others use JWT
+	secretsResolve := v1.Group("/secrets")
+	secretsResolve.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier()))
+	secretsResolve.Use(middleware.PQCAgentMiddleware(services.Agent))
+	secretsResolve.Use(middleware.RateLimitMiddleware())
+	secretsResolve.Post("/resolve", h.Secrets.ResolveCredential)
+
+	secretsMgmt := v1.Group("/secrets")
+	secretsMgmt.Use(middleware.AuthMiddleware(jwtService))
+	secretsMgmt.Use(middleware.RateLimitMiddleware())
+	secretsMgmt.Post("/namespaces", middleware.MemberMiddleware(), h.Secrets.CreateNamespace)
+	secretsMgmt.Get("/namespaces", h.Secrets.ListNamespaces)
+	secretsMgmt.Get("/namespaces/:id", h.Secrets.GetNamespace)
+	secretsMgmt.Delete("/namespaces/:id", middleware.MemberMiddleware(), h.Secrets.DeleteNamespace)
+	secretsMgmt.Post("/namespaces/:id/credentials", middleware.MemberMiddleware(), h.Secrets.StoreCredential)
+	secretsMgmt.Post("/namespaces/:id/rotate", middleware.MemberMiddleware(), h.Secrets.RotateCredential)
+	secretsMgmt.Get("/audit", h.Secrets.GetAuditLog)
+
+	// Community Intelligence opt-in telemetry (authentication required)
+	ci := v1.Group("/community-intelligence")
+	ci.Use(middleware.AuthMiddleware(jwtService))
+	ci.Use(middleware.RateLimitMiddleware())
+	ci.Post("/enable", h.CommunityIntelligence.EnableOptIn)
+	ci.Post("/disable", h.CommunityIntelligence.DisableOptIn)
+	ci.Get("/status", h.CommunityIntelligence.GetOptInStatus)
+	ci.Get("/benchmarks", h.CommunityIntelligence.GetCommunityBenchmarks)
+
 	// Admin routes (admin only)
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AuthMiddleware(jwtService))
@@ -1223,6 +1445,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Registry Bridge (admin only - manual trigger for OpenA2A Registry contribution)
 	admin.Post("/registry-bridge/push", h.RegistryBridge.TriggerPush)
+
+	// Community Intelligence (admin only - manual trigger for CI data push)
+	admin.Post("/community-intelligence/push", h.CommunityIntelligence.TriggerPush)
 
 	// Compliance routes (admin only)
 	// SOC 2 and HIPAA compliance features
@@ -1764,6 +1989,34 @@ func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) ch
 			case <-stopChan:
 				ticker.Stop()
 				log.Println("Registry bridge stopped")
+				return
+			}
+		}
+	}()
+
+	return stopChan
+}
+
+// startCommunityIntelligenceJob starts a background goroutine that periodically
+// collects anonymized trust factor distributions from opted-in organizations
+// and pushes them to the OpenA2A Registry. Runs every 6 hours.
+// Returns a channel that should be closed to stop the job.
+func startCommunityIntelligenceJob(ciService *application.CommunityIntelligenceService) chan struct{} {
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(6 * time.Hour)
+
+	go func() {
+		log.Println("Community intelligence job enabled (runs every 6 hours)")
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := ciService.CollectAndPushTelemetry(context.Background()); err != nil {
+					log.Printf("Community intelligence job error: %v", err)
+				}
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("Community intelligence job stopped")
 				return
 			}
 		}

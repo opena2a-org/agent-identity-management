@@ -29,6 +29,8 @@ import {
   type IsolationPosture,
   type IsolationAttestationResult,
 } from '../isolation/index';
+import type { SecretsClient } from '../secrets';
+import type { SecretsClient } from '../secrets';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT = 30000;
@@ -64,6 +66,7 @@ export class AIMClient {
   private tokenManager: OAuthTokenManager | null = null;
   private credentials: AgentCredentials | null = null;
   private agent: Agent | null = null;
+  private _secrets: SecretsClient | null = null;
 
   constructor(config: AIMClientConfig = {}) {
     this.config = {
@@ -81,6 +84,24 @@ export class AIMClient {
     if (this.credentials) {
       this.tokenManager = new OAuthTokenManager(this.config.baseUrl, this.credentials);
     }
+  }
+
+  /**
+   * Lazy-initialized secrets client for identity-native credential management.
+   */
+  get secrets(): SecretsClient {
+    if (!this._secrets) {
+      // Dynamic import to avoid circular dependency and keep secrets optional
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SecretsClient: SC } = require('../secrets') as { SecretsClient: typeof SecretsClient };
+      this._secrets = new SC({
+        request: <T>(method: string, path: string, body?: unknown, useApiKey?: boolean) =>
+          this.request<T>(method, path, body, useApiKey),
+        getPrivateKey: () => this.credentials?.privateKey ?? null,
+        getPublicKey: () => this.credentials?.publicKey ?? null,
+      });
+    }
+    return this._secrets;
   }
 
   /**
@@ -195,6 +216,7 @@ export class AIMClient {
       capabilities: options.capabilities ?? [],
       talksTo: options.talksTo ?? [],
       metadata: options.metadata ?? {},
+      communityIntelligenceOptIn: options.communityIntelligenceOptIn ?? false,
       publicKey,
     };
 

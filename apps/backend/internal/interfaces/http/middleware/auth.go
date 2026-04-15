@@ -26,6 +26,12 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			return c.Next()
 		}
 
+		// Check if already authenticated by ATC middleware
+		if authMethod == "atc" {
+			// Already authenticated via ATC - skip JWT validation
+			return c.Next()
+		}
+
 		// Try to get token from Authorization header first
 		authHeader := c.Get("Authorization")
 		var token string

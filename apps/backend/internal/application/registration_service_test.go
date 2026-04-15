@@ -430,55 +430,30 @@ func TestRegistrationService_DefaultOrganizationValues(t *testing.T) {
 }
 
 // ========================================
-// Auto-Approval Logic Tests
+// Platform Admin Allowlist Tests
 // ========================================
 
-func TestRegistrationService_AutoApprovalConditions(t *testing.T) {
-	// Document and test the auto-approval logic
-	// shouldAutoApproveFirstUser returns true when:
-	// 1. No organization exists for this domain, OR
-	// 2. Organization exists but has zero users
-
+func TestIsPlatformAdmin(t *testing.T) {
 	tests := []struct {
-		name          string
-		orgExists     bool
-		userCount     int
-		shouldApprove bool
+		name      string
+		allowlist string
+		email     string
+		want      bool
 	}{
-		{
-			name:          "no org exists - should auto-approve",
-			orgExists:     false,
-			userCount:     0,
-			shouldApprove: true,
-		},
-		{
-			name:          "org exists with no users - should auto-approve",
-			orgExists:     true,
-			userCount:     0,
-			shouldApprove: true,
-		},
-		{
-			name:          "org exists with users - should not auto-approve",
-			orgExists:     true,
-			userCount:     1,
-			shouldApprove: false,
-		},
-		{
-			name:          "org exists with many users - should not auto-approve",
-			orgExists:     true,
-			userCount:     10,
-			shouldApprove: false,
-		},
+		{name: "empty allowlist denies all", allowlist: "", email: "info@opena2a.org", want: false},
+		{name: "single match", allowlist: "info@opena2a.org", email: "info@opena2a.org", want: true},
+		{name: "single non-match", allowlist: "info@opena2a.org", email: "other@opena2a.org", want: false},
+		{name: "case insensitive email", allowlist: "info@opena2a.org", email: "Info@OpenA2A.Org", want: true},
+		{name: "case insensitive allowlist", allowlist: "Info@OpenA2A.Org", email: "info@opena2a.org", want: true},
+		{name: "multi-entry allowlist", allowlist: "alice@x.com,info@opena2a.org,bob@y.com", email: "info@opena2a.org", want: true},
+		{name: "multi-entry no match", allowlist: "alice@x.com,bob@y.com", email: "info@opena2a.org", want: false},
+		{name: "whitespace tolerant", allowlist: " info@opena2a.org , alice@x.com ", email: "info@opena2a.org", want: true},
+		{name: "no domain squat: same-domain non-listed denied", allowlist: "info@opena2a.org", email: "attacker@opena2a.org", want: false},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Document the expected behavior
-			if !tt.orgExists || tt.userCount == 0 {
-				assert.True(t, tt.shouldApprove)
-			} else {
-				assert.False(t, tt.shouldApprove)
-			}
+			t.Setenv("AIM_PLATFORM_ADMINS", tt.allowlist)
+			assert.Equal(t, tt.want, isPlatformAdmin(tt.email))
 		})
 	}
 }
