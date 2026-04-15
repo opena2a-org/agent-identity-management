@@ -30,7 +30,6 @@ import {
   type IsolationAttestationResult,
 } from '../isolation/index';
 import type { SecretsClient } from '../secrets';
-import type { SecretsClient } from '../secrets';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT = 30000;

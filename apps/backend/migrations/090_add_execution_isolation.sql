@@ -1,4 +1,4 @@
--- Migration 085: Add execution isolation level trust factor
+-- Migration 090: Add execution isolation level trust factor
 -- Adds isolation attestation table and execution_isolation column to trust_scores
 
 -- Isolation attestation records from agents
