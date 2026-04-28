@@ -57,7 +57,7 @@ These names match Slide 14 of the May 22 Observability Summit talk and the AIM S
 | `agent.drift_score` | double | metric, resource attribute | 0-1 saturated drift signal |
 | `agent.scan_verdict` | string | resource attribute | `clean`, `warn`, `dirty` |
 | `fga.step` | string | span attribute on child spans | One of: `capability_check`, `attribute_check`, `context_check`, `chain_check`, `intent_check_sync`, `intent_check_async` |
-| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE` |
+| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures — `loadPolicy` / `HasCapability` returned an error) |
 | `fga.denied_by` | string | span attribute, log attribute, metric label | Step that denied (set when `fga.outcome != ALLOW`) |
 
 ## What the backend emits

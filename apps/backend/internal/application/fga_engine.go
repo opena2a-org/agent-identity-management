@@ -142,10 +142,9 @@ func (e *FGAEngine) SetRegistryASCURL(url string) {
 // step actually triggered. Span attribute names are pinned to the AIM
 // SemConv proposal (Slide 14 of the May 22 talk); see
 // internal/telemetry/init.go for the canonical reference.
-func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult, error) {
-	e.ensureTelemetry()
+func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGAResult, retErr error) {
 	start := time.Now()
-	result := &FGAResult{
+	result = &FGAResult{
 		StepsTriggered: make([]string, 0, 5),
 	}
 
@@ -156,6 +155,23 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 		),
 	)
 	defer func() {
+		// Error-return paths (loadPolicy / HasCapability failures) leave
+		// result.Outcome empty AND may set the named return to nil via
+		// `return nil, err`. Synthesize a minimal result with Outcome=ERROR
+		// so the metric/log pipeline sees a clean enum value instead of ""
+		// (which would pollute SemConv-keyed dashboards with phantom DENYs
+		// for every transient DB hiccup).
+		if retErr != nil {
+			if result == nil {
+				result = &FGAResult{StepsTriggered: []string{}}
+			}
+			result.Outcome = "ERROR"
+			result.DeniedReason = retErr.Error()
+			if result.LatencyMs == 0 {
+				result.LatencyMs = time.Since(start).Milliseconds()
+			}
+			span.RecordError(retErr)
+		}
 		span.SetAttributes(
 			attribute.String("fga.outcome", result.Outcome),
 			attribute.Int64("fga.latency_ms", result.LatencyMs),
@@ -348,31 +364,6 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 	e.recordAttestation(ctx, req, result)
 
 	return result, nil
-}
-
-// ensureTelemetry guards against zero-value FGAEngine{} construction (used
-// in helper unit tests) by lazily wiring instruments. NewFGAEngine populates
-// these eagerly; this is purely a safety net.
-func (e *FGAEngine) ensureTelemetry() {
-	if e.logger == nil {
-		e.logger = slog.Default()
-	}
-	if e.tracer == nil {
-		e.tracer = otel.Tracer("aim/fga")
-	}
-	if e.decisions == nil {
-		e.decisions, _ = otel.Meter("aim/fga").Int64Counter(
-			"fga.decisions_total",
-			metric.WithDescription("FGA authorization decisions by outcome"),
-		)
-	}
-	if e.latency == nil {
-		e.latency, _ = otel.Meter("aim/fga").Int64Histogram(
-			"fga.latency_ms",
-			metric.WithDescription("FGA total latency in milliseconds"),
-			metric.WithUnit("ms"),
-		)
-	}
 }
 
 // emitDecisionTelemetry emits the per-decision metric + structured log line.
