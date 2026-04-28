@@ -6,6 +6,21 @@ This implementation is the reference for the AIM SemConv proposal pitched at the
 
 ## Quick start
 
+The fastest way to verify the stack works end-to-end is to run the smoke test, which boots the stack and confirms a synthetic OTLP trace + counter + log lands in Tempo, Prometheus, and Loki:
+
+```bash
+cd apps/backend/deployments/otel-demo
+./smoke-test.sh
+```
+
+Expected output ends with `==> PASS: all three signals landed end-to-end` plus three clickable Grafana/Prometheus URLs pointing at the verified signals. Runtime: 60-90s warm, 3-5 min on first run (image pulls).
+
+The smoke test also handles port conflicts: if any of `4317 4318 3200 9090 3100 3001` are taken on your machine, it fails fast with a clear message and tells you to copy `.env.example` to `.env` and pick free ports. See `docs/testing/release-smoke.md` for the full smoke-test contract.
+
+## Manual run
+
+If you want to drive the stack with the real backend instead of synthetic signals:
+
 ```bash
 cd apps/backend/deployments/otel-demo
 docker compose up -d
@@ -81,13 +96,13 @@ Spans whose check denies set status `codes.Error` with the deny reason.
 
 ### Metrics
 
-| Metric | Type | Labels | Notes |
-|---|---|---|---|
-| `fga.decisions_total` | counter | `fga.outcome`, `fga.denied_by` | Incremented on every Authorize return |
-| `fga.latency_ms` | histogram | none | Total Authorize latency in ms |
-| `agent.drift_score` | gauge | `agent.id` | Saturated 0-1 score from `tanh(drift_count / 2)`. Emitted on every DetectDrift call (including 0 when no drift) so dashboards distinguish "clean" from "silent". |
+| OTel metric name | Type | Labels | Prometheus query name | Notes |
+|---|---|---|---|---|
+| `fga.decisions` | counter | `fga.outcome`, `fga.denied_by` | `fga_decisions_total` | Incremented on every Authorize return. The `_total` suffix is added by Prometheus's OTLP receiver per OpenMetrics convention; do NOT include it in the OTel name (Prometheus rejects with "invalid temporality and type combination"). |
+| `fga.latency_ms` | histogram | none | `fga_latency_ms_bucket`, `_count`, `_sum` | Total Authorize latency in ms |
+| `agent.drift_score` | gauge | `agent.id` | `agent_drift_score` | Saturated 0-1 score from `tanh(drift_count / 2)`. Emitted on every DetectDrift call (including 0 when no drift) so dashboards distinguish "clean" from "silent". |
 
-In Prometheus the names are normalized to `fga_decisions_total`, `fga_latency_ms`, `agent_drift_score`, with attributes flattened to label names (`fga_outcome`, `agent_id`, etc.) per the OTLP-to-Prometheus convention.
+Attributes are flattened to label names (`fga_outcome`, `agent_id`, etc.) per the OTLP-to-Prometheus convention.
 
 ### Logs
 

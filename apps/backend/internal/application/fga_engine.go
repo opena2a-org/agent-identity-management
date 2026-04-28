@@ -99,7 +99,7 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	tracer := otel.Tracer("aim/fga")
 	meter := otel.Meter("aim/fga")
 	decisions, err := meter.Int64Counter(
-		"fga.decisions_total",
+		"fga.decisions",
 		metric.WithDescription("FGA authorization decisions by outcome"),
 	)
 	if err != nil {

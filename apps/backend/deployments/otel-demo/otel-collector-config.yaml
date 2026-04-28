@@ -5,6 +5,10 @@
 #   metrics -> Prometheus (otlphttp via OTLP-write receiver)
 #   logs    -> Loki (otlphttp via Loki's OTLP endpoint)
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 receivers:
   otlp:
     protocols:
@@ -39,9 +43,10 @@ exporters:
       insecure: true
 
   debug:
-    verbosity: basic
+    verbosity: detailed
 
 service:
+  extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
@@ -57,6 +62,14 @@ service:
       exporters: [otlphttp/loki, debug]
   telemetry:
     metrics:
-      address: 0.0.0.0:8888
+      # Collector 0.122+ replaced the legacy `address: host:port` field with
+      # the OTel-native `readers` shape. This binds a Prometheus exposition
+      # endpoint at localhost:8888 inside the container.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
     logs:
       level: info

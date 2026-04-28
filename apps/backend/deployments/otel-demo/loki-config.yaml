@@ -42,7 +42,7 @@ limits_config:
             - service.name
             - service.version
     scope_attributes:
-      - action: index_label
+      - action: structured_metadata
         attributes:
           - otel.scope.name
     log_attributes:

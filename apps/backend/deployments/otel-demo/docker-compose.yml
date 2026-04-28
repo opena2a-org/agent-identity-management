@@ -5,22 +5,26 @@ name: aim-otel-demo
 # Tear down (preserves data): docker compose stop
 # Tear down + wipe: docker compose down -v
 #
-# The AIM backend writes to localhost:4317 (the OTLP gRPC port). When this
-# stack is running on the host, point the backend at it by leaving
-# OTEL_EXPORTER_OTLP_ENDPOINT unset (defaults to localhost:4317).
+# The AIM backend writes to localhost:${OTEL_GRPC_PORT:-4317}. When this
+# stack is running on the host, point the backend at the same port via
+# OTEL_EXPORTER_OTLP_ENDPOINT (default localhost:4317).
+#
+# All host ports are env-overridable. On a busy dev machine, copy
+# .env.example to .env and pick free ports first:
+#   for p in 4317 4318 3200 9090 3100 3001; do lsof -i :$p && echo "BUSY $p"; done
 
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.115.0
+    image: otel/opentelemetry-collector-contrib:0.150.1
     container_name: aim-otel-collector
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-      - "8888:8888"   # collector self-metrics
-      - "8889:8889"   # prometheus scrape endpoint
+      - "${OTEL_GRPC_PORT:-4317}:4317"   # OTLP gRPC
+      - "${OTEL_HTTP_PORT:-4318}:4318"   # OTLP HTTP
+      - "${OTEL_SELF_METRICS_PORT:-8888}:8888"   # collector self-metrics
+      - "${OTEL_HEALTH_PORT:-13133}:13133"   # collector health_check
     depends_on:
       - tempo
       - loki
@@ -34,22 +38,22 @@ services:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - tempo-data:/var/tempo
     ports:
-      - "3200:3200"   # tempo HTTP API (Grafana datasource)
-      - "9095:9095"   # tempo gRPC API
+      - "${TEMPO_HTTP_PORT:-3200}:3200"   # tempo HTTP API (Grafana datasource)
+      - "${TEMPO_GRPC_PORT:-9095}:9095"   # tempo gRPC API
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v2.55.0
+    image: prom/prometheus:v3.11.3
     container_name: aim-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--enable-feature=otlp-write-receiver"
+      - "--web.enable-otlp-receiver"
       - "--storage.tsdb.retention.time=24h"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     restart: unless-stopped
 
   loki:
@@ -60,7 +64,7 @@ services:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki-data:/loki
     ports:
-      - "3100:3100"
+      - "${LOKI_PORT:-3100}:3100"
     restart: unless-stopped
 
   grafana:
@@ -72,7 +76,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "3001:3000"   # mapped off 3000 to leave the AIM web app port free
+      - "${GRAFANA_PORT:-3001}:3000"   # mapped off 3000 to leave the AIM web app port free
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

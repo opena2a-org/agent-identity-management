@@ -17,10 +17,3 @@ scrape_configs:
       - targets: ['otel-collector:8888']
         labels:
           source: collector_self_metrics
-
-  - job_name: otel-collector-prometheus-export
-    scrape_interval: 10s
-    static_configs:
-      - targets: ['otel-collector:8889']
-        labels:
-          source: collector_export
