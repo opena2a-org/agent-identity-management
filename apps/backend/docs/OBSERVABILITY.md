@@ -15,7 +15,7 @@ cd apps/backend/deployments/otel-demo
 
 Expected output ends with `==> PASS: all three signals landed end-to-end` plus three clickable Grafana/Prometheus URLs pointing at the verified signals. Runtime: 60-90s warm, 3-5 min on first run (image pulls).
 
-The smoke test also handles port conflicts: if any of `4317 4318 3200 9090 3100 3001` are taken on your machine, it fails fast with a clear message and tells you to copy `.env.example` to `.env` and pick free ports. See `docs/testing/release-smoke.md` for the full smoke-test contract.
+The smoke test also handles port conflicts: if any of `4317 4318 3200 9090 3100 3001` are taken on your machine, it fails fast with a clear message and tells you to copy `env.example` to `.env` and pick free ports. See `docs/testing/release-smoke.md` for the full smoke-test contract.
 
 ## Manual run
 

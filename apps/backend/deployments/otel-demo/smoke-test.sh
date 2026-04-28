@@ -13,7 +13,7 @@
 #   5. Print a one-line PASS / FAIL.
 #
 # Run: ./smoke-test.sh
-# To use custom ports: copy .env.example to .env first, then run.
+# To use custom ports: copy env.example to .env first, then run.
 #
 # Exit codes:
 #   0 = all signals verified end-to-end
@@ -67,7 +67,7 @@ for p in "$OTEL_GRPC_PORT" "$OTEL_HTTP_PORT" "$TEMPO_HTTP_PORT" "$PROMETHEUS_POR
     fi
 done
 if [ "$conflicts" -gt 0 ]; then
-    echo "FAIL: $conflicts port conflict(s). Copy .env.example to .env and pick free ports."
+    echo "FAIL: $conflicts port conflict(s). Copy env.example to .env and pick free ports."
     exit 1
 fi
 echo "    ports clear, prior runs cleaned up"

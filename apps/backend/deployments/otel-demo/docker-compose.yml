@@ -10,7 +10,7 @@ name: aim-otel-demo
 # OTEL_EXPORTER_OTLP_ENDPOINT (default localhost:4317).
 #
 # All host ports are env-overridable. On a busy dev machine, copy
-# .env.example to .env and pick free ports first:
+# env.example to .env and pick free ports first:
 #   for p in 4317 4318 3200 9090 3100 3001; do lsof -i :$p && echo "BUSY $p"; done
 
 services:

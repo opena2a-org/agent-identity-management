@@ -82,7 +82,7 @@ Async pipelines need flush time. Pattern: poll every 2s for up to 30s with a cle
 
 ### 6. Make it port-overridable
 
-Dev machines run other Docker stacks. The smoke test must work on a clean machine AND on a machine where the default ports are taken. Pattern: env vars with defaults (`OTEL_GRPC_PORT=${OTEL_GRPC_PORT:-4317}`), provide a `.env.example` operators can copy, document the conflict-check command in the comments at the top of compose.
+Dev machines run other Docker stacks. The smoke test must work on a clean machine AND on a machine where the default ports are taken. Pattern: env vars with defaults (`OTEL_GRPC_PORT=${OTEL_GRPC_PORT:-4317}`), provide an `env.example` operators can copy (note: deliberately no leading dot — leading-dot `.env*` filenames trip the pre-push sensitive-file scanner), document the conflict-check command in the comments at the top of compose.
 
 ### 7. Make it idempotent
 
