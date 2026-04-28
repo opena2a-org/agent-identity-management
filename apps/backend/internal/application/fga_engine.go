@@ -11,6 +11,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // FGAEngine implements the 5-step Fine-Grained Authorization flow.
@@ -22,6 +27,13 @@ type FGAEngine struct {
 	daemonURL       string // NanoMind daemon URL
 	registryASCURL  string // Registry ASC endpoint
 	logger          *slog.Logger
+
+	// OTel instruments. Captured in NewFGAEngine so they bind to the
+	// real provider installed by telemetry.Init, not to the noop global
+	// at package-init time.
+	tracer       trace.Tracer
+	decisions    metric.Int64Counter
+	latency      metric.Int64Histogram
 }
 
 // FGARequest represents an authorization request to the FGA engine.
@@ -83,12 +95,34 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	if logger == nil {
 		logger = slog.Default()
 	}
+
+	tracer := otel.Tracer("aim/fga")
+	meter := otel.Meter("aim/fga")
+	decisions, err := meter.Int64Counter(
+		"fga.decisions_total",
+		metric.WithDescription("FGA authorization decisions by outcome"),
+	)
+	if err != nil {
+		logger.Warn("fga decisions counter init failed", "error", err)
+	}
+	latency, err := meter.Int64Histogram(
+		"fga.latency_ms",
+		metric.WithDescription("FGA total latency in milliseconds"),
+		metric.WithUnit("ms"),
+	)
+	if err != nil {
+		logger.Warn("fga latency histogram init failed", "error", err)
+	}
+
 	return &FGAEngine{
 		db:             db,
 		agentSvc:       agentSvc,
 		daemonURL:      "http://127.0.0.1:47200",
 		registryASCURL: "https://api.oa2a.org",
 		logger:         logger,
+		tracer:         tracer,
+		decisions:      decisions,
+		latency:        latency,
 	}
 }
 
@@ -103,15 +137,44 @@ func (e *FGAEngine) SetRegistryASCURL(url string) {
 }
 
 // Authorize executes the 5-step FGA authorization flow.
+//
+// Emits one parent span (`fga.authorize`) plus one child span per FGA
+// step actually triggered. Span attribute names are pinned to the AIM
+// SemConv proposal (Slide 14 of the May 22 talk); see
+// internal/telemetry/init.go for the canonical reference.
 func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult, error) {
+	e.ensureTelemetry()
 	start := time.Now()
 	result := &FGAResult{
 		StepsTriggered: make([]string, 0, 5),
 	}
 
+	ctx, span := e.tracer.Start(ctx, "fga.authorize",
+		trace.WithAttributes(
+			attribute.String("agent.id", req.AgentID.String()),
+			attribute.String("agent.capability", req.Capability),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.String("fga.outcome", result.Outcome),
+			attribute.Int64("fga.latency_ms", result.LatencyMs),
+			attribute.StringSlice("fga.steps_triggered", result.StepsTriggered),
+		)
+		if result.DeniedBy != "" {
+			span.SetAttributes(attribute.String("fga.denied_by", result.DeniedBy))
+		}
+		if !result.Allowed {
+			span.SetStatus(codes.Error, result.DeniedReason)
+		}
+		e.emitDecisionTelemetry(ctx, req, result)
+		span.End()
+	}()
+
 	// Load FGA policy for this agent+capability
 	policy, err := e.loadPolicy(ctx, req.AgentID, req.Capability)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("failed to load FGA policy: %w", err)
 	}
 
@@ -119,10 +182,21 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 	if policy == nil {
 		// Step 1 only: basic capability check via existing AIM
 		result.StepsTriggered = append(result.StepsTriggered, "capability_check")
-		hasCapability, err := e.agentSvc.HasCapability(ctx, req.AgentID, req.Capability, req.Resource)
-		if err != nil {
-			return nil, err
+		stepCtx, stepSpan := e.tracer.Start(ctx, "fga.capability_check",
+			trace.WithAttributes(
+				attribute.String("fga.step", "capability_check"),
+				attribute.String("agent.id", req.AgentID.String()),
+				attribute.String("agent.capability", req.Capability),
+			),
+		)
+		hasCapability, hcErr := e.agentSvc.HasCapability(stepCtx, req.AgentID, req.Capability, req.Resource)
+		stepSpan.SetAttributes(attribute.Bool("fga.allowed", hasCapability))
+		if hcErr != nil {
+			stepSpan.RecordError(hcErr)
+			stepSpan.End()
+			return nil, hcErr
 		}
+		stepSpan.End()
 		result.Allowed = hasCapability
 		result.Outcome = "ALLOW"
 		if !hasCapability {
@@ -136,10 +210,21 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 
 	// Step 1: Capability Check (< 1ms)
 	result.StepsTriggered = append(result.StepsTriggered, "capability_check")
-	hasCapability, err := e.agentSvc.HasCapability(ctx, req.AgentID, req.Capability, req.Resource)
-	if err != nil {
-		return nil, err
+	stepCtx, stepSpan := e.tracer.Start(ctx, "fga.capability_check",
+		trace.WithAttributes(
+			attribute.String("fga.step", "capability_check"),
+			attribute.String("agent.id", req.AgentID.String()),
+			attribute.String("agent.capability", req.Capability),
+		),
+	)
+	hasCapability, hcErr := e.agentSvc.HasCapability(stepCtx, req.AgentID, req.Capability, req.Resource)
+	stepSpan.SetAttributes(attribute.Bool("fga.allowed", hasCapability))
+	if hcErr != nil {
+		stepSpan.RecordError(hcErr)
+		stepSpan.End()
+		return nil, hcErr
 	}
+	stepSpan.End()
 	if !hasCapability {
 		result.Outcome = "DENY"
 		result.DeniedBy = "capability_check"
@@ -151,7 +236,17 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 
 	// Step 2: Attribute Check (< 2ms)
 	result.StepsTriggered = append(result.StepsTriggered, "attribute_check")
-	if denied, reason := e.checkAttributes(req, policy); denied {
+	_, attrSpan := e.tracer.Start(ctx, "fga.attribute_check",
+		trace.WithAttributes(attribute.String("fga.step", "attribute_check")),
+	)
+	denied, reason := e.checkAttributes(req, policy)
+	attrSpan.SetAttributes(attribute.Bool("fga.allowed", !denied))
+	if denied {
+		attrSpan.SetAttributes(attribute.String("fga.denied_reason", reason))
+		attrSpan.SetStatus(codes.Error, reason)
+	}
+	attrSpan.End()
+	if denied {
 		result.Outcome = "DENY_ATTRIBUTE"
 		result.DeniedBy = "attribute_check"
 		result.DeniedReason = reason
@@ -162,7 +257,17 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 
 	// Step 3: Context Check (< 5ms) - reads ASC from cache
 	result.StepsTriggered = append(result.StepsTriggered, "context_check")
-	if denied, reason := e.checkContext(ctx, req, policy); denied {
+	ctxCtx, ctxSpan := e.tracer.Start(ctx, "fga.context_check",
+		trace.WithAttributes(attribute.String("fga.step", "context_check")),
+	)
+	denied, reason = e.checkContext(ctxCtx, req, policy)
+	ctxSpan.SetAttributes(attribute.Bool("fga.allowed", !denied))
+	if denied {
+		ctxSpan.SetAttributes(attribute.String("fga.denied_reason", reason))
+		ctxSpan.SetStatus(codes.Error, reason)
+	}
+	ctxSpan.End()
+	if denied {
 		result.Outcome = "DENY_CONTEXT"
 		result.DeniedBy = "context_check"
 		result.DeniedReason = reason
@@ -173,7 +278,17 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 
 	// Step 4: Chain Check (< 3ms) - rolling call history
 	result.StepsTriggered = append(result.StepsTriggered, "chain_check")
-	if denied, reason := e.checkChain(ctx, req, policy); denied {
+	chainCtx, chainSpan := e.tracer.Start(ctx, "fga.chain_check",
+		trace.WithAttributes(attribute.String("fga.step", "chain_check")),
+	)
+	denied, reason = e.checkChain(chainCtx, req, policy)
+	chainSpan.SetAttributes(attribute.Bool("fga.allowed", !denied))
+	if denied {
+		chainSpan.SetAttributes(attribute.String("fga.denied_reason", reason))
+		chainSpan.SetStatus(codes.Error, reason)
+	}
+	chainSpan.End()
+	if denied {
 		result.Outcome = "DENY_CHAIN"
 		result.DeniedBy = "chain_check"
 		result.DeniedReason = reason
@@ -185,9 +300,21 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 	// Step 5: Intent Check (< 800ms for HIGH, async for MEDIUM, skip for LOW)
 	if policy.RiskLevel == "HIGH" {
 		result.StepsTriggered = append(result.StepsTriggered, "intent_check_sync")
-		intentResult := e.checkIntentSync(ctx, req)
+		intentCtx, intentSpan := e.tracer.Start(ctx, "fga.intent_check_sync",
+			trace.WithAttributes(attribute.String("fga.step", "intent_check_sync")),
+		)
+		intentResult := e.checkIntentSync(intentCtx, req)
 		result.IntentCheck = intentResult
+		if intentResult != nil {
+			intentSpan.SetAttributes(
+				attribute.String("fga.intent_class", intentResult.IntentClass),
+				attribute.Float64("fga.intent_confidence", intentResult.Confidence),
+				attribute.Bool("fga.allowed", !intentResult.Blocked),
+			)
+		}
 		if intentResult != nil && intentResult.Blocked {
+			intentSpan.SetStatus(codes.Error, "intent blocked")
+			intentSpan.End()
 			result.Outcome = "DENY_INTENT"
 			result.DeniedBy = "intent_check"
 			result.DeniedReason = fmt.Sprintf("Intent classified as %s (confidence %.2f)", intentResult.IntentClass, intentResult.Confidence)
@@ -195,8 +322,17 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 			e.recordAttestation(ctx, req, result)
 			return result, nil
 		}
+		intentSpan.End()
 	} else if policy.RiskLevel == "MEDIUM" {
 		result.StepsTriggered = append(result.StepsTriggered, "intent_check_async")
+		// Span only marks the dispatch; the async check itself is detached.
+		_, asyncSpan := e.tracer.Start(ctx, "fga.intent_check_async",
+			trace.WithAttributes(
+				attribute.String("fga.step", "intent_check_async"),
+				attribute.Bool("fga.dispatched", true),
+			),
+		)
+		asyncSpan.End()
 		go e.checkIntentAsync(context.Background(), req) // detached context for fire-and-forget
 	}
 	// LOW: skip intent check entirely
@@ -212,6 +348,63 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (*FGAResult,
 	e.recordAttestation(ctx, req, result)
 
 	return result, nil
+}
+
+// ensureTelemetry guards against zero-value FGAEngine{} construction (used
+// in helper unit tests) by lazily wiring instruments. NewFGAEngine populates
+// these eagerly; this is purely a safety net.
+func (e *FGAEngine) ensureTelemetry() {
+	if e.logger == nil {
+		e.logger = slog.Default()
+	}
+	if e.tracer == nil {
+		e.tracer = otel.Tracer("aim/fga")
+	}
+	if e.decisions == nil {
+		e.decisions, _ = otel.Meter("aim/fga").Int64Counter(
+			"fga.decisions_total",
+			metric.WithDescription("FGA authorization decisions by outcome"),
+		)
+	}
+	if e.latency == nil {
+		e.latency, _ = otel.Meter("aim/fga").Int64Histogram(
+			"fga.latency_ms",
+			metric.WithDescription("FGA total latency in milliseconds"),
+			metric.WithUnit("ms"),
+		)
+	}
+}
+
+// emitDecisionTelemetry emits the per-decision metric + structured log line.
+// Called from the deferred span finalizer in Authorize so it runs on every
+// return path (allow, deny, error). The slog logger is bridged through
+// telemetry, so trace.id and span.id auto-attach.
+func (e *FGAEngine) emitDecisionTelemetry(ctx context.Context, req *FGARequest, result *FGAResult) {
+	if e.decisions != nil {
+		attrs := []attribute.KeyValue{attribute.String("fga.outcome", result.Outcome)}
+		if result.DeniedBy != "" {
+			attrs = append(attrs, attribute.String("fga.denied_by", result.DeniedBy))
+		}
+		e.decisions.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if e.latency != nil {
+		e.latency.Record(ctx, result.LatencyMs)
+	}
+
+	// Structured log emitted on every decision. WARN-level for denies so it
+	// surfaces in default LogQL queries; INFO for allows.
+	level := slog.LevelInfo
+	if !result.Allowed {
+		level = slog.LevelWarn
+	}
+	e.logger.LogAttrs(ctx, level, "fga.decision",
+		slog.String("agent.id", req.AgentID.String()),
+		slog.String("agent.capability", req.Capability),
+		slog.String("fga.outcome", result.Outcome),
+		slog.String("fga.denied_by", result.DeniedBy),
+		slog.String("fga.denied_reason", result.DeniedReason),
+		slog.Int64("fga.latency_ms", result.LatencyMs),
+	)
 }
 
 // ============================================================================

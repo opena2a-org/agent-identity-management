@@ -37,6 +37,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 )
 
 // @title Agent Identity Management API
@@ -63,6 +64,28 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
+	}
+
+	// Initialize OpenTelemetry (traces + metrics + logs to OTLP collector).
+	// Defaults to localhost:4317 (the demo stack at apps/backend/deployments/otel-demo).
+	// Override with OTEL_EXPORTER_OTLP_ENDPOINT. Failure is non-fatal: the server
+	// boots without telemetry if the collector is unreachable.
+	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName:    "aim-backend",
+		ServiceVersion: "0.x",
+		Insecure:       true,
+	})
+	if otelErr != nil {
+		log.Printf("⚠️  OpenTelemetry init failed: %v (continuing without telemetry)", otelErr)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelShutdown(shutdownCtx); err != nil {
+				log.Printf("OpenTelemetry shutdown error: %v", err)
+			}
+		}()
+		log.Println("✅ OpenTelemetry initialized (OTLP gRPC)")
 	}
 
 	// Initialize database

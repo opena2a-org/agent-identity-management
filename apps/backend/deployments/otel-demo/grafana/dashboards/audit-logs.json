@@ -1,0 +1,76 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "uid": "aim-audit-logs",
+  "title": "AIM FGA Audit Log",
+  "tags": ["aim", "fga", "audit", "logs"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "weekStart": "",
+  "refresh": "10s",
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "outcome",
+        "label": "FGA Outcome",
+        "type": "custom",
+        "multi": false,
+        "includeAll": true,
+        "query": "ALLOW,DENY,DENY_INTENT,DENY_CONTEXT,DENY_CHAIN,DENY_ATTRIBUTE",
+        "current": {"text": "DENY", "value": "DENY"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "fga.decision events (click trace_id to jump to Tempo)",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 16, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{service_name=\"aim-backend\"} |= \"fga.decision\" |= \"$outcome\"",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Deny events per minute by reason",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "bars", "fillOpacity": 80}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (fga_denied_by) (count_over_time({service_name=\"aim-backend\"} |= \"fga.decision\" | json | fga_outcome != \"ALLOW\" [1m]))",
+          "legendFormat": "{{fga_denied_by}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

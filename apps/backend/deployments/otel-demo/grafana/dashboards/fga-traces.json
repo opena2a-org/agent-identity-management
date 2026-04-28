@@ -1,0 +1,105 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "uid": "aim-fga-traces",
+  "title": "AIM FGA Traces",
+  "tags": ["aim", "fga", "traces"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "weekStart": "",
+  "refresh": "10s",
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "agent_id",
+        "label": "Agent ID",
+        "type": "textbox",
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "outcome",
+        "label": "FGA Outcome",
+        "type": "custom",
+        "multi": false,
+        "includeAll": true,
+        "query": "ALLOW,DENY,DENY_INTENT,DENY_CONTEXT,DENY_CHAIN,DENY_ATTRIBUTE",
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "traces",
+      "title": "Recent fga.authorize traces",
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {
+          "queryType": "traceql",
+          "query": "{name=\"fga.authorize\"}",
+          "filters": [],
+          "limit": 50,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "traces",
+      "title": "Traces by agent.id (filter via $agent_id)",
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12},
+      "targets": [
+        {
+          "queryType": "traceql",
+          "query": "{name=\"fga.authorize\" && .agent.id=\"$agent_id\"}",
+          "filters": [],
+          "limit": 50,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "FGA decisions per minute (by outcome)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 24},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum by (fga_outcome) (rate(fga_decisions_total[1m]))",
+          "legendFormat": "{{fga_outcome}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
