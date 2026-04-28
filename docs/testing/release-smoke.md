@@ -31,7 +31,7 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 | Component | What ships | Smoke test | What it verifies | Run command |
 |---|---|---|---|---|
 | **OTel demo stack** | docker-compose stack with collector + Tempo + Prometheus + Loki + Grafana | `apps/backend/deployments/otel-demo/smoke-test.sh` | All 5 services boot healthy; a synthetic OTLP trace + counter + log lands in Tempo, Prometheus, and Loki respectively | `cd apps/backend/deployments/otel-demo && ./smoke-test.sh` |
-| **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge | (covered by OTel demo stack smoke) | Backend exports succeed against a real collector | (TODO: end-to-end test that boots backend AND demo stack, sends an HTTP request that triggers FGA, verifies trace/metric/log) |
+| **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge, /api/v1/agents/:id/authorize handler | `apps/backend/deployments/otel-demo/smoke-backend.sh` | Boots throwaway Postgres + OTel demo stack + a fresh backend binary; logs in as admin, creates an agent, POSTs /authorize, asserts the response shape, then verifies the `fga.authorize` parent span with at least one `fga.*` child landed in Tempo. Hermetic — does not touch the user's running backend or persistent data | `cd apps/backend/deployments/otel-demo && ./smoke-backend.sh` |
 | **AIM backend HTTP API** | Fiber routes, auth, FGA enforcement | `tests/integration/*.go` | Endpoints return correct status codes against a live backend | (currently broken: needs a running backend with admin login configured — pre-existing issue, not part of this contract yet) |
 | **PQC migration** | ML-DSA / ML-KEM key generation | `internal/crypto/pqc/*_test.go` | Keys generate, sign, verify | `go test ./internal/crypto/pqc/` (passes today; not a real "boot" test but acceptable since the surface is pure crypto) |
 
@@ -121,7 +121,9 @@ The `pre-push-review` skill should be extended (TODO) to run the smoke test for 
 |---|---|
 | `apps/backend/deployments/otel-demo/**` | `apps/backend/deployments/otel-demo/smoke-test.sh` |
 | `apps/backend/internal/telemetry/**` | `apps/backend/deployments/otel-demo/smoke-test.sh` (validates the SDK init that the backend uses) |
-| `apps/backend/internal/application/fga_engine.go` | (TODO: backend HTTP smoke that triggers an FGA call) |
+| `apps/backend/internal/application/fga_engine.go` | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
+| `apps/backend/internal/interfaces/http/handlers/authorize_handler.go` | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
+| `apps/backend/cmd/server/main.go` (FGA wiring, Authorize handler init, route reg) | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
 
 Until that wiring lands, the rule is: **before you push, manually run the smoke for any component touched in your diff**, and paste the `==> PASS` line into your PR description.
 

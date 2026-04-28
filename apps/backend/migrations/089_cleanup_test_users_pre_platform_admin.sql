@@ -13,9 +13,10 @@
 -- Strategy: delete the org -- ON DELETE CASCADE on every org_id FK takes care
 -- of agents, mcp_servers, users, audit logs, etc. For FKs not on org_id (e.g.
 -- agents.created_by → users.id, no CASCADE), null them out first. The whole
--- thing runs in a single transaction; any failure rolls back cleanly.
-
-BEGIN;
+-- thing runs inside the migration runner's outer transaction (cmd/server/main.go
+-- wraps every migration in db.Begin()/tx.Commit()), so this file must NOT open
+-- its own BEGIN/COMMIT — that nesting fails with "unexpected transaction status
+-- idle" against a fresh database. Caught by smoke-backend.sh on 2026-04-28.
 
 -- 1. Null out user FKs that don't cascade, scoped to the test org's users.
 --    Use DO blocks so the migration stays idempotent if the org is already gone
@@ -54,5 +55,3 @@ END $$;
 -- Belt-and-braces: catch any standalone pending request that was outside the org.
 DELETE FROM user_registration_requests
  WHERE email IN ('deploy-test@opena2a.org', 'sec-audit-2026-04-13@opena2a.org');
-
-COMMIT;

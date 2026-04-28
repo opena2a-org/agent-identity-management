@@ -1,2 +1,7 @@
 # Operator-specific port overrides — never commit
 .env
+
+# smoke-backend.sh runtime artifacts (binary + logs)
+.smoke-backend.bin
+.smoke-backend.log
+.smoke-backend.pid
