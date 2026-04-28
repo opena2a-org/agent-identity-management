@@ -60,7 +60,7 @@ def test_grant_capabilities():
                 print(f"      Capability ID: {result.get('id', 'N/A')}")
             elif response.status_code == 409:
                 # Capability already exists
-                print(f"   ℹ️  Already exists: {capability_type}")
+                print(f"   ℹ  Already exists: {capability_type}")
                 granted_count += 1
             else:
                 print(f"   ❌ Failed to grant {capability_type}: {response.status_code}")

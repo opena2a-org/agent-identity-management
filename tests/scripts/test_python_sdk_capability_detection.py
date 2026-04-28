@@ -44,7 +44,7 @@ def main():
         if len(detected_capabilities) > 5:
             print(f"      ... and {len(detected_capabilities) - 5} more")
     else:
-        print("   ℹ️  No capabilities auto-detected, will use test capabilities")
+        print("   ℹ  No capabilities auto-detected, will use test capabilities")
         detected_capabilities = [
             "network_access",
             "make_api_calls",
@@ -76,7 +76,7 @@ def main():
                 force_new=True  # Force new registration for testing
             )
         else:
-            print("   ⚠️  No SDK credentials found")
+            print("   ⚠  No SDK credentials found")
             print("   Please download SDK credentials from:")
             print(f"     {aim_url}/dashboard/sdk")
             sys.exit(1)
@@ -97,12 +97,12 @@ def main():
         # Note: The Python SDK doesn't have a bulk ReportCapabilities method yet
         # so we'll report via the SDK integration method which shows capabilities
 
-        print(f"   ℹ️  Capabilities will be reported via SDK integration")
-        print(f"   ℹ️  Individual capability reporting coming in next SDK version")
+        print(f"   ℹ  Capabilities will be reported via SDK integration")
+        print(f"   ℹ  Individual capability reporting coming in next SDK version")
         print()
 
     except Exception as e:
-        print(f"   ⚠️  Capability reporting issue: {e}")
+        print(f"   ⚠  Capability reporting issue: {e}")
         print()
 
     # Step 4: Report SDK integration
@@ -142,7 +142,7 @@ def main():
 
     except Exception as e:
         # MCP may already exist
-        print(f"   ⚠️  MCP registration failed (may already exist): {e}")
+        print(f"   ⚠  MCP registration failed (may already exist): {e}")
         print()
 
     # Summary

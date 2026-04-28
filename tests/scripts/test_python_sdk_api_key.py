@@ -59,7 +59,7 @@ def main():
         if len(capabilities) > 5:
             print(f"      ... and {len(capabilities) - 5} more")
     else:
-        print("   ℹ️  No capabilities auto-detected, using test capabilities")
+        print("   ℹ  No capabilities auto-detected, using test capabilities")
         capabilities = [
             "network_access",
             "make_api_calls",
@@ -76,7 +76,7 @@ def main():
         print(f"   📊 Granted: {result['granted']}/{result['total']}")
         print()
     except Exception as e:
-        print(f"   ⚠️  Capability reporting failed: {e}")
+        print(f"   ⚠  Capability reporting failed: {e}")
         print()
 
     # Step 4: Report SDK integration
@@ -93,7 +93,7 @@ def main():
         print(f"   📊 Detections processed: {result.get('detectionsProcessed', 0)}")
         print()
     except Exception as e:
-        print(f"   ⚠️  SDK integration report failed: {e}")
+        print(f"   ⚠  SDK integration report failed: {e}")
         print()
 
     # Step 5: Register test MCP server
@@ -113,7 +113,7 @@ def main():
         print(f"   ✅ Registered {mcp_result.get('added', 0)} MCP server(s)")
         print()
     except Exception as e:
-        print(f"   ⚠️  MCP registration failed (may already exist): {e}")
+        print(f"   ⚠  MCP registration failed (may already exist): {e}")
         print()
 
     # Summary

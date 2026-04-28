@@ -276,7 +276,10 @@ This is the same library used by HackMyAgent's `--with-aim` flag to add agent id
 For team and fleet deployments, the AIM server provides a REST API, dashboard, and PostgreSQL-backed storage.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
+# Download, inspect, then run — never pipe to shell.
+curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
+shasum -a 256 quickstart.sh   # verify against the SHA published in the release notes
+bash quickstart.sh
 ```
 
 Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.

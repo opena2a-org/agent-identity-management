@@ -4,10 +4,13 @@ Get AIM running locally in under 5 minutes.
 
 ---
 
-## Option 1: One-Line Install (Recommended)
+## Option 1: Download + Verify + Run (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
+# Download, inspect, then run — never pipe to shell.
+curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
+shasum -a 256 quickstart.sh   # verify against the SHA published in the release notes
+bash quickstart.sh
 ```
 
 This script handles everything: pulls images, generates secrets, starts services, runs migrations, and prints login credentials. Dashboard opens at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080).

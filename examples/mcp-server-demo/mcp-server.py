@@ -284,8 +284,29 @@ def tool_calculate():
     sys.stdout.flush()
     
     try:
-        # Safe evaluation (only allow basic math)
-        result = eval(expression, {"__builtins__": {}}, {})
+        # Safe arithmetic via AST walk — no eval/exec. Allow numeric
+        # literals + the four binary ops + unary minus only. Anything
+        # else (names, calls, attribute access) raises ValueError, so
+        # there is no path from the request body to arbitrary code.
+        import ast
+        import operator as _op
+        _OPS = {
+            ast.Add: _op.add, ast.Sub: _op.sub,
+            ast.Mult: _op.mul, ast.Div: _op.truediv,
+            ast.Mod: _op.mod, ast.Pow: _op.pow,
+            ast.USub: _op.neg, ast.UAdd: _op.pos,
+        }
+        def _safe_eval(node):
+            if isinstance(node, ast.Expression):
+                return _safe_eval(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return node.value
+            if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+                return _OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+            if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
+                return _OPS[type(node.op)](_safe_eval(node.operand))
+            raise ValueError(f"unsupported expression: {ast.dump(node)}")
+        result = _safe_eval(ast.parse(expression, mode='eval'))
         return jsonify({
             'content': [
                 {
