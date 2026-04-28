@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,12 +22,9 @@ func TestCheckIntentSync_RespectsCtxCancel(t *testing.T) {
 	// Daemon hangs until either the client cancels (we want this) or
 	// the test finishes (release channel as a safety net).
 	release := make(chan struct{})
-	var handlerCancelled sync.WaitGroup
-	handlerCancelled.Add(1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
-			handlerCancelled.Done()
 		case <-release:
 		}
 	}))
