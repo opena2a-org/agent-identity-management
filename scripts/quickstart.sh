@@ -2,7 +2,16 @@
 set -euo pipefail
 
 # AIM Quickstart — one command to run the full stack
-# Usage: curl -sSL https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh | bash
+#
+# Recommended (download, inspect, then run — no pipe to shell):
+#   curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
+#   shasum -a 256 quickstart.sh   # compare against the SHA published in the release notes / README
+#   bash quickstart.sh
+#
+# We deliberately do NOT recommend piping a network download straight
+# into a shell interpreter: a compromised or MITM-ed mirror could inject
+# anything between the download and the interpreter, and there is no
+# opportunity to inspect or checksum the payload first.
 
 COMPOSE_URL="https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/docker-compose.quickstart.yml"
 INSTALL_DIR="${AIM_DIR:-aim}"

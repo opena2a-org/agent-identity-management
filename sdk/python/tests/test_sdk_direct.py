@@ -184,7 +184,7 @@ def test_existing_agent():
             print(f"   - Message: {result.get('message')}")
             print(f"   - Detections reported: {len(detections)}")
         except Exception as e:
-            print(f"   ℹ️  Detection reporting: {str(e)[:100]}")
+            print(f"   ℹ  Detection reporting: {str(e)[:100]}")
 
         print()
 
@@ -205,9 +205,9 @@ def test_existing_agent():
                     result = client.report_capabilities(capabilities)
                     print(f"✅ Capability report: {result.get('message')}")
                 except Exception as e:
-                    print(f"   ℹ️  Capability reporting: {str(e)[:100]}")
+                    print(f"   ℹ  Capability reporting: {str(e)[:100]}")
         except Exception as e:
-            print(f"   ℹ️  Capability detection: {str(e)[:100]}")
+            print(f"   ℹ  Capability detection: {str(e)[:100]}")
 
         print()
         print("=" * 80)

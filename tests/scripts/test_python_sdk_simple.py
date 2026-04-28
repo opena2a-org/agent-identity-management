@@ -120,7 +120,7 @@ def main():
         if len(capabilities) > 5:
             print(f"      ... and {len(capabilities) - 5} more")
     else:
-        print("   ℹ️  No capabilities auto-detected")
+        print("   ℹ  No capabilities auto-detected")
         capabilities = ["network_access", "make_api_calls", "read_files"]
 
     print()
@@ -140,7 +140,7 @@ def main():
         print()
 
     except Exception as e:
-        print(f"   ⚠️  SDK integration report failed: {e}")
+        print(f"   ⚠  SDK integration report failed: {e}")
         print()
 
     # Step 5: Register test MCP server
@@ -161,7 +161,7 @@ def main():
         print()
 
     except Exception as e:
-        print(f"   ⚠️  MCP registration failed: {e}")
+        print(f"   ⚠  MCP registration failed: {e}")
         print()
 
     # Summary

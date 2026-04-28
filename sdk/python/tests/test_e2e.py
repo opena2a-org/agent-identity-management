@@ -43,7 +43,7 @@ def test_mcp_detection():
         for det in mcp_detections[:3]:
             print(f"   - {det['mcpServer']} ({det['detectionMethod']}, {det['confidence']}%)")
     else:
-        print("   ℹ️  No MCP servers detected (expected in test environment)")
+        print("   ℹ  No MCP servers detected (expected in test environment)")
 
     print("✅ MCP detection works correctly!\n")
     return True
@@ -215,7 +215,7 @@ def main():
         print("   One-line enterprise security is HERE! 🚀\n")
         return 0
     else:
-        print(f"\n⚠️  {failed} test(s) failed. Please review.\n")
+        print(f"\n⚠  {failed} test(s) failed. Please review.\n")
         return 1
 
 

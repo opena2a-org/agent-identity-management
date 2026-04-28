@@ -37,6 +37,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 )
 
 // @title Agent Identity Management API
@@ -63,6 +64,28 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
+	}
+
+	// Initialize OpenTelemetry (traces + metrics + logs to OTLP collector).
+	// Defaults to localhost:4317 (the demo stack at apps/backend/deployments/otel-demo).
+	// Override with OTEL_EXPORTER_OTLP_ENDPOINT. Failure is non-fatal: the server
+	// boots without telemetry if the collector is unreachable.
+	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName:    "aim-backend",
+		ServiceVersion: "0.x",
+		Insecure:       true,
+	})
+	if otelErr != nil {
+		log.Printf("⚠️  OpenTelemetry init failed: %v (continuing without telemetry)", otelErr)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelShutdown(shutdownCtx); err != nil {
+				log.Printf("OpenTelemetry shutdown error: %v", err)
+			}
+		}()
+		log.Println("✅ OpenTelemetry initialized (OTLP gRPC)")
 	}
 
 	// Initialize database
@@ -547,6 +570,7 @@ type Services struct {
 	CommunityIntelligence   *application.CommunityIntelligenceService   // For community intelligence opt-in telemetry
 	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
 	Secrets                 *application.SecretsService                 // For identity-native secrets management
+	FGA                     *application.FGAEngine                      // Fine-Grained Authorization engine (5-step decision flow)
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -911,6 +935,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		secretsBackends,
 	)
 
+	// Fine-Grained Authorization engine. Wired with the OTel-bridged slog
+	// logger so per-decision log lines auto-attach trace.id / span.id and
+	// surface in Loki under {service_name="aim-backend"} alongside the
+	// fga.authorize trace tree in Tempo.
+	fgaEngine := application.NewFGAEngine(db, agentService, telemetry.Logger("aim-fga"))
+	if v := os.Getenv("FGA_DAEMON_URL"); v != "" {
+		fgaEngine.SetDaemonURL(v)
+	}
+	if v := os.Getenv("FGA_REGISTRY_ASC_URL"); v != "" {
+		fgaEngine.SetRegistryASCURL(v)
+	}
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -940,6 +976,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		CommunityIntelligence:   ciService,                 // For community intelligence opt-in telemetry
 		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
 		Secrets:                 secretsService,                                       // For identity-native secrets management
+		FGA:                     fgaEngine,                                            // Fine-Grained Authorization engine
 	}, keyVault
 }
 
@@ -980,6 +1017,7 @@ type Handlers struct {
 	AIP                     *handlers.AIPHandler                     // For AIP discovery and DID resolution
 	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
 	Secrets                 *handlers.SecretsHandler                 // For identity-native secrets management
+	Authorize               *handlers.AuthorizeHandler               // POST /agents/:id/authorize -- FGA decision endpoint
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1159,6 +1197,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Secrets: handlers.NewSecretsHandler(
 			services.Secrets,
 		),
+		Authorize: handlers.NewAuthorizeHandler(services.FGA),
 	}
 }
 
@@ -1295,6 +1334,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Runtime verification endpoints - CORE functionality
 	agents.Post("/:id/verify-capability", h.Agent.VerifyCapability)
 	agents.Post("/:id/log-capability/:audit_id", h.Agent.LogCapabilityResult)
+	// Fine-Grained Authorization (5-step decision flow with OTel span tree)
+	agents.Post("/:id/authorize", h.Authorize.Authorize)
 	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
 	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration

@@ -83,7 +83,7 @@ if mcps:
         print(f"     🔧 Command: {mcp.get('command', 'N/A')}")
         print()
 else:
-    print("ℹ️  No MCP servers detected")
+    print("ℹ  No MCP servers detected")
     print()
     print("To test MCP detection:")
     print("  1. Install Claude Desktop")

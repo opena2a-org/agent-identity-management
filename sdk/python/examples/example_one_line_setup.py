@@ -52,7 +52,7 @@ try:
     print()
 
 except Exception as e:
-    print("ℹ️  SDK Download Mode not available (expected if using pip install)")
+    print("ℹ  SDK Download Mode not available (expected if using pip install)")
     print(f"   Error: {e}")
     print()
     print("📝 Falling back to Manual Mode (API Key required)...")
@@ -117,7 +117,7 @@ if capabilities:
     for cap in capabilities:
         print(f"  ✅ {cap}")
 else:
-    print("ℹ️  No capabilities detected yet")
+    print("ℹ  No capabilities detected yet")
     print("   Use @agent.perform_action(capability='...') to declare capabilities")
 print()
 
@@ -139,7 +139,7 @@ if mcps:
     for mcp in mcps:
         print(f"  ✅ {mcp['mcpServer']} ({mcp['detectionMethod']}, {mcp['confidence']}% confidence)")
 else:
-    print("ℹ️  No MCP servers detected (expected if Claude Desktop not configured)")
+    print("ℹ  No MCP servers detected (expected if Claude Desktop not configured)")
 print()
 
 # ============================================================================
@@ -176,20 +176,20 @@ def fetch_external_data():
     return {"status": "success", "data": [1, 2, 3]}
 
 # Execute verified actions
-print("1️⃣  Getting user count (auto-verified)...")
+print("1⃣  Getting user count (auto-verified)...")
 try:
     result = get_user_count()
     print(f"   ✅ Result: {result}")
 except Exception as e:
-    print(f"   ⚠️  Action requires backend connection: {e}")
+    print(f"   ⚠  Action requires backend connection: {e}")
 print()
 
-print("2️⃣  Fetching external data (auto-verified)...")
+print("2⃣  Fetching external data (auto-verified)...")
 try:
     result = fetch_external_data()
     print(f"   ✅ Result: {result}")
 except Exception as e:
-    print(f"   ⚠️  Action requires backend connection: {e}")
+    print(f"   ⚠  Action requires backend connection: {e}")
 print()
 
 # ============================================================================

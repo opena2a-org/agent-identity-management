@@ -1,0 +1,65 @@
+# Single-binary Loki for local demo. Retains 24h.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 24h
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+  allow_structured_metadata: true
+  otlp_config:
+    resource_attributes:
+      attributes_config:
+        - action: index_label
+          attributes:
+            - service.name
+            - service.version
+    scope_attributes:
+      - action: structured_metadata
+        attributes:
+          - otel.scope.name
+    log_attributes:
+      - action: structured_metadata
+        attributes:
+          - trace.id
+          - span.id
+          - agent.id
+          - fga.outcome
+          - fga.denied_by
+          - fga.step
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false

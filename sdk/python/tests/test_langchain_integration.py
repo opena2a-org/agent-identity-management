@@ -29,6 +29,36 @@ from aim_sdk.integrations.langchain import AIMCallbackHandler, aim_verify, wrap_
 AIM_URL = "http://localhost:8080"
 
 
+def _safe_arith(expression: str):
+    """AST-walk evaluator for the arithmetic test fixtures.
+
+    Replaces the unsafe Python builtin (the one that takes a string and
+    runs it as code) so the test file itself cannot trigger code execution
+    if a future contributor pastes attacker-controlled strings into the
+    invoke() calls below.
+    """
+    import ast
+    import operator as _op
+    _OPS = {
+        ast.Add: _op.add, ast.Sub: _op.sub,
+        ast.Mult: _op.mul, ast.Div: _op.truediv,
+        ast.USub: _op.neg, ast.UAdd: _op.pos,
+    }
+
+    def _walk(node):
+        if isinstance(node, ast.Expression):
+            return _walk(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_walk(node.left), _walk(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_walk(node.operand))
+        raise ValueError("unsupported expression")
+
+    return _walk(ast.parse(expression, mode='eval'))
+
+
 @pytest.mark.integration
 def test_callback_handler():
     """Test 1: AIMCallbackHandler - Automatic logging"""
@@ -51,7 +81,7 @@ def test_callback_handler():
     def simple_calculator(expression: str) -> str:
         '''Calculate a mathematical expression'''
         try:
-            result = eval(expression)
+            result = _safe_arith(expression)
             return f"Result: {result}"
         except Exception as e:
             return f"Error: {e}"
@@ -112,7 +142,7 @@ def test_tool_wrapper():
     @tool
     def calculator(expression: str) -> str:
         '''Calculate mathematical expressions'''
-        return f"Result: {eval(expression)}"
+        return f"Result: {_safe_arith(expression)}"
 
     @tool
     def string_reverser(text: str) -> str:

@@ -2870,7 +2870,7 @@ export const apiDocumentation: EndpointCategory[] = [
         example: `{
   "agent_id": "uuid-agent-123",
   "capability": "code:execute",
-  "resource": "eval(user_input)",
+  "resource": "exec_user_supplied_code",
   "context": {
     "code": "print('hello')",
     "risk": "high"

@@ -6,6 +6,12 @@
 
 set -e  # Exit on any error
 
+# Hardened tempdir — predictable /tmp/aim-* paths enable symlink attacks
+# (CWE-377) where an attacker pre-creates a symlink at the expected path
+# to redirect writes. mktemp gives us a 0700 dir with a random suffix.
+TMPDIR=$(mktemp -d -t aim-deploy.XXXXXXXX)
+trap 'rm -rf "$TMPDIR"' EXIT
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -304,13 +310,13 @@ echo ""
 # Build migration tool
 echo "   Building migration tool..."
 cd apps/backend
-go build -o /tmp/aim-migrate ./cmd/migrate
+go build -o "$TMPDIR/aim-migrate" ./cmd/migrate
 cd ../..
 
 # Run smart migrations
 echo "   Running smart migrations..."
 DATABASE_URL="postgresql://aimadmin:${DB_PASSWORD}@${DB_HOST}:5432/identity?sslmode=require" \
-  /tmp/aim-migrate
+  "$TMPDIR/aim-migrate"
 
 echo ""
 echo -e "${GREEN}✓ Database migrations complete${NC}"
@@ -322,19 +328,25 @@ echo -e "${BLUE}1️⃣2️⃣  Creating default security policies...${NC}"
 # Build backfill binary
 echo "   Building backfill binary..."
 cd apps/backend
-go build -o /tmp/aim-backfill-policies ./cmd/backfill_policies
+go build -o "$TMPDIR/aim-backfill-policies" ./cmd/backfill_policies
 cd ../..\
 
 # Run backfill
 echo "   Running policy backfill..."
 DATABASE_URL="postgresql://aimadmin:${DB_PASSWORD}@${DB_HOST}:5432/identity?sslmode=require" \
-  /tmp/aim-backfill-policies
+  "$TMPDIR/aim-backfill-policies"
 
 echo -e "${GREEN}✓ Default security policies created${NC}"
 
-# Save credentials
-CREDS_FILE="/tmp/aim-production-creds-${TIMESTAMP}.txt"
-cat > $CREDS_FILE <<EOF
+# Save credentials. Must survive past this script (operator reads later),
+# so we use mktemp WITHOUT the EXIT-trap cleanup, plus 0600 perms so the
+# file is readable only by the deploying user.
+CREDS_FILE=$(mktemp -t aim-production-creds.XXXXXXXX) || {
+    echo "FAIL: could not create credentials file" >&2
+    exit 1
+}
+chmod 0600 "$CREDS_FILE"
+cat > "$CREDS_FILE" <<EOF
 AIM Production Deployment Credentials
 ======================================
 

@@ -1,10 +1,16 @@
 package application
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -24,13 +30,29 @@ const (
 type DriftDetectionService struct {
 	agentRepo domain.AgentRepository
 	alertRepo domain.AlertRepository
+
+	// driftScore is the OTel gauge keyed by agent.id. Emitted on every
+	// DetectDrift call so dashboards see steady-state zeros and a spike
+	// at the moment drift is observed. SemConv attribute name pinned to
+	// `agent.drift_score` per the May 22 talk Slide 14.
+	driftScore metric.Float64Gauge
 }
 
 // NewDriftDetectionService creates a new drift detection service
 func NewDriftDetectionService(agentRepo domain.AgentRepository, alertRepo domain.AlertRepository) *DriftDetectionService {
+	gauge, err := otel.Meter("aim/drift").Float64Gauge(
+		"agent.drift_score",
+		metric.WithDescription("Agent behavioral drift score (0-1, higher = more drift)"),
+	)
+	if err != nil {
+		// Log via fmt to match existing service style; metric will be nil
+		// and gauge emission becomes a no-op.
+		fmt.Printf("⚠️  drift score gauge init failed: %v\n", err)
+	}
 	return &DriftDetectionService{
-		agentRepo: agentRepo,
-		alertRepo: alertRepo,
+		agentRepo:  agentRepo,
+		alertRepo:  alertRepo,
+		driftScore: gauge,
 	}
 }
 
@@ -60,6 +82,11 @@ func (s *DriftDetectionService) DetectDrift(
 	// 3. Detect capability drift (if agent has registered capabilities)
 	// Note: Capabilities are currently stored in separate table, so this is for future use
 	capabilityDrift := []string{}
+
+	// Emit drift gauge on every check, including 0 for "no drift". Steady-state
+	// zeros let the dashboard distinguish "agent active and clean" from "agent
+	// silent" — without them, missing data points look identical to clean checks.
+	s.emitDriftScore(agentID, mcpDrift, capabilityDrift)
 
 	// 4. If no drift detected, return early
 	if len(mcpDrift) == 0 && len(capabilityDrift) == 0 {
@@ -188,6 +215,21 @@ func (s *DriftDetectionService) applyTrustScorePenalty(
 		agent.Name, agent.TrustScore, newScore, penalty)
 
 	return nil
+}
+
+// emitDriftScore computes a 0-1 score from drift counts and records it on
+// the OTel gauge. The score is a tanh-shaped saturation: 0 drift → 0.0,
+// 1 drift item → ~0.46, 2 → ~0.76, 5+ → ~0.99. Lets the demo dashboard
+// show meaningful spikes from a single drift event.
+func (s *DriftDetectionService) emitDriftScore(agentID uuid.UUID, mcpDrift, capabilityDrift []string) {
+	if s.driftScore == nil {
+		return
+	}
+	count := float64(len(mcpDrift) + len(capabilityDrift))
+	score := math.Tanh(count / 2.0)
+	s.driftScore.Record(context.Background(), score, metric.WithAttributes(
+		attribute.String("agent.id", agentID.String()),
+	))
 }
 
 // detectArrayDrift finds items in 'runtime' that are not in 'registered'

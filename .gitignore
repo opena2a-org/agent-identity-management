@@ -16,7 +16,13 @@ out/
 
 # Misc
 .DS_Store
+
+# Secrets / credentials — never commit
 *.pem
+*.key
+*.p12
+*.pfx
+secrets.json
 .env*.local
 .env
 

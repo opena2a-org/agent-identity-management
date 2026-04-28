@@ -192,8 +192,21 @@ def wrap_tools_with_aim(
         # Define tools
         @tool
         def calculator(expression: str) -> str:
-            '''Calculate mathematical expressions'''
-            return str(eval(expression))
+            '''Calculate mathematical expressions (safe AST walk, never eval).'''
+            import ast, operator as _op
+            _OPS = {ast.Add: _op.add, ast.Sub: _op.sub,
+                    ast.Mult: _op.mul, ast.Div: _op.truediv,
+                    ast.USub: _op.neg}
+            def _walk(n):
+                if isinstance(n, ast.Expression): return _walk(n.body)
+                if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+                    return n.value
+                if isinstance(n, ast.BinOp) and type(n.op) in _OPS:
+                    return _OPS[type(n.op)](_walk(n.left), _walk(n.right))
+                if isinstance(n, ast.UnaryOp) and type(n.op) in _OPS:
+                    return _OPS[type(n.op)](_walk(n.operand))
+                raise ValueError("unsupported expression")
+            return str(_walk(ast.parse(expression, mode='eval')))
 
         @tool
         def search_web(query: str) -> str:
