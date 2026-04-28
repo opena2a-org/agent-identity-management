@@ -146,8 +146,3 @@ func TestPqArray_Parse(t *testing.T) {
 	assert.Len(t, arr, 0)
 }
 
-func TestPqFromStrings(t *testing.T) {
-	assert.Equal(t, "{}", pq_from_strings(nil))
-	assert.Equal(t, "{}", pq_from_strings([]string{}))
-	assert.Equal(t, `{"a","b"}`, pq_from_strings([]string{"a", "b"}))
-}

@@ -8,15 +8,45 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// Async intent-check worker pool defaults. The pool bounds the number of
+// in-flight NanoMind daemon calls per process; the queue gives a small
+// burst buffer before backpressure forces drops. Both are package-level
+// constants for now (no config knob until backpressure telemetry tells
+// us they need tuning).
+//
+// Shutdown budget invariant:
+//
+//	fgaAsyncQueueSize × checkIntentSyncTimeout(800ms) / fgaAsyncWorkers
+//	  ≤ services.FGA.Shutdown ctx in cmd/server/main.go (currently 10s)
+//
+// Today: 64 × 800ms / 8 = 6.4s — fits in the 10s shutdown budget. Bump
+// fgaAsyncQueueSize past 100 (or extend the per-call HTTP timeout) and
+// the budget in main.go must move with it, or workers can be SIGKILL'd
+// mid-flight under k8s/systemd grace windows.
+const (
+	fgaAsyncWorkers   = 8
+	fgaAsyncQueueSize = 64
+)
+
+// asyncIntentJob is one queued MEDIUM-risk intent check. ctx carries the
+// fga.authorize parent span, detached from the request lifetime so the
+// worker isn't cancelled when the caller returns.
+type asyncIntentJob struct {
+	ctx context.Context
+	req *FGARequest
+}
 
 // FGAEngine implements the 5-step Fine-Grained Authorization flow.
 // Steps 1-4 must complete in < 10ms P99 (no external calls).
@@ -34,6 +64,19 @@ type FGAEngine struct {
 	tracer       trace.Tracer
 	decisions    metric.Int64Counter
 	latency      metric.Int64Histogram
+	asyncDropped metric.Int64Counter
+
+	// Async intent-check worker pool. Owned by the engine, drained by
+	// Shutdown. asyncDone is closed exactly once by Shutdown to signal
+	// "stop accepting new dispatches"; asyncQueue is NEVER closed (closing
+	// it would race with dispatch — `select { case ch <- v; default: }`
+	// still picks the closed-channel send case and panics, defeating the
+	// non-blocking dispatch contract). Workers exit when asyncDone is
+	// closed and the queue is drained.
+	asyncQueue chan asyncIntentJob
+	asyncDone  chan struct{}
+	asyncWg    sync.WaitGroup
+	asyncOnce  sync.Once // makes Shutdown idempotent
 }
 
 // FGARequest represents an authorization request to the FGA engine.
@@ -113,8 +156,15 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	if err != nil {
 		logger.Warn("fga latency histogram init failed", "error", err)
 	}
+	asyncDropped, err := meter.Int64Counter(
+		"fga.async_intent_dropped",
+		metric.WithDescription("Async intent checks dropped because the worker queue was full"),
+	)
+	if err != nil {
+		logger.Warn("fga async_intent_dropped counter init failed", "error", err)
+	}
 
-	return &FGAEngine{
+	e := &FGAEngine{
 		db:             db,
 		agentSvc:       agentSvc,
 		daemonURL:      "http://127.0.0.1:47200",
@@ -123,7 +173,112 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 		tracer:         tracer,
 		decisions:      decisions,
 		latency:        latency,
+		asyncDropped:   asyncDropped,
+		asyncQueue:     make(chan asyncIntentJob, fgaAsyncQueueSize),
+		asyncDone:      make(chan struct{}),
 	}
+	e.startAsyncWorkers(fgaAsyncWorkers)
+	return e
+}
+
+// startAsyncWorkers boots N goroutines that drain the async intent queue.
+// Each worker creates a child span (`fga.intent_check_async.worker`) that
+// chains into the parent fga.authorize span captured at dispatch. Workers
+// exit when asyncDone is closed and the queue has been drained.
+func (e *FGAEngine) startAsyncWorkers(n int) {
+	for i := 0; i < n; i++ {
+		e.asyncWg.Add(1)
+		go func() {
+			defer e.asyncWg.Done()
+			for {
+				select {
+				case <-e.asyncDone:
+					// Shutdown signalled. Drain whatever is queued at this
+					// moment, then exit. Use a non-blocking inner select so
+					// we don't wedge if every queued job has already been
+					// claimed by a sibling worker.
+					for {
+						select {
+						case job := <-e.asyncQueue:
+							e.runAsyncWorker(job)
+						default:
+							return
+						}
+					}
+				case job := <-e.asyncQueue:
+					e.runAsyncWorker(job)
+				}
+			}
+		}()
+	}
+}
+
+// recordAsyncDrop accounts for one dropped async intent-check dispatch.
+// reason is one of: "shutdown" (engine.Shutdown signalled), "queue_full"
+// (worker pool saturated). Touches the dispatch span, the dropped
+// counter, and a WARN log so operators see backpressure in three
+// signals at once.
+func (e *FGAEngine) recordAsyncDrop(ctx context.Context, span trace.Span, req *FGARequest, reason string) {
+	span.SetAttributes(
+		attribute.Bool("fga.dispatched", false),
+		attribute.Bool("fga.async_dropped", true),
+		attribute.String("fga.async_drop_reason", reason),
+	)
+	if e.asyncDropped != nil {
+		e.asyncDropped.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("fga.async_drop_reason", reason),
+		))
+	}
+	e.logger.WarnContext(ctx, fmt.Sprintf("fga.async_intent dropped (%s)", reason),
+		slog.String("agent.id", req.AgentID.String()),
+		slog.String("agent.capability", req.Capability),
+		slog.String("fga.async_drop_reason", reason),
+	)
+}
+
+// runAsyncWorker executes a single async intent-check job under a worker
+// span. Extracted so the steady-state and shutdown-drain paths share one
+// span/log shape.
+func (e *FGAEngine) runAsyncWorker(job asyncIntentJob) {
+	workerCtx, workerSpan := e.tracer.Start(job.ctx, "fga.intent_check_async.worker",
+		trace.WithAttributes(
+			attribute.String("fga.step", "intent_check_async"),
+		),
+	)
+	e.checkIntentAsync(workerCtx, job.req)
+	workerSpan.End()
+}
+
+// Shutdown stops the async intent-check worker pool. It signals workers
+// to stop accepting new jobs (close asyncDone), drain whatever is already
+// in flight or queued, and exit. The passed context's deadline is the
+// upper bound; if it expires before the pool drains, Shutdown returns
+// ctx.Err(). Per-worker NanoMind HTTP calls keep their own 800ms timeout
+// regardless, so workers can't block the shutdown indefinitely.
+//
+// asyncQueue is intentionally NOT closed: dispatches that race with
+// Shutdown read asyncDone instead and drop cleanly via the shutdown
+// branch in their select, with no risk of "send on closed channel"
+// panic.
+//
+// Safe to call multiple times; subsequent calls are no-ops.
+func (e *FGAEngine) Shutdown(ctx context.Context) error {
+	var shutdownErr error
+	e.asyncOnce.Do(func() {
+		close(e.asyncDone)
+		done := make(chan struct{})
+		go func() {
+			e.asyncWg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+			shutdownErr = nil
+		case <-ctx.Done():
+			shutdownErr = ctx.Err()
+		}
+	})
+	return shutdownErr
 }
 
 // SetDaemonURL configures the NanoMind daemon endpoint.
@@ -345,11 +500,38 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		_, asyncSpan := e.tracer.Start(ctx, "fga.intent_check_async",
 			trace.WithAttributes(
 				attribute.String("fga.step", "intent_check_async"),
-				attribute.Bool("fga.dispatched", true),
 			),
 		)
+
+		// Build a context that carries the fga.authorize parent span but
+		// is detached from the request lifetime — the caller returning
+		// (and cancelling its ctx) must not kill the async check.
+		// trace.ContextWithSpan is belt-and-suspenders: WithoutCancel
+		// preserves all values including the otel context, but pinning
+		// the parent span explicitly is robust to propagator changes.
+		parentSpan := trace.SpanFromContext(ctx)
+		detached := trace.ContextWithSpan(context.WithoutCancel(ctx), parentSpan)
+
+		// Priority-select: the outer non-blocking receive on asyncDone
+		// gives strict priority to "shutdown in progress" over an enqueue
+		// attempt. Go's select picks uniformly among ready cases, so a
+		// flat three-way select would race during shutdown — items could
+		// land in the queue with no consumer left to drain them. Nesting
+		// makes the rule explicit: if asyncDone is closed, never send.
+		// asyncQueue is never closed (see FGAEngine.asyncQueue doc), so
+		// the inner send case can't panic.
+		select {
+		case <-e.asyncDone:
+			e.recordAsyncDrop(ctx, asyncSpan, req, "shutdown")
+		default:
+			select {
+			case e.asyncQueue <- asyncIntentJob{ctx: detached, req: req}:
+				asyncSpan.SetAttributes(attribute.Bool("fga.dispatched", true))
+			default:
+				e.recordAsyncDrop(ctx, asyncSpan, req, "queue_full")
+			}
+		}
 		asyncSpan.End()
-		go e.checkIntentAsync(context.Background(), req) // detached context for fire-and-forget
 	}
 	// LOW: skip intent check entirely
 
@@ -669,8 +851,8 @@ func (e *FGAEngine) recordToolCall(ctx context.Context, req *FGARequest, result 
 		`INSERT INTO tool_call_history (agent_id, capability, object_path, attributes_accessed, data_class, authorized, fga_steps_triggered)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		req.AgentID, req.Capability, req.Resource,
-		pq_from_strings(req.Attributes), req.DataClass,
-		result.Allowed, pq_from_strings(result.StepsTriggered),
+		pq.Array(nonNilStrings(req.Attributes)), req.DataClass,
+		result.Allowed, pq.Array(nonNilStrings(result.StepsTriggered)),
 	)
 	if err != nil {
 		e.logger.Error("failed to record tool call", "agentId", req.AgentID, "error", err)
@@ -685,8 +867,8 @@ func (e *FGAEngine) recordAttestation(ctx context.Context, req *FGARequest, resu
 		`INSERT INTO access_attestations (agent_id, capability, resource_path, attributes_accessed, fga_outcome, fga_steps_triggered)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		req.AgentID, req.Capability, req.Resource,
-		pq_from_strings(req.Attributes), result.Outcome,
-		pq_from_strings(result.StepsTriggered),
+		pq.Array(nonNilStrings(req.Attributes)), result.Outcome,
+		pq.Array(nonNilStrings(result.StepsTriggered)),
 	)
 	if err != nil {
 		e.logger.Error("failed to record access attestation", "agentId", req.AgentID, "error", err)
@@ -696,6 +878,19 @@ func (e *FGAEngine) recordAttestation(ctx context.Context, req *FGARequest, resu
 // ============================================================================
 // Helpers
 // ============================================================================
+
+// nonNilStrings returns s if non-nil, else an empty []string. Used to
+// preserve the previous pq_from_strings emission shape: pq.Array(nil)
+// renders as SQL NULL, but the legacy helper rendered as `{}`. Storing
+// NULL where the schema (or downstream audit queries) expected an empty
+// array would change behavior — and would crash on NOT NULL columns
+// (e.g. emergency_declarations.granted_caps).
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
 
 // matchPattern matches a simple wildcard pattern (supports trailing *)
 func matchPattern(value, pattern string) bool {
@@ -750,14 +945,3 @@ func (s *pqStringArray) parse(str string) error {
 	return nil
 }
 
-// pq_from_strings converts a string slice to a PostgreSQL array literal.
-func pq_from_strings(arr []string) string {
-	if len(arr) == 0 {
-		return "{}"
-	}
-	parts := make([]string, len(arr))
-	for i, s := range arr {
-		parts[i] = "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
-	}
-	return "{" + strings.Join(parts, ",") + "}"
-}
