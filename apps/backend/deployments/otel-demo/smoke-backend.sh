@@ -70,8 +70,12 @@ SMOKE_PG_DB="${SMOKE_PG_DB:-identity}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@opena2a.org}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-AIM2025!Smoke}"
 
-# JWT secret must be set or backend exits at config.Validate().
-JWT_SECRET="${JWT_SECRET:-aim-smoke-jwt-secret-aim-smoke-jwt-secret}"
+# JWT signing material — backend exits at config.Validate() if missing.
+# Generate per-run instead of hardcoding a placeholder so the file does
+# not trip secret scanners (gitleaks jwt-secret-assignment rule). The
+# value is ephemeral: lifetime is one smoke run against a throwaway
+# Postgres container, then discarded.
+JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 
 echo "==> AIM real-backend smoke (hermetic)"
 echo "    Backend     : localhost:${SMOKE_BACKEND_PORT}"

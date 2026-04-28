@@ -82,6 +82,9 @@ paths = [
   '''(.*/)?sdk/.*\.integration\.test\.(ts|js)$''',
   '''(.*/)?sdks/.*test.*$''',
   '''(.*/)?scripts/.*$''',
+  # Smoke / demo deployment harnesses: throwaway env vars wired to throwaway
+  # containers, no real secrets. Matches docker-compose, smoke-*.sh, env.example.
+  '''apps/backend/deployments/.*$''',
   '''\.gitleaks\.toml$''',
   '''go\.sum$''',
   '''package-lock\.json$''',
