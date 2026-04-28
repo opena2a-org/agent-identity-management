@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -736,7 +738,6 @@ func (e *FGAEngine) checkChain(ctx context.Context, req *FGARequest, policy *FGA
 func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *IntentCheckResult {
 	start := time.Now()
 
-	client := &http.Client{Timeout: 800 * time.Millisecond}
 	inferBody := map[string]interface{}{
 		"intent": "INTENT_CHECK",
 		"input":  req.Capability + " on " + req.Resource,
@@ -746,13 +747,30 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	}
 	bodyBytes, _ := json.Marshal(inferBody)
 
-	resp, err := client.Post(e.daemonURL+"/v1/infer", "application/json", strings.NewReader(string(bodyBytes)))
+	// Use NewRequestWithContext so caller cancellation aborts the
+	// in-flight HTTP call. The 800ms client timeout remains as a
+	// hard upper bound; ctx cancel typically fires first when the
+	// caller is shutting down or has its own deadline.
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, e.daemonURL+"/v1/infer", bytes.NewReader(bodyBytes))
+	if err != nil {
+		e.logger.Debug("intent check request build failed", "error", err)
+		return &IntentCheckResult{
+			IntentClass: "unknown",
+			Confidence:  0,
+			Blocked:     false,
+			LatencyMs:   time.Since(start).Milliseconds(),
+		}
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 800 * time.Millisecond}
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		e.logger.Debug("NanoMind daemon unavailable for intent check", "error", err)
 		return &IntentCheckResult{
 			IntentClass: "unknown",
 			Confidence:  0,
-			Blocked:     false, // fail open if daemon unavailable
+			Blocked:     false, // fail open if daemon unavailable or ctx cancelled
 			LatencyMs:   time.Since(start).Milliseconds(),
 		}
 	}
@@ -851,8 +869,8 @@ func (e *FGAEngine) recordToolCall(ctx context.Context, req *FGARequest, result 
 		`INSERT INTO tool_call_history (agent_id, capability, object_path, attributes_accessed, data_class, authorized, fga_steps_triggered)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		req.AgentID, req.Capability, req.Resource,
-		pq.Array(nonNilStrings(req.Attributes)), req.DataClass,
-		result.Allowed, pq.Array(nonNilStrings(result.StepsTriggered)),
+		pq.Array(sqlarray.NonNilStrings(req.Attributes)), req.DataClass,
+		result.Allowed, pq.Array(sqlarray.NonNilStrings(result.StepsTriggered)),
 	)
 	if err != nil {
 		e.logger.Error("failed to record tool call", "agentId", req.AgentID, "error", err)
@@ -867,8 +885,8 @@ func (e *FGAEngine) recordAttestation(ctx context.Context, req *FGARequest, resu
 		`INSERT INTO access_attestations (agent_id, capability, resource_path, attributes_accessed, fga_outcome, fga_steps_triggered)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		req.AgentID, req.Capability, req.Resource,
-		pq.Array(nonNilStrings(req.Attributes)), result.Outcome,
-		pq.Array(nonNilStrings(result.StepsTriggered)),
+		pq.Array(sqlarray.NonNilStrings(req.Attributes)), result.Outcome,
+		pq.Array(sqlarray.NonNilStrings(result.StepsTriggered)),
 	)
 	if err != nil {
 		e.logger.Error("failed to record access attestation", "agentId", req.AgentID, "error", err)
@@ -878,19 +896,6 @@ func (e *FGAEngine) recordAttestation(ctx context.Context, req *FGARequest, resu
 // ============================================================================
 // Helpers
 // ============================================================================
-
-// nonNilStrings returns s if non-nil, else an empty []string. Used to
-// preserve the previous pq_from_strings emission shape: pq.Array(nil)
-// renders as SQL NULL, but the legacy helper rendered as `{}`. Storing
-// NULL where the schema (or downstream audit queries) expected an empty
-// array would change behavior — and would crash on NOT NULL columns
-// (e.g. emergency_declarations.granted_caps).
-func nonNilStrings(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
 
 // matchPattern matches a simple wildcard pattern (supports trailing *)
 func matchPattern(value, pattern string) bool {

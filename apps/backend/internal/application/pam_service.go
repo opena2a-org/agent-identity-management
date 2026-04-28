@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 )
 
 // PAMService implements Privileged Access Management for AI agent fleets.
@@ -230,7 +232,7 @@ func (s *PAMService) DeclareEmergency(ctx context.Context, decl *EmergencyDeclar
 				affected_agents, granted_caps, justification, status)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			decl.ID, decl.IncidentID, decl.DeclaredBy, decl.DeclaredAt, decl.ExpiresAt,
-			pq_from_uuids(decl.AffectedAgents), pq.Array(nonNilStrings(decl.GrantedCaps)),
+			pq_from_uuids(decl.AffectedAgents), pq.Array(sqlarray.NonNilStrings(decl.GrantedCaps)),
 			decl.Justification, decl.Status,
 		)
 		if err != nil {
