@@ -379,6 +379,17 @@ func main() {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 
+	// Drain the FGA async intent-check worker pool. Bound the wait at 10s
+	// so we don't deadlock shutdown on a hung NanoMind daemon — the
+	// per-call HTTP timeout (800ms) caps individual workers regardless.
+	if services.FGA != nil {
+		fgaShutdownCtx, fgaShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := services.FGA.Shutdown(fgaShutdownCtx); err != nil {
+			log.Printf("⚠️  FGA engine shutdown timed out: %v", err)
+		}
+		fgaShutdownCancel()
+	}
+
 	log.Println("Server exited")
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 )
 
 type SecretNamespaceRepository struct {
@@ -33,7 +34,7 @@ func (r *SecretNamespaceRepository) Create(ns *secrets.SecretNamespace) error {
 	`
 	_, err := r.db.Exec(query,
 		ns.ID, ns.AgentID, ns.Namespace, string(ns.BackendType),
-		pq.Array(ns.Operations), pq.Array(ns.URLPatterns),
+		pq.Array(sqlarray.NonNilStrings(ns.Operations)), pq.Array(sqlarray.NonNilStrings(ns.URLPatterns)),
 		string(ns.Status), ns.CreatedAt, ns.UpdatedAt, ns.CreatedBy,
 	)
 	if err != nil {
