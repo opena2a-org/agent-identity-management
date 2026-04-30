@@ -340,6 +340,42 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		if !result.Allowed {
 			span.SetStatus(codes.Error, result.DeniedReason)
 		}
+
+		// SemConv enrichment for the May 22 talk Slide 14 / 15 proposal:
+		// agent.public_key.algorithm, agent.trust_score, agent.scan_verdict
+		// land on the fga.authorize parent span. Both lookups are local
+		// indexed reads (agents PK, agent_security_contexts PK); failures
+		// are silent so a missing ASC row or a transient repo blip never
+		// blocks an authorize decision. Hybrid-keyed agents emit the
+		// classical+PQC pair joined with "+" (e.g. "Ed25519+ML-DSA-65").
+		if e.agentSvc != nil {
+			if agent, agErr := e.agentSvc.GetAgent(ctx, req.AgentID); agErr == nil && agent != nil {
+				keyAlgo := agent.KeyAlgorithm
+				if agent.PQCKeyAlgorithm != nil && *agent.PQCKeyAlgorithm != "" {
+					if keyAlgo == "" {
+						keyAlgo = *agent.PQCKeyAlgorithm
+					} else {
+						keyAlgo = keyAlgo + "+" + *agent.PQCKeyAlgorithm
+					}
+				}
+				if keyAlgo != "" {
+					span.SetAttributes(attribute.String("agent.public_key.algorithm", keyAlgo))
+				}
+				span.SetAttributes(attribute.Float64("agent.trust_score", agent.TrustScore))
+			}
+		}
+		if summary := e.fetchASCRiskSummary(ctx, req.AgentID); summary != nil {
+			if summary.ScanVerdict != "" {
+				span.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+			}
+			// agent.drift_score also lives as a Prometheus gauge
+			// (DriftDetectionService.driftScore) for alerting; emitting it
+			// here as a span attr makes Slide 14 a uniform "all 9 attrs on
+			// the span" claim while preserving the gauge shape for Prom.
+			span.SetAttributes(attribute.Float64("agent.drift_score", summary.DriftScore))
+			span.SetAttributes(attribute.Int("agent.active_alerts", summary.ActiveAlerts))
+		}
+
 		e.emitDecisionTelemetry(ctx, req, result)
 		span.End()
 	}()
