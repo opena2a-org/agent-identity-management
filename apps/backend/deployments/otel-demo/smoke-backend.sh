@@ -343,6 +343,7 @@ REQUIRED_SPAN_ATTRS=(
     "agent.trust_score"
     "agent.drift_score"
     "agent.scan_verdict"
+    "agent.active_alerts"
     "fga.outcome"
     "fga.denied_by"
 )
@@ -358,7 +359,7 @@ if [ ${#MISSING[@]} -gt 0 ]; then
     echo "    present: $PARENT_ATTRS"
     exit 6
 fi
-echo "    all 8 required span attrs present on fga.authorize"
+echo "    all 9 required span attrs present on fga.authorize"
 
 # 8. Done.
 echo
