@@ -41,6 +41,7 @@
 #   3 = a service failed health check
 #   4 = login / agent-create / authorize HTTP step failed
 #   5 = trace did not land in Tempo or did not contain expected spans
+#   6 = trace landed but is missing one or more of the 9 Slide 14 SemConv attrs
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -245,6 +246,29 @@ if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ]; then
 fi
 echo "    agent created id=${AGENT_ID}"
 
+# Seed agent_security_contexts so agent.scan_verdict lands on the trace.
+# In production this table is populated by the Registry ASC pipeline; in
+# the smoke test the table doesn't exist yet, so create + populate it.
+# The fga_engine reads it via fetchASCRiskSummary; missing rows fail open
+# silently, which would let agent.scan_verdict drop off the parent span
+# unnoticed and weaken the Slide 14 SemConv proposal credibility.
+docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
+    psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
+    "CREATE TABLE IF NOT EXISTS agent_security_contexts (
+        agent_id        UUID PRIMARY KEY,
+        overall_risk    TEXT NOT NULL DEFAULT 'LOW',
+        drift_score     DOUBLE PRECISION NOT NULL DEFAULT 0,
+        active_alerts   INTEGER NOT NULL DEFAULT 0,
+        atc_trust_level INTEGER NOT NULL DEFAULT 0,
+        scan_verdict    TEXT NOT NULL DEFAULT 'UNKNOWN'
+     );" >/dev/null
+docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
+    psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
+    "INSERT INTO agent_security_contexts (agent_id, overall_risk, drift_score, active_alerts, atc_trust_level, scan_verdict)
+     VALUES ('${AGENT_ID}', 'LOW', 0.05, 0, 3, 'CLEAN')
+     ON CONFLICT (agent_id) DO UPDATE SET scan_verdict='CLEAN';" >/dev/null
+echo "    seeded agent_security_contexts row (scan_verdict=CLEAN)"
+
 AUTH_BODY=$(jq -n '{capability:"file:read", resource:"/tmp/smoke", action:"read"}')
 AUTH_RESP=$(curl -sf -X POST "http://localhost:${SMOKE_BACKEND_PORT}/api/v1/agents/${AGENT_ID}/authorize" \
     -H "Authorization: Bearer ${TOKEN}" \
@@ -295,6 +319,40 @@ if [ "${CHILD_COUNT:-0}" -lt 1 ]; then
     exit 5
 fi
 echo "    trace has ${CHILD_COUNT} fga.* child span(s)"
+
+# 7b. SemConv attribute coverage on the fga.authorize parent.
+# The May 22 Slide 14 proposal locks 9 attribute names. fga_decision is a
+# DENY here, so fga.denied_by must be present; agent.drift_score lives on
+# the Prom gauge (not span attr). The remaining 7 must be on the parent.
+echo
+echo "==> [7b/8] Verify Slide 14 SemConv attrs on fga.authorize parent"
+PARENT_ATTRS=$(echo "$TRACE" | jq -c '
+    [.batches[].scopeSpans[].spans[]
+        | select(.name == "fga.authorize")
+        | .attributes[]
+        | .key]' 2>/dev/null || echo '[]')
+REQUIRED_SPAN_ATTRS=(
+    "agent.id"
+    "agent.public_key.algorithm"
+    "agent.capability"
+    "agent.trust_score"
+    "agent.scan_verdict"
+    "fga.outcome"
+    "fga.denied_by"
+)
+MISSING=()
+for attr in "${REQUIRED_SPAN_ATTRS[@]}"; do
+    if ! echo "$PARENT_ATTRS" | jq -e --arg a "$attr" 'index($a)' >/dev/null 2>&1; then
+        MISSING+=("$attr")
+    fi
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "FAIL: fga.authorize span is missing required SemConv attrs:"
+    for m in "${MISSING[@]}"; do echo "    - $m"; done
+    echo "    present: $PARENT_ATTRS"
+    exit 6
+fi
+echo "    all 7 required span attrs present on fga.authorize"
 
 # 8. Done.
 echo
