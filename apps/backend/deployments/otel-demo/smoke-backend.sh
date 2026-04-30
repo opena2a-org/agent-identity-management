@@ -288,13 +288,17 @@ fi
 echo "    /authorize outcome=${OUTCOME}"
 
 # 7. Trace verification via Tempo TraceQL search.
+# Filter by this run's agent.id so we never grab a stale trace from a
+# previous smoke run (Tempo returns matching traces newest-first, but a
+# tight retry loop can still hit a still-flushing slot before the new
+# span lands; pinning to agent.id removes that race entirely).
 echo
 echo "==> [7/8] Verify fga.authorize trace landed in Tempo"
 sleep 5  # batch span processor flush window
 attempt=0
 while [ $attempt -lt 15 ]; do
     resp=$(curl -sfG "http://localhost:${TEMPO_HTTP_PORT}/api/search" \
-        --data-urlencode 'q={ resource.service.name="aim-backend" && name="fga.authorize" }' \
+        --data-urlencode "q={ resource.service.name=\"aim-backend\" && name=\"fga.authorize\" && span.agent.id=\"${AGENT_ID}\" }" \
         --data-urlencode "limit=10" 2>/dev/null || true)
     if echo "$resp" | jq -e '.traces | length > 0' >/dev/null 2>&1; then
         TRACE_ID=$(echo "$resp" | jq -r '.traces[0].traceID')
@@ -322,8 +326,9 @@ echo "    trace has ${CHILD_COUNT} fga.* child span(s)"
 
 # 7b. SemConv attribute coverage on the fga.authorize parent.
 # The May 22 Slide 14 proposal locks 9 attribute names. fga_decision is a
-# DENY here, so fga.denied_by must be present; agent.drift_score lives on
-# the Prom gauge (not span attr). The remaining 7 must be on the parent.
+# DENY here, so fga.denied_by must be present. fga.step lives on the per-step
+# child spans (capability_check, attribute_check, ...), not on the parent.
+# The remaining 8 must be on the parent.
 echo
 echo "==> [7b/8] Verify Slide 14 SemConv attrs on fga.authorize parent"
 PARENT_ATTRS=$(echo "$TRACE" | jq -c '
@@ -336,6 +341,7 @@ REQUIRED_SPAN_ATTRS=(
     "agent.public_key.algorithm"
     "agent.capability"
     "agent.trust_score"
+    "agent.drift_score"
     "agent.scan_verdict"
     "fga.outcome"
     "fga.denied_by"
@@ -352,7 +358,7 @@ if [ ${#MISSING[@]} -gt 0 ]; then
     echo "    present: $PARENT_ATTRS"
     exit 6
 fi
-echo "    all 7 required span attrs present on fga.authorize"
+echo "    all 8 required span attrs present on fga.authorize"
 
 # 8. Done.
 echo

@@ -364,8 +364,15 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 				span.SetAttributes(attribute.Float64("agent.trust_score", agent.TrustScore))
 			}
 		}
-		if summary := e.fetchASCRiskSummary(ctx, req.AgentID); summary != nil && summary.ScanVerdict != "" {
-			span.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+		if summary := e.fetchASCRiskSummary(ctx, req.AgentID); summary != nil {
+			if summary.ScanVerdict != "" {
+				span.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+			}
+			// agent.drift_score also lives as a Prometheus gauge
+			// (DriftDetectionService.driftScore) for alerting; emitting it
+			// here as a span attr makes Slide 14 a uniform "all 9 attrs on
+			// the span" claim while preserving the gauge shape for Prom.
+			span.SetAttributes(attribute.Float64("agent.drift_score", summary.DriftScore))
 		}
 
 		e.emitDecisionTelemetry(ctx, req, result)
