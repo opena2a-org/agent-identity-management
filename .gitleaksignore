@@ -1,0 +1,11 @@
+# Gitleaks allowlist — false-positive fingerprints kept here so we don't have
+# to rewrite history when an example/placeholder string trips a high-entropy rule.
+# Format: <commit-sha>:<file>:<rule-id>:<line>
+# Each entry MUST be a confirmed false positive on a placeholder/example value.
+
+# README.md Quick Start example — fictional Ed25519 public-key placeholder
+# (rDx9KpMtjPmQr8mZ4RKW...) flagged as generic-api-key (entropy 4.06).
+# Replaced with <base64-Ed25519-public-key> in a follow-up commit on the same
+# branch; allowlisting the historical commit prevents the PR-only-new-commits
+# scan from re-flagging the original blob.
+1b540a6c1ae536e569416e586f9498528f24e50f:README.md:generic-api-key:28
