@@ -40,15 +40,33 @@ A LangChain-based agent that performs CRUD operations on a todo list:
 
 Model Context Protocol (MCP) server registration example:
 - ✅ MCP server registration with AIM
-- ✅ Cryptographic attestation
-- ✅ Capability declarations
-- ✅ Server verification workflow
+- ✅ Cryptographic attestation (Ed25519)
+- ✅ Capability declarations via `/.well-known/mcp/capabilities`
+- ✅ Server verification workflow + challenge-response auth
 
 **Use Case**: Registering and securing MCP servers
 
-**Tech Stack**: Python 3.11+, MCP Protocol, AIM SDK
+**Tech Stack**: Python 3.11+, Flask, PyNaCl, MCP Protocol
 
-[View Code →](./mcp-server-demo/mcp-server.py)
+[View Documentation →](./mcp-server-demo/README.md)
+
+### 4. A2A Multi-Agent Demo (`a2a-multi-agent-demo/`)
+
+Agent-to-Agent collaboration between a Research Agent and an Analysis Agent (Python + Java):
+- ✅ Agent Card registration with skills
+- ✅ Intent-based agent discovery
+- ✅ Trust score management (A2A + peer trust)
+- ✅ Security policy evaluation
+- ✅ GDPR consent management
+- ✅ Ed25519 request signing
+- ✅ Task logging + skill attestation
+- ✅ Consensus verification
+
+**Use Case**: Multi-agent workflows where agents collaborate across trust boundaries
+
+**Tech Stack**: Python 3.11+, Java 17+, AIM A2A SDK
+
+[View Documentation →](./a2a-multi-agent-demo/README.md)
 
 ## 🚀 Quick Start
 
@@ -175,12 +193,12 @@ examples/
 If you see "Authentication failed" errors, your SDK credentials may have expired:
 
 ```bash
-# Option 1: Download fresh SDK from dashboard
+# Open the dashboard and download a fresh SDK
 open http://localhost:3000/dashboard/settings
 
-# Option 2: Use automated QA test (flight-search-agent only)
-cd examples/flight-search-agent/
-./quick_qa_test.sh
+# Or, for contributors with a repo checkout, the SDK at ../../sdk/python
+# is already on sys.path — just pip install it editable:
+pip install -e ../../sdk/python
 ```
 
 ### Empty Dashboard Tabs

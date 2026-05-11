@@ -1,11 +1,18 @@
-requests>=2.32.3
+# MCP server demo — minimal Flask + Ed25519 stack.
+#
+# The previous requirements.txt carried cruft (langchain / langchain-core /
+# langchain-google-genai / requests / dotenv) that this server does not
+# import. The `dotenv` package (without the `python-` prefix) is a
+# typo-squat lookalike for `python-dotenv` and was removed.
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# AIM SDK is OPTIONAL for this demo (the server itself doesn't import it;
+# it ships an Ed25519 keypair via its own /.well-known/mcp/capabilities
+# endpoint, which AIM then verifies). If you want to register this server
+# with a local AIM dashboard from a sibling script, install the SDK with:
+#   pip install -e ../../sdk/python
+
+Flask>=2.3.2
 PyNaCl>=1.6.0
-flask>=2.3.2
-python-dotenv>=1.0.1
-dotenv>=1.2.1
-langchain>=0.3.1
-langchain-google-genai>=0.3.1
-langchain-core>=0.3.1       
-
-
-# pip install -e <path_to_your_package> to install aim sdk from local path
