@@ -9,6 +9,7 @@ This flight search agent showcases:
 - ✅ **Auto-detection** - Automatically detects 5 capabilities from code
 - ✅ **Cryptographic signing** - Ed25519 signatures for authentication
 - ✅ **Capability verification** - Requests approval before executing searches
+- ✅ **Prompt-injection denial** - The `inject` subcommand drives three deterministic injection scenarios (data exfiltration, privilege escalation, sandbox escape) through AIM. Each one asks for a capability the agent never declared; AIM denies at FGA Step 1 (capability_check). Used as the stage demo for the May 2026 LF Open Source Summit + Observability Summit talks.
 - ✅ **Activity logging** - Logs all capabilities to AIM for audit trail
 - ✅ **Trust scoring** - Builds trust score through verified capabilities
 - ✅ **Dashboard integration** - Visible in AIM web dashboard
@@ -68,10 +69,35 @@ python flight_agent.py
 ```
 
 Available commands:
-- `search <destination>` - Search flights to a destination (NYC, SFO, MIA)
+- `search <destination>` - Search flights to a destination (NYC, SFO, MIA). Routes through `verify_capability("flights:search", ...)`, which AIM approves because the agent has the capability declared.
+- `inject <scenario>` - Run a deterministic prompt-injection demo. The agent attempts a capability it never declared; AIM denies at FGA Step 1 (capability_check). Scenarios:
+  - `data-exfil` — exfiltration via `email:send`
+  - `priv-esc` — privilege escalation via `admin:create_user`
+  - `sandbox-escape` — sandbox escape via `os:exec`
 - `status` - Show agent status and AIM connection
 - `help` - Show available commands
 - `quit` - Exit the agent
+
+The `inject` command is what the Linux Foundation Open Source Summit + Observability Summit stage demos drive on Beat 4 of `presentations/linux-foundation/demo-script.md`. Each scenario is repeatable and produces the same DENY output every time, which is exactly what you want under stage lights.
+
+### Stage prep (run once before the talk)
+
+The flight agent uses an OAuth-backed SDK token that expires after 90 days. If your token is stale, the agent falls into standalone mode and the `inject` command can no longer demonstrate the live deny path. To refresh:
+
+```bash
+# 1. Open the AIM dashboard (community: https://aim.opena2a.org)
+# 2. Settings → SDK Downloads → download a fresh Python SDK
+# 3. Extract over the existing credentials directory:
+mv ~/Downloads/aim-sdk-python ./aim-sdk-python
+# 4. The agent's auto-prepended sys.path picks this up — no env vars needed.
+
+# Smoke-test that the deny path is live:
+python3 flight_agent.py
+flightagent> inject data-exfil
+# Expected: "🛡️  AIM DENIED the capability request." block.
+```
+
+For backend-side verification without the SDK (faster, doesn't need a token), run the hermetic OTel smoke from `apps/backend/deployments/otel-demo/smoke-backend.sh`. It proves the same fga.authorize → DENY path that `inject` exercises through the SDK.
 
 ### Example Session
 

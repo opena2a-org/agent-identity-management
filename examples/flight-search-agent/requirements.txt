@@ -1,5 +1,7 @@
 # AIM SDK (local installation)
-# Install from ../../sdks/python
+# Install from ../../sdk/python (singular `sdk`):
+#   pip install -e ../../sdk/python
+# Or rely on the auto-prepended sys.path (see flight_agent.py:25-27).
 
 # Additional dependencies for flight agent
 requests>=2.31.0
