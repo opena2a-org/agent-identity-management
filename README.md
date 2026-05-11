@@ -1,214 +1,257 @@
-> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
 # Agent Identity Management (AIM)
 
-No way to audit what an agent did, control what it can do, or revoke access when something goes wrong. AIM fixes that -- open-source identity, governance, and access control for AI agents.
+> **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
+
+Your AI agents act on your behalf — calling APIs, writing to your filesystem, spending your budget, reading your private data. Today you have no way to prove which agent did what, restrict what they can do, or revoke access when something goes wrong. AIM fixes that.
+
+Open-source. Apache 2.0. Local-first or fleet-scale. Same wire format, your call.
 
 [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
 [![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
 [![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-[Website](https://opena2a.org) | [Demos](https://opena2a.org/demos) | [Discord](https://discord.gg/uRZa3KXgEn)
+[Website](https://opena2a.org) · [Demos](https://opena2a.org/demos) · [Discord](https://discord.gg/uRZa3KXgEn)
 
-## Quick Start
+---
+
+## 30 seconds in
 
 ```bash
 npx opena2a-cli identity create --name my-agent
 ```
 
 ```
-Agent created:
-  ID:         aim_7f3a9c2e
-  Name:       my-agent
-  Public Key: ed25519:x8Kp...mQ4R
-  Stored:     ~/.opena2a/aim-core/identities/my-agent.json
-  Audit Log:  ~/.opena2a/aim-core/audit.jsonl
+Identity created
+  Agent ID:    aim_dGVzdC1hZ2Vu
+  Name:        my-agent
+  Public Key:  rDx9KpMtjPmQr8mZ4RKW...
+  Stored in:   ~/.opena2a/aim-core/
 ```
 
-Your agent now has a cryptographic identity, an append-only audit log, and a trust score -- no server required.
-
-<details>
-<summary>Dashboard screenshots</summary>
-
-![Security Dashboard](docs/images/dashboard-security.png)
-*Fleet overview — 298 agents monitored, 24 actions blocked, risk by category*
-
-![Agent Registry](docs/images/agents.png)
-*Agent registry with trust scores, verification status, and type classification*
-
-![Trust Score Breakdown](docs/images/agent-trust-score.png)
-*8-factor trust score — verification, compliance, uptime, action success, security alerts*
-
-![MCP Supply Chain](docs/images/supply-chain.png)
-*MCP server dependencies with attestation status and confidence scores*
-
-</details>
-
-[See all demos](https://opena2a.org/demos)
-
-## Two Ways to Start
-
-**Solo developer, single agent, no infrastructure:**
+Your agent now has an Ed25519 identity, a local audit log, and a trust score. No server. No account. The files live under `~/.opena2a/aim-core/` and stay on your machine. When an incident happens, run:
 
 ```bash
-npm install @opena2a/aim-core
+opena2a identity audit
 ```
 
-Local Ed25519 keys, file-based audit log, YAML capability policies. Everything stays on your machine.
+…and read back every credential injection, file access, config change, and capability check the OpenA2A toolchain captured for that agent. That's the local-first promise.
 
-**Team, fleet of agents, full governance:**
+---
+
+## Three ways to run AIM
+
+| Mode | When to use it | What you get |
+|---|---|---|
+| **Local-only** (`@opena2a/aim-core` + CLI) | Solo developer, single machine. Want incident review without standing up infrastructure. | Ed25519 keypair, append-only `audit.jsonl`, YAML capability policies, 8-factor trust score. Events from Secretless, HMA, ARP, ConfigGuard, Shield flow into the audit log automatically via [identity bridges](#how-the-local-audit-log-fills-up). |
+| **Self-hosted server** | Team or fleet. Need a dashboard, OAuth login, multi-machine state, 9-factor real-time trust scoring with NanoMind. | Everything above, plus PostgreSQL audit, REST API, web dashboard, 5-step FGA, MCP attestation, PAM, SIEM adapters. |
+| **AIM Cloud** | Same as self-hosted, but you don't want to run infrastructure. | Managed deployment at [aim.opena2a.org](https://aim.opena2a.org). Same SDKs, same dashboard, no Postgres to babysit. |
+
+All three modes share the same audit-event schema. A local-only agent can later enable `AIMCore.enableReporting()` and push its history to a server — no rewrite, no migration script.
+
+---
+
+## Install
+
+### 1. npm — for users and contributors writing agent code
+
+The library + CLI ship as two packages. Install one or both.
 
 ```bash
-docker pull opena2a/aim-server
-docker pull opena2a/aim-dashboard
-```
-
-PostgreSQL-backed audit log, REST API, dashboard, OAuth 2.0 token endpoint, cross-machine fleet management.
-
-Or use [AIM Cloud](https://aim.opena2a.org) -- no infrastructure required.
-
-## CLI Commands
-
-The CLI is the fastest path to managing agent identity. Install once:
-
-```bash
+# CLI only — `opena2a identity ...` and the rest of the OpenA2A toolchain
 npm install -g opena2a-cli
+
+# Library only — embed AIM in your own TypeScript / Node.js agent
+npm install @opena2a/aim-core
+
+# Both, in a brand-new project
+mkdir my-agent && cd my-agent
+npm init -y
+npm install @opena2a/aim-core
+npm install -g opena2a-cli
+opena2a identity create --name my-agent
 ```
 
-Then:
+Python and Java SDKs ship server-side — see [SDKs](#sdks).
+
+### 2. Docker — for fleet operators
 
 ```bash
-# Local identity
-opena2a identity create --name my-agent    # Create Ed25519 identity
-opena2a identity trust                     # Calculate trust score
-opena2a identity sign --data "hello"       # Sign data
-opena2a identity audit                     # View audit log
-opena2a identity attach --all              # Connect to all detected tools
-
-# Cloud (aim.opena2a.org)
-opena2a login                              # Authenticate via browser
-opena2a identity create --name my-agent --server cloud   # Register on server
-opena2a identity list --server cloud       # List all agents
-opena2a identity tag add production --server cloud       # Tag agents
-opena2a identity mcp list --server cloud   # View MCP connections
-opena2a identity activity --server cloud   # View activity log
-opena2a whoami                             # Check auth status
+# Quickstart: dashboard at localhost:3000, API at localhost:8080
+curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
+shasum -a 256 quickstart.sh   # verify against the SHA in the latest release notes
+bash quickstart.sh
 ```
 
-For a full security dashboard across all your agents:
+Pulls `opena2a/aim-server` and `opena2a/aim-dashboard` from Docker Hub. PostgreSQL, Redis, and the backend come up in one stack. Secrets auto-generated. Login credentials printed at the end of the run.
+
+Production deployment (Azure / GCP / AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
+
+### 3. From source — for contributors, security teams, or self-hosters who want to inspect every line
+
+Clone the repo and run the full stack locally. This is what we use for development and what HackMyAgent's `--with-aim` flag bundles when shipping AIM as part of a remediation.
+
+**Prerequisites:** Docker Desktop (or Docker Engine + Compose v2), Go 1.22+, Node 20+, Python 3.11+ (for SDK + examples).
 
 ```bash
-npx opena2a-cli review
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
+
+# Option A: start everything via docker-compose (recommended — matches CI)
+docker compose up -d aim-postgres aim-redis aim-backend aim-frontend
+# → backend on :8080, frontend on :3000, Postgres on :5432
+
+# Option B: backend from source, dependencies in docker
+docker compose up -d aim-postgres aim-redis
+cd apps/backend
+go build ./...
+./aim-server   # picks up DATABASE_URL from .env, or set it explicitly
+
+# Frontend from source
+cd apps/web
+npm install
+npm run dev   # → localhost:3000 with hot reload
+
+# Install the Python SDK editable for the examples
+pip install -e sdk/python
+
+# Run the flight-search-agent demo against your local stack
+cd examples/flight-search-agent
+python3 flight_agent.py
 ```
 
-```
-Security Review: ~/my-project
-  Identity:     aim_7f3a9c2e (my-agent)
-  Trust Score:  0.85 (strong)
-  Capabilities: 3 allowed, 1 denied
-  Audit Events: 47 (last 24h)
-  MCP Servers:  2 verified, 0 drifted
+Health check before you do anything else:
+
+```bash
+curl -fsS localhost:8080/healthz   # → {"service":"agent-identity-management","status":"healthy",...}
 ```
 
-## What AIM Provides
+If the backend returns healthy, you can hit the SDK API at `/api/v1/sdk-api/verifications`. The dashboard's first-run flow walks you through creating an admin account (default password printed to stdout — change it before exposing the port).
 
-Cryptographic identity, OAuth 2.0 auth, capability enforcement, audit trail, 8-factor trust scoring, MCP attestation, lifecycle management, policy engine, tag/MCP management, and a full web dashboard.
+The `docker-compose.yml` at the repo root also brings up Elasticsearch, MinIO, NATS, Prometheus, Grafana, and Loki for observability. Skip those services for a minimal dev loop:
 
-<details>
-<summary>See all features</summary>
+```bash
+docker compose up -d aim-postgres aim-redis aim-backend aim-frontend
+# leaves the heavy observability stack idle until you need it
+```
 
-**Cryptographic identity** -- Ed25519 keypairs generated on agent creation. Every agent gets a verifiable identity with signing and verification capabilities. Post-quantum (ML-DSA-44/65/87) and hybrid Ed25519+ML-DSA modes available server-side.
+A separate, hermetic OTel demo lives at `apps/backend/deployments/otel-demo/` — that one is for verifying the trace/metric/log exporters end-to-end (see [Observability](#observability)).
 
-**OAuth 2.0 and machine-to-machine auth** -- JWT-bearer grant for agent-to-server authentication. Device authorization flow (RFC 8628) for CLI login via browser. No API key management needed after `opena2a login`.
+---
 
-**Capability enforcement** -- Declare what each agent can do; block everything else at runtime. Per-capability trust thresholds (e.g., `system:admin` requires 70% trust, `file:read` requires 0%). Per-capability execution modes: `auto` (immediate), `notify` (execute + alert), `review` (queue for human approval). Policies defined in YAML (local) or via REST API (server).
+## How the local audit log fills up
 
-**Audit trail** -- Append-only, tamper-evident log of every action. JSON-lines locally, PostgreSQL with full query API on the server. Audit events include action, target, result, timestamp, and tool attribution.
+This is the value prop you don't get from the marketing snippet.
 
-**Trust scoring** -- 8-factor weighted algorithm: verification status (25%), uptime (15%), action success rate (15%), security alerts (15%), compliance (10%), agent age (10%), drift detection (5%), and user feedback (5%). Historical trends and confidence levels tracked. Trust scores gate capability access via per-capability thresholds.
+`opena2a identity attach --all` installs **cross-tool bridges**. Each tool in the OpenA2A toolchain already writes its own local event log. The bridges read those logs and re-emit each event through `aim.logEvent()` into the unified AIM audit JSONL.
 
-**Delegation chains** -- Cryptographically signed delegation with Ed25519. Scope narrowing enforced at each hop. Trust attenuation: each delegation hop reduces effective trust by a configurable factor (default 0.8x per hop, minimum floor of 0.3). Prevents deep delegation chains from bypassing trust requirements.
+```text
+Secretless events    ──┐
+HMA scan findings    ──┤
+HMA ARP runtime      ──┤   bridges.importAllToolEvents()
+ConfigGuard events   ──┼─→ AIMCore.logEvent() ─→ ~/.opena2a/aim-core/audit.jsonl
+Shield events        ──┘
+                            ↑ "what happened around the agent, on this machine"
+```
 
-**MCP attestation** -- Agents attest to the quality and security of MCP servers they use. Multi-agent consensus protocol: 3+ unique attesters across 2+ owners = verified. Supply chain visualization on the dashboard.
+You don't add a decorator. You don't import a library into your agent. You run `opena2a identity attach --all` once, work normally, and after an incident you have a deduplicated, timestamp-ordered, signed audit trail of everything the toolchain saw the agent do — credential injections, file accesses, network calls, config tampering, scan findings.
 
-**Lifecycle management** -- Full agent state machine: pending, verified, suspended, revoked. Suspend agents instantly when compromised, revoke permanently (30-day data retention). Status affects trust score automatically.
+**This works without a running AIM server.** Local-first means local-first.
 
-**Policy management** -- YAML-based local policies or server-managed via REST API. Default-deny or default-allow with granular capability rules. Plugin-scoped policies for per-tool control.
+If you ALSO want capability authorization (deny-before-execute, FGA, intent classification) — that requires the server-backed AIM. See [What the server adds](#what-the-server-adds).
 
-**Tag and MCP management** -- Organize agents with tags, attach/detach MCP server connections. Manageable via CLI (`identity tag add`, `identity mcp add`), REST API, or dashboard.
+---
 
-**Dashboard** -- Web UI for fleet management at [aim.opena2a.org](https://aim.opena2a.org). Agent overview, trust score breakdowns, MCP network graph, audit timeline, security violations, capability requests, and policy editor.
+## SDKs
 
-</details>
+| SDK | Install | Stable | Talks to |
+|---|---|---|---|
+| TypeScript / Node.js | `npm install @opena2a/aim-core` | Yes | Local files OR server (via `enableReporting`) |
+| Python | `pip install -e sdk/python` (clone) · or download from the [dashboard](https://aim.opena2a.org) → Settings → SDK Downloads | Yes | Server (Go backend) |
+| Java | Maven: `org.opena2a:aim-sdk:1.0.0` · or `cd sdk/java && mvn package` from source | Yes | Server (Go backend) |
 
-## Fine-Grained Authorization (FGA)
-
-5-step authorization pipeline that evaluates every agent action before execution:
-
-1. **Capability check** -- does the agent have the required capability?
-2. **Attribute check** -- do agent attributes satisfy the policy conditions?
-3. **Context check** -- does the runtime context (time, location, risk level) permit the action?
-4. **Chain check** -- if delegated, is the delegation chain valid and within scope?
-5. **Intent check** -- does the declared intent match the action being performed?
-
-All five steps must pass. Any failure returns a typed denial with the specific step that blocked the action.
+The TypeScript SDK is the only one that runs without a server (it's `@opena2a/aim-core`, the library backing local mode). Python and Java SDKs always talk to the AIM backend over HTTP — they're meant for production agents that need real-time capability authorization.
 
 ```typescript
-const decision = await aim.authorize({
-  agent: 'billing-agent',
-  action: 'db:write',
-  resource: 'invoices',
-  context: { riskLevel: 'elevated' }
-});
-// { allowed: false, deniedAt: 'context', reason: 'elevated risk requires human approval' }
+// TypeScript: local-first, file-based
+import { AIMCore } from '@opena2a/aim-core';
+
+const aim = new AIMCore({ agentName: 'flight-search' });
+aim.loadPolicy({ allow: ['flights:search'], deny: ['email:send', 'os:exec'] });
+
+if (aim.checkCapability('flights:search')) {
+  // execute the action
+  aim.logEvent({ plugin: 'flight-search', action: 'flights:search', target: 'NYC', result: 'allowed' });
+}
 ```
 
-## Privileged Access Management (PAM)
+```python
+# Python: server-backed, every decorated method auto-logs
+from aim_sdk import secure
 
-Three privilege tiers with escalating controls:
+agent = secure("flight-search")
 
-| Tier | Examples | Controls |
-|------|----------|----------|
-| STANDARD | `file:read`, `api:call` | Normal capability enforcement |
-| PRIVILEGED | `db:write`, `deploy:staging` | Time-bound session, audit-intensive logging |
-| SUPER_PRIVILEGED | `infra:destroy`, `secrets:rotate` | Human approval gate, dual authorization |
-
-**Human approval gates** -- SUPER_PRIVILEGED actions queue for human review. Configurable approval timeout (default 5 minutes), automatic denial on expiry.
-
-**Break-glass** -- emergency override for blocked critical actions. Requires a break-glass token, logs to a separate tamper-evident audit stream, and triggers immediate review notification.
-
-**Certification campaigns** -- periodic review of agent privilege assignments. Managers approve or revoke each privilege. Unreviewed privileges expire automatically.
-
-## CyberArk Integration
-
-CCP (Central Credential Provider) bridge for retrieving vaulted credentials at runtime without exposing secrets to the agent context. PSM (Privileged Session Manager) streaming for recording and auditing privileged agent sessions.
-
-```typescript
-const aim = new AIMCore({
-  agentName: 'billing-agent',
-  vault: {
-    provider: 'cyberark',
-    ccpUrl: process.env.CYBERARK_CCP_URL,
-    appId: 'aim-agents',
-    safe: 'AgentCredentials'
-  }
-});
-
-// Agent requests credential by reference, never sees the value
-const cred = await aim.getCredential('db-connection-string');
+@agent.perform_action("flights:search")
+def search_flights(destination):
+    return MOCK_FLIGHTS[destination]
+# Every call routes through AIM's /api/v1/sdk-api/verifications endpoint,
+# runs the 5-step FGA, and lands in the dashboard audit timeline.
 ```
 
-## SIEM Integration
+```java
+// Java: same shape, server-backed, manual call
+AIMClient client = AIMClient.fromCredentials("flight-search");
+VerificationResult result = client.verifyCapability("flights:search", "NYC", Map.of("riskLevel", "low"));
+if (result.isApproved()) { /* execute */ }
+```
 
-Built-in adapters for forwarding audit events to enterprise SIEM platforms:
+Working examples for all three SDKs live in [`examples/`](examples/). The flight-search-agent demo is the same one we run at Linux Foundation Open Source Summit (May 2026) — including three deterministic prompt-injection scenarios via `inject data-exfil`, `inject priv-esc`, and `inject sandbox-escape`.
 
-- **Splunk** -- HTTP Event Collector (HEC) adapter. Sends structured JSON events with AIM-specific source type and index configuration.
-- **Microsoft Sentinel** -- Data Collector API adapter. Maps AIM audit events to custom log tables with workspace ID routing.
+---
 
-Both adapters support buffered batch delivery, automatic retry with backoff, and event filtering by severity.
+## What the local CLI gets you (without the server)
+
+```bash
+# Identity lifecycle
+opena2a identity create --name my-agent       # generate Ed25519 keypair
+opena2a identity sign --data "hello"          # sign arbitrary bytes
+opena2a identity trust                        # local 8-factor trust score
+opena2a identity audit [--limit 50]           # read the audit JSONL
+opena2a identity attach --all                 # turn on the cross-tool bridges
+opena2a identity policy load policy.yaml      # load a capability policy
+
+# Other OpenA2A surfaces, same CLI
+opena2a review                                # full security dashboard for this project
+opena2a scan                                  # HMA security checks
+opena2a protect                               # auto-fix common misconfigurations
+opena2a runtime tail [-c 50]                  # tail HMA's ARP runtime events
+opena2a secrets add OPENAI_API_KEY            # Secretless credential management
+```
+
+All of the above work offline. The CLI binary IS the front door — no server connection required.
+
+---
+
+## What the server adds
+
+If you run the AIM server (Docker or self-hosted from source), you get:
+
+**5-step Fine-Grained Authorization (FGA)** — Every privileged action runs through `capability → attribute → context → chain → intent` before execution. The intent check is powered by [NanoMind](https://huggingface.co/opena2a/nanomind-security-analyst), a 3M-parameter local language model. Sub-10ms for the cheap steps, up to 800ms for the intent check on HIGH-risk operations.
+
+**9-factor real-time trust scoring** — Server-side trust includes verification status, uptime, action success rate, security alerts (NanoMind-modulated), compliance, agent age, drift detection, user feedback, and execution isolation. Updates on every action. The trust score gates capability access via per-capability thresholds (`system:admin` requires ≥0.70, `file:read` no minimum, etc.).
+
+**MCP server attestation** — Multi-agent consensus protocol. 3+ unique attesters across 2+ owners = verified. Supply-chain visualization on the dashboard.
+
+**Privileged Access Management (PAM)** — Three tiers (STANDARD / PRIVILEGED / SUPER_PRIVILEGED). Human approval gates on SUPER_PRIVILEGED. Break-glass override with tamper-evident logging. Certification campaigns for periodic privilege review.
+
+**CyberArk integration** — CCP for vaulted credential retrieval, PSM for privileged session recording.
+
+**SIEM adapters** — Splunk HEC and Microsoft Sentinel Data Collector. Buffered batch delivery, retry with backoff, severity filtering.
+
+**Web dashboard** — Agent registry, trust score breakdowns, MCP network graph, audit timeline, security violations, capability requests, policy editor.
 
 ```yaml
-# aim-config.yaml
+# aim-config.yaml — SIEM forwarding
 siem:
   adapter: splunk
   hecUrl: https://splunk.internal:8088
@@ -218,73 +261,97 @@ siem:
   minSeverity: warning
 ```
 
-## SDKs
+---
 
-| SDK | Install | Status |
-|-----|---------|--------|
-| Python | `pip install -e sdk/python/` (local) or download from [AIM dashboard](https://aim.opena2a.org) | Stable |
-| Java | `org.opena2a:aim-sdk:1.0.0` (Maven / Gradle) | Stable |
-| TypeScript/Node.js | `npm install @opena2a/aim-core` | Stable |
+## Trust scoring — local vs server
 
-## aim-core: For Library Developers
+The two trust scores measure different things on purpose.
 
-If you are building a tool or framework that needs to embed agent identity, `@opena2a/aim-core` provides programmatic access without requiring a running server.
+### Local: `@opena2a/aim-core` (8 factors)
 
-```bash
-npm install @opena2a/aim-core
-```
+The local trust score answers: **"how well is this agent's security posture set up?"** It's a one-shot computation from local files — does the agent have a keypair? Is there a policy? An audit log? Are secrets managed via Secretless? Are configs signed by ConfigGuard?
 
-```typescript
-import { AIMCore } from '@opena2a/aim-core';
+| Factor | Weight | What signals it |
+|---|---|---|
+| Identity | 20% | `identity.json` exists |
+| Capabilities | 15% | `policy.yaml` exists |
+| Audit log | 10% | `audit.jsonl` exists |
+| Secrets managed | 15% | Secretless integration active |
+| Config signed | 10% | ConfigGuard signatures present |
+| Skills verified | 10% | HMA verification on skills |
+| Network controlled | 10% | Egress policy detected |
+| Heartbeat monitored | 10% | ARP runtime heartbeat present |
 
-const aim = new AIMCore({ agentName: 'my-assistant' });
+Plus up to 0.05 extended bonus for comprehensive posture. Score range 0.0–1.0. Source: [`packages/aim-core/src/trust.ts`](https://github.com/opena2a-org/opena2a/blob/main/packages/aim-core/src/trust.ts) in the `opena2a` repo.
 
-// Ed25519 identity -- created on first run, persisted to ~/.opena2a/aim-core/
-const identity = aim.getIdentity();
-console.log('Agent ID:', identity.agentId);
+### Server: `aim-server` (9 factors)
 
-// Capability enforcement -- define what the agent can do
-aim.loadPolicy({ allow: ['db:read', 'api:call'], deny: ['db:write'] });
-aim.checkCapability('db:read');   // passes
-// aim.checkCapability('db:write'); // throws CapabilityDenied
+The server trust score answers: **"is this agent behaving in a way I should still trust at this moment?"** It updates on every action and includes behavioral signals the local mode can't observe.
 
-// Audit log -- append-only, tamper-evident
-aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin: 'my-assistant' });
+| Factor | Weight | Source |
+|---|---|---|
+| Verification status | 25% | Externally attested (signed) |
+| Uptime | 15% | Observed behavior |
+| Action success rate | 15% | Observed behavior |
+| Security alerts | 15% | NanoMind-modulated |
+| Compliance | 10% | Externally attested |
+| Execution isolation | 10% | Externally attested (added in PR #95, 2026-04-15) |
+| Agent age | 5% | Server-recorded |
+| Drift detection | 3% | Observed behavior |
+| User feedback | 2% | Human input |
 
-// Trust scoring -- 8-factor calculation
-const score = aim.calculateTrust();
-console.log('Trust:', score.overall); // e.g. 0.45
-```
+Source: [`apps/backend/internal/domain/trust_score.go`](apps/backend/internal/domain/trust_score.go) in this repo.
 
-| Feature | aim-core (local) | Full AIM (server + dashboard) |
-|---------|-----------------|-------------------------------|
-| Ed25519 identity | Local keypair | Server-issued + PQC (ML-DSA) |
-| OAuth 2.0 auth | N/A | JWT-bearer + device flow |
-| Audit log | JSON-lines file | PostgreSQL + query API |
-| Capability policy | YAML file | REST API + visual editor |
-| Trust scoring | 8-factor local | Real-time + history + trends |
-| MCP attestation | N/A | Multi-agent consensus |
-| Lifecycle | N/A | Suspend, revoke, verify |
-| Tags + MCPs | N/A | Organize + attach via CLI/API |
-| Multi-agent | Per-machine | Cross-machine fleet |
-| Dashboard | N/A | Full web UI |
+The two scores are complementary — local says "you set the agent up right", server says "the agent is still acting right." Both can be active for the same agent if you've enabled local-to-server reporting via `AIMCore.enableReporting()`.
 
-This is the same library used by HackMyAgent's `--with-aim` flag to add agent identity during security remediation.
+---
 
-## Server Deployment
+## Observability
 
-For team and fleet deployments, the AIM server provides a REST API, dashboard, and PostgreSQL-backed storage.
+AIM emits OpenTelemetry traces, metrics, and logs from the Go backend. The hermetic demo stack lives at [`apps/backend/deployments/otel-demo/`](apps/backend/deployments/otel-demo/) — a one-command boot of OpenTelemetry Collector + Tempo + Prometheus + Loki + Grafana, wired to the backend.
 
 ```bash
-# Download, inspect, then run — never pipe to shell.
-curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
-shasum -a 256 quickstart.sh   # verify against the SHA published in the release notes
-bash quickstart.sh
+cd apps/backend/deployments/otel-demo
+docker compose up -d                # → Grafana on :3001, Tempo on :3200
+./smoke-backend.sh                  # end-to-end verification
 ```
 
-Opens dashboard at [localhost:3000](http://localhost:3000), API at [localhost:8080](http://localhost:8080). Secrets are auto-generated. Login credentials are printed at the end.
+Every `fga.authorize` decision lands as a parent span with 5 children (one per FGA step), all 9 Slide 14 SemConv attributes (`agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`), plus a structured log line in Loki and a real-time gauge in Prometheus. See [Observing the Observers](https://opena2a.org/talks/observability-summit-2026) for the talk-length version.
 
-Images on [Docker Hub](https://hub.docker.com/u/opena2a). See [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md) for tag conventions and production deployment.
+We're proposing these attributes for the OpenTelemetry Semantic Conventions WG — there are currently zero standard attributes for AI agents, and every vendor that ships agent telemetry ships incompatible attributes. The proposal is in `briefs/otel-exporters-aim-backend.md`.
+
+---
+
+## Demos
+
+Four runnable demos in [`examples/`](examples/):
+
+| Demo | Shows | Stack |
+|---|---|---|
+| [`flight-search-agent`](examples/flight-search-agent/) | AIM Python SDK end-to-end with three deterministic prompt-injection scenarios | Python + AIM server |
+| [`langchain-crud-agent`](examples/langchain-crud-agent/) | LangChain agent secured by `@perform_action` decorator | Python + LangChain + AIM server |
+| [`mcp-server-demo`](examples/mcp-server-demo/) | MCP server with Ed25519 signing + capabilities endpoint | Python + Flask + PyNaCl |
+| [`a2a-multi-agent-demo`](examples/a2a-multi-agent-demo/) | Agent-to-Agent collaboration: discovery, GDPR consent, request signing, skill attestation | Python + Java + AIM server |
+
+`flight-search-agent` is the live demo from the May 2026 Linux Foundation Open Source Summit and Observability Summit talks. The eight-beat demo script lives in `opena2a-org/presentations/linux-foundation/demo-script.md` if you want to reproduce the stage flow.
+
+---
+
+## Use cases
+
+| Guide | Description | Time |
+|---|---|---|
+| [Register my agent](docs/use-cases/register-my-agent.md) | Create an Ed25519 identity and attach tools | 2 min |
+| [Audit agent actions](docs/use-cases/audit-agent-actions.md) | Track actions with a tamper-evident log | 5 min |
+| [Enforce capabilities](docs/use-cases/enforce-capabilities.md) | Restrict what your agent can do with YAML policies | 5 min |
+| [Embed in my app](docs/use-cases/embed-in-my-app.md) | Use `aim-core` SDK in your own framework | 10 min |
+| [Fleet governance](docs/use-cases/fleet-governance.md) | Centralized management with AIM Server | 30 min |
+| [SIEM forwarding](docs/use-cases/siem-forwarding.md) | Stream audit events to Splunk / Sentinel | 15 min |
+| [CyberArk vault integration](docs/use-cases/cyberark-integration.md) | Retrieve secrets at runtime without exposing values | 20 min |
+
+See [docs/USE-CASES.md](docs/USE-CASES.md) for the full index.
+
+---
 
 ## Using with HackMyAgent
 
@@ -295,28 +362,31 @@ hackmyagent fix-all --with-aim     # scan, fix, and add agent identity
 hackmyagent fix-all --dry-run      # preview without modifying
 ```
 
-## Use Cases
+ARP runtime events flow into AIM's audit log via the identity bridges, so the local-only "what happened during this scan + fix" story is unified across both tools.
 
-| Guide | Description | Time |
-|-------|-------------|------|
-| [Register my agent](docs/use-cases/register-my-agent.md) | Create an Ed25519 identity and attach tools | 2 min |
-| [Audit agent actions](docs/use-cases/audit-agent-actions.md) | Track actions with a tamper-evident log | 5 min |
-| [Enforce capabilities](docs/use-cases/enforce-capabilities.md) | Restrict what your agent can do with YAML policies | 5 min |
-| [Embed in my app](docs/use-cases/embed-in-my-app.md) | Use aim-core SDK in your own framework | 10 min |
-| [Fleet governance](docs/use-cases/fleet-governance.md) | Centralized management with AIM Server | 30 min |
+---
 
-See [docs/USE-CASES.md](docs/USE-CASES.md) for the full index.
+## Contributing
+
+We ship Apache 2.0, develop in the open, and merge PRs from outside the org regularly. [CONTRIBUTING.md](CONTRIBUTING.md) covers the dev loop, test conventions, and pre-push review gates.
+
+If you found a security issue, please email `security@opena2a.org` — coordinated disclosure preferred. We respond within 24 hours.
+
+---
 
 ## Links
 
-- [Documentation](https://opena2a.org/docs) -- full guides, tutorials, API reference
-- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) -- secure your first agent
-- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) -- connect MCP servers
-- [Contributing](CONTRIBUTING.md) -- how to contribute
-- [Deployment Guide](infrastructure/DEPLOYMENT.md) -- production deployment
+- [Documentation](https://opena2a.org/docs) — full guides, tutorials, API reference
+- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) — secure your first agent
+- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) — connect MCP servers
+- [Deployment Guide](infrastructure/DEPLOYMENT.md) — production deployment (Azure / GCP / AWS)
+- [Contributing](CONTRIBUTING.md) — how to contribute
+- [Research](https://research.opena2a.org) — published threat data, scanner benchmarks, exposure sweeps
 
-Part of the [OpenA2A](https://opena2a.org) security platform. See all tools at [opena2a.org](https://opena2a.org).
+Part of the [OpenA2A](https://opena2a.org) security platform.
+
+---
 
 ## License
 
-Apache-2.0 -- See [LICENSE](LICENSE)
+Apache-2.0 — see [LICENSE](LICENSE).
