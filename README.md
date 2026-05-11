@@ -23,9 +23,9 @@ npx opena2a-cli identity create --name my-agent
 
 ```
 Identity created
-  Agent ID:    aim_dGVzdC1hZ2Vu
+  Agent ID:    aim_xxxxxxxx
   Name:        my-agent
-  Public Key:  rDx9KpMtjPmQr8mZ4RKW...
+  Public Key:  <base64-Ed25519-public-key>
   Stored in:   ~/.opena2a/aim-core/
 ```
 
