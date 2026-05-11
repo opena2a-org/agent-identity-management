@@ -22,25 +22,29 @@ This flight search agent showcases:
 - Python 3.11+
 - SDK downloaded from AIM dashboard (Settings → SDK Download)
 
-### Option 1: Automated QA Test (Recommended)
+### Option 1: Repo checkout (recommended for contributors)
+
+If you have the `agent-identity-management` repo cloned, the SDK at `../../sdk/python` is already on `sys.path` (see `flight_agent.py:25-27`). Run:
 
 ```bash
-# This script guides you through the complete flow
-./quick_qa_test.sh
+# From the agent-identity-management repo root, start the AIM backend if it
+# isn't already running. The agent talks to localhost:8080 by default.
+docker compose up -d aim-postgres aim-redis aim-backend
+
+# From this directory:
+pip install -r requirements.txt
+python3 flight_agent.py
 ```
 
-This will:
-1. Open browser for OAuth login
-2. Guide you to download fresh SDK
-3. Install credentials automatically
-4. Run verification tests
-5. Open dashboard to verify results
+On first run the agent will register with AIM, generate an Ed25519 keypair, and drop a credentials file under `~/.aim/`. The same OAuth/SDK-token flow used by external SDK consumers — exercising every path the dashboard-bundle flow exercises.
 
-### Option 2: Manual Testing
+### Option 2: Dashboard-bundle SDK (for AIM Cloud users)
 
 ```bash
-# 1. Download SDK from AIM dashboard (Settings → SDK Download)
-# 2. Extract SDK to this directory or add to PYTHONPATH
+# 1. Download the Python SDK bundle from your AIM dashboard:
+#    Settings → SDK Downloads → Python
+# 2. Extract the bundle here so the agent sees ./aim-sdk-python/:
+#    mv ~/Downloads/aim-sdk-python ./aim-sdk-python
 
 # Install dependencies
 pip install -r requirements.txt
@@ -54,6 +58,8 @@ python3 demo_search.py
 # Or run automated tests
 python3 test_flight_agent.py
 ```
+
+The auto-prepended `sys.path` picks up either layout — no env vars required.
 
 ## Configuration
 
@@ -213,14 +219,10 @@ client.log_capability_result(
 **Solution**: Get fresh credentials
 
 ```bash
-# Option 1: Use automated script
-./quick_qa_test.sh
-
-# Option 2: Manual process
 # 1. Log in to portal
 open http://localhost:3000/auth/login
 
-# 2. Download fresh SDK
+# 2. Download fresh SDK from the dashboard
 open http://localhost:3000/dashboard/sdk
 
 # 3. Copy credentials
@@ -297,10 +299,10 @@ After running the agent, you should see:
 - Implement multi-city searches
 
 ### For Testing
-1. Run `./quick_qa_test.sh` to complete QA
-2. Verify all dashboard tabs populate
-3. Test with different destinations
-4. Review security logs in dashboard
+1. Run `python3 test_flight_agent.py` to exercise registration + benign search + verification logging end-to-end.
+2. Run `python3 flight_agent.py`, then in the REPL: `inject data-exfil`, `inject priv-esc`, `inject sandbox-escape` — each should produce a clean AIM DENY block (FGA capability_check denial).
+3. Verify all dashboard tabs populate (`http://localhost:3000/dashboard/agents/<agent-id>`).
+4. Review security logs and audit events in dashboard.
 
 ### For Production
 - Review `PRODUCTION_READINESS_REPORT.md`
@@ -311,10 +313,10 @@ After running the agent, you should see:
 ## 🚀 TL;DR - Get Started in 60 Seconds
 
 ```bash
-# 1. Run automated QA test
-./quick_qa_test.sh
+# 1. Bring AIM up locally (one-time)
+docker compose -f ../../docker-compose.yml up -d aim-postgres aim-redis aim-backend aim-frontend
 
-# 2. Follow browser prompts to log in and download SDK
+# 2. Follow browser prompts at http://localhost:3000 to log in and download the Python SDK
 
 # 3. Watch verification tests pass
 
