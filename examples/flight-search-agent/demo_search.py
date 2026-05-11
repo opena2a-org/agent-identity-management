@@ -7,8 +7,10 @@ This simulates interactive usage of the flight agent
 import sys
 import os
 
-# Add SDK to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'aim-sdk-python'))
+# Add SDK to path. Repo checkout path first, dashboard-bundle path second.
+_AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_AGENT_DIR, '../../sdk/python'))
+sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 
 def main():
     """Run demo flight searches"""
