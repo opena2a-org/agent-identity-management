@@ -356,7 +356,7 @@ class FlightAgent:
         print("Simulated injected prompt (what the agent's input layer received):")
         print(f"  > {scenario['injected_prompt']}")
         print()
-        print(f"Implied capability the agent must verify with AIM:")
+        print("Implied capability the agent must verify with AIM:")
         print(f"  capability = {scenario['capability']!r}")
         print(f"  resource   = {scenario['resource']!r}")
         print()
@@ -377,7 +377,7 @@ class FlightAgent:
             )
         except ActionDeniedError as exc:
             print("🛡️  AIM DENIED the capability request.")
-            print(f"   FGA outcome: DENY")
+            print("   FGA outcome: DENY")
             print(f"   Reason     : {exc}")
             print(f"   Verifier   : agent has no grant for {scenario['capability']!r}")
             print()
@@ -394,7 +394,7 @@ class FlightAgent:
         # Network/other path — verify_capability returned a dict, not raised.
         verified = bool(result.get("verified"))
         status = result.get("status") or ("approved" if verified else "denied")
-        print(f"AIM response:")
+        print("AIM response:")
         print(f"  verified        = {verified}")
         print(f"  status          = {status}")
         if result.get("error"):
