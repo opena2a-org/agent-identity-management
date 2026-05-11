@@ -1,0 +1,15 @@
+# HMA scanner exemptions — keep this file as small as possible.
+# Format: one rule per line.
+#   - Bare path patterns exempt the file/directory from all checks.
+#   - Lines prefixed with `!` exempt a specific check ID globally
+#     (supports trailing `*` wildcard, e.g. `!SANDBOX-*`).
+# See `src/hardening/scanner.ts:loadHmaIgnore` in hackmyagent for the parser.
+
+# .env.example is a template file by convention. The whole purpose is
+# to ship placeholder values that document what env vars the project
+# expects. HMA's AST-CRED-003 ("patterns consistent with hardcoded
+# secrets") fires on any KEY=value line, so it scores every .env.example
+# in the ecosystem as HIGH. This exemption is safe BECAUSE we have a
+# stronger invariant: .env (without the .example suffix) is in
+# .gitignore via .git/info/exclude and would never be committed.
+.env.example

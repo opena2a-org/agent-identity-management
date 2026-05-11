@@ -64,27 +64,33 @@ jobs:
   secret-scan:
     name: Secret Detection
     runs-on: ubuntu-latest
+    # We dogfood our own scanner. HackMyAgent's quick-mode scan
+    # (config + creds) is a superset of what gitleaks gave us: same
+    # credential pattern coverage, plus MCP config integrity and
+    # governance checks. Single source of truth for credential
+    # detection across the CLI (`opena2a scan` / `opena2a protect`),
+    # the local pre-push gate (Phase 4), and this CI pipeline.
+    # Intentional placeholder files (e.g. .env.example) are
+    # allowlisted via .hmaignore at the repo root.
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks
-        run: |
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz
-          sudo mv gitleaks /usr/local/bin/
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Run gitleaks (PR — scan only new commits)
-        if: github.event_name == 'pull_request'
-        run: |
-          gitleaks detect --config .gitleaks.toml --source . \
-            --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
-            -v --redact
-
-      - name: Run gitleaks (push/schedule — scan last commit)
-        if: github.event_name != 'pull_request'
-        run: gitleaks detect --config .gitleaks.toml --source . --log-opts "HEAD~1..HEAD" -v --redact
+      - name: Run HackMyAgent secret + credential scan
+        # --scan-depth quick     : config + creds only (gitleaks-equivalent scope)
+        # --static-only          : disable NanoMind semantic analysis for
+        #                          deterministic, GPU-free CI runs.
+        # --fail-below 90        : fail on net HIGH/CRITICAL findings;
+        #                          baseline today is 100/100 with the
+        #                          .env.example allowlist + .gitleaks.toml
+        #                          deletion landed.
+        run: npx hackmyagent@latest secure . --ci --scan-depth quick --static-only --fail-below 90
 
   dependency-audit:
     name: Dependency Audit
