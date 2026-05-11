@@ -16,6 +16,16 @@ ENV/
 # AIM credentials
 .aim/
 
+# Sensitive files (per HMA recommendation)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
 # IDE
 .vscode/
 .idea/

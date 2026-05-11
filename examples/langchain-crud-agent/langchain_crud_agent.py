@@ -30,8 +30,13 @@ import os
 from typing import List, Dict, Optional
 from datetime import datetime
 
-# Add SDK to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'aim-sdk-python'))
+# Add SDK to path. Two supported layouts:
+#   1. Repo checkout: SDK lives at ../../sdk/python (singular `sdk`).
+#   2. Dashboard-downloaded SDK: bundled under ./aim-sdk-python/.
+# Both paths are appended so either deployment works without env vars.
+_AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_AGENT_DIR, '../../sdk/python'))
+sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 
 from aim_sdk import secure
 
