@@ -2,6 +2,8 @@
 
 Agent Identity Management SDK for Java. Provides cryptographic identity verification, capability-based access control, and security logging for AI agents.
 
+Managed hosting available at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Self-host instructions below.
+
 ## Quick Start
 
 ```java

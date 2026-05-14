@@ -2,6 +2,8 @@
 
 Official TypeScript SDK for Agent Identity Management (AIM) - secure identity verification for AI agents.
 
+Managed hosting available at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Self-host instructions below.
+
 ## Installation
 
 ```bash
