@@ -41,7 +41,7 @@ Reads back credential injections, file accesses, config changes, and capability 
 |---|---|---|
 | **Local-only** | Solo developer, single machine | Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor trust score, cross-tool event bridges |
 | **Self-hosted** | Team or fleet | Above plus PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor real-time trust, MCP attestation, PAM, SIEM adapters |
-| **AIM Cloud** | Same as self-hosted with no infrastructure to operate | Managed at [aim.opena2a.org](https://aim.opena2a.org) |
+| **AIM Cloud** | Same as self-hosted with no infrastructure to operate | Managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started) |
 
 All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
 

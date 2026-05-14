@@ -4,6 +4,8 @@
 
 Cryptographic verification with zero configuration.
 
+Managed hosting available at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Self-host instructions below.
+
 ---
 
 ## See It Work in 60 Seconds!
