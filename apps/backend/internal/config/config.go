@@ -30,8 +30,12 @@ var insecureDevSecretDigests = []string{
 }
 
 // isKnownDevSecret reports whether s matches any of the hashed dev-secret
-// digests. Constant-time across the digest list; the input is hashed once.
+// digests. Input is whitespace-trimmed before hashing so that a paste-with-
+// trailing-newline doesn't bypass the blocklist; case is preserved on
+// purpose so that a legitimate mixed-case secret which happens to share its
+// lowercase form with a dev string is not rejected.
 func isKnownDevSecret(s string) bool {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}
@@ -238,10 +242,14 @@ func (c *Config) Validate() error {
 
 // insecureSecretError returns the single error format used when a known
 // development secret leaks into a real config. The format is plain text so it
-// reads cleanly in container logs and CI output.
+// reads cleanly in container logs and CI output. The "every environment"
+// clause is intentional — operators conditioned by other tools may try
+// toggling ENVIRONMENT=development to bypass; this check now runs in every
+// environment, so that workaround no longer exists.
 func insecureSecretError(name, generator string) error {
 	return fmt.Errorf(
-		"SECURITY ERROR: %s is set to a known development default. "+
+		"SECURITY ERROR: %s is set to a known development default; "+
+			"this is rejected in every environment (development, staging, production). "+
 			"Replace it with a freshly generated value: %s. "+
 			"See scripts/gen-dev-secrets.sh for the local-dev helper.",
 		name, generator,

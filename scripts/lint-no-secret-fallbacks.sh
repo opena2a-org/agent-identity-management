@@ -4,14 +4,26 @@
 # (often source-committed) value when the operator forgets to set the env var,
 # and is the root cause of CWE-798 in this repo's history.
 #
-# Allowed shapes (these PASS):
-#   ${SECRET_NAME}                    — fail at compose-time if unset
-#   ${SECRET_NAME:?Set SECRET in .env} — fail-fast with operator-friendly message
-#   ${SECRET_NAME:-}                  — empty fallback (treats the secret as
-#                                       optional, does not leak a credential)
+# Two-tier policy:
 #
-# Forbidden shapes (these FAIL):
-#   ${SECRET_NAME:-known-bad-value}   — silent fallback to a non-empty default
+#   REQUIRED_SECRETS — must use ${VAR:?...} (fail-fast). No fallback of ANY kind
+#   is allowed, including empty (`:-`). An empty fallback for a required secret
+#   lets the container start with VAR="" and produces a confusing second-layer
+#   failure inside the application code instead of at compose-time.
+#
+#   OPTIONAL_SECRETS — `${VAR:-}` (empty fallback) is allowed; non-empty
+#   fallbacks remain forbidden. These are credentials for features that are
+#   genuinely optional (e.g. SMTP auth — the platform works without email).
+#
+# Allowed shapes for OPTIONAL_SECRETS only:
+#   ${VAR:-}      — empty fallback, feature disabled when unset
+#
+# Allowed shapes for both tiers:
+#   ${VAR}        — fail at compose-time if unset (no default)
+#   ${VAR:?msg}   — fail-fast with operator-friendly message
+#
+# Forbidden everywhere:
+#   ${VAR:-non-empty}  — silent fallback to a default (CWE-798)
 #
 # The list of vars below is the closed set of secret-shaped names AIM exposes.
 # Add new names when introducing new secrets; never remove names without
@@ -22,15 +34,22 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Names treated as secret-shaped. Order matches docker-compose.yml usage order
-# (POSTGRES_PASSWORD/REDIS_PASSWORD first since they appear in multiple jobs).
-SECRET_VARS=(
+# REQUIRED_SECRETS: must use ${VAR:?...}. Empty fallback ${VAR:-} is NOT
+# allowed for these — an empty value here means the container starts with the
+# var blank and the app errors at a later layer with a more confusing message
+# than the compose-time :? error.
+REQUIRED_SECRETS=(
     POSTGRES_PASSWORD
     REDIS_PASSWORD
     JWT_SECRET
     KEYVAULT_MASTER_KEY
     MINIO_ROOT_PASSWORD
     GRAFANA_ADMIN_PASSWORD
+)
+
+# OPTIONAL_SECRETS: ${VAR:-} (empty fallback) is allowed because the feature
+# itself is optional. Non-empty fallback is still forbidden.
+OPTIONAL_SECRETS=(
     SMTP_PASSWORD
 )
 
@@ -40,19 +59,24 @@ if [[ ! -e "${compose_files[0]}" ]]; then
     exit 1
 fi
 
-# Build the alternation pattern once.
-alt="$(IFS='|'; echo "${SECRET_VARS[*]}")"
-# ${(SECRET_NAME):-<non-empty>} — only non-empty fallbacks leak credentials.
-# ${VAR:-} is allowed: empty fallback is the "feature optional" pattern and
-# does not introduce a hardcoded credential.
-pattern="\\\$\\{(${alt}):-[^}]"
+required_alt="$(IFS='|'; echo "${REQUIRED_SECRETS[*]}")"
+optional_alt="$(IFS='|'; echo "${OPTIONAL_SECRETS[*]}")"
+
+# Required-tier pattern: ${(REQUIRED):-anything} is forbidden (even empty).
+required_pattern="\\\$\\{(${required_alt}):-"
+
+# Optional-tier pattern: ${(OPTIONAL):-<non-empty>} is forbidden.
+optional_pattern="\\\$\\{(${optional_alt}):-[^}]"
 
 fail=0
 for f in "${compose_files[@]}"; do
-    # grep -E uses ERE; -n prints line numbers; capture both to differentiate
-    # locations in the failure message.
-    if matches="$(grep -EHn "$pattern" "$f" 2>/dev/null)"; then
-        echo "lint-no-secret-fallbacks: forbidden \${VAR:-fallback} pattern in $f" >&2
+    if matches="$(grep -EHn "$required_pattern" "$f" 2>/dev/null)"; then
+        echo "lint-no-secret-fallbacks: REQUIRED secret used \${VAR:-...} in $f (must be \${VAR:?msg})" >&2
+        echo "$matches" >&2
+        fail=1
+    fi
+    if matches="$(grep -EHn "$optional_pattern" "$f" 2>/dev/null)"; then
+        echo "lint-no-secret-fallbacks: OPTIONAL secret used non-empty fallback in $f (only \${VAR:-} is allowed)" >&2
         echo "$matches" >&2
         fail=1
     fi
@@ -72,4 +96,4 @@ EOF
     exit 1
 fi
 
-echo "lint-no-secret-fallbacks: ok (${#SECRET_VARS[@]} names checked across ${#compose_files[@]} compose files)"
+echo "lint-no-secret-fallbacks: ok (${#REQUIRED_SECRETS[@]} required + ${#OPTIONAL_SECRETS[@]} optional names checked across ${#compose_files[@]} compose files)"

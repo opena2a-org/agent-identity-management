@@ -45,7 +45,10 @@ func baseValidConfig() *Config {
 func TestValidate_RejectsKnownDevSecrets_InAllEnvironments(t *testing.T) {
 	t.Parallel()
 
-	environments := []string{"development", "staging", "production"}
+	// Includes "" and "test" alongside the canonical three so that a future
+	// regression that re-introduces any environment gate is caught even when
+	// the gate uses an unusual or empty env value.
+	environments := []string{"", "development", "test", "staging", "production"}
 
 	for _, env := range environments {
 		for _, secret := range knownDevSecrets {
@@ -81,6 +84,35 @@ func TestValidate_RejectsKnownDevKeyvaultMasterKey(t *testing.T) {
 				t.Fatalf("Validate accepted known dev KEYVAULT_MASTER_KEY in development; want error")
 			}
 		})
+	}
+}
+
+// TestValidate_RejectsKnownDevSecrets_WithWhitespacePadding closes the
+// adversarial-review HIGH on the whitespace-paste bypass. Before the
+// strings.TrimSpace in isKnownDevSecret, a value pasted from a clipboard with
+// a trailing newline or surrounding spaces hashed to a different digest and
+// bypassed the blocklist.
+func TestValidate_RejectsKnownDevSecrets_WithWhitespacePadding(t *testing.T) {
+	t.Parallel()
+	paddings := []struct {
+		name   string
+		wrap   func(string) string
+	}{
+		{"trailing-newline", func(s string) string { return s + "\n" }},
+		{"leading-space", func(s string) string { return " " + s }},
+		{"both-sides-whitespace", func(s string) string { return "\t" + s + " \r\n" }},
+	}
+	for _, p := range paddings {
+		for _, secret := range knownDevSecrets {
+			padded := p.wrap(secret)
+			t.Run(p.name+"/"+secret[:min(16, len(secret))], func(t *testing.T) {
+				cfg := baseValidConfig()
+				cfg.JWT.Secret = padded
+				if err := cfg.Validate(); err == nil {
+					t.Fatalf("Validate accepted %s-padded dev secret %q; want error", p.name, padded)
+				}
+			})
+		}
 	}
 }
 
