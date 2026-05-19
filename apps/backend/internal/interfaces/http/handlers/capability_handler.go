@@ -12,11 +12,20 @@ import (
 )
 
 // CapabilityHandler handles capability-related HTTP requests
+// agentByIDLookup is the single-method subset of any agent repository this
+// handler needs. Both domain.AgentRepository (the production type) and the
+// test-side MockAgentRepositoryerImpl satisfy it via Go structural typing,
+// which lets the handler accept either without having to define a shared
+// interface upstream that both sides agree on.
+type agentByIDLookup interface {
+	GetByID(id uuid.UUID) (*domain.Agent, error)
+}
+
 type CapabilityHandler struct {
 	// Concrete service pointers (used by existing code)
 	capabilityService        *application.CapabilityService
 	capabilityRequestService *application.CapabilityRequestService
-	agentRepo                domain.AgentRepository
+	agentRepo                agentByIDLookup
 	orgRepo                  domain.OrganizationRepository
 
 	// Interface fields for testability (used when set)
@@ -38,7 +47,11 @@ func NewCapabilityHandler(
 	}
 }
 
-// NewCapabilityHandlerWithInterfaces creates a CapabilityHandler using interfaces for testability
+// NewCapabilityHandlerWithInterfaces creates a CapabilityHandler using
+// interfaces for testability. Tests that exercise paths past the
+// tenant-scoping check (defect #25 fix) must overwrite handler.agentRepo
+// with a scenario-specific mock that returns an agent whose
+// OrganizationID matches the caller's org in the test's c.Locals.
 func NewCapabilityHandlerWithInterfaces(
 	capabilityService CapabilityServicer,
 ) *CapabilityHandler {
@@ -105,6 +118,13 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error: "Invalid organization ID type in context",
 		})
+	}
+
+	// SECURITY (defect #25): verify the agent referenced by URL parameter
+	// belongs to the caller's organization. Without this check, a valid SDK
+	// token for org A could grant capabilities to agent B in org C.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	capSvc := h.getCapabilityService()
