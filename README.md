@@ -11,6 +11,8 @@ Cryptographic identity, capability authorization, and audit trails for AI agents
 
 [Website](https://opena2a.org) · [Demos](https://opena2a.org/demos) · [Discord](https://discord.gg/uRZa3KXgEn)
 
+> **Pre-1.0.** AIM is suitable today for evaluation, development, and internal testing. Production deployment with untrusted tenants or sensitive data is not yet recommended. Active hardening work is tracked in [HARDENING.md](HARDENING.md).
+
 ## Quick start
 
 ```bash
