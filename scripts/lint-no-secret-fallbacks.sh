@@ -51,6 +51,7 @@ REQUIRED_SECRETS=(
 # itself is optional. Non-empty fallback is still forbidden.
 OPTIONAL_SECRETS=(
     SMTP_PASSWORD
+    DEFAULT_ADMIN_PASSWORD
 )
 
 compose_files=(docker-compose*.yml)

@@ -1,12 +1,23 @@
--- Migration: Create default admin user for fresh deployments
+-- Migration: Create default organization for fresh deployments
 -- Created: 2025-10-21
--- Purpose: Every fresh deployment MUST have a default admin user
---          Admin is forced to change password on first login
+-- Updated: 2026-05-20 — removed sentinel UUIDs (CWE-330) and the hardcoded
+--          admin user INSERT (CWE-798). The admin user is now seeded by the
+--          Go bootstrap binary at apps/backend/cmd/bootstrap with --default,
+--          which generates a random UUID and a random password (printed once
+--          to stdout). See HARDENING.md for the bootstrap flow.
+--
+-- Why the admin INSERT moved out of SQL: AIM Cloud runs on Azure Postgres,
+-- which does not allow-list pgcrypto / uuid-ossp. SQL-side password hashing
+-- via crypt()/gen_salt() is therefore unavailable in production. gen_random_uuid()
+-- is built-in on Postgres 13+ so the org row keeps its random-UUID assignment
+-- here; the password hashing lives in Go (auth.PasswordHasher, bcrypt cost=12).
 
--- Create default organization if it doesn't exist
+-- Create default organization if it doesn't exist.
+-- ON CONFLICT (domain) DO NOTHING makes this idempotent: re-runs preserve the
+-- random UUID assigned on first execution.
 INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active)
 VALUES (
-    'a0000000-0000-0000-0000-000000000001'::uuid,
+    gen_random_uuid(),
     'OpenA2A Admin',
     'admin.opena2a.org',
     'enterprise',
@@ -16,39 +27,7 @@ VALUES (
 )
 ON CONFLICT (domain) DO NOTHING;
 
--- Create default admin user if it doesn't exist
--- SECURITY: Default password is randomly generated (see deployment docs).
--- Admin MUST change password on first login (force_password_change=TRUE).
--- For fresh deployments, set DEFAULT_ADMIN_PASSWORD env var or use the generated one.
--- Bcrypt hash generated with cost=12
-INSERT INTO users (
-    id,
-    organization_id,
-    email,
-    name,
-    role,
-    provider,
-    provider_id,
-    password_hash,
-    status,
-    email_verified,
-    force_password_change
-)
-VALUES (
-    'a0000000-0000-0000-0000-000000000002'::uuid,
-    'a0000000-0000-0000-0000-000000000001'::uuid,
-    'admin@opena2a.org',
-    'System Administrator',
-    'admin',
-    'local',
-    'admin@opena2a.org',
-    '$2a$12$UbRtBE0U9Ry36Bdl04YWDuXe3lIw14aZaxQ8B6bbA4P7peLRski66',  -- Default password: AIM2025!Secure (MUST be changed on first login)
-    'active',
-    TRUE,
-    TRUE  -- Admin MUST change password on first login
-)
-ON CONFLICT (organization_id, email) DO NOTHING;
-
--- Add comment explaining this migration
-COMMENT ON TABLE organizations IS 'Default organization (id: a0000000-0000-0000-0000-000000000001) created for system admin';
-COMMENT ON TABLE users IS 'Default admin user (admin@opena2a.org) created with force_password_change=TRUE';
+-- Comments reflect the post-2026-05-20 seeding model: the org is seeded here,
+-- the admin user is seeded by `aim-bootstrap --default` after migrations run.
+COMMENT ON TABLE organizations IS 'Default OpenA2A Admin org (lookup by domain=admin.opena2a.org) seeded with gen_random_uuid()';
+COMMENT ON TABLE users IS 'Default admin user seeded by apps/backend/cmd/bootstrap --default; force_password_change=TRUE on first login';

@@ -18,7 +18,7 @@ The AIM SDK comes with your embedded credentials - zero configuration required.
 **Steps to Download**:
 1. **Login** to AIM Dashboard (http://localhost:3000)
    - Email: `admin@opena2a.org`
-   - Password: `AIM2025!Secure`
+   - Password: captured from `aim-bootstrap --default` stdout on first deploy (pre-B2 stacks: `AIM2025!Secure`)
 2. **Navigate** to Settings → SDK Download
 3. **Click** "Download Python SDK" button
 4. **Extract** the downloaded ZIP file to your project directory

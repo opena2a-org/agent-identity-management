@@ -23,6 +23,17 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /bin/aim-server ./cmd/server
 
+# Build the migrate and bootstrap binaries so operators can run them inside the
+# container (`docker compose run --rm aim-backend /app/aim-migrate` then
+# `aim-bootstrap --default`). Bootstrap is the post-B2 seed path for the default
+# admin user; migration 013 only seeds the org now.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w" \
+    -o /bin/aim-migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w" \
+    -o /bin/aim-bootstrap ./cmd/bootstrap
+
 # Runtime stage
 FROM alpine:3.21
 
@@ -33,8 +44,8 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /bin/aim-server .
+# Copy the binaries from builder
+COPY --from=builder /bin/aim-server /bin/aim-migrate /bin/aim-bootstrap ./
 
 # Copy migrations
 COPY apps/backend/migrations ./migrations
