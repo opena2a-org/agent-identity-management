@@ -61,6 +61,12 @@ type BootstrapConfig struct {
 	// password. The final credential block highlights that the operator must
 	// capture the password from this run's stdout.
 	passwordWasGenerated bool
+	// adminAlreadyExisted is set to true when runBootstrap's user INSERT hit
+	// the ON CONFLICT DO NOTHING branch in --default mode. The stored
+	// password does NOT match this run's hashed password, so the credential
+	// block must be suppressed to avoid handing the operator a wrong
+	// password.
+	adminAlreadyExisted bool
 }
 
 func main() {
@@ -161,6 +167,14 @@ func main() {
 	}
 
 	fmt.Println("\n✅ Bootstrap completed successfully!")
+	if config.adminAlreadyExisted {
+		// --default mode hit ON CONFLICT DO NOTHING. The password we hashed
+		// for this run was NEVER stored. Printing config.AdminPassword would
+		// lock out the operator. Suppress the credential block.
+		fmt.Printf("\nℹ️  Admin user for %s already existed in this org. The bootstrap_completed marker is set; nothing else to do.\n", config.AdminEmail)
+		fmt.Println("    If you have lost the original admin password, use the password-reset flow rather than re-running bootstrap.")
+		return
+	}
 	fmt.Printf("\n🔐 Admin Credentials:\n")
 	fmt.Printf("   Email:    %s\n", config.AdminEmail)
 	fmt.Printf("   Password: %s\n", config.AdminPassword)
@@ -292,11 +306,29 @@ func validateConfig(config *BootstrapConfig) error {
 	return nil
 }
 
+// isBootstrapped returns true only when the system_config row explicitly says
+// so. A database error (connection failed, permission denied, system_config
+// table missing because migrations haven't run) is treated as "not
+// bootstrapped" — but unlike the previous version, the error is logged so
+// operators can distinguish "fresh DB" from "DB is reachable but the marker
+// is unset" from "DB is unreachable, every run is racing the previous one."
+//
+// Note: this check is necessary-but-not-sufficient for idempotency. The
+// runBootstrap user INSERT uses ON CONFLICT (organization_id, email) DO
+// NOTHING in --default mode so a concurrent run that bypasses this check
+// cannot silently rotate an existing admin's password.
 func isBootstrapped(db *sql.DB) bool {
 	var value string
 	query := `SELECT value FROM system_config WHERE key = 'bootstrap_completed'`
 	err := db.QueryRow(query).Scan(&value)
+	if err == sql.ErrNoRows {
+		return false
+	}
 	if err != nil {
+		// Distinguish from sql.ErrNoRows so operators see the real reason.
+		// Stays "not bootstrapped" to preserve the existing semantic; the
+		// runBootstrap INSERT's ON CONFLICT clause is the actual guard.
+		log.Printf("⚠️  isBootstrapped: DB error (treating as not-yet-bootstrapped): %v", err)
 		return false
 	}
 	return value == "true"
@@ -342,24 +374,53 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 	}
 	fmt.Println("   ✓ Password hashed")
 
-	// 3. Create admin user
+	// 3. Create admin user.
+	//
+	// Conflict policy depends on mode:
+	//   --default (idempotent re-runs): ON CONFLICT DO NOTHING. If an admin
+	//     row already exists for this org+email, the run leaves it alone,
+	//     RowsAffected returns 0, and the credential block is NOT printed —
+	//     the printed password would not match the stored password and would
+	//     lock out the operator. This is the TOCTOU mitigation for two
+	//     concurrent `--default` invocations both passing isBootstrapped.
+	//   non-default (explicit re-init): ON CONFLICT DO UPDATE. Operators
+	//     running `aim-bootstrap --admin-email=X --admin-password=Y` again
+	//     mean it; rotate the stored password to the new value.
+	//
+	// status='active' is set explicitly here. The users table default is
+	// 'pending' (apps/backend/migrations/001_initial_schema.sql:49) which
+	// blocks downstream approval flows that expect the seeded admin to be
+	// active out of the gate. The pre-B2 migration 013 v1 set this column
+	// explicitly; the move to Go preserves that behavior.
 	fmt.Println("3️⃣  Creating admin user...")
 	userID := uuid.New()
 	providerID := fmt.Sprintf("local-%s", userID.String())
 
-	query = `
-		INSERT INTO users (
-			id, organization_id, email, name, role, provider, provider_id,
-			password_hash, email_verified, force_password_change, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
-		)
-		ON CONFLICT (organization_id, email) DO UPDATE
-		SET role = $5, password_hash = $8, email_verified = $9, force_password_change = $10, updated_at = NOW()
-		RETURNING id
-	`
+	var insertQuery string
+	if config.Default {
+		insertQuery = `
+			INSERT INTO users (
+				id, organization_id, email, name, role, provider, provider_id,
+				password_hash, status, email_verified, force_password_change, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, NOW(), NOW()
+			)
+			ON CONFLICT (organization_id, email) DO NOTHING
+		`
+	} else {
+		insertQuery = `
+			INSERT INTO users (
+				id, organization_id, email, name, role, provider, provider_id,
+				password_hash, status, email_verified, force_password_change, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, NOW(), NOW()
+			)
+			ON CONFLICT (organization_id, email) DO UPDATE
+			SET role = $5, password_hash = $8, status = 'active', email_verified = $9, force_password_change = $10, updated_at = NOW()
+		`
+	}
 
-	err = tx.QueryRow(query,
+	result, err := tx.Exec(insertQuery,
 		userID,
 		orgID,
 		config.AdminEmail,
@@ -368,14 +429,27 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 		"local",
 		providerID,
 		passwordHash,
-		true,  // email_verified
-		true,  // force_password_change - user must change default password
-	).Scan(&userID)
-
+		true, // email_verified
+		true, // force_password_change - user must change default password
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create admin user: %w", err)
 	}
-	fmt.Printf("   ✓ Admin user created (ID: %s)\n", userID)
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read insert result: %w", err)
+	}
+	if rowsAffected == 0 {
+		// --default mode hit the DO NOTHING branch — admin already exists.
+		// Signal the caller (via config.passwordWasGenerated reset) that the
+		// credential print should be suppressed; the stored password is NOT
+		// the one we just hashed.
+		fmt.Printf("   ✓ Admin user already exists for %s in this org — leaving stored password unchanged\n", config.AdminEmail)
+		config.adminAlreadyExisted = true
+	} else {
+		fmt.Printf("   ✓ Admin user created (ID: %s)\n", userID)
+	}
 
 	// 4. Mark bootstrap as completed
 	fmt.Println("4️⃣  Updating system configuration...")
