@@ -656,6 +656,14 @@ func TestNewCapabilityHandlerWithInterfaces_WithMock(t *testing.T) {
 // before the handler reaches `orgRepo.GetByID(agent.OrganizationID)`.
 // Without this fix the request would, in MONITORING mode, auto-grant the
 // requested capability on agent B.
+//
+// REGRESSION GUARANTEE: The mock `orgRepo` records whether it was
+// invoked. A future change that removes the `LoadOwned` wrap (or
+// otherwise routes cross-org execution past the scoping check) reaches
+// `orgRepo.GetByID(agent.OrganizationID)` at the post-LoadOwned org
+// lookup, sets the flag, and the post-call assertion fails with a clear
+// message. This makes the test a clean structural guard rather than
+// relying on a downstream nil-pointer panic if `orgRepo` were left unset.
 func TestCapabilityHandler_RegisterCapability_CrossOrg_Returns404(t *testing.T) {
 	agentID := uuid.New()
 	callerOrgID := uuid.New()
@@ -666,6 +674,13 @@ func TestCapabilityHandler_RegisterCapability_CrossOrg_Returns404(t *testing.T) 
 	handler.agentRepo = &MockAgentRepositoryerImpl{
 		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
 			return &domain.Agent{ID: id, OrganizationID: otherOrgID}, nil
+		},
+	}
+	orgRepoCalled := false
+	handler.orgRepo = &MockOrganizationRepository{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Organization, error) {
+			orgRepoCalled = true
+			return &domain.Organization{ID: id, EnforcementMode: domain.EnforcementModeMonitoring}, nil
 		},
 	}
 
@@ -692,6 +707,13 @@ func TestCapabilityHandler_RegisterCapability_CrossOrg_Returns404(t *testing.T) 
 	assert.Equal(t, "not found", body404["error"])
 	assert.NotContains(t, body404, "agentId")
 	assert.NotContains(t, body404, "organizationId")
+
+	// Regression assertion: LoadOwned must short-circuit before the
+	// org-settings lookup. If `orgRepoCalled` is true, the handler
+	// reached the post-LoadOwned org lookup on a cross-org request —
+	// the scoping check was bypassed and the IDOR has regressed.
+	assert.False(t, orgRepoCalled,
+		"orgRepo.GetByID was reached on a cross-org request; LoadOwned scoping was bypassed")
 }
 
 // TestCapabilityHandler_RegisterCapability_NoOrgID_Integration mirrors
