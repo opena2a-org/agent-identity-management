@@ -1249,7 +1249,7 @@ func TestAgentService_CreateCapabilityViolation_SeverityMapping(t *testing.T) {
 func TestNewAgentService_NilDependencies(t *testing.T) {
 	// Test that service can be created even with nil dependencies
 	// (this is used in some test scenarios)
-	service := NewAgentService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewAgentService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	assert.NotNil(t, service)
 	assert.Nil(t, service.agentRepo)
@@ -1263,6 +1263,7 @@ func TestNewAgentService_NilDependencies(t *testing.T) {
 	assert.Nil(t, service.tagRepo)
 	assert.Nil(t, service.userRepo)
 	assert.Nil(t, service.orgRepo)
+	assert.Nil(t, service.capabilityRequestService)
 }
 
 func TestNewAgentService_WithMockedDependencies(t *testing.T) {
@@ -1287,6 +1288,7 @@ func TestNewAgentService_WithMockedDependencies(t *testing.T) {
 		nil, // tagRepo
 		nil, // userRepo
 		nil, // orgRepo
+		nil, // capabilityRequestService
 	)
 
 	assert.NotNil(t, service)
@@ -1849,7 +1851,7 @@ func TestAgentService_UpdateAgent_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	agent, err := service.UpdateAgent(ctx, existingAgent.ID, req)
+	agent, err := service.UpdateAgent(ctx, existingAgent.ID, req, uuid.New())
 
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
@@ -1869,7 +1871,7 @@ func TestAgentService_UpdateAgent_NotFound(t *testing.T) {
 	req := &CreateAgentRequest{DisplayName: "New Name"}
 
 	ctx := context.Background()
-	agent, err := service.UpdateAgent(ctx, agentID, req)
+	agent, err := service.UpdateAgent(ctx, agentID, req, uuid.New())
 
 	assert.Error(t, err)
 	assert.Nil(t, agent)

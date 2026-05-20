@@ -373,7 +373,7 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 		})
 	}
 
-	agent, err := h.agentService.UpdateAgent(c.Context(), agentID, &req)
+	agent, err := h.agentService.UpdateAgent(c.Context(), agentID, &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

@@ -20,7 +20,7 @@ type MockAgentServiceImpl struct {
 	GetAgentFunc                    func(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
 	GetAgentByNameFunc              func(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
 	ListAgentsFunc                  func(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
-	UpdateAgentFunc                 func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest) (*domain.Agent, error)
+	UpdateAgentFunc                 func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
 	DeleteAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	VerifyAgentFunc                 func(ctx context.Context, id uuid.UUID) error
 	SuspendAgentFunc                func(ctx context.Context, id uuid.UUID) error
@@ -72,9 +72,9 @@ func (m *MockAgentServiceImpl) ListAgents(ctx context.Context, orgID uuid.UUID) 
 	return []*domain.Agent{}, nil
 }
 
-func (m *MockAgentServiceImpl) UpdateAgent(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest) (*domain.Agent, error) {
+func (m *MockAgentServiceImpl) UpdateAgent(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error) {
 	if m.UpdateAgentFunc != nil {
-		return m.UpdateAgentFunc(ctx, id, req)
+		return m.UpdateAgentFunc(ctx, id, req, requestedBy)
 	}
 	return nil, nil
 }

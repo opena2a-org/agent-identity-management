@@ -639,6 +639,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		driftDetectionService,
 	)
 
+	// Construct the capability-request workflow service BEFORE the agent
+	// service. AgentService.UpdateAgent (re-registration) routes new
+	// capability declarations through CapabilityRequestService so the
+	// mode-aware policy (monitoring auto-approves, strict creates pending
+	// request) is enforced in one place rather than duplicated.
+	capabilityRequestService := application.NewCapabilityRequestService(
+		repos.CapabilityRequest,
+		repos.Capability,
+		repos.Agent,
+		repos.Organization,
+	)
+
 	agentService := application.NewAgentService(
 		repos.Agent,
 		trustCalculator,
@@ -651,6 +663,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Tag,                // ✅ NEW: Inject TagRepository for tagging agents during registration
 		repos.User,               // ✅ NEW: Inject UserRepository for audit trail (creator/updater info)
 		repos.Organization,       // ✅ NEW: Inject OrganizationRepository for checking enforcement mode
+		capabilityRequestService, // NEW: For mode-aware capability approval workflow on re-registration
 	)
 
 	apiKeyService := application.NewAPIKeyService(
@@ -753,13 +766,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Alert,
 		trustCalculator,
 		repos.TrustScore,
-	)
-
-	capabilityRequestService := application.NewCapabilityRequestService(
-		repos.CapabilityRequest,
-		repos.Capability,
-		repos.Agent,
-		repos.Organization,
 	)
 
 	detectionService := application.NewDetectionService(
