@@ -39,7 +39,7 @@ export function AccessReview() {
     setError(null);
     try {
       const data = await api.getAccessReview();
-      setUsers(data.users);
+      setUsers(data.users ?? []);
       setTotal(data.total);
     } catch (err: any) {
       console.error('Failed to fetch access review:', err);

@@ -118,7 +118,7 @@ func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*doma
 	}
 	defer rows.Close()
 
-	var scores []*domain.TrustScore
+	scores := make([]*domain.TrustScore, 0)
 	for rows.Next() {
 		score := &domain.TrustScore{}
 		err := rows.Scan(
@@ -181,7 +181,7 @@ func (r *TrustScoreRepository) GetHistoryAuditTrail(agentID uuid.UUID, limit int
 	}
 	defer rows.Close()
 
-	var entries []*domain.TrustScoreHistoryEntry
+	entries := make([]*domain.TrustScoreHistoryEntry, 0)
 	for rows.Next() {
 		entry := &domain.TrustScoreHistoryEntry{}
 		err := rows.Scan(

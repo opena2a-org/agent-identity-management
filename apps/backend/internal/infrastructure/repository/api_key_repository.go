@@ -115,7 +115,7 @@ func (r *APIKeyRepository) GetByAgent(agentID uuid.UUID) ([]*domain.APIKey, erro
 	}
 	defer rows.Close()
 
-	var keys []*domain.APIKey
+	keys := make([]*domain.APIKey, 0)
 	for rows.Next() {
 		key := &domain.APIKey{}
 		err := rows.Scan(
@@ -157,7 +157,7 @@ func (r *APIKeyRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.APIKey,
 	}
 	defer rows.Close()
 
-	var keys []*domain.APIKey
+	keys := make([]*domain.APIKey, 0)
 	for rows.Next() {
 		key := &domain.APIKey{}
 		var agentName sql.NullString

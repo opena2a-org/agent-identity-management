@@ -230,7 +230,7 @@ func (r *A2AAgentCardRepository) queryCards(ctx context.Context, query string, a
 }
 
 func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCard, error) {
-	var cards []*domain.A2AAgentCard
+	cards := make([]*domain.A2AAgentCard, 0)
 	for rows.Next() {
 		card := &domain.A2AAgentCard{}
 		var attestSig, validationErr sql.NullString
@@ -516,7 +516,7 @@ func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, 
 	}
 	defer rows.Close()
 
-	var results []*domain.RoutedAgent
+	results := make([]*domain.RoutedAgent, 0)
 	for rows.Next() {
 		ra := &domain.RoutedAgent{}
 		err := rows.Scan(
@@ -606,7 +606,7 @@ func (r *A2ASkillRepository) querySkills(ctx context.Context, query string, args
 	}
 	defer rows.Close()
 
-	var skills []*domain.A2ASkill
+	skills := make([]*domain.A2ASkill, 0)
 	for rows.Next() {
 		skill := &domain.A2ASkill{}
 		var tagsJSON, inputModesJSON, outputModesJSON, examplesJSON []byte
@@ -863,7 +863,7 @@ func (r *A2ATaskRepository) scanTask(row *sql.Row) (*domain.A2ATask, error) {
 	var startedAt, completedAt, policyEvaluatedAt sql.NullTime
 	var durationMs sql.NullInt32
 	var clientTrust, remoteTrust sql.NullFloat64
-	var policyDecision []byte
+	policyDecision := make([]byte, 0)
 
 	err := row.Scan(
 		&task.ID,
@@ -928,14 +928,14 @@ func (r *A2ATaskRepository) queryTasks(ctx context.Context, query string, args .
 	}
 	defer rows.Close()
 
-	var tasks []*domain.A2ATask
+	tasks := make([]*domain.A2ATask, 0)
 	for rows.Next() {
 		task := &domain.A2ATask{}
 		var contextID, skillID, errorCode, errorMessage sql.NullString
 		var startedAt, completedAt, policyEvaluatedAt sql.NullTime
 		var durationMs sql.NullInt32
 		var clientTrust, remoteTrust sql.NullFloat64
-		var policyDecision []byte
+		policyDecision := make([]byte, 0)
 
 		err := rows.Scan(
 			&task.ID,
@@ -1198,7 +1198,7 @@ func (r *A2APeerTrustRepository) queryPeerTrusts(ctx context.Context, query stri
 	}
 	defer rows.Close()
 
-	var trusts []*domain.A2APeerTrust
+	trusts := make([]*domain.A2APeerTrust, 0)
 	for rows.Next() {
 		trust := &domain.A2APeerTrust{}
 		var successRate, peerTrust sql.NullFloat64
@@ -1504,7 +1504,7 @@ func (r *A2AConsentRepository) queryConsents(ctx context.Context, query string, 
 	}
 	defer rows.Close()
 
-	var consents []*domain.A2AConsentRecord
+	consents := make([]*domain.A2AConsentRecord, 0)
 	for rows.Next() {
 		consent := &domain.A2AConsentRecord{}
 		var orgID sql.NullString
@@ -1842,7 +1842,7 @@ func (r *A2ATrustScoreRepository) ListAll(ctx context.Context, limit, offset int
 	}
 	defer rows.Close()
 
-	var scores []*domain.A2ATrustScore
+	scores := make([]*domain.A2ATrustScore, 0)
 	for rows.Next() {
 		score := &domain.A2ATrustScore{}
 		var avgResp, p95Resp, avgDuration sql.NullInt32
@@ -2173,7 +2173,7 @@ func (r *A2APolicyRepository) queryPolicies(ctx context.Context, query string, a
 	}
 	defer rows.Close()
 
-	var policies []*domain.A2APolicy
+	policies := make([]*domain.A2APolicy, 0)
 	for rows.Next() {
 		policy := &domain.A2APolicy{}
 		var orgID, createdBy, updatedBy sql.NullString
@@ -2375,7 +2375,7 @@ func (r *A2AAgentAttestationRepository) GetByAttestedAgent(ctx context.Context, 
 	}
 	defer rows.Close()
 
-	var attestations []*domain.A2AAgentAttestation
+	attestations := make([]*domain.A2AAgentAttestation, 0)
 	for rows.Next() {
 		att := &domain.A2AAgentAttestation{}
 		var sID, ch, rr sql.NullString
@@ -2536,7 +2536,7 @@ func (r *A2ARevokedAgentRepository) List(ctx context.Context, limit, offset int)
 	}
 	defer rows.Close()
 
-	var list []*domain.A2ARevokedAgent
+	list := make([]*domain.A2ARevokedAgent, 0)
 	for rows.Next() {
 		ra := &domain.A2ARevokedAgent{}
 		var reason, revokedBy sql.NullString
@@ -2729,10 +2729,10 @@ func (r *A2ASecurityViolationRepository) queryViolations(ctx context.Context, qu
 }
 
 func (r *A2ASecurityViolationRepository) scanViolations(rows *sql.Rows) ([]*domain.A2ASecurityViolation, error) {
-	var list []*domain.A2ASecurityViolation
+	list := make([]*domain.A2ASecurityViolation, 0)
 	for rows.Next() {
 		v := &domain.A2ASecurityViolation{}
-		var detailsJSON []byte
+		detailsJSON := make([]byte, 0)
 		var reqAgentID, targetAgentID, taskID, policyID sql.NullString
 		var reqSig, reqNonce sql.NullString
 		var reqTimestamp sql.NullTime

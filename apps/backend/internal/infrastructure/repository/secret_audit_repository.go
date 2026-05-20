@@ -71,7 +71,7 @@ func (r *SecretAuditRepository) scanEntries(rows *sql.Rows, err error) ([]*secre
 	}
 	defer rows.Close()
 
-	var result []*secrets.SecretAuditEntry
+	result := make([]*secrets.SecretAuditEntry, 0)
 	for rows.Next() {
 		entry := &secrets.SecretAuditEntry{}
 		if err := rows.Scan(

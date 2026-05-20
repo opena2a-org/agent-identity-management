@@ -34,7 +34,7 @@ func (r *DataTransferRepository) RecordTransfer(transfer *domain.DataTransfer) e
 		transfer.CreatedAt = time.Now()
 	}
 
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 	var err error
 	if transfer.Metadata != nil {
 		metadataJSON, err = json.Marshal(transfer.Metadata)
@@ -124,7 +124,7 @@ func (r *DataTransferRepository) GetOrCreateCurrentAggregate(agentID, orgID uuid
 	`
 
 	aggregate := &domain.DataTransferAggregate{}
-	var topDestJSON []byte
+	topDestJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, agentID, bucketStart).Scan(
 		&aggregate.ID,
@@ -223,10 +223,10 @@ func (r *DataTransferRepository) GetAggregates(agentID uuid.UUID, since time.Tim
 	}
 	defer rows.Close()
 
-	var aggregates []*domain.DataTransferAggregate
+	aggregates := make([]*domain.DataTransferAggregate, 0)
 	for rows.Next() {
 		agg := &domain.DataTransferAggregate{}
-		var topDestJSON []byte
+		topDestJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&agg.ID,
@@ -279,7 +279,7 @@ func (r *DataTransferRepository) GetTopTransferringAgents(orgID uuid.UUID, windo
 	}
 	defer rows.Close()
 
-	var summaries []domain.AgentTransferSummary
+	summaries := make([]domain.AgentTransferSummary, 0)
 	for rows.Next() {
 		var s domain.AgentTransferSummary
 		var topDest sql.NullString
@@ -324,11 +324,11 @@ func (r *DataTransferRepository) CleanupOldRecords(olderThan time.Duration) (int
 
 // scanTransfers scans rows into DataTransfer slice
 func (r *DataTransferRepository) scanTransfers(rows *sql.Rows) ([]*domain.DataTransfer, error) {
-	var transfers []*domain.DataTransfer
+	transfers := make([]*domain.DataTransfer, 0)
 
 	for rows.Next() {
 		t := &domain.DataTransfer{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 		var resource, destIP, destDomain sql.NullString
 
 		err := rows.Scan(

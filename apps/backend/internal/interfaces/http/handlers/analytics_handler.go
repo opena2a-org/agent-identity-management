@@ -334,7 +334,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				avgScore float64
 				count    int
 			}
-			var sortedTrends []weekTrend
+			sortedTrends := make([]weekTrend, 0)
 			for weekKey, scores := range weekScores {
 				t, _ := time.Parse("2006-01-02", weekKey)
 				total := 0.0
@@ -495,7 +495,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				avgScore float64
 				count    int
 			}
-			var sortedTrends []dateTrend
+			sortedTrends := make([]dateTrend, 0)
 			for dateKey, scores := range dateScores {
 				t, _ := time.Parse("2006-01-02", dateKey)
 				total := 0.0
@@ -790,7 +790,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 			mcpVerified    int
 			mcpPending     int
 		}
-		var sortedMonths []monthData
+		sortedMonths := make([]monthData, 0)
 		for monthKey, counts := range monthlyData {
 			t, _ := time.Parse("2006-01", monthKey)
 			sortedMonths = append(sortedMonths, monthData{
@@ -929,7 +929,7 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 			mcpVerified    int
 			mcpPending     int
 		}
-		var sortedMonths []monthData
+		sortedMonths := make([]monthData, 0)
 		for monthKey, counts := range monthlyData {
 			t, _ := time.Parse("2006-01", monthKey)
 			sortedMonths = append(sortedMonths, monthData{
@@ -1460,7 +1460,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var activityByDay []DailyActivity
+	activityByDay := make([]DailyActivity, 0)
 
 	activityByDayQuery := `
 		SELECT
@@ -1502,7 +1502,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		CreatedAt     time.Time `json:"createdAt"`
 		DurationMs    int       `json:"durationMs,omitempty"`
 	}
-	var recentActivity []RecentActivity
+	recentActivity := make([]RecentActivity, 0)
 
 	recentActivityQuery := `
 		SELECT

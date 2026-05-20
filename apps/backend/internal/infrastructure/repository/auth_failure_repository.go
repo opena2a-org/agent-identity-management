@@ -35,7 +35,7 @@ func (r *AuthFailureRepository) RecordFailure(failure *domain.AuthFailure) error
 	}
 
 	// Convert metadata to JSON
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 	var err error
 	if failure.Metadata != nil {
 		metadataJSON, err = json.Marshal(failure.Metadata)
@@ -75,10 +75,10 @@ func (r *AuthFailureRepository) GetRecentFailures(email string, withinMinutes in
 	}
 	defer rows.Close()
 
-	var failures []*domain.AuthFailure
+	failures := make([]*domain.AuthFailure, 0)
 	for rows.Next() {
 		failure := &domain.AuthFailure{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 		var orgID, userID sql.NullString
 
 		err := rows.Scan(
@@ -157,10 +157,10 @@ func (r *AuthFailureRepository) GetByOrganization(orgID uuid.UUID, limit, offset
 	}
 	defer rows.Close()
 
-	var failures []*domain.AuthFailure
+	failures := make([]*domain.AuthFailure, 0)
 	for rows.Next() {
 		failure := &domain.AuthFailure{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 		var orgIDNull, userID sql.NullString
 
 		err := rows.Scan(
@@ -316,7 +316,7 @@ func (r *AuthFailureRepository) GetLockoutsByOrganization(orgID uuid.UUID, limit
 	}
 	defer rows.Close()
 
-	var lockouts []*domain.AuthLockout
+	lockouts := make([]*domain.AuthLockout, 0)
 	for rows.Next() {
 		lockout := &domain.AuthLockout{}
 		var orgIDNull, userID, unlockedBy sql.NullString

@@ -49,7 +49,8 @@ func (r *SecretNamespaceRepository) GetByID(id uuid.UUID) (*secrets.SecretNamesp
 		FROM secret_namespaces WHERE id = $1
 	`
 	ns := &secrets.SecretNamespace{}
-	var ops, patterns []string
+	ops := make([]string, 0)
+	patterns := make([]string, 0)
 	var backendType, status string
 
 	err := r.db.QueryRow(query, id).Scan(
@@ -77,7 +78,8 @@ func (r *SecretNamespaceRepository) GetByAgentAndName(agentID uuid.UUID, namespa
 		FROM secret_namespaces WHERE agent_id = $1 AND namespace = $2
 	`
 	ns := &secrets.SecretNamespace{}
-	var ops, patterns []string
+	ops := make([]string, 0)
+	patterns := make([]string, 0)
 	var backendType, status string
 
 	err := r.db.QueryRow(query, agentID, namespace).Scan(
@@ -110,10 +112,11 @@ func (r *SecretNamespaceRepository) ListByAgent(agentID uuid.UUID) ([]*secrets.S
 	}
 	defer rows.Close()
 
-	var result []*secrets.SecretNamespace
+	result := make([]*secrets.SecretNamespace, 0)
 	for rows.Next() {
 		ns := &secrets.SecretNamespace{}
-		var ops, patterns []string
+		ops := make([]string, 0)
+	patterns := make([]string, 0)
 		var backendType, status string
 
 		if err := rows.Scan(

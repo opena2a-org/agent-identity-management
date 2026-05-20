@@ -78,7 +78,7 @@ func (h *VerificationEventHandler) ListVerificationEvents(c fiber.Ctx) error {
 
 	agentIDStr := c.Query("agent_id")
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	var total int
 
 	// Filter by agent if specified

@@ -155,7 +155,7 @@ func (r *capabilityRequestRepository) List(filter domain.CapabilityRequestFilter
 		args = append(args, filter.Offset)
 	}
 
-	var requests []*domain.CapabilityRequestWithDetails
+	requests := make([]*domain.CapabilityRequestWithDetails, 0)
 	err := r.db.Select(&requests, query, args...)
 	if err != nil {
 		return nil, err

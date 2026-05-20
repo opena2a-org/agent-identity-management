@@ -219,7 +219,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 	}
 	defer rows.Close()
 
-	var requests []*domain.UserRegistrationRequest
+	requests := make([]*domain.UserRegistrationRequest, 0)
 	for rows.Next() {
 		var req domain.UserRegistrationRequest
 

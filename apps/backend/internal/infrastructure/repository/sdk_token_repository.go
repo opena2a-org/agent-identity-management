@@ -70,7 +70,7 @@ func (r *sdkTokenRepository) GetByID(id uuid.UUID) (*domain.SDKToken, error) {
 	`
 
 	token := &domain.SDKToken{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&token.ID,
@@ -119,7 +119,7 @@ func (r *sdkTokenRepository) GetByTokenID(tokenID string) (*domain.SDKToken, err
 	`
 
 	token := &domain.SDKToken{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, tokenID).Scan(
 		&token.ID,
@@ -168,7 +168,7 @@ func (r *sdkTokenRepository) GetByTokenHash(tokenHash string) (*domain.SDKToken,
 	`
 
 	token := &domain.SDKToken{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, tokenHash).Scan(
 		&token.ID,
@@ -228,10 +228,10 @@ func (r *sdkTokenRepository) GetByUserID(userID uuid.UUID, includeRevoked bool) 
 	}
 	defer rows.Close()
 
-	var tokens []*domain.SDKToken
+	tokens := make([]*domain.SDKToken, 0)
 	for rows.Next() {
 		token := &domain.SDKToken{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&token.ID,
@@ -290,10 +290,10 @@ func (r *sdkTokenRepository) GetByOrganizationID(organizationID uuid.UUID, inclu
 	}
 	defer rows.Close()
 
-	var tokens []*domain.SDKToken
+	tokens := make([]*domain.SDKToken, 0)
 	for rows.Next() {
 		token := &domain.SDKToken{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&token.ID,

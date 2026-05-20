@@ -82,7 +82,7 @@ func (r *MCPServerRepository) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
 	`
 
 	server := &domain.MCPServer{}
-	var capabilitiesJSON []byte
+	capabilitiesJSON := make([]byte, 0)
 	var description sql.NullString
 	var version sql.NullString
 	var publicKey sql.NullString
@@ -189,10 +189,10 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 	}
 	defer rows.Close()
 
-	var servers []*domain.MCPServer
+	servers := make([]*domain.MCPServer, 0)
 	for rows.Next() {
 		server := &domain.MCPServer{}
-		var capabilitiesJSON []byte
+		capabilitiesJSON := make([]byte, 0)
 		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
@@ -265,7 +265,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 	`
 
 	server := &domain.MCPServer{}
-	var capabilitiesJSON []byte
+	capabilitiesJSON := make([]byte, 0)
 	var description sql.NullString
 	var version sql.NullString
 	var publicKey sql.NullString
@@ -340,7 +340,7 @@ func (r *MCPServerRepository) GetByName(orgID uuid.UUID, name string) (*domain.M
 	`
 
 	server := &domain.MCPServer{}
-	var capabilitiesJSON []byte
+	capabilitiesJSON := make([]byte, 0)
 	var description sql.NullString
 	var version sql.NullString
 	var publicKey sql.NullString
@@ -484,10 +484,10 @@ func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, erro
 	}
 	defer rows.Close()
 
-	var servers []*domain.MCPServer
+	servers := make([]*domain.MCPServer, 0)
 	for rows.Next() {
 		server := &domain.MCPServer{}
-		var capabilitiesJSON []byte
+		capabilitiesJSON := make([]byte, 0)
 		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString

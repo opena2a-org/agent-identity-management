@@ -64,7 +64,7 @@ func (r *WebhookRepository) GetByID(id uuid.UUID) (*domain.Webhook, error) {
 	`
 
 	webhook := &domain.Webhook{}
-	var events []string
+	events := make([]string, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&webhook.ID,
@@ -116,10 +116,10 @@ func (r *WebhookRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Webhoo
 	}
 	defer rows.Close()
 
-	var webhooks []*domain.Webhook
+	webhooks := make([]*domain.Webhook, 0)
 	for rows.Next() {
 		webhook := &domain.Webhook{}
-		var events []string
+		events := make([]string, 0)
 
 		err := rows.Scan(
 			&webhook.ID,
@@ -251,7 +251,7 @@ func (r *WebhookRepository) GetDeliveries(webhookID uuid.UUID, limit, offset int
 	}
 	defer rows.Close()
 
-	var deliveries []*domain.WebhookDelivery
+	deliveries := make([]*domain.WebhookDelivery, 0)
 	for rows.Next() {
 		delivery := &domain.WebhookDelivery{}
 		var status string
@@ -363,7 +363,7 @@ func (r *WebhookRepository) queryDeliveries(query string, limit int) ([]*domain.
 	}
 	defer rows.Close()
 
-	var deliveries []*domain.WebhookDelivery
+	deliveries := make([]*domain.WebhookDelivery, 0)
 	for rows.Next() {
 		delivery := &domain.WebhookDelivery{}
 		var status string
@@ -487,10 +487,10 @@ func (r *WebhookRepository) queryWebhooks(query string, args ...interface{}) ([]
 	}
 	defer rows.Close()
 
-	var webhooks []*domain.Webhook
+	webhooks := make([]*domain.Webhook, 0)
 	for rows.Next() {
 		webhook := &domain.Webhook{}
-		var events []string
+		events := make([]string, 0)
 
 		err := rows.Scan(
 			&webhook.ID,

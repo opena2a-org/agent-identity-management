@@ -70,7 +70,7 @@ func (r *SecurityRepository) GetThreats(orgID uuid.UUID, limit, offset int) ([]*
 	}
 	defer rows.Close()
 
-	var threats []*domain.Threat
+	threats := make([]*domain.Threat, 0)
 	for rows.Next() {
 		threat := &domain.Threat{}
 		var targetName sql.NullString
@@ -199,7 +199,7 @@ func (r *SecurityRepository) GetAnomalies(orgID uuid.UUID, limit, offset int) ([
 	}
 	defer rows.Close()
 
-	var anomalies []*domain.Anomaly
+	anomalies := make([]*domain.Anomaly, 0)
 	for rows.Next() {
 		anomaly := &domain.Anomaly{}
 		err := rows.Scan(
@@ -322,10 +322,10 @@ func (r *SecurityRepository) GetIncidents(orgID uuid.UUID, status domain.Inciden
 	}
 	defer rows.Close()
 
-	var incidents []*domain.SecurityIncident
+	incidents := make([]*domain.SecurityIncident, 0)
 	for rows.Next() {
 		incident := &domain.SecurityIncident{}
-		var affectedResources []string
+		affectedResources := make([]string, 0)
 		var assignedTo, resolvedBy, resolutionNotes sql.NullString
 		var resolvedAt sql.NullTime
 
@@ -383,7 +383,7 @@ func (r *SecurityRepository) GetIncidentByID(id uuid.UUID) (*domain.SecurityInci
 	`
 
 	incident := &domain.SecurityIncident{}
-	var affectedResources []string
+	affectedResources := make([]string, 0)
 	var assignedTo, resolvedBy, resolutionNotes sql.NullString
 	var resolvedAt sql.NullTime
 

@@ -196,7 +196,7 @@ func (r *BehaviorBaselineRepository) GetMatureByOrganization(orgID uuid.UUID) ([
 	}
 	defer rows.Close()
 
-	var baselines []*domain.AgentBehaviorBaseline
+	baselines := make([]*domain.AgentBehaviorBaseline, 0)
 	for rows.Next() {
 		baseline := &domain.AgentBehaviorBaseline{}
 		var capabilityUsageJSON, resourcePatternsJSON, actionSequencesJSON []byte
@@ -358,11 +358,11 @@ func (r *BehaviorBaselineRepository) GetAnomaliesByType(orgID uuid.UUID, anomaly
 
 // scanAnomalies is a helper to scan anomaly rows
 func (r *BehaviorBaselineRepository) scanAnomalies(rows *sql.Rows) ([]*domain.BehavioralAnomaly, error) {
-	var anomalies []*domain.BehavioralAnomaly
+	anomalies := make([]*domain.BehavioralAnomaly, 0)
 
 	for rows.Next() {
 		anomaly := &domain.BehavioralAnomaly{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&anomaly.ID,

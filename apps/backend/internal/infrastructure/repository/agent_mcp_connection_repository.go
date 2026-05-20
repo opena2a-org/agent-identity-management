@@ -95,7 +95,7 @@ func (r *AgentMCPConnectionRepository) ListByMCPServer(ctx context.Context, mcpS
 		ORDER BY first_connected_at DESC
 	`
 
-	var connections []*domain.AgentMCPConnection
+	connections := make([]*domain.AgentMCPConnection, 0)
 	err := r.db.SelectContext(ctx, &connections, query, mcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list connections for MCP server: %w", err)
@@ -115,7 +115,7 @@ func (r *AgentMCPConnectionRepository) ListByAgent(ctx context.Context, agentID 
 		ORDER BY first_connected_at DESC
 	`
 
-	var connections []*domain.AgentMCPConnection
+	connections := make([]*domain.AgentMCPConnection, 0)
 	err := r.db.SelectContext(ctx, &connections, query, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list connections for agent: %w", err)
@@ -189,7 +189,7 @@ func (r *AgentMCPConnectionRepository) ListByOrganization(ctx context.Context, o
 		ORDER BY c.last_attested_at DESC NULLS LAST, c.first_connected_at DESC
 	`
 
-	var connections []*domain.AgentMCPConnection
+	connections := make([]*domain.AgentMCPConnection, 0)
 	err := r.db.SelectContext(ctx, &connections, query, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list connections for organization: %w", err)
@@ -245,7 +245,7 @@ func (r *AgentMCPConnectionRepository) GetAttestationTrend(ctx context.Context, 
 		ORDER BY d.date
 	`
 
-	var entries []AttestationTrendEntry
+	entries := make([]AttestationTrendEntry, 0)
 	err := r.db.SelectContext(ctx, &entries, query, orgID, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation trend: %w", err)

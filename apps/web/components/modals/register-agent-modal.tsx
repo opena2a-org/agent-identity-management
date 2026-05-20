@@ -181,8 +181,8 @@ export function RegisterAgentModal({
       setLoadingCapabilities(true);
       api.getCapabilityDefinitions()
         .then((response: ListCapabilitiesResponse) => {
-          setCapabilityDefinitions(response.capabilities);
-          setReservedNamespaces(response.reservedNamespaces);
+          setCapabilityDefinitions(response.capabilities ?? []);
+          setReservedNamespaces(response.reservedNamespaces ?? []);
         })
         .catch((err) => {
           console.error("Failed to fetch capability definitions:", err);

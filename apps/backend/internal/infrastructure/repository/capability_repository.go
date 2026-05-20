@@ -61,7 +61,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.
 	`
 
 	var capability domain.AgentCapability
-	var scopeJSON []byte
+	scopeJSON := make([]byte, 0)
 	var grantedBy uuid.NullUUID
 	var revokedAt sql.NullTime
 
@@ -110,10 +110,10 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUI
 	}
 	defer rows.Close()
 
-	var capabilities []*domain.AgentCapability
+	capabilities := make([]*domain.AgentCapability, 0)
 	for rows.Next() {
 		var capability domain.AgentCapability
-		var scopeJSON []byte
+		scopeJSON := make([]byte, 0)
 		var grantedBy uuid.NullUUID
 		var revokedAt sql.NullTime
 
@@ -165,10 +165,10 @@ func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uu
 	}
 	defer rows.Close()
 
-	var capabilities []*domain.AgentCapability
+	capabilities := make([]*domain.AgentCapability, 0)
 	for rows.Next() {
 		var capability domain.AgentCapability
-		var scopeJSON []byte
+		scopeJSON := make([]byte, 0)
 		var grantedBy uuid.NullUUID
 		var revokedAt sql.NullTime
 
@@ -392,7 +392,7 @@ func (r *CapabilityRepositoryPostgres) GetViolationsByOrganization(orgID uuid.UU
 
 // Helper function to scan violation rows
 func (r *CapabilityRepositoryPostgres) scanViolations(rows *sql.Rows) []*domain.CapabilityViolation {
-	var violations []*domain.CapabilityViolation
+	violations := make([]*domain.CapabilityViolation, 0)
 
 	for rows.Next() {
 		var violation domain.CapabilityViolation
@@ -450,7 +450,7 @@ func (r *CapabilityRepositoryPostgres) ListCapabilityDefinitions(orgID *uuid.UUI
 	}
 	defer rows.Close()
 
-	var definitions []*domain.CapabilityDefinition
+	definitions := make([]*domain.CapabilityDefinition, 0)
 	for rows.Next() {
 		def, err := r.scanCapabilityDefinition(rows)
 		if err != nil {

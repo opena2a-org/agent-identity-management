@@ -1290,7 +1290,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		}
 	}
 
-	var responseItems []PendingVerificationResponse
+	responseItems := make([]PendingVerificationResponse, 0)
 	for _, event := range events {
 		// Get agent name with fallbacks
 		agentName := ""

@@ -162,7 +162,7 @@ func (h *MCPDiscoveryHandler) GetDiscoveredMCPs(c fiber.Ctx) error {
 	}
 
 	// Convert map to slice
-	var discovered []DiscoveredMCP
+	discovered := make([]DiscoveredMCP, 0)
 	var totalUnmapped int
 	for _, d := range discoveredMap {
 		discovered = append(discovered, *d)
