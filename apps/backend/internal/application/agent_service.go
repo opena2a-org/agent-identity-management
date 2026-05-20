@@ -18,14 +18,15 @@ type AgentService struct {
 	agentRepo                domain.AgentRepository
 	trustCalc                domain.TrustScoreCalculator
 	trustScoreRepo           domain.TrustScoreRepository
-	keyVault                 *crypto.KeyVault            // ✅ For secure private key storage
-	alertRepo                domain.AlertRepository      // ✅ For creating security alerts
-	policyService            *SecurityPolicyService      // ✅ For policy-based enforcement
-	capabilityRepo           domain.CapabilityRepository // ✅ For checking agent capabilities
-	verificationEventService *VerificationEventService   // ✅ For creating verification events
-	tagRepo                  domain.TagRepository        // ✅ For tagging agents during registration
-	userRepo                 domain.UserRepository       // ✅ For looking up user details (audit trail)
+	keyVault                 *crypto.KeyVault              // ✅ For secure private key storage
+	alertRepo                domain.AlertRepository        // ✅ For creating security alerts
+	policyService            *SecurityPolicyService        // ✅ For policy-based enforcement
+	capabilityRepo           domain.CapabilityRepository   // ✅ For checking agent capabilities
+	verificationEventService *VerificationEventService     // ✅ For creating verification events
+	tagRepo                  domain.TagRepository          // ✅ For tagging agents during registration
+	userRepo                 domain.UserRepository         // ✅ For looking up user details (audit trail)
 	orgRepo                  domain.OrganizationRepository // ✅ For checking enforcement mode
+	capabilityRequestService *CapabilityRequestService     // For routing re-registration capability adds through the mode-aware approval workflow (monitoring auto-approves, strict creates pending request)
 }
 
 // NewAgentService creates a new agent service
@@ -41,6 +42,7 @@ func NewAgentService(
 	tagRepo domain.TagRepository, // ✅ NEW: For tagging agents during registration
 	userRepo domain.UserRepository, // ✅ NEW: For audit trail (creator/updater info)
 	orgRepo domain.OrganizationRepository, // ✅ NEW: For checking enforcement mode
+	capabilityRequestService *CapabilityRequestService, // NEW: For mode-aware capability approval workflow on re-registration
 ) *AgentService {
 	return &AgentService{
 		agentRepo:                agentRepo,
@@ -54,6 +56,7 @@ func NewAgentService(
 		tagRepo:                  tagRepo,
 		userRepo:                 userRepo,
 		orgRepo:                  orgRepo,
+		capabilityRequestService: capabilityRequestService,
 	}
 }
 
@@ -328,15 +331,20 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
-	// AUTO-GRANT CAPABILITIES: Only in monitoring mode.
-	// In strict mode, capabilities require explicit admin approval.
-	if len(req.Capabilities) > 0 && !isStrictMode {
+	// First-registration baseline. Declared capabilities are granted directly
+	// in BOTH monitoring and strict mode because first registration IS the
+	// baseline declaration moment: the trust boundary is the authenticated
+	// user who has permission to create the agent, not the capability list
+	// they declare for it. The strict-mode protection kicks in on
+	// re-registration (AgentService.UpdateAgent), which routes new caps
+	// through CapabilityRequestService for admin approval.
+	if len(req.Capabilities) > 0 {
 		grantedCount := 0
 		for _, capabilityType := range req.Capabilities {
 			capabilityRecord := &domain.AgentCapability{
 				AgentID:        agent.ID,
 				CapabilityType: capabilityType,
-				GrantedBy:      &userID, // Auto-granted by user who created agent
+				GrantedBy:      &userID,
 				GrantedAt:      time.Now(),
 			}
 
@@ -348,7 +356,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 
 		if grantedCount > 0 {
-			fmt.Printf("✅ Auto-granted %d capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
+			fmt.Printf("✅ Granted %d baseline capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
 		}
 	}
 
@@ -455,8 +463,12 @@ func (s *AgentService) ListAgents(ctx context.Context, orgID uuid.UUID) ([]*doma
 	return s.agentRepo.GetByOrganization(orgID)
 }
 
-// UpdateAgent updates an agent
-func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *CreateAgentRequest) (*domain.Agent, error) {
+// UpdateAgent updates an agent. requestedBy is the authenticated user ID
+// driving the update; used as the RequestedBy on any capability_requests
+// rows created for new capability declarations in strict mode. A zero UUID
+// is acceptable for system-initiated paths but should be avoided for SDK /
+// dashboard calls where the user identity is known.
+func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error) {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -536,29 +548,49 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 			}
 		}
 
-		// Handle new capabilities based on enforcement mode
+		// Route every new (re-registration-declared) capability through
+		// CapabilityRequestService.CreateRequest, which encapsulates the
+		// mode-aware approval policy in one place:
+		//
+		//   monitoring mode -> creates a capability_requests row with
+		//     status=auto_approved AND grants the capability. Audit trail
+		//     preserved.
+		//
+		//   strict mode -> creates a capability_requests row with
+		//     status=pending. Capability is NOT granted; admin must approve
+		//     via /api/v1/capability-requests/:id/approve before the agent
+		//     can use it. Agent's verify_capability calls for the requested
+		//     cap will DENY until approval.
+		//
+		// capabilityRequestService is REQUIRED for this branch to execute.
+		// Production wiring (cmd/server/main.go) always injects it; if a
+		// caller constructs AgentService without it AND tries to add new
+		// caps, we fail loudly rather than silently fall back to a
+		// strict-mode-bypassing direct grant.
 		if len(newCaps) > 0 {
-			if enforcementMode == domain.EnforcementModeMonitoring {
-				// MONITORING MODE: Auto-grant new capabilities (permissive)
-				for _, capType := range newCaps {
-					capabilityRecord := &domain.AgentCapability{
-						AgentID:        id,
-						CapabilityType: capType,
-						GrantedBy:      nil, // System auto-grant
-						GrantedAt:      time.Now(),
-					}
-					if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
-						fmt.Printf("Warning: failed to auto-grant capability '%s': %v\n", capType, err)
-					} else {
-						fmt.Printf("Agent %s: auto-granted capability '%s' (monitoring mode)\n", agent.Name, capType)
-					}
+			if s.capabilityRequestService == nil {
+				return nil, fmt.Errorf("capabilityRequestService is required to add new capabilities to existing agents; received nil (agent=%s, new_caps=%v)", agent.Name, newCaps)
+			}
+			for _, capType := range newCaps {
+				input := &domain.CreateCapabilityRequestInput{
+					AgentID:        id,
+					CapabilityType: capType,
+					Reason:         fmt.Sprintf("Re-registration declared new capability for agent %s.", agent.Name),
+					RequestedBy:    requestedBy,
 				}
-			} else {
-				// STRICT MODE: Reject capability escalation attempts
-				// New capabilities MUST go through request_capability() approval workflow
-				fmt.Printf("SECURITY: Agent %s (%s) attempted capability escalation: %v - REJECTED (strict mode)\n",
-					agent.Name, id, newCaps)
-				fmt.Printf("  -> New capabilities must be requested via request_capability() and approved by an admin\n")
+				createdRequest, err := s.capabilityRequestService.CreateRequest(ctx, input)
+				if err != nil {
+					fmt.Printf("Warning: failed to create capability request for '%s' (agent %s, mode=%s): %v\n",
+						capType, agent.Name, enforcementMode, err)
+					continue
+				}
+				// High-signal log line for SIEM rules. Distinguishes
+				// monitoring auto-approve (already-granted) from strict
+				// pending (admin action required).
+				if createdRequest != nil && createdRequest.Status == domain.CapabilityRequestStatusPending {
+					fmt.Printf("SECURITY: agent %s (%s) re-registration declared new capability '%s' in strict mode; pending admin approval (request_id=%s, requested_by=%s)\n",
+						agent.Name, id, capType, createdRequest.ID, requestedBy)
+				}
 			}
 		}
 
@@ -579,12 +611,18 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 			fmt.Printf("Agent %s: revoked capabilities %v (self-requested reduction)\n", agent.Name, revokedCaps)
 		}
 	}
-	// Recalculate trust score
-	trustScore, err := s.trustCalc.Calculate(agent)
-	if err == nil {
-		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
-		s.trustScoreRepo.Create(trustScore)
+	// Recalculate trust score. Guarded for test setups that construct
+	// AgentService without a trust calculator; production wiring always
+	// injects one.
+	if s.trustCalc != nil {
+		trustScore, err := s.trustCalc.Calculate(agent)
+		if err == nil {
+			agent.TrustScore = trustScore.Score
+			s.agentRepo.Update(agent)
+			if s.trustScoreRepo != nil {
+				s.trustScoreRepo.Create(trustScore)
+			}
+		}
 	}
 
 	return agent, nil

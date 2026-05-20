@@ -1044,7 +1044,7 @@ func TestAgentHandler_UpdateAgent_Success(t *testing.T) {
 				Name:           "original-agent",
 			}, nil
 		},
-		UpdateAgentFunc: func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest) (*domain.Agent, error) {
+		UpdateAgentFunc: func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error) {
 			return &domain.Agent{
 				ID:             agentID,
 				OrganizationID: orgID,
