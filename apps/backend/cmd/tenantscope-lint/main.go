@@ -153,35 +153,29 @@ var allowlist = map[string]string{
 	"VerificationHandler.UpdateExecutionStatus":             "audit-baseline: needs review",
 
 	// ---------------------------------------------------------------
-	// A3c-FLAGGED: 7 handlers surfaced 2026-05-20. Six were caught
-	// directly by broadening paramKeys to cover the snake_case +
-	// camelCase URL-param spellings for tenant-scoped resources
-	// beyond `id`/`agent_id` (#42-47). The seventh (#48,
-	// CapabilityHandler.RegisterCapability) was NOT caught by the
-	// lint — adversarial review surfaced it as a sibling-of-#25
-	// IDOR (write-side, SDK auth path) that the lenient
-	// `bodyMentionsOrganizationID` heuristic silently exempts
-	// because the handler mentions `agent.OrganizationID` only to
-	// look up the VICTIM resource's org, never to compare against
-	// the caller. It is allowlisted here so that any future
-	// heuristic tightening surfaces an explicit deferred entry
-	// rather than a suddenly-blocking violation, and so reviewers
-	// walking the audit-baseline section find it tracked.
-	//
-	// Each handler in this block reads its resource ID from the
-	// path without invoking LoadOwned (or, for #48, without
-	// comparing the mentioned OrganizationID to the caller).
-	// Service-layer enforcement (if any) needs manual verification
-	// before these can be moved to a per-entry justification or
-	// wired through LoadOwned. Filed as defects #42-48 in
+	// A3c-FLAGGED: 6 handlers surfaced 2026-05-20 by broadening
+	// paramKeys to cover the snake_case + camelCase URL-param
+	// spellings for tenant-scoped resources beyond `id`/`agent_id`.
+	// Each handler reads its resource ID from the path without
+	// invoking LoadOwned and without a visible OrganizationID
+	// identifier check at the handler layer. Service-layer
+	// enforcement (if any) needs manual verification before these
+	// can be moved to a per-entry justification or wired through
+	// LoadOwned. Filed as defects #42-47 in
 	// todo/2026-05-18-aim-defect-audit-from-lf-demo-prep.md.
 	// Closing these is A3b/A3d scope.
+	//
+	// Historical note: a seventh defensive entry for
+	// CapabilityHandler.RegisterCapability (#48) lived here from
+	// PR #144 (A3c) until PR #145 wrapped the handler with
+	// LoadOwned. The entry was removed because the handler now
+	// satisfies the lint structurally (LoadOwned recognition path).
+	// The audit doc #48 retains the full historical record.
 	// ---------------------------------------------------------------
 	"A2AHandler.GetSkillAttestations":               "audit-baseline: needs review (A3c-flagged #43)",
 	"A2AHandler.ListUserConsents":                   "audit-baseline: needs review (A3c-flagged #42)",
 	"CapabilityHandler.GetRecentViolations":         "audit-baseline: needs review (A3c-flagged #46)",
 	"CapabilityHandler.GetViolationsByOrganization": "audit-baseline: needs review (A3c-flagged #45)",
-	"CapabilityHandler.RegisterCapability":          "audit-baseline: needs review (A3c-flagged #48; lint-exempt today via bodyMentionsOrganizationID — entry future-proofs heuristic tightening)",
 	"CapabilityHandler.RevokeCapability":            "audit-baseline: needs review (A3c-flagged #44)",
 	"MCPAttestationHandler.RevokeAttestation":       "audit-baseline: needs review (A3c-flagged #47)",
 }
