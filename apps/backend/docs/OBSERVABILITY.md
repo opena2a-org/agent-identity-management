@@ -32,9 +32,9 @@ go run ./cmd/server
 
 Then open Grafana at http://localhost:3001 (anonymous admin, no login). Three dashboards are pre-loaded under the `AIM` folder:
 
-- **AIM FGA Traces** — Tempo trace search filtered by `agent.id` and `fga.outcome`
-- **AIM Agent Drift** — Prometheus time-series of `agent.drift_score` with watch / alert / critical bands
-- **AIM FGA Audit Log** — Loki logs of `fga.decision` events, with click-through to Tempo via `trace.id`
+- **AIM FGA Traces**: Tempo trace search filtered by `agent.id` and `fga.outcome`
+- **AIM Agent Drift**: Prometheus time-series of `agent.drift_score` with watch / alert / critical bands
+- **AIM FGA Audit Log**: Loki logs of `fga.decision` events, with click-through to Tempo via `trace.id`
 
 Tear down without losing data:
 
@@ -72,7 +72,7 @@ These names match Slide 14 of the May 22 Observability Summit talk and the AIM S
 | `agent.drift_score` | double | metric, resource attribute | 0-1 saturated drift signal |
 | `agent.scan_verdict` | string | resource attribute | `clean`, `warn`, `dirty` |
 | `fga.step` | string | span attribute on child spans | One of: `capability_check`, `attribute_check`, `context_check`, `chain_check`, `intent_check_sync`, `intent_check_async` |
-| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures — `loadPolicy` / `HasCapability` returned an error) |
+| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures: `loadPolicy` / `HasCapability` returned an error) |
 | `fga.denied_by` | string | span attribute, log attribute, metric label | Step that denied (set when `fga.outcome != ALLOW`) |
 
 ## What the backend emits
@@ -206,6 +206,6 @@ This stack is for the Observability Summit demo and local development. For produ
 
 1. Switch `Insecure: true` in `internal/telemetry/init.go` to false and configure mutual TLS to a managed collector.
 2. Replace the in-memory single-binary Tempo / Loki with their distributed deployments.
-3. Add tail-based sampling at the collector (`tail_sampling` processor) — full sampling at AIM scale will overwhelm the trace store.
+3. Add tail-based sampling at the collector (`tail_sampling` processor). Full sampling at AIM scale will overwhelm the trace store.
 4. Strip PII from span attributes via a transform processor before export.
 5. Send traces to your existing tracing backend if you have one; the collector's `otlp/tempo` exporter can be replaced with `datadog`, `newrelic`, `splunk_hec`, etc.
