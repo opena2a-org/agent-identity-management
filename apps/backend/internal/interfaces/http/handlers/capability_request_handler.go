@@ -205,16 +205,23 @@ func (h *CapabilityRequestHandlers) GetCapabilityRequest(c fiber.Ctx) error {
 		})
 	}
 
-	request, err := h.service.GetRequest(c.Context(), id)
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
-		if err.Error() == "capability request not found" {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "capability request not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get capability request",
-		})
+		return err
+	}
+
+	// SECURITY (defect #22): CapabilityRequest has no OrganizationID field;
+	// ownership is determined by the request's AgentID -> Agent.OrganizationID.
+	// Without this check, an admin in org A could read pending capability
+	// requests for agents in org B by guessing request UUIDs.
+	loader := func(reqID uuid.UUID) (*domain.CapabilityRequestWithDetails, error) {
+		return h.service.GetRequest(c.Context(), reqID)
+	}
+	request := LoadOwnedViaAgent(c, loader, id, orgID,
+		func(r *domain.CapabilityRequestWithDetails) uuid.UUID { return r.AgentID },
+		h.agentRepo)
+	if request == nil {
+		return nil
 	}
 
 	return c.Status(fiber.StatusOK).JSON(request)
@@ -248,6 +255,25 @@ func (h *CapabilityRequestHandlers) ApproveCapabilityRequest(c fiber.Ctx) error 
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid capability request ID",
 		})
+	}
+
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (defect #22, the worst finding in the audit): cross-tenant
+	// privilege escalation. Before this check, an admin in org A could
+	// approve a pending capability request for an agent in org B and thereby
+	// grant arbitrary capabilities to a stranger's agent. Verify ownership
+	// BEFORE invoking ApproveRequest so the grant cannot happen.
+	loader := func(reqID uuid.UUID) (*domain.CapabilityRequestWithDetails, error) {
+		return h.service.GetRequest(c.Context(), reqID)
+	}
+	if LoadOwnedViaAgent(c, loader, id, orgID,
+		func(r *domain.CapabilityRequestWithDetails) uuid.UUID { return r.AgentID },
+		h.agentRepo) == nil {
+		return nil
 	}
 
 	if err := h.service.ApproveRequest(c.Context(), id, userID); err != nil {

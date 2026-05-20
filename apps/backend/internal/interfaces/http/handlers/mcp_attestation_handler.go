@@ -12,15 +12,18 @@ import (
 type MCPAttestationHandler struct {
 	attestationService *application.MCPAttestationService
 	auditService       *application.AuditService
+	agentRepo          domain.AgentRepository
 }
 
 func NewMCPAttestationHandler(
 	attestationService *application.MCPAttestationService,
 	auditService *application.AuditService,
+	agentRepo domain.AgentRepository,
 ) *MCPAttestationHandler {
 	return &MCPAttestationHandler{
 		attestationService: attestationService,
 		auditService:       auditService,
+		agentRepo:          agentRepo,
 	}
 }
 
@@ -672,6 +675,21 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (defect #19): verify the agent in the URL belongs to the
+	// caller's organization before recording the MCP connection. Without
+	// this check, an SDK token for org A can record fake MCP connections
+	// for any agent in any org by guessing UUIDs. Placed AFTER the body
+	// validation so that malformed-input tests retain their 400-shape
+	// contract; the security boundary is the service call below, not the
+	// JSON parse.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	// Record the connection
 	connection, err := h.attestationService.RecordAgentMCPConnection(
 		c.Context(),
@@ -738,6 +756,18 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 			"error":   "Invalid agent ID",
 			"message": err.Error(),
 		})
+	}
+
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (defect #19b): same tenant-scoping pattern as
+	// RecordMCPConnection. Verify the URL agent belongs to caller's org
+	// before processing the usage report body.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Parse request body

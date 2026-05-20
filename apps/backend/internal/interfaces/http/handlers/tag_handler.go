@@ -226,6 +226,22 @@ func (h *TagHandler) DeleteTag(c fiber.Ctx) error {
 		})
 	}
 
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (defect #24): tenant-scoping. TagService.DeleteTag(ctx, tagID)
+	// has no orgID parameter, so prior code allowed any authenticated caller
+	// to delete tags owned by any organization. Load the tag first and
+	// verify ownership before invoking the unscoped delete.
+	loader := func(id uuid.UUID) (*domain.Tag, error) {
+		return h.tagService.GetTagByID(c.Context(), id)
+	}
+	if LoadOwned(c, loader, tagID, orgID, tagOrgID) == nil {
+		return nil
+	}
+
 	// Delete tag
 	if err := h.tagService.DeleteTag(c.Context(), tagID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
