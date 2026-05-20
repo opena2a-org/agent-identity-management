@@ -240,11 +240,22 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	// does not exist), silently drop the link (treat it as if the field was
 	// not supplied) rather than 404 the whole request — the MCP registration
 	// itself is otherwise valid.
+	//
+	// agentLinkDropped tracks the residual read-oracle path closed below: the
+	// body-supplied agentID was non-empty but was not honored (cross-org,
+	// nonexistent, or unparseable). When true the response is scrubbed to
+	// never echo the supplied UUID — see the redaction step before the JSON
+	// write.
+	agentLinkDropped := false
 	if req.RegisteredByAgent != "" && agentID == nil {
 		if parsedAgentID, err := uuid.Parse(req.RegisteredByAgent); err == nil {
-			if agent, err := h.agentRepository.GetByID(parsedAgentID); err == nil && agent != nil && agent.OrganizationID == orgID {
+			if agent, err := h.getAgentRepository().GetByID(parsedAgentID); err == nil && agent != nil && agent.OrganizationID == orgID {
 				agentID = &parsedAgentID
+			} else {
+				agentLinkDropped = true
 			}
+		} else {
+			agentLinkDropped = true
 		}
 	}
 
@@ -267,7 +278,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	}
 
 	// SECURITY: No error logging to prevent information leakage
-	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
+	server, err := h.getMCPService().CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
 	if err != nil {
 		// Return 409 Conflict for duplicate URL errors - include existing server ID for SDK
 		if err.Error() == "mcp server with this URL already exists" {
@@ -288,7 +299,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	}
 
 	// Log audit
-	h.auditService.LogAction(
+	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -303,6 +314,17 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 			"authMethod": c.Locals("auth_method"), // Ed25519 or JWT
 		},
 	)
+
+	// SECURITY (defect #18 read-oracle closure): when a body-supplied
+	// RegisteredByAgent was dropped (cross-org, nonexistent, or unparseable)
+	// the response must not echo the attacker-supplied UUID, and must look
+	// the same as a request that supplied no agentID at all. The service
+	// already sets server.RegisteredByAgent = nil when agentID is nil; this
+	// is belt-and-suspenders against future refactors that might propagate
+	// req.RegisteredByAgent into the response by accident.
+	if agentLinkDropped {
+		server.RegisteredByAgent = nil
+	}
 
 	return c.Status(fiber.StatusCreated).JSON(server)
 }

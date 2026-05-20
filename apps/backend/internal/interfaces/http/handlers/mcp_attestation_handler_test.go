@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +28,7 @@ func withMCPAttestationContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewMCPAttestationHandler_NilDeps(t *testing.T) {
-	handler := NewMCPAttestationHandler(nil, nil, nil)
+	handler := NewMCPAttestationHandler(nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 
@@ -491,6 +494,92 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidMCPServerIDFormat(t *t
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+// SECURITY (defect #19): RecordMCPConnection — body-supplied mcpServerID
+// belonging to a different organization must return 404 (LoadOwned default),
+// and the response body must NOT echo the supplied UUID (no existence side
+// channel via either status code or body content).
+func TestMCPAttestationHandler_RecordMCPConnection_CrossOrgMCPServerID_Returns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	crossOrgID := uuid.New()
+	agentID := uuid.New()
+	mcpServerID := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: mcpServerID, OrganizationID: crossOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPConnection(c)
+	})
+
+	body := `{"mcpServerId":"` + mcpServerID.String() + `","toolName":"x"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode, "cross-org mcpServerID must return 404")
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, mcpServerID.String(), "response body must not echo the body-supplied mcpServerID UUID")
+	assert.NotContains(t, bodyStr, crossOrgID.String(), "response body must not echo the cross-org organization UUID")
+}
+
+// SECURITY (defect #19): RecordMCPConnection — same-org mcpServerID must
+// pass the LoadOwned check. Asserts the security gate is NOT a 404; the
+// downstream service call may fail since attestationService is nil in this
+// test, but the LoadOwned boundary is what matters here.
+func TestMCPAttestationHandler_RecordMCPConnection_SameOrgPassesLoadOwned(t *testing.T) {
+	callerOrgID := uuid.New()
+	agentID := uuid.New()
+	mcpServerID := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: mcpServerID, OrganizationID: callerOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Use(recover.New()) // service is nil; recover the downstream panic so we can inspect status
+	app.Post("/agents/:agent_id/mcp-connections", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPConnection(c)
+	})
+
+	body := `{"mcpServerId":"` + mcpServerID.String() + `","toolName":"x"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.NotEqual(t, fiber.StatusNotFound, resp.StatusCode, "same-org mcpServerID must pass LoadOwned (not 404)")
+	assert.NotEqual(t, fiber.StatusBadRequest, resp.StatusCode, "same-org request must pass JSON validation (not 400)")
+}
+
 // ===========================
 // MCPAttestationHandler.RecordMCPUsageReport Tests
 // ===========================
@@ -524,6 +613,90 @@ func TestMCPAttestationHandler_RecordMCPUsageReport_InvalidAgentID(t *testing.T)
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+// SECURITY (defect #19b): RecordMCPUsageReport — body-supplied mcpServerID
+// belonging to a different organization must abort the entire request with
+// 404 (LoadOwned default), avoiding partial writes for any preceding
+// own-org entries. The response body must NOT echo the supplied UUID.
+func TestMCPAttestationHandler_RecordMCPUsageReport_CrossOrgMCPServerID_Returns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	crossOrgID := uuid.New()
+	agentID := uuid.New()
+	mcpServerID := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: mcpServerID, OrganizationID: crossOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/agents/:id/mcp-usage-report", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPUsageReport(c)
+	})
+
+	body := `{"agentId":"` + agentID.String() + `","mcpServers":{"` + mcpServerID.String() + `":{"toolUsage":{"t1":{"count":1,"firstUsed":"2024-01-01T00:00:00Z","lastUsed":"2024-01-01T00:00:00Z"}}}},"reportedAt":"2024-01-01T00:00:00Z"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-usage-report", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode, "cross-org mcpServerID in usage report must return 404")
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, mcpServerID.String(), "response body must not echo the body-supplied mcpServerID UUID")
+	assert.NotContains(t, bodyStr, crossOrgID.String(), "response body must not echo the cross-org organization UUID")
+}
+
+// SECURITY (defect #19b): RecordMCPUsageReport — same-org mcpServerID
+// must pass the LoadOwned pre-validation pass. Service is nil; recover
+// catches downstream panic so the LoadOwned boundary remains observable.
+func TestMCPAttestationHandler_RecordMCPUsageReport_SameOrgPassesLoadOwned(t *testing.T) {
+	callerOrgID := uuid.New()
+	agentID := uuid.New()
+	mcpServerID := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: mcpServerID, OrganizationID: callerOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Use(recover.New())
+	app.Post("/agents/:id/mcp-usage-report", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPUsageReport(c)
+	})
+
+	body := `{"agentId":"` + agentID.String() + `","mcpServers":{"` + mcpServerID.String() + `":{"toolUsage":{"t1":{"count":1,"firstUsed":"2024-01-01T00:00:00Z","lastUsed":"2024-01-01T00:00:00Z"}}}},"reportedAt":"2024-01-01T00:00:00Z"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-usage-report", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.NotEqual(t, fiber.StatusNotFound, resp.StatusCode, "same-org mcpServerID must pass LoadOwned (not 404)")
 }
 
 // ===========================

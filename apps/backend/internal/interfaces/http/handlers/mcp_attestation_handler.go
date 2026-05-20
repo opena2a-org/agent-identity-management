@@ -12,18 +12,21 @@ import (
 type MCPAttestationHandler struct {
 	attestationService *application.MCPAttestationService
 	auditService       *application.AuditService
-	agentRepo          domain.AgentRepository
+	agentRepo          AgentRepositoryer
+	mcpServerRepo      MCPServerRepositoryer
 }
 
 func NewMCPAttestationHandler(
 	attestationService *application.MCPAttestationService,
 	auditService *application.AuditService,
-	agentRepo domain.AgentRepository,
+	agentRepo AgentRepositoryer,
+	mcpServerRepo MCPServerRepositoryer,
 ) *MCPAttestationHandler {
 	return &MCPAttestationHandler{
 		attestationService: attestationService,
 		auditService:       auditService,
 		agentRepo:          agentRepo,
+		mcpServerRepo:      mcpServerRepo,
 	}
 }
 
@@ -690,6 +693,15 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 		return nil
 	}
 
+	// SECURITY (defect #19 follow-up): the body-supplied mcpServerID is
+	// also attacker-controlled. A legitimate own-org agent could otherwise
+	// record fake connections referencing any MCP server UUID in any org.
+	// LoadOwned returns 404 (indistinguishable from nonexistent) on cross-
+	// org or unknown UUIDs, preserving existence secrecy.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Record the connection
 	connection, err := h.attestationService.RecordAgentMCPConnection(
 		c.Context(),
@@ -799,7 +811,39 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 		})
 	}
 
-	// Calculate totals for response
+	// SECURITY (defect #19b): pre-validate every body-supplied mcpServerID
+	// against the caller's organization BEFORE any writes. Without this,
+	// an SDK token for a legitimate own-org agent can record fake usage
+	// reports referencing any mcpServerID in any org (the audit's "single
+	// SDK token can create fake usage reports for any agent/MCP across
+	// the entire system"). LoadOwned returns 404 on cross-org or unknown
+	// UUIDs, identical to nonexistent — no existence side channel.
+	//
+	// Malformed UUIDs preserve the existing silent-skip behavior at the
+	// :827 path. Closing the malformed-vs-cross-org reporting oracle is
+	// audit-baseline work tracked separately in A3d; this PR closes the
+	// write-side hole only.
+	//
+	// Pre-pass instead of in-loop check so a cross-org probe in the
+	// middle of an otherwise legitimate batch does NOT cause partial
+	// writes — the entire request aborts before any service call.
+	validatedServerIDs := make(map[string]uuid.UUID, len(req.MCPServers))
+	for serverIDStr := range req.MCPServers {
+		mcpServerID, parseErr := uuid.Parse(serverIDStr)
+		if parseErr != nil {
+			continue
+		}
+		if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+			return nil
+		}
+		validatedServerIDs[serverIDStr] = mcpServerID
+	}
+
+	// Calculate totals for response. Counts come from the input map and are
+	// not affected by which entries actually wrote — preserves the existing
+	// response shape so a client probing usage-report behavior cannot tell
+	// from serversReported/totalInvocations whether a particular UUID was
+	// honored. Malformed UUIDs raise the same response shape.
 	serversReported := len(req.MCPServers)
 	totalInvocations := 0
 
@@ -811,10 +855,11 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 			totalInvocations += toolUsage.Count
 		}
 
-		// Try to parse server ID and record the usage data
-		mcpServerID, parseErr := uuid.Parse(serverID)
-		if parseErr != nil {
-			// Log but continue - invalid UUIDs are skipped
+		mcpServerID, ok := validatedServerIDs[serverID]
+		if !ok {
+			// Either malformed (skipped above) or, if pre-validation
+			// found a cross-org UUID, we already returned 404 — this
+			// loop iteration is unreachable in the cross-org case.
 			continue
 		}
 

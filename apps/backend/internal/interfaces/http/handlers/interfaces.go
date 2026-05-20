@@ -203,6 +203,13 @@ type AgentRepositoryer interface {
 	GetByMCPServerName(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error)
 }
 
+// MCPServerRepositoryer defines the methods from MCPServerRepository that
+// handlers use. Narrow on purpose: handlers only need to load by ID for
+// tenant-scope LoadOwned checks (defects #19/#19b).
+type MCPServerRepositoryer interface {
+	GetByID(id uuid.UUID) (*domain.MCPServer, error)
+}
+
 // VerificationEventRepositoryer defines the methods from VerificationEventRepository that handlers use
 type VerificationEventRepositoryer interface {
 	GetByMCPServer(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error)
