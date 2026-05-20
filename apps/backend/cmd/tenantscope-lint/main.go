@@ -149,6 +149,25 @@ var allowlist = map[string]string{
 	"VerificationHandler.GetVerification":                    "DEFECT #23 deferred: handler mounted on both public /api/v1/verifications/:id (no auth) and SDK-token /api/v1/sdk-api/verifications/:id (audit-cited); needs route split before tenant-scoping can apply.",
 	"VerificationHandler.SubmitVerificationResult":           "audit-baseline: needs review",
 	"VerificationHandler.UpdateExecutionStatus":              "audit-baseline: needs review",
+
+	// ---------------------------------------------------------------
+	// A3c-FLAGGED: 6 handlers surfaced 2026-05-20 by broadening
+	// paramKeys to cover the snake_case + camelCase URL-param spellings
+	// for tenant-scoped resources beyond `id`/`agent_id`. Each handler
+	// reads its resource ID from the path without invoking LoadOwned
+	// and without a visible OrganizationID identifier check at the
+	// handler layer. Service-layer enforcement (if any) needs manual
+	// verification before these can be moved to a per-entry
+	// justification or wired through LoadOwned. Filed as defects
+	// #42-47 in todo/2026-05-18-aim-defect-audit-from-lf-demo-prep.md.
+	// Closing these is A3b/A3d scope.
+	// ---------------------------------------------------------------
+	"A2AHandler.GetSkillAttestations":                "audit-baseline: needs review (A3c-flagged #43)",
+	"A2AHandler.ListUserConsents":                    "audit-baseline: needs review (A3c-flagged #42)",
+	"CapabilityHandler.GetRecentViolations":          "audit-baseline: needs review (A3c-flagged #46)",
+	"CapabilityHandler.GetViolationsByOrganization":  "audit-baseline: needs review (A3c-flagged #45)",
+	"CapabilityHandler.RevokeCapability":             "audit-baseline: needs review (A3c-flagged #44)",
+	"MCPAttestationHandler.RevokeAttestation":        "audit-baseline: needs review (A3c-flagged #47)",
 }
 
 // recognizedHelpers names the helper functions that satisfy the lint.
@@ -162,10 +181,35 @@ var recognizedHelpers = map[string]bool{
 // paramKeys names the URL-param keys whose reads we want to gate. Reading
 // any of these and not subsequently calling a recognized helper is a
 // violation unless the function is on the allowlist.
+//
+// The list covers every URL-param spelling for tenant-scoped resources
+// observed in the handlers package. Generic `id` plus the per-resource
+// names: agent_id / agentId / identifier (agents and agent-name lookups),
+// mcp_id (MCP servers), attestation_id (attestations), audit_id (audit
+// log entries), capabilityId (capabilities), peer_id (A2A peers),
+// skillId (A2A skills), tagId (tags), userId (users), and orgId (the
+// organization itself — a handler reading another org's UUID from the
+// path must verify the caller's org matches it).
+//
+// Excluded by design:
+//   - checkName  — compliance check NAME string (not a resource UUID).
+//   - requestId  — public registration request, pre-authentication endpoint.
+//   - *1         — Fiber wildcard route param (route shape, not a resource).
 var paramKeys = map[string]bool{
-	"id":       true,
-	"agent_id": true,
-	"agent-id": true,
+	"id":             true,
+	"agent_id":       true,
+	"agent-id":       true,
+	"agentId":        true,
+	"identifier":     true,
+	"mcp_id":         true,
+	"attestation_id": true,
+	"audit_id":       true,
+	"capabilityId":   true,
+	"peer_id":        true,
+	"skillId":        true,
+	"tagId":          true,
+	"userId":         true,
+	"orgId":          true,
 }
 
 type violation struct {
