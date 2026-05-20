@@ -25,7 +25,7 @@ func withMCPAttestationContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewMCPAttestationHandler_NilDeps(t *testing.T) {
-	handler := NewMCPAttestationHandler(nil, nil)
+	handler := NewMCPAttestationHandler(nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

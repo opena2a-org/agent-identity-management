@@ -77,6 +77,17 @@ __pycache__/
 
 # SDK credentials and sensitive data
 sdk/python/.aim/
+
+# AIM SDK credentials and cached identity material — never commit
+.aim/
+**/.aim/
+**/sdk_credentials.json
+**/sdk_credentials.encrypted
+examples/**/aim-sdk-python/
+
+# Vercel build/preview artifacts
+.vercel/
+**/.vercel/
 **/credentials.json
 **/credentials.encrypted
 *.encrypted

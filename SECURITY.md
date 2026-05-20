@@ -1,5 +1,7 @@
 # Security Policy
 
+> **Pre-1.0 status.** AIM is in active hardening. The capabilities described in this document reflect target behavior. Several streams of work are open before we recommend production deployment, and we track them publicly in [HARDENING.md](HARDENING.md). Use AIM today for evaluation, development, and internal testing. Do not deploy it to environments handling untrusted tenants or sensitive data until the items in HARDENING.md are closed.
+
 ## Reporting Security Vulnerabilities
 
 The Agent Identity Management (AIM) team takes security seriously. We appreciate the security research community's efforts in responsibly disclosing vulnerabilities.
