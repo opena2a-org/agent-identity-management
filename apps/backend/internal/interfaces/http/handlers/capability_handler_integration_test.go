@@ -633,3 +633,154 @@ func TestNewCapabilityHandlerWithInterfaces_WithMock(t *testing.T) {
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.capabilityServicer)
 }
+
+// ===========================
+// RegisterCapability Tests (defect #48 — cross-tenant scoping)
+// ===========================
+//
+// SECURITY context: PR #136 fixed defect #25 for the sibling
+// GrantCapability handler by wrapping the URL-derived agentID lookup in
+// LoadOwned so a cross-tenant request returns 404. RegisterCapability had
+// the same IDOR shape but was silently lint-exempt via the
+// `bodyMentionsOrganizationID` lenient heuristic (the handler referenced
+// `agent.OrganizationID` only for victim-side lookups, never compared to
+// the caller). These tests assert the LoadOwned wrap closes the gap.
+
+// TestCapabilityHandler_RegisterCapability_CrossOrg_Returns404 asserts
+// that a caller authenticated to org A cannot register capabilities on an
+// agent in org B by substituting the foreign agent's UUID in the URL.
+// LoadOwned returns 404 (not 403) to preserve existence-secrecy across
+// organizations.
+//
+// Enforcement mode is irrelevant for this test: LoadOwned short-circuits
+// before the handler reaches `orgRepo.GetByID(agent.OrganizationID)`.
+// Without this fix the request would, in MONITORING mode, auto-grant the
+// requested capability on agent B.
+func TestCapabilityHandler_RegisterCapability_CrossOrg_Returns404(t *testing.T) {
+	agentID := uuid.New()
+	callerOrgID := uuid.New()
+	otherOrgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: otherOrgID}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/sdk-api/agents/:id/capabilities/register", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		c.Locals("user_id", userID)
+		return handler.RegisterCapability(c)
+	})
+
+	body := `{"capabilityType": "file:read"}`
+	req := httptest.NewRequest("POST", "/sdk-api/agents/"+agentID.String()+"/capabilities/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+
+	// Response body must NOT echo the cross-org agent's UUID or any other
+	// existence signal — same response shape as "agent does not exist."
+	var body404 map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body404))
+	assert.Equal(t, "not found", body404["error"])
+	assert.NotContains(t, body404, "agentId")
+	assert.NotContains(t, body404, "organizationId")
+}
+
+// TestCapabilityHandler_RegisterCapability_NoOrgID_Integration mirrors
+// GrantCapability's defensive coverage for the case where the
+// organization_id local is missing entirely — middleware misconfiguration
+// or a stripped JWT. The handler must 401 before any data access.
+func TestCapabilityHandler_RegisterCapability_NoOrgID_Integration(t *testing.T) {
+	agentID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
+
+	app := fiber.New()
+	app.Post("/sdk-api/agents/:id/capabilities/register", func(c fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		// organization_id intentionally absent
+		return handler.RegisterCapability(c)
+	})
+
+	body := `{"capabilityType": "file:read"}`
+	req := httptest.NewRequest("POST", "/sdk-api/agents/"+agentID.String()+"/capabilities/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+// TestCapabilityHandler_RegisterCapability_SameOrg_Monitoring_AutoGrants
+// confirms the LoadOwned wrap does not break the legitimate happy path
+// for a same-org caller registering on their own agent in MONITORING
+// mode. Without this test, a regression that broke MONITORING auto-grant
+// would not surface in CI.
+func TestCapabilityHandler_RegisterCapability_SameOrg_Monitoring_AutoGrants(t *testing.T) {
+	agentID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetAgentCapabilitiesFunc: func(ctx context.Context, aID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {
+			return nil, nil
+		},
+		ValidateAndRegisterCapabilityFunc: func(ctx context.Context, capability string, oID uuid.UUID) error {
+			return nil
+		},
+		GrantCapabilityFunc: func(ctx context.Context, aID uuid.UUID, capType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error) {
+			return &domain.AgentCapability{
+				ID:             uuid.New(),
+				AgentID:        aID,
+				CapabilityType: capType,
+			}, nil
+		},
+	}
+
+	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: orgID}, nil
+		},
+	}
+	handler.orgRepo = &MockOrganizationRepository{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Organization, error) {
+			return &domain.Organization{
+				ID:              id,
+				EnforcementMode: domain.EnforcementModeMonitoring,
+			}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/sdk-api/agents/:id/capabilities/register", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", userID)
+		return handler.RegisterCapability(c)
+	})
+
+	body := `{"capabilityType": "file:read"}`
+	req := httptest.NewRequest("POST", "/sdk-api/agents/"+agentID.String()+"/capabilities/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+
+	var registered RegisterCapabilityResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&registered))
+	assert.True(t, registered.Success)
+	assert.Equal(t, "granted", registered.Status)
+	assert.Equal(t, "file:read", registered.CapabilityType)
+}
