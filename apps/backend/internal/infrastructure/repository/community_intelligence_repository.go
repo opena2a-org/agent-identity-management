@@ -98,10 +98,10 @@ func (r *CommunityIntelligenceRepository) GetAllRecentReports(since time.Time) (
 }
 
 func scanReports(rows *sql.Rows) ([]*domain.CommunityIntelligenceReport, error) {
-	var reports []*domain.CommunityIntelligenceReport
+	reports := make([]*domain.CommunityIntelligenceReport, 0)
 	for rows.Next() {
 		report := &domain.CommunityIntelligenceReport{}
-		var dataPointsJSON []byte
+		dataPointsJSON := make([]byte, 0)
 
 		if err := rows.Scan(
 			&report.ID,

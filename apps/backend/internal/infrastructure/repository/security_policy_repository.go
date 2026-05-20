@@ -70,7 +70,7 @@ func (r *SecurityPolicyRepository) GetByID(id uuid.UUID) (*domain.SecurityPolicy
 	`
 
 	var policy domain.SecurityPolicy
-	var rulesJSON []byte
+	rulesJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&policy.ID,
@@ -118,7 +118,7 @@ func (r *SecurityPolicyRepository) GetByOrganization(orgID uuid.UUID) ([]*domain
 	policies := []*domain.SecurityPolicy{}
 	for rows.Next() {
 		var policy domain.SecurityPolicy
-		var rulesJSON []byte
+		rulesJSON := make([]byte, 0)
 
 		if err := rows.Scan(
 			&policy.ID,
@@ -168,7 +168,7 @@ func (r *SecurityPolicyRepository) GetActiveByOrganization(orgID uuid.UUID) ([]*
 	policies := []*domain.SecurityPolicy{}
 	for rows.Next() {
 		var policy domain.SecurityPolicy
-		var rulesJSON []byte
+		rulesJSON := make([]byte, 0)
 
 		if err := rows.Scan(
 			&policy.ID,
@@ -218,7 +218,7 @@ func (r *SecurityPolicyRepository) GetByType(orgID uuid.UUID, policyType domain.
 	policies := []*domain.SecurityPolicy{}
 	for rows.Next() {
 		var policy domain.SecurityPolicy
-		var rulesJSON []byte
+		rulesJSON := make([]byte, 0)
 
 		if err := rows.Scan(
 			&policy.ID,

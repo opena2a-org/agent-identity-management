@@ -168,7 +168,7 @@ func (r *OrganizationRepository) ListAll() ([]*domain.Organization, error) {
 	}
 	defer rows.Close()
 
-	var orgs []*domain.Organization
+	orgs := make([]*domain.Organization, 0)
 	for rows.Next() {
 		org := &domain.Organization{}
 		if err := rows.Scan(

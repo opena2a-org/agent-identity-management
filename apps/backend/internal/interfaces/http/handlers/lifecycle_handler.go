@@ -69,7 +69,7 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 		Reason    string    `json:"reason"`
 	}
 
-	var revoked []RevokedEntry
+	revoked := make([]RevokedEntry, 0)
 	for _, agent := range agents {
 		if agent.Status == domain.AgentStatusRevoked {
 			revoked = append(revoked, RevokedEntry{
@@ -122,7 +122,7 @@ func (h *LifecycleHandler) BulkStatus(c fiber.Ctx) error {
 	}
 
 	// Parse UUIDs
-	var ids []uuid.UUID
+	ids := make([]uuid.UUID, 0)
 	for _, idStr := range request.AgentIDs {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
@@ -147,7 +147,7 @@ func (h *LifecycleHandler) BulkStatus(c fiber.Ctx) error {
 		LastActive *time.Time `json:"lastActive"`
 	}
 
-	var entries []AgentStatusEntry
+	entries := make([]AgentStatusEntry, 0)
 	for _, agent := range agents {
 		entries = append(entries, AgentStatusEntry{
 			ID:         agent.ID,

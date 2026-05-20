@@ -255,7 +255,7 @@ function AgentsPageContent() {
       setLoading(true);
       setError(null);
       const data = await api.listAgents();
-      setAgents(data.agents);
+      setAgents(data.agents ?? []);
     } catch (err) {
       console.error("Failed to fetch agents:", err);
       const errorMessage = getErrorMessage(err, {

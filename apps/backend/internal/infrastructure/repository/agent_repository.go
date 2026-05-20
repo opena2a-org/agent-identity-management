@@ -26,7 +26,7 @@ func unmarshalTalksTo(data []byte) ([]string, error) {
 	}
 
 	// Try format 1: string array
-	var strings []string
+	strings := make([]string, 0)
 	if err := json.Unmarshal(data, &strings); err == nil {
 		return strings, nil
 	}
@@ -166,9 +166,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var certificateURL sql.NullString
 	var repositoryURL sql.NullString
 	var documentationURL sql.NullString
-	var talksToJSON []byte
-	var capabilitiesJSON []byte
-	var metadataJSON []byte
+	talksToJSON := make([]byte, 0)
+	capabilitiesJSON := make([]byte, 0)
+	metadataJSON := make([]byte, 0)
 	var lastActive sql.NullTime
 	var keyCreatedAt sql.NullTime
 	var keyExpiresAt sql.NullTime
@@ -345,7 +345,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
 		var description sql.NullString
@@ -354,8 +354,8 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
-		var talksToJSON []byte
-		var metadataJSON []byte
+		talksToJSON := make([]byte, 0)
+		metadataJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -523,7 +523,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
 		var version sql.NullString
@@ -531,8 +531,8 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
-		var talksToJSON []byte
-		var metadataJSON []byte
+		talksToJSON := make([]byte, 0)
+		metadataJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -663,7 +663,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
 		var version sql.NullString
@@ -671,8 +671,8 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
-		var talksToJSON []byte
-		var metadataJSON []byte
+		talksToJSON := make([]byte, 0)
+		metadataJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -769,7 +769,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
 		var version sql.NullString
@@ -777,8 +777,8 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		var certificateURL sql.NullString
 		var repositoryURL sql.NullString
 		var documentationURL sql.NullString
-		var talksToJSON []byte
-		var metadataJSON []byte
+		talksToJSON := make([]byte, 0)
+		metadataJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -871,9 +871,9 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	var keyRotationGraceUntil sql.NullTime
 	var previousPublicKey sql.NullString
 	var rotationCount sql.NullInt32
-	var talksToJSON []byte
-	var capabilitiesJSON []byte
-	var metadataJSON []byte
+	talksToJSON := make([]byte, 0)
+	capabilitiesJSON := make([]byte, 0)
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, orgID, name).Scan(
 		&agent.ID,
@@ -1016,7 +1016,7 @@ func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Ti
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		a := &domain.Agent{}
 		var lastHeartbeat sql.NullTime
@@ -1058,7 +1058,7 @@ func (r *AgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*dom
 	}
 	defer rows.Close()
 
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		a := &domain.Agent{}
 		var lastHeartbeat sql.NullTime

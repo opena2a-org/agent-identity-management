@@ -71,7 +71,7 @@ func (r *RemediationRepository) GetByID(id uuid.UUID) (*domain.RemediationRecord
 	`
 
 	record := &domain.RemediationRecord{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 	var sourceEventID, agentIdentifier, initialSeverity, remediationScanID sql.NullString
 	var initialScore, rescanScore, improvementDelta sql.NullInt32
 	var remediationDurationH sql.NullFloat64
@@ -255,7 +255,7 @@ func (r *RemediationRepository) ListRecent(limit int) ([]*domain.RemediationReco
 	}
 	defer rows.Close()
 
-	var records []*domain.RemediationRecord
+	records := make([]*domain.RemediationRecord, 0)
 	for rows.Next() {
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {

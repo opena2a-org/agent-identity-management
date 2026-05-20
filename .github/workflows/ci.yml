@@ -53,6 +53,15 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: jsonarray-lint (null-array regression guard)
+        run: |
+          LINT_TMP=$(mktemp -d -t jsonarray-lint.XXXXXX)
+          trap 'rm -rf "$LINT_TMP"' EXIT
+          go build -o "$LINT_TMP/jsonarray-lint" ./cmd/jsonarray-lint/
+          "$LINT_TMP/jsonarray-lint" \
+            internal/interfaces/http/handlers \
+            internal/infrastructure/repository
+
       - name: Test with coverage
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...

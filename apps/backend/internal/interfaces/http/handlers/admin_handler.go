@@ -203,7 +203,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		IsRegistrationRequest bool       `json:"isRegistrationRequest"`
 	}
 
-	var allUsers []UserWithStatus
+	allUsers := make([]UserWithStatus, 0)
 
 	// Add approved users
 	for _, user := range users {
@@ -1699,7 +1699,7 @@ func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID
 	}
 
 	// Find all admin users and sort by created_at (oldest first)
-	var admins []*domain.User
+	admins := make([]*domain.User, 0)
 	for _, u := range users {
 		if u.Role == "admin" && u.Status == "active" {
 			admins = append(admins, u)

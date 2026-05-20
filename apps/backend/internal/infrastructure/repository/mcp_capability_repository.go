@@ -67,7 +67,7 @@ func (r *MCPServerCapabilityRepository) GetByID(id uuid.UUID) (*domain.MCPServer
 
 	capability := &domain.MCPServerCapability{}
 	var description sql.NullString
-	var capabilitySchema []byte
+	capabilitySchema := make([]byte, 0)
 	var lastVerifiedAt sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
@@ -122,11 +122,11 @@ func (r *MCPServerCapabilityRepository) GetByServerID(serverID uuid.UUID) ([]*do
 	}
 	defer rows.Close()
 
-	var capabilities []*domain.MCPServerCapability
+	capabilities := make([]*domain.MCPServerCapability, 0)
 	for rows.Next() {
 		capability := &domain.MCPServerCapability{}
 		var description sql.NullString
-		var capabilitySchema []byte
+		capabilitySchema := make([]byte, 0)
 		var lastVerifiedAt sql.NullTime
 
 		err := rows.Scan(
@@ -180,11 +180,11 @@ func (r *MCPServerCapabilityRepository) GetByServerIDAndType(serverID uuid.UUID,
 	}
 	defer rows.Close()
 
-	var capabilities []*domain.MCPServerCapability
+	capabilities := make([]*domain.MCPServerCapability, 0)
 	for rows.Next() {
 		capability := &domain.MCPServerCapability{}
 		var description sql.NullString
-		var capabilitySchema []byte
+		capabilitySchema := make([]byte, 0)
 		var lastVerifiedAt sql.NullTime
 
 		err := rows.Scan(
@@ -310,7 +310,7 @@ type CapabilityDriftStats struct {
 // Returns alerts for capabilities that were added (never seen before) or removed/stale (not verified recently)
 // Also creates real alerts in the alerts table for the security dashboard
 func (r *MCPServerCapabilityRepository) GetCapabilityDriftAlerts(orgID uuid.UUID, days int) ([]CapabilityDriftAlert, *CapabilityDriftStats, error) {
-	var alerts []CapabilityDriftAlert
+	alerts := make([]CapabilityDriftAlert, 0)
 	stats := &CapabilityDriftStats{}
 
 	// Query 1: Stale capabilities (not verified in last N days)

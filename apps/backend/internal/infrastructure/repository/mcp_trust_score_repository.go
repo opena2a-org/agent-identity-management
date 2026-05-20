@@ -69,7 +69,7 @@ func (r *MCPTrustScoreRepository) GetLatest(mcpServerID uuid.UUID) (*domain.MCPT
 	`
 
 	score := &domain.MCPTrustScore{}
-	var factorsJSON []byte
+	factorsJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, mcpServerID).Scan(
 		&score.ID,
@@ -112,10 +112,10 @@ func (r *MCPTrustScoreRepository) GetHistory(mcpServerID uuid.UUID, limit int) (
 	}
 	defer rows.Close()
 
-	var scores []*domain.MCPTrustScore
+	scores := make([]*domain.MCPTrustScore, 0)
 	for rows.Next() {
 		score := &domain.MCPTrustScore{}
-		var factorsJSON []byte
+		factorsJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&score.ID,
@@ -159,7 +159,7 @@ func (r *MCPTrustScoreRepository) GetHistoryAuditTrail(mcpServerID uuid.UUID, li
 	}
 	defer rows.Close()
 
-	var entries []*domain.MCPTrustScoreHistoryEntry
+	entries := make([]*domain.MCPTrustScoreHistoryEntry, 0)
 	for rows.Next() {
 		entry := &domain.MCPTrustScoreHistoryEntry{}
 		var previousScore sql.NullFloat64

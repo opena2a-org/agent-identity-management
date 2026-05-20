@@ -62,7 +62,7 @@ func (r *ComplianceEvidenceRepository) GetByID(id uuid.UUID) (*domain.Compliance
 	`
 
 	var evidence domain.ComplianceEvidence
-	var dataJSON []byte
+	dataJSON := make([]byte, 0)
 	var framework, evidenceType string
 
 	err := r.db.QueryRow(query, id).Scan(
@@ -189,11 +189,11 @@ func (r *ComplianceEvidenceRepository) DeleteExpired(orgID uuid.UUID) (int, erro
 }
 
 func (r *ComplianceEvidenceRepository) scanEvidenceRows(rows *sql.Rows) ([]*domain.ComplianceEvidence, error) {
-	var evidences []*domain.ComplianceEvidence
+	evidences := make([]*domain.ComplianceEvidence, 0)
 
 	for rows.Next() {
 		var evidence domain.ComplianceEvidence
-		var dataJSON []byte
+		dataJSON := make([]byte, 0)
 		var framework, evidenceType string
 
 		err := rows.Scan(
@@ -276,7 +276,7 @@ func (r *ComplianceSnapshotRepository) GetByID(id uuid.UUID) (*domain.Compliance
 	`
 
 	var snapshot domain.ComplianceSnapshot
-	var checkResultsJSON []byte
+	checkResultsJSON := make([]byte, 0)
 	var framework string
 
 	err := r.db.QueryRow(query, id).Scan(
@@ -371,7 +371,7 @@ func (r *ComplianceSnapshotRepository) GetLatest(orgID uuid.UUID, framework doma
 	`
 
 	var snapshot domain.ComplianceSnapshot
-	var checkResultsJSON []byte
+	checkResultsJSON := make([]byte, 0)
 	var fw string
 
 	err := r.db.QueryRow(query, orgID, string(framework)).Scan(
@@ -410,11 +410,11 @@ func (r *ComplianceSnapshotRepository) DeleteOlderThan(orgID uuid.UUID, before t
 }
 
 func (r *ComplianceSnapshotRepository) scanSnapshotRows(rows *sql.Rows) ([]*domain.ComplianceSnapshot, error) {
-	var snapshots []*domain.ComplianceSnapshot
+	snapshots := make([]*domain.ComplianceSnapshot, 0)
 
 	for rows.Next() {
 		var snapshot domain.ComplianceSnapshot
-		var checkResultsJSON []byte
+		checkResultsJSON := make([]byte, 0)
 		var framework string
 
 		err := rows.Scan(

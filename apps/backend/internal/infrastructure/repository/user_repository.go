@@ -230,7 +230,7 @@ func (r *UserRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.User, err
 	}
 	defer rows.Close()
 
-	var users []*domain.User
+	users := make([]*domain.User, 0)
 	for rows.Next() {
 		user := &domain.User{}
 		var status sql.NullString
@@ -271,7 +271,7 @@ func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status doma
 		return nil, err
 	}
 
-	var filteredUsers []*domain.User
+	filteredUsers := make([]*domain.User, 0)
 	for _, user := range allUsers {
 		if user.Status == status {
 			filteredUsers = append(filteredUsers, user)

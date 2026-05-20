@@ -49,7 +49,7 @@ func (r *SecretCredentialRepository) GetLatestByNamespace(namespaceID uuid.UUID)
 		FROM secret_credentials WHERE namespace_id = $1 ORDER BY version DESC LIMIT 1
 	`
 	cred := &secrets.SecretCredential{}
-	var ephPub []byte
+	ephPub := make([]byte, 0)
 
 	err := r.db.QueryRow(query, namespaceID).Scan(
 		&cred.ID, &cred.NamespaceID, &cred.EncryptedBlob, &cred.EncryptionAlg,
@@ -72,7 +72,7 @@ func (r *SecretCredentialRepository) GetByVersion(namespaceID uuid.UUID, version
 		FROM secret_credentials WHERE namespace_id = $1 AND version = $2
 	`
 	cred := &secrets.SecretCredential{}
-	var ephPub []byte
+	ephPub := make([]byte, 0)
 
 	err := r.db.QueryRow(query, namespaceID, version).Scan(
 		&cred.ID, &cred.NamespaceID, &cred.EncryptedBlob, &cred.EncryptionAlg,

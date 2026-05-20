@@ -89,8 +89,8 @@ func (h *MCPGraphHandler) GetConnectionGraph(c fiber.Ctx) error {
 	}
 
 	// Build graph nodes and edges
-	var nodes []GraphNode
-	var edges []GraphEdge
+	nodes := make([]GraphNode, 0)
+	edges := make([]GraphEdge, 0)
 	nodeIndex := make(map[string]bool)
 	edgeIndex := make(map[string]bool)
 
@@ -234,8 +234,8 @@ func (h *MCPGraphHandler) GetMCPServerConnections(c fiber.Ctx) error {
 	}
 
 	// Build mini graph centered on the MCP server
-	var nodes []GraphNode
-	var edges []GraphEdge
+	nodes := make([]GraphNode, 0)
+	edges := make([]GraphEdge, 0)
 	nodeIndex := make(map[string]bool)
 
 	// Add MCP server node
