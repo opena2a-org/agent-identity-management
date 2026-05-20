@@ -37,6 +37,19 @@ func (h *LifecycleHandler) Heartbeat(c fiber.Ctx) error {
 		})
 	}
 
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (defect #20): verify the agent belongs to the caller's
+	// organization before mutating its heartbeat or trust score. Without this
+	// check, any SDK token holder can spoof liveness signals for agents in
+	// other organizations.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	agent, err := h.agentService.RecordHeartbeat(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

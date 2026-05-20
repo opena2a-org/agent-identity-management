@@ -28,6 +28,13 @@ func GetTestConfig() *TestConfig {
 		baseURL = "http://localhost:8080"
 	}
 
+	// TEST_ADMIN_PASSWORD is the bootstrap-printed password from
+	// `aim-bootstrap --default` (post-B2 deploys) or the legacy default
+	// `AIM2025!Secure` from migration 072 (pre-B2 deploys). The legacy
+	// fallback exists because the integration tests run against an existing
+	// demo stack that was seeded before the password-rotation work landed;
+	// fresh CI runs and post-B2 deploys must set TEST_ADMIN_PASSWORD to the
+	// password they captured from the bootstrap command.
 	adminPassword := os.Getenv("TEST_ADMIN_PASSWORD")
 	if adminPassword == "" {
 		adminPassword = "AIM2025!Secure"

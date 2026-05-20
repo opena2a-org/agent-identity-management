@@ -39,7 +39,7 @@ docker compose up -d
 
 **Default Admin Login**:
 - Email: `admin@opena2a.org`
-- Password: `AIM2025!Secure` (⚠️ Change on first login!)
+- Password: captured from `aim-bootstrap --default` stdout on first deploy. (⚠️ Pre-B2 stacks used `AIM2025!Secure` — rotate immediately if you inherited it; first login forces a change either way.)
 
 ### Option B: Azure Production (One Command) ☁️
 

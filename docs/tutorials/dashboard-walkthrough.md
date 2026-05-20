@@ -15,7 +15,7 @@ A quick tour of the AIM dashboard. Learn where everything is and how to manage y
 Open http://localhost:3000 and login with:
 
 - **Email:** `admin@opena2a.org`
-- **Password:** `AIM2025!Secure`
+- **Password:** captured from `aim-bootstrap --default` stdout on first deploy (pre-B2 stacks: `AIM2025!Secure`)
 
 > **First login?** You'll be prompted to change your password for security.
 

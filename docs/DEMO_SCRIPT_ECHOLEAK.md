@@ -18,7 +18,7 @@ docker compose up -d
 ### **2. Access the Dashboard**
 
 * Open: **[http://localhost:3000](http://localhost:3000)**
-* Log in: `admin@opena2a.org` / `AIM2025!Secure`
+* Log in: `admin@opena2a.org` / the password captured from `aim-bootstrap --default` on first deploy (pre-B2 stacks: `AIM2025!Secure`, rotate immediately)
 
 ### **3. Verify the Backend**
 

@@ -476,7 +476,15 @@ func TestCapabilityHandler_GrantCapability_Success(t *testing.T) {
 		},
 	}
 
+	// Tenant-scoping (defect #25 fix) requires the agent referenced by URL
+	// to belong to the caller's org. Mock returns an agent owned by orgID
+	// so LoadOwned succeeds and execution proceeds to the capability grant.
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
 	app.Post("/agents/:id/capabilities", func(c fiber.Ctx) error {
@@ -584,6 +592,12 @@ func TestCapabilityHandler_GrantCapability_ValidationError(t *testing.T) {
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	// Tenant-scoping (defect #25 fix) precondition.
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
 	app.Post("/agents/:id/capabilities", func(c fiber.Ctx) error {

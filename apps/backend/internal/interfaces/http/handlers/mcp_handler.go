@@ -231,10 +231,20 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	}
 
 	// ✅ If SDK passes RegisteredByAgent in request body, use it for connection tracking
-	// This allows OAuth-authenticated requests to still create agent-MCP connections
+	// This allows OAuth-authenticated requests to still create agent-MCP connections.
+	//
+	// SECURITY (defect #18): the body-supplied agent ID is attacker-controlled.
+	// Before this check, an SDK token for org A could register an MCP linked to
+	// an agent in org B by passing B's agent UUID in RegisteredByAgent. Verify
+	// the referenced agent belongs to the caller's org; if not (or the agent
+	// does not exist), silently drop the link (treat it as if the field was
+	// not supplied) rather than 404 the whole request — the MCP registration
+	// itself is otherwise valid.
 	if req.RegisteredByAgent != "" && agentID == nil {
 		if parsedAgentID, err := uuid.Parse(req.RegisteredByAgent); err == nil {
-			agentID = &parsedAgentID
+			if agent, err := h.agentRepository.GetByID(parsedAgentID); err == nil && agent != nil && agent.OrganizationID == orgID {
+				agentID = &parsedAgentID
+			}
 		}
 	}
 
