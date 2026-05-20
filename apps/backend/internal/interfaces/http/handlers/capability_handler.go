@@ -214,16 +214,43 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 		})
 	}
 
-	// Get the agent to verify it exists and get org ID
-	agent, err := h.agentRepo.GetByID(agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
-			Error: "Agent not found",
+	// Get organization ID from context. The route is mounted only on
+	// the sdkAPI group (cmd/server/main.go:322) which sits behind
+	// PQCAgentMiddleware — the middleware sets organization_id from the
+	// signed agent's database record, not from any caller-controllable
+	// input.
+	orgIDValue := c.Locals("organization_id")
+	if orgIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Organization ID not found in context",
+		})
+	}
+	orgID, ok := orgIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: "Invalid organization ID type in context",
 		})
 	}
 
+	// SECURITY (defect #48): verify the agent referenced by the URL
+	// parameter belongs to the caller's organization. Without this check,
+	// a valid SDK-authenticated agent in org A could register capabilities
+	// on agent B in org B by substituting agent B's UUID in the path; in
+	// MONITORING enforcement mode that registration auto-grants the
+	// capability. Same threat class as defect #25, fixed for the sibling
+	// GrantCapability handler in PR #136 via the same LoadOwned pattern.
+	agent := LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil // helper already wrote the 404 response
+	}
+
+	// Resolve the capability service via the helper (sibling handlers in
+	// this file use the same pattern; lets tests inject a mock through
+	// NewCapabilityHandlerWithInterfaces).
+	capSvc := h.getCapabilityService()
+
 	// Check if agent already has this capability
-	existingCaps, err := h.capabilityService.GetAgentCapabilities(context.Background(), agentID, true)
+	existingCaps, err := capSvc.GetAgentCapabilities(context.Background(), agentID, true)
 	if err == nil {
 		for _, cap := range existingCaps {
 			if cap.CapabilityType == req.CapabilityType {
@@ -248,14 +275,14 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 	// MONITORING mode: Auto-grant the capability
 	if org.EnforcementMode == domain.EnforcementModeMonitoring {
 		// Validate and auto-register the capability type if custom
-		if err := h.capabilityService.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, agent.OrganizationID); err != nil {
+		if err := capSvc.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, agent.OrganizationID); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 				Error: err.Error(),
 			})
 		}
 
 		// Auto-grant the capability
-		capability, err := h.capabilityService.GrantCapability(
+		capability, err := capSvc.GrantCapability(
 			context.Background(),
 			agentID,
 			req.CapabilityType,
