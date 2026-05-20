@@ -43,6 +43,12 @@ minio_root_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-32)"
 # GRAFANA_ADMIN_PASSWORD — surfaced in a UI login, keep printable.
 grafana_admin_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-32)"
 
+# DEFAULT_ADMIN_PASSWORD — picked up by `aim-bootstrap --default` to seed the
+# canonical OpenA2A admin. Adds enough character classes (upper/lower/digit/
+# special) to satisfy auth.PasswordHasher.ValidatePassword. If unset when
+# bootstrap runs, bootstrap generates its own random password and prints it.
+default_admin_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-28)Aa1!"
+
 prefix=""
 if [[ "$mode" == "export" ]]; then
     prefix="export "
@@ -57,4 +63,5 @@ ${prefix}POSTGRES_PASSWORD=${postgres_password}
 ${prefix}REDIS_PASSWORD=${redis_password}
 ${prefix}MINIO_ROOT_PASSWORD=${minio_root_password}
 ${prefix}GRAFANA_ADMIN_PASSWORD=${grafana_admin_password}
+${prefix}DEFAULT_ADMIN_PASSWORD=${default_admin_password}
 EOF

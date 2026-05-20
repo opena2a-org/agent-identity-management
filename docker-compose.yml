@@ -216,6 +216,11 @@ services:
       # Admin user configuration (optional - override default admin password)
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # DEFAULT_ADMIN_PASSWORD is read by `aim-bootstrap --default` inside the
+      # container so operators can pre-set the canonical admin password via
+      # .env (./scripts/gen-dev-secrets.sh emits one). If unset, bootstrap
+      # generates a random password and prints it once to stdout. Optional.
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-}
       # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
       - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
