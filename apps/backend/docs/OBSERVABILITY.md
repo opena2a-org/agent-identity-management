@@ -70,7 +70,7 @@ These names match Slide 14 of the May 22 Observability Summit talk and the AIM S
 | `agent.capability` | string | span attribute, log attribute | The capability being authorized (e.g. `read:bookings`) |
 | `agent.trust_score` | double | resource attribute | 9-factor weighted trust score |
 | `agent.drift_score` | double | metric, resource attribute | 0-1 saturated drift signal |
-| `agent.scan_verdict` | string | resource attribute | `clean`, `warn`, `dirty` |
+| `agent.scan_verdict` | string | resource attribute | Producer-emitted security scan verdict. Read from `agent_security_contexts.scan_verdict`. Producer is expected to write this from a real scanner; the HackMyAgent integration that performs that write is on the roadmap. Enum values: `clean`, `warnings`, `findings`, `critical`, `unknown`. |
 | `fga.step` | string | span attribute on child spans | One of: `capability_check`, `attribute_check`, `context_check`, `chain_check`, `intent_check_sync`, `intent_check_async` |
 | `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures: `loadPolicy` / `HasCapability` returned an error) |
 | `fga.denied_by` | string | span attribute, log attribute, metric label | Step that denied (set when `fga.outcome != ALLOW`) |
