@@ -1,6 +1,8 @@
 // tenantscope-lint walks the HTTP handler package and reports any handler
-// that reads c.Params("id") or c.Params("agent_id") without invoking one of
-// the registered tenant-scoping helpers (LoadOwned, LoadOwnedViaAgent).
+// that reads c.Params(...) with a tenant-scoped URL-param spelling (see
+// paramKeys below — generic `id`/`agent_id` plus per-resource names like
+// mcp_id, attestation_id, capabilityId, etc.) without invoking one of the
+// registered tenant-scoping helpers (LoadOwned, LoadOwnedViaAgent).
 //
 // The lint is the structural guarantee for the defect #18-25 cluster: it
 // catches future handlers that forget to enforce tenant scoping AT LINT TIME,
@@ -194,7 +196,14 @@ var recognizedHelpers = map[string]bool{
 // Excluded by design:
 //   - checkName  — compliance check NAME string (not a resource UUID).
 //   - requestId  — public registration request, pre-authentication endpoint.
-//   - *1         — Fiber wildcard route param (route shape, not a resource).
+//   - *1         — single-use today on /api/v1/did/* (DID resolution,
+//     W3C public-federation endpoint, caller-org-irrelevant
+//     by design). NOT a general-purpose exclusion: if a
+//     future route mounts a `*` wildcard on a tenant-scoped
+//     resource, add the receiving handler to the allowlist
+//     with a one-line rationale OR gate it via LoadOwned —
+//     the lint will not catch a `c.Params("*1")` read on its
+//     own.
 var paramKeys = map[string]bool{
 	"id":             true,
 	"agent_id":       true,
@@ -243,7 +252,7 @@ func main() {
 		return violations[i].Line < violations[j].Line
 	})
 
-	fmt.Fprintf(os.Stderr, "tenantscope-lint: %d handler(s) read c.Params(\"id\"|\"agent_id\") without invoking LoadOwned/LoadOwnedViaAgent:\n\n", len(violations))
+	fmt.Fprintf(os.Stderr, "tenantscope-lint: %d handler(s) read a tenant-scoped c.Params(...) key without invoking LoadOwned/LoadOwnedViaAgent:\n\n", len(violations))
 	for _, v := range violations {
 		fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.File, v.Line, v.Handler)
 	}
@@ -335,6 +344,15 @@ func scanFile(fset *token.FileSet, file *ast.File, path string) []violation {
 // "did the handler consider organization scoping at all" check. False
 // positives are acceptable here — the goal is to catch handlers that have
 // completely forgotten, not to enforce the helper as the only valid pattern.
+//
+// Known false-NEGATIVE class (audit-doc defect #48 is the cited example):
+// a handler that mentions `OrganizationID` only to look up the VICTIM
+// resource's org for routing/policy or audit-log purposes — without
+// comparing to the caller's `c.Locals("organization_id")` — silently
+// satisfies this check. Tightening the heuristic to detect "mentioned-but-
+// not-compared" is OUT OF the A3c structural-broadening scope; reviewers
+// should treat the OrganizationID-mention-only exemption as a hint, not a
+// proof, and walk the lenient-exempted set during A3b/A3d.
 func bodyMentionsOrganizationID(body *ast.BlockStmt) bool {
 	var found bool
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -377,7 +395,9 @@ func receiverTypeName(fn *ast.FuncDecl) string {
 
 // bodyReadsTenantParam returns true and the line number of the first match
 // if the function body invokes c.Params(...) with a tenant-relevant key
-// (id, agent_id, agent-id).
+// from the paramKeys set above (id, agent_id, agent-id, agentId,
+// mcp_id, attestation_id, capabilityId, peer_id, skillId, tagId, userId,
+// orgId, identifier).
 func bodyReadsTenantParam(fset *token.FileSet, body *ast.BlockStmt) (bool, int) {
 	var (
 		found bool
