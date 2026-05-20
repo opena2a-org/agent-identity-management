@@ -214,10 +214,11 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 		})
 	}
 
-	// Get organization ID from context (PQCAgentMiddleware on the
-	// /sdk-api/agents/:id/capabilities/register route sets this from the
-	// caller-authenticated agent's organization; JWT-auth routes set it
-	// from the user claims).
+	// Get organization ID from context. The route is mounted only on
+	// the sdkAPI group (cmd/server/main.go:322) which sits behind
+	// PQCAgentMiddleware — the middleware sets organization_id from the
+	// signed agent's database record, not from any caller-controllable
+	// input.
 	orgIDValue := c.Locals("organization_id")
 	if orgIDValue == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
