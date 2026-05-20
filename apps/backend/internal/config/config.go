@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -8,15 +10,43 @@ import (
 	"time"
 )
 
-// SECURITY: Known development-only secrets that must never be used in production
-// These are the default values in docker-compose.yml for easy local development
-var insecureDevSecrets = []string{
-	"dev-only-jwt-secret-do-not-use-in-production-abc123",
-	"dev-only-keyvault-key-do-not-use-in-prod==",
-	"XfnA4gOf872btnIv8pMyaTBu0bpi4AfbAFDfisQBUt0=",      // docker-compose.yml default
-	"pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=",      // Legacy default
-	"YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=",      // Legacy default
-	"aim-super-secret-jwt-key-2025-development",          // Local .env default
+// SECURITY: SHA-256 digests of known development-only secrets that must never be
+// used in any environment. Hash-only storage keeps the plaintexts out of the
+// compiled binary and the source-of-record (CWE-798). To verify whether a
+// suspect string is on the blocklist during a security review:
+//
+//	echo -n "<suspect string>" | shasum -a 256
+//
+// and compare against the digests below. The corresponding plaintexts live only
+// in the test file (config_test.go), where they are part of the documented
+// negative-test surface, not shipped code.
+var insecureDevSecretDigests = []string{
+	"ed6328f5592d88d85070fdf00a39c1c94caf46e9a175e30776c7e95c37e61576",
+	"849f4281c67d78f9cabb75eee0297b69e21dcde5e78dc6c75638c4d21deae10b",
+	"a1ad7292753ed8898e898b79c0d8b4fe5d5a620323d390371d83b640a6c2d473",
+	"e8cdbad8a2a71625ade7cd908b26f6522040a56af09ba9b82387185627c2b596",
+	"8413be1bcea1ec20652c60b3c01c6ba7f8a09d3e1c4c11f1d872e737d9a9a4ad",
+	"b508342c88497e5bc592721e44ef7b27642741df360a10fde1d48be4b44aefa7",
+}
+
+// isKnownDevSecret reports whether s matches any of the hashed dev-secret
+// digests. Input is whitespace-trimmed before hashing so that a paste-with-
+// trailing-newline doesn't bypass the blocklist; case is preserved on
+// purpose so that a legitimate mixed-case secret which happens to share its
+// lowercase form with a dev string is not rejected.
+func isKnownDevSecret(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(s))
+	got := hex.EncodeToString(sum[:])
+	for _, want := range insecureDevSecretDigests {
+		if got == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Config holds all configuration for the application
@@ -171,7 +201,13 @@ func (c *Config) printSecurityWarnings() {
 	}
 }
 
-// Validate validates the configuration
+// Validate validates the configuration.
+//
+// SECURITY: known dev-secret values are rejected in every environment, not only
+// production. A laptop running ENVIRONMENT=development with a leaked dev secret
+// is still a vulnerability the moment that laptop gets pointed at shared
+// infrastructure; failing fast everywhere prevents the misconfiguration from
+// ever taking effect.
 func (c *Config) Validate() error {
 	if c.JWT.Secret == "" {
 		return fmt.Errorf("JWT_SECRET is required")
@@ -181,10 +217,20 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
 	}
 
-	// SECURITY: Block production deployment with development secrets
+	if isKnownDevSecret(c.JWT.Secret) {
+		return insecureSecretError("JWT_SECRET", "openssl rand -hex 32")
+	}
+
+	if isKnownDevSecret(os.Getenv("KEYVAULT_MASTER_KEY")) {
+		return insecureSecretError("KEYVAULT_MASTER_KEY", "openssl rand -base64 32")
+	}
+
+	// Production-only: weak POSTGRES_PASSWORD against a remote host.
 	if c.Server.Environment == "production" {
-		if err := c.validateProductionSecrets(); err != nil {
-			return err
+		if c.Database.Password == "postgres" || c.Database.Password == "" {
+			if !strings.Contains(c.Database.Host, "localhost") && !strings.Contains(c.Database.Host, "127.0.0.1") {
+				return fmt.Errorf("POSTGRES_PASSWORD is weak or empty for a remote host; generate one with `openssl rand -base64 24`")
+			}
 		}
 	}
 
@@ -194,68 +240,20 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// validateProductionSecrets ensures no development secrets are used in production
-func (c *Config) validateProductionSecrets() error {
-	// Check JWT_SECRET
-	for _, insecure := range insecureDevSecrets {
-		if c.JWT.Secret == insecure {
-			return fmt.Errorf(`
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    🚨 SECURITY ERROR: INSECURE SECRETS 🚨                   ║
-╠════════════════════════════════════════════════════════════════════════════╣
-║  You are running in PRODUCTION mode with DEVELOPMENT secrets!              ║
-║  This is a critical security vulnerability.                                ║
-║                                                                            ║
-║  To fix this, generate secure secrets:                                     ║
-║                                                                            ║
-║    JWT_SECRET:                                                             ║
-║      openssl rand -hex 32                                                  ║
-║                                                                            ║
-║    KEYVAULT_MASTER_KEY:                                                    ║
-║      openssl rand -base64 32                                               ║
-║                                                                            ║
-║  Then set them in your environment or .env file.                           ║
-║                                                                            ║
-║  For local development, use ENVIRONMENT=development                        ║
-╚════════════════════════════════════════════════════════════════════════════╝`)
-		}
-	}
-
-	// Check KEYVAULT_MASTER_KEY
-	keyvaultKey := os.Getenv("KEYVAULT_MASTER_KEY")
-	for _, insecure := range insecureDevSecrets {
-		if keyvaultKey == insecure {
-			return fmt.Errorf(`
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    🚨 SECURITY ERROR: INSECURE SECRETS 🚨                   ║
-╠════════════════════════════════════════════════════════════════════════════╣
-║  KEYVAULT_MASTER_KEY is using a development default!                       ║
-║  This would allow attackers to decrypt all stored private keys.            ║
-║                                                                            ║
-║  Generate a secure key:                                                    ║
-║      openssl rand -base64 32                                               ║
-║                                                                            ║
-║  For local development, use ENVIRONMENT=development                        ║
-╚════════════════════════════════════════════════════════════════════════════╝`)
-		}
-	}
-
-	// Check for weak POSTGRES_PASSWORD in production
-	if c.Database.Password == "postgres" || c.Database.Password == "" {
-		if !strings.Contains(c.Database.Host, "localhost") && !strings.Contains(c.Database.Host, "127.0.0.1") {
-			return fmt.Errorf(`
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    🚨 SECURITY ERROR: WEAK DATABASE PASSWORD 🚨             ║
-╠════════════════════════════════════════════════════════════════════════════╣
-║  POSTGRES_PASSWORD is using a weak or default value in production!         ║
-║                                                                            ║
-║  Generate a secure password:                                               ║
-║      openssl rand -base64 24                                               ║
-╚════════════════════════════════════════════════════════════════════════════╝`)
-		}
-	}
-
-	return nil
+// insecureSecretError returns the single error format used when a known
+// development secret leaks into a real config. The format is plain text so it
+// reads cleanly in container logs and CI output. The "every environment"
+// clause is intentional — operators conditioned by other tools may try
+// toggling ENVIRONMENT=development to bypass; this check now runs in every
+// environment, so that workaround no longer exists.
+func insecureSecretError(name, generator string) error {
+	return fmt.Errorf(
+		"SECURITY ERROR: %s is set to a known development default; "+
+			"this is rejected in every environment (development, staging, production). "+
+			"Replace it with a freshly generated value: %s. "+
+			"See scripts/gen-dev-secrets.sh for the local-dev helper.",
+		name, generator,
+	)
 }
 
 // Helper functions

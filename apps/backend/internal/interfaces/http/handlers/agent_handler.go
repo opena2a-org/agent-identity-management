@@ -102,7 +102,7 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 	}
 
 	// ✅ Fetch tags from agent_tags table
-	var tags []fiber.Map
+	tags := make([]fiber.Map, 0)
 	if h.tagService != nil {
 		agentTags, err := h.tagService.GetAgentTags(c.Context(), agent.ID)
 		if err != nil {
@@ -835,7 +835,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Generate SDK package based on language
-	var sdkBytes []byte
+	sdkBytes := make([]byte, 0)
 	var filename string
 
 	// SDK version - keep in sync with sdk/python/VERSION and sdk/python/aim_sdk/__init__.py

@@ -66,7 +66,7 @@ func (r *MCPAttestationRepository) GetAttestationByID(id uuid.UUID) (*domain.MCP
 	`
 
 	attestation := &domain.MCPAttestation{}
-	var attestationJSON []byte
+	attestationJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&attestation.ID,
@@ -115,10 +115,10 @@ func (r *MCPAttestationRepository) GetAttestationsByMCP(mcpServerID uuid.UUID) (
 	}
 	defer rows.Close()
 
-	var attestations []*domain.MCPAttestation
+	attestations := make([]*domain.MCPAttestation, 0)
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
-		var attestationJSON []byte
+		attestationJSON := make([]byte, 0)
 		var agentName sql.NullString
 		var agentTrustScore sql.NullFloat64
 
@@ -180,10 +180,10 @@ func (r *MCPAttestationRepository) GetValidAttestationsByMCP(mcpServerID uuid.UU
 	}
 	defer rows.Close()
 
-	var attestations []*domain.MCPAttestation
+	attestations := make([]*domain.MCPAttestation, 0)
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
-		var attestationJSON []byte
+		attestationJSON := make([]byte, 0)
 		var agentName sql.NullString
 		var agentTrustScore sql.NullFloat64
 
@@ -240,10 +240,10 @@ func (r *MCPAttestationRepository) GetAttestationsByAgent(agentID uuid.UUID) ([]
 	}
 	defer rows.Close()
 
-	var attestations []*domain.MCPAttestation
+	attestations := make([]*domain.MCPAttestation, 0)
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
-		var attestationJSON []byte
+		attestationJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&attestation.ID,
@@ -290,10 +290,10 @@ func (r *MCPAttestationRepository) GetAllAttestationsByOrganization(orgID uuid.U
 	}
 	defer rows.Close()
 
-	var attestations []*domain.MCPAttestation
+	attestations := make([]*domain.MCPAttestation, 0)
 	for rows.Next() {
 		attestation := &domain.MCPAttestation{}
-		var attestationJSON []byte
+		attestationJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&attestation.ID,
@@ -485,7 +485,7 @@ func (r *MCPAttestationRepository) GetConnectionsByAgent(agentID uuid.UUID) ([]*
 	}
 	defer rows.Close()
 
-	var connections []*domain.AgentMCPConnection
+	connections := make([]*domain.AgentMCPConnection, 0)
 	for rows.Next() {
 		connection := &domain.AgentMCPConnection{}
 
@@ -529,7 +529,7 @@ func (r *MCPAttestationRepository) GetConnectionsByMCP(mcpServerID uuid.UUID) ([
 	}
 	defer rows.Close()
 
-	var connections []*domain.AgentMCPConnection
+	connections := make([]*domain.AgentMCPConnection, 0)
 	for rows.Next() {
 		connection := &domain.AgentMCPConnection{}
 

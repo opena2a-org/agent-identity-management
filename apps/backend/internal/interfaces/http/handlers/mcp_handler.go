@@ -127,7 +127,7 @@ func (h *MCPHandler) getAttestationService() MCPAttestationServicerExtended {
 // enrichMCPServerResponse adds tags to MCP server response
 func (h *MCPHandler) enrichMCPServerResponse(c fiber.Ctx, server *domain.MCPServer) fiber.Map {
 	// ✅ Fetch tags from mcp_server_tags table
-	var tags []fiber.Map
+	tags := make([]fiber.Map, 0)
 	tagSvc := h.getTagService()
 	if tagSvc != nil {
 		serverTags, err := tagSvc.GetMCPServerTags(c.Context(), server.ID)
@@ -231,10 +231,20 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	}
 
 	// ✅ If SDK passes RegisteredByAgent in request body, use it for connection tracking
-	// This allows OAuth-authenticated requests to still create agent-MCP connections
+	// This allows OAuth-authenticated requests to still create agent-MCP connections.
+	//
+	// SECURITY (defect #18): the body-supplied agent ID is attacker-controlled.
+	// Before this check, an SDK token for org A could register an MCP linked to
+	// an agent in org B by passing B's agent UUID in RegisteredByAgent. Verify
+	// the referenced agent belongs to the caller's org; if not (or the agent
+	// does not exist), silently drop the link (treat it as if the field was
+	// not supplied) rather than 404 the whole request — the MCP registration
+	// itself is otherwise valid.
 	if req.RegisteredByAgent != "" && agentID == nil {
 		if parsedAgentID, err := uuid.Parse(req.RegisteredByAgent); err == nil {
-			agentID = &parsedAgentID
+			if agent, err := h.agentRepository.GetByID(parsedAgentID); err == nil && agent != nil && agent.OrganizationID == orgID {
+				agentID = &parsedAgentID
+			}
 		}
 	}
 
@@ -1203,7 +1213,7 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		IPAddress   string                 `json:"ipAddress,omitempty"`
 	}
 
-	var timeline []TimelineEvent
+	timeline := make([]TimelineEvent, 0)
 
 	// 1. Get audit logs
 	logs, _, err := h.auditService.GetAuditLogs(

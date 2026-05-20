@@ -1310,7 +1310,13 @@ func TestAdminHandler_GetAuditLogByID_ServiceError(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+	// Behavior change (PR for defect #21): loader errors now collapse into
+	// 404 instead of 500 so the response shape cannot be used to
+	// distinguish "row exists in another org" from "DB error" — both look
+	// like "not found" to the caller. See handlers.LoadOwned for the
+	// SECURITY rationale. A future PR may introduce domain.ErrNotFound to
+	// re-establish the 404-vs-500 distinction for genuine DB failures.
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 }
 
 func TestAdminHandler_ExportAuditLogs_Success(t *testing.T) {

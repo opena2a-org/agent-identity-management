@@ -203,7 +203,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		IsRegistrationRequest bool       `json:"isRegistrationRequest"`
 	}
 
-	var allUsers []UserWithStatus
+	allUsers := make([]UserWithStatus, 0)
 
 	// Add approved users
 	for _, user := range users {
@@ -705,18 +705,22 @@ func (h *AdminHandler) GetAuditLogByID(c fiber.Ctx) error {
 		})
 	}
 
-	// Get audit log from service
-	auditLog, err := h.getAuditService().GetByID(c.Context(), auditLogID)
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch audit log",
-		})
+		return err
 	}
 
+	// SECURITY (defect #21): tenant-scoping. An admin in org A used to be
+	// able to read any audit log by guessing its UUID. LoadOwned wraps the
+	// service GetByID, verifies auditLog.OrganizationID == orgID, and
+	// returns the same 404 for both "not found" and "exists in another
+	// org" to prevent a cross-tenant existence side channel.
+	loader := func(id uuid.UUID) (*domain.AuditLog, error) {
+		return h.getAuditService().GetByID(c.Context(), id)
+	}
+	auditLog := LoadOwned(c, loader, auditLogID, orgID, auditLogOrgID)
 	if auditLog == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Audit log not found",
-		})
+		return nil
 	}
 
 	return c.JSON(auditLog)
@@ -1699,7 +1703,7 @@ func (h *AdminHandler) isSuperAdmin(ctx context.Context, userID, orgID uuid.UUID
 	}
 
 	// Find all admin users and sort by created_at (oldest first)
-	var admins []*domain.User
+	admins := make([]*domain.User, 0)
 	for _, u := range users {
 		if u.Role == "admin" && u.Status == "active" {
 			admins = append(admins, u)

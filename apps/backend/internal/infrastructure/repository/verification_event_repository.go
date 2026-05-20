@@ -71,7 +71,7 @@ func (r *VerificationEventRepositorySimple) GetByID(id uuid.UUID) (*domain.Verif
 	var initiatorID uuid.NullUUID
 	var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 	var completedAt sql.NullTime
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&event.ID, &event.OrganizationID, &agentID, &agentName,
@@ -188,7 +188,7 @@ func (r *VerificationEventRepositorySimple) GetByOrganization(orgID uuid.UUID, l
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID uuid.NullUUID
@@ -198,7 +198,7 @@ func (r *VerificationEventRepositorySimple) GetByOrganization(orgID uuid.UUID, l
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName,
@@ -313,7 +313,7 @@ func (r *VerificationEventRepositorySimple) GetByAgent(agentID uuid.UUID, limit,
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID uuid.NullUUID
@@ -323,7 +323,7 @@ func (r *VerificationEventRepositorySimple) GetByAgent(agentID uuid.UUID, limit,
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName,
@@ -438,7 +438,7 @@ func (r *VerificationEventRepositorySimple) GetByMCPServer(mcpServerID uuid.UUID
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID, mcpServerID uuid.NullUUID
@@ -448,7 +448,7 @@ func (r *VerificationEventRepositorySimple) GetByMCPServer(mcpServerID uuid.UUID
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName, &mcpServerID,
@@ -558,7 +558,7 @@ func (r *VerificationEventRepositorySimple) GetRecentEvents(orgID uuid.UUID, min
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID uuid.NullUUID
@@ -568,7 +568,7 @@ func (r *VerificationEventRepositorySimple) GetRecentEvents(orgID uuid.UUID, min
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName,
@@ -897,7 +897,7 @@ func (r *VerificationEventRepositorySimple) GetPendingVerifications(orgID uuid.U
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID uuid.NullUUID
@@ -907,7 +907,7 @@ func (r *VerificationEventRepositorySimple) GetPendingVerifications(orgID uuid.U
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName,
@@ -1106,7 +1106,7 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 	}
 	defer rows.Close()
 
-	var events []*domain.VerificationEvent
+	events := make([]*domain.VerificationEvent, 0)
 	for rows.Next() {
 		event := &domain.VerificationEvent{}
 		var agentID uuid.NullUUID
@@ -1116,7 +1116,7 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 		var initiatorID uuid.NullUUID
 		var initiatorName, initiatorIP, action, resourceType, resourceID, location, details sql.NullString
 		var completedAt sql.NullTime
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&event.ID, &event.OrganizationID, &agentID, &agentName,

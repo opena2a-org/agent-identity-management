@@ -98,6 +98,9 @@ Prerequisites: Docker, Go 1.22+, Node 20+, Python 3.11+.
 git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
+# Generate local-dev secrets (one-time setup)
+./scripts/gen-dev-secrets.sh > .env
+
 # Minimal dev stack
 docker compose up -d aim-postgres aim-redis aim-backend aim-frontend
 

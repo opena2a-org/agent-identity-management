@@ -59,7 +59,7 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 	`
 
 	log := &domain.AuditLog{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, id).Scan(
 		&log.ID,
@@ -200,11 +200,11 @@ func (r *AuditLogRepository) Search(query string, limit, offset int) ([]*domain.
 }
 
 func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error) {
-	var logs []*domain.AuditLog
+	logs := make([]*domain.AuditLog, 0)
 
 	for rows.Next() {
 		log := &domain.AuditLog{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&log.ID,
@@ -237,11 +237,11 @@ func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error
 
 // scanLogsWithNames scans rows that include agent_name and user_name from JOINs
 func (r *AuditLogRepository) scanLogsWithNames(rows *sql.Rows) ([]*domain.AuditLog, error) {
-	var logs []*domain.AuditLog
+	logs := make([]*domain.AuditLog, 0)
 
 	for rows.Next() {
 		log := &domain.AuditLog{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 
 		err := rows.Scan(
 			&log.ID,

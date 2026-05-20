@@ -193,7 +193,7 @@ function AlertsPageContent() {
       const offset = isAll ? 0 : (page - 1) * (pageSize as number);
 
       const data = await api.getAlerts(effectiveLimit, offset, statusFilter);
-      setAlerts(data.alerts);
+      setAlerts(data.alerts ?? []);
       setTotal(data.total);
       setAllCount(data.allCount || 0);
       setAcknowledgedCount(data.acknowledgedCount || 0);

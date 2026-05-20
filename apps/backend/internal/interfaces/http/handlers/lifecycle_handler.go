@@ -37,6 +37,19 @@ func (h *LifecycleHandler) Heartbeat(c fiber.Ctx) error {
 		})
 	}
 
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (defect #20): verify the agent belongs to the caller's
+	// organization before mutating its heartbeat or trust score. Without this
+	// check, any SDK token holder can spoof liveness signals for agents in
+	// other organizations.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	agent, err := h.agentService.RecordHeartbeat(c.Context(), agentID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -69,7 +82,7 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 		Reason    string    `json:"reason"`
 	}
 
-	var revoked []RevokedEntry
+	revoked := make([]RevokedEntry, 0)
 	for _, agent := range agents {
 		if agent.Status == domain.AgentStatusRevoked {
 			revoked = append(revoked, RevokedEntry{
@@ -122,7 +135,7 @@ func (h *LifecycleHandler) BulkStatus(c fiber.Ctx) error {
 	}
 
 	// Parse UUIDs
-	var ids []uuid.UUID
+	ids := make([]uuid.UUID, 0)
 	for _, idStr := range request.AgentIDs {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
@@ -147,7 +160,7 @@ func (h *LifecycleHandler) BulkStatus(c fiber.Ctx) error {
 		LastActive *time.Time `json:"lastActive"`
 	}
 
-	var entries []AgentStatusEntry
+	entries := make([]AgentStatusEntry, 0)
 	for _, agent := range agents {
 		entries = append(entries, AgentStatusEntry{
 			ID:         agent.ID,

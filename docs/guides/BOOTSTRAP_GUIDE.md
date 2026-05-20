@@ -46,6 +46,35 @@ go run cmd/bootstrap/main.go \
   --org-name="My Company"
 ```
 
+### Alternative: `--default` mode for the canonical OpenA2A admin
+
+If you want the default `admin@opena2a.org` org and admin (the supported path
+for evaluation deployments), use `--default`. Bootstrap will fill in the
+canonical fields and generate a random password if you don't supply one,
+printing the credentials to stdout once.
+
+```bash
+# Random password generated, printed once to stdout:
+go run cmd/bootstrap/main.go --default
+
+# Or with an operator-chosen password:
+go run cmd/bootstrap/main.go --default --admin-password='OperatorChoiceP@ss1'
+```
+
+`--default` is idempotent: if the bootstrap_completed marker is already set, the
+command exits successfully without changing the existing admin. This makes it
+safe to wire into deployment scripts that may run on every container start.
+
+Inside the docker-compose image (post-B2), the binary is shipped as
+`/app/aim-bootstrap`, so the equivalent invocation is:
+
+```bash
+docker compose run --rm aim-backend /app/aim-bootstrap --default
+```
+
+Capture the printed password from the command output before the container is
+removed. The admin user is forced to change the password at first login.
+
 Expected output:
 ```
  █████╗ ██╗███╗   ███╗    ██████╗  ██████╗  ██████╗ ████████╗███████╗████████╗██████╗  █████╗ ██████╗

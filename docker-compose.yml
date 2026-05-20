@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-identity}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "127.0.0.1:5432:5432"
@@ -26,7 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aim-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -67,7 +67,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aim_minio_user}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aim_minio_password_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
@@ -127,7 +127,7 @@ services:
     container_name: aim-grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3003
     ports:
@@ -190,19 +190,20 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       - POSTGRES_DB=${POSTGRES_DB:-identity}
       - POSTGRES_SSL_MODE=${POSTGRES_SSL_MODE:-disable}
       # Redis Configuration (connects to redis service)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev_password}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       # Security Configuration
-      # WARNING: Default secrets are for LOCAL DEVELOPMENT ONLY
-      # For production: Generate your own with openssl rand -hex 32 (JWT) / openssl rand -base64 32 (KEYVAULT)
-      # The backend will refuse to start in production mode with default secrets
-      - JWT_SECRET=${JWT_SECRET:-dev-only-jwt-secret-do-not-use-in-production-abc123}
-      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:-XfnA4gOf872btnIv8pMyaTBu0bpi4AfbAFDfisQBUt0=}
+      # No fallback defaults: known-bad secrets in source defeat their own blocklist (CWE-798).
+      # Generate fresh values with ./scripts/gen-dev-secrets.sh (writes to stdout; redirect to .env).
+      # The backend refuses to start when these are set to any known development default,
+      # in every environment (not only production) — see apps/backend/internal/config/config.go.
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -215,6 +216,11 @@ services:
       # Admin user configuration (optional - override default admin password)
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # DEFAULT_ADMIN_PASSWORD is read by `aim-bootstrap --default` inside the
+      # container so operators can pre-set the canonical admin password via
+      # .env (./scripts/gen-dev-secrets.sh emits one). If unset, bootstrap
+      # generates a random password and prints it once to stdout. Optional.
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-}
       # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
       - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:

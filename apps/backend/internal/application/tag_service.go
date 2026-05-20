@@ -75,6 +75,17 @@ func (s *TagService) CreateTag(ctx context.Context, input CreateTagInput) (*doma
 	return tag, nil
 }
 
+// GetTagByID retrieves a single tag by ID. The HTTP layer uses this to
+// verify tenant ownership (via LoadOwned) before invoking DeleteTag, which
+// itself has no orgID parameter.
+func (s *TagService) GetTagByID(ctx context.Context, tagID uuid.UUID) (*domain.Tag, error) {
+	tag, err := s.tagRepo.GetByID(ctx, tagID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tag: %w", err)
+	}
+	return tag, nil
+}
+
 // GetTagsByOrganization retrieves all tags for an organization
 func (s *TagService) GetTagsByOrganization(ctx context.Context, orgID uuid.UUID, category *domain.TagCategory) ([]*domain.Tag, error) {
 	tags, err := s.tagRepo.List(ctx, orgID, category)

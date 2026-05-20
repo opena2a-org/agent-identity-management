@@ -74,17 +74,22 @@ Dashboard opens at [localhost:3000](http://localhost:3000).
 
 ### Step 4: Log In
 
-The default admin account is created automatically:
+The default admin account is created when you run `aim-bootstrap --default`
+(post-B2 deploys). The bootstrap command prints the randomly-generated
+password once to stdout — capture it from the deploy log.
 
 - **Email:** `admin@opena2a.org`
-- **Password:** `AIM2025!Secure` (you must change this on first login)
+- **Password:** captured from `aim-bootstrap --default` stdout (pre-B2 stacks: `AIM2025!Secure`, must rotate)
+
+You must change this on first login either way.
 
 Log in via the dashboard or via API:
 
 ```bash
+# Replace $ADMIN_PASSWORD with the value captured from aim-bootstrap stdout.
 curl -X POST http://localhost:8080/api/v1/public/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@opena2a.org","password":"AIM2025!Secure"}'
+  -d "{\"email\":\"admin@opena2a.org\",\"password\":\"$ADMIN_PASSWORD\"}"
 ```
 
 The response includes an `accessToken` for authenticated API calls.

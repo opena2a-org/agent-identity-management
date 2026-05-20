@@ -32,7 +32,7 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 	}
 
 	// Convert metadata to JSON
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 	var err error
 	if alert.Metadata != nil {
 		metadataJSON, err = json.Marshal(alert.Metadata)
@@ -77,7 +77,7 @@ func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 	`
 
 	alert := &domain.Alert{}
-	var metadataJSON []byte
+	metadataJSON := make([]byte, 0)
 	var agentName sql.NullString
 	var sourceIP sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
@@ -359,11 +359,11 @@ func (r *AlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([
 }
 
 func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
-	var alerts []*domain.Alert
+	alerts := make([]*domain.Alert, 0)
 
 	for rows.Next() {
 		alert := &domain.Alert{}
-		var metadataJSON []byte
+		metadataJSON := make([]byte, 0)
 		var agentName sql.NullString
 		var sourceIP sql.NullString
 		err := rows.Scan(

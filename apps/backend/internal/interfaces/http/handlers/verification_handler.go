@@ -899,6 +899,14 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 		})
 	}
 
+	// NOTE (defect #23, deferred from this PR): tenant-scoping not applied
+	// here because GetVerification is mounted on BOTH a public route
+	// (/api/v1/verifications/:id, no auth middleware) and an SDK-token route
+	// (/api/v1/sdk-api/verifications/:id, audit-cited). Closing the SDK-route
+	// surface needs a route split (separate handler method) so the public
+	// route is not broken. Tracked as follow-up; for now this handler
+	// remains on the audit-baseline allowlist in cmd/tenantscope-lint.
+
 	// Query verification event from database
 	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
 	if err != nil {
@@ -1282,7 +1290,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		}
 	}
 
-	var responseItems []PendingVerificationResponse
+	responseItems := make([]PendingVerificationResponse, 0)
 	for _, event := range events {
 		// Get agent name with fallbacks
 		agentName := ""

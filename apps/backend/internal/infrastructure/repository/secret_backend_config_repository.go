@@ -53,7 +53,7 @@ func (r *SecretBackendConfigRepository) GetByAgentAndType(agentID uuid.UUID, bac
 	`
 	config := &secrets.SecretBackendConfig{}
 	var bt string
-	var configJSON []byte
+	configJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, agentID, string(backendType)).Scan(
 		&config.ID, &config.AgentID, &bt, &configJSON,
@@ -86,11 +86,11 @@ func (r *SecretBackendConfigRepository) ListByAgent(agentID uuid.UUID) ([]*secre
 	}
 	defer rows.Close()
 
-	var result []*secrets.SecretBackendConfig
+	result := make([]*secrets.SecretBackendConfig, 0)
 	for rows.Next() {
 		config := &secrets.SecretBackendConfig{}
 		var bt string
-		var configJSON []byte
+		configJSON := make([]byte, 0)
 
 		if err := rows.Scan(
 			&config.ID, &config.AgentID, &bt, &configJSON,
