@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,6 +14,19 @@ permissions:
   contents: read
 
 jobs:
+  # Reject ${VAR:-fallback} patterns for secret-shaped env vars in any
+  # docker-compose*.yml. Catches the CWE-798 regression that shipped to main
+  # multiple times before — see scripts/lint-no-secret-fallbacks.sh for the
+  # closed set of names enforced. Unconditional (no path filter) because the
+  # script is sub-second and the failure mode is silent if it ever stops running.
+  secrets-lint:
+    name: Compose secret-fallback lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No ${VAR:-fallback} for secret-shaped env vars
+        run: ./scripts/lint-no-secret-fallbacks.sh
+
   # AST lint that catches HTTP handlers reading c.Params("id"|"agent_id")
   # without invoking the tenant-scoping helper (LoadOwned or
   # LoadOwnedViaAgent). The structural guarantee for the defect #18-25
