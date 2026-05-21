@@ -105,8 +105,6 @@ var allowlist = map[string]string{
 	"APIKeyHandler.DeleteAPIKey":                            "audit-baseline: needs review",
 	"APIKeyHandler.DisableAPIKey":                           "audit-baseline: needs review",
 	"AuthorizeHandler.Authorize":                            "audit-baseline: needs review",
-	"CapabilityHandler.GetAgentCapabilities":                "audit-baseline: needs review",
-	"CapabilityHandler.GetViolationsByAgent":                "audit-baseline: needs review",
 	"CapabilityRequestHandlers.CreateCapabilityRequest":     "audit-baseline: needs review",
 	"CapabilityRequestHandlers.ListAgentCapabilityRequests": "audit-baseline: needs review",
 	"CapabilityRequestHandlers.RejectCapabilityRequest":     "audit-baseline: needs review",
