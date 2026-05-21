@@ -494,6 +494,55 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidMCPServerIDFormat(t *t
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+// SECURITY (defect #19, body-class #2): RecordMCPConnection accepts a
+// body-supplied mcpServerId. PR #185 closed the URL path's agent_id
+// cross-org class but the body-supplied mcpServerId remained an IDOR:
+// an attacker holding an SDK token for org A could record a fictitious
+// connection between A's own agent and ANY tenant's MCP server by
+// guessing the UUID, poisoning the victim org's connection-graph
+// analytics. The fix wraps mcpServerId in LoadOwned against
+// mcpServerRepo; the captured-flag test confirms the service is never
+// reached (attestationService is nil; a bypass would 500-panic
+// rather than returning the asserted 404).
+func TestMCPAttestationHandler_RecordMCPConnection_CrossOrgMCPServerID_Returns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	agentID := uuid.New()
+	mcpServerID := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: mcpServerID, OrganizationID: victimOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/agents/:agent_id/mcp-connections", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPConnection(c)
+	})
+
+	body := `{"mcpServerId":"` + mcpServerID.String() + `","toolName":"x"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-connections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode, "cross-org body mcpServerId must return 404")
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, mcpServerID.String(), "response must not echo the supplied mcpServerId")
+	assert.NotContains(t, bodyStr, victimOrgID.String(), "response must not echo the cross-org organization UUID")
+}
+
 // ===========================
 // MCPAttestationHandler.RecordMCPUsageReport Tests
 // ===========================
@@ -527,6 +576,69 @@ func TestMCPAttestationHandler_RecordMCPUsageReport_InvalidAgentID(t *testing.T)
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+// SECURITY (defect #19b, body-class #2): RecordMCPUsageReport accepts
+// a body containing a map of mcpServerId → usage stats. Any cross-org
+// UUID anywhere in the batch must abort the entire request with 404
+// before any service call — without the pre-validation pass, an
+// attacker could plant a fictitious usage report against a victim
+// org's MCP, poisoning their invocation counters / capability rollups.
+//
+// Captured-flag pattern: attestationService is nil. A bypass that
+// reached the service would surface as a panic / 500, observably
+// distinct from the 404 the test asserts. The first cross-org UUID
+// encountered during the pre-validation pass triggers the abort,
+// regardless of where it appears in the map.
+func TestMCPAttestationHandler_RecordMCPUsageReport_CrossOrgMCPServerID_Returns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	agentID := uuid.New()
+	sameOrgMCP := uuid.New()
+	crossOrgMCP := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				if id == sameOrgMCP {
+					return &domain.MCPServer{ID: id, OrganizationID: callerOrgID}, nil
+				}
+				return &domain.MCPServer{ID: id, OrganizationID: victimOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/agents/:id/mcp-usage-report", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPUsageReport(c)
+	})
+
+	// Batch with one same-org and one cross-org server. The whole
+	// request must abort with 404 — partial-acceptance would still
+	// poison the victim's analytics for the same-org entries while
+	// the lying-by-omission about the cross-org entry hides the
+	// probe.
+	body := `{"agentId":"` + agentID.String() + `","mcpServers":{` +
+		`"` + sameOrgMCP.String() + `":{"toolUsage":{},"capabilitiesAttested":[]},` +
+		`"` + crossOrgMCP.String() + `":{"toolUsage":{},"capabilitiesAttested":[]}` +
+		`},"reportedAt":"2024-01-01T00:00:00Z"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-usage-report", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode, "any cross-org body mcpServerId must abort the whole batch with 404")
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, crossOrgMCP.String(), "response must not echo the supplied cross-org mcpServerId")
+	assert.NotContains(t, bodyStr, victimOrgID.String(), "response must not echo the cross-org organization UUID")
 }
 
 // ===========================
