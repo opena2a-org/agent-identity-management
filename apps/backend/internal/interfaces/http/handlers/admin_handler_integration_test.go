@@ -33,6 +33,9 @@ func createAdminHandlerWithMocks(
 	registrationService RegistrationServicer,
 	securityService SecurityServicer,
 ) *AdminHandler {
+	// A3d-v: tests that don't exercise ApproveUser / RejectUser path pass
+	// nil userRepo. Cross-org tests for those handlers wire a real stub
+	// via the dedicated test (see admin_handler_a3dv_test.go).
 	return NewAdminHandlerWithInterfaces(
 		authService,
 		adminService,
@@ -42,6 +45,7 @@ func createAdminHandlerWithMocks(
 		alertService,
 		registrationService,
 		securityService,
+		nil,
 	)
 }
 
@@ -413,7 +417,7 @@ func TestAdminHandler_isSuperAdmin_UserNotFound(t *testing.T) {
 // ===========================
 
 func TestNewAdminHandlerWithInterfaces_NilDeps(t *testing.T) {
-	handler := NewAdminHandlerWithInterfaces(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAdminHandlerWithInterfaces(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 
@@ -429,7 +433,7 @@ func TestNewAdminHandlerWithInterfaces_WithMocks(t *testing.T) {
 
 	handler := NewAdminHandlerWithInterfaces(
 		mockAuth, mockAdmin, mockAgent, mockMCP,
-		mockAudit, mockAlert, mockReg, mockSec,
+		mockAudit, mockAlert, mockReg, mockSec, nil,
 	)
 
 	assert.NotNil(t, handler)
@@ -1458,6 +1462,7 @@ func TestAdminHandler_RejectUser_Success(t *testing.T) {
 	}
 
 	handler := createAdminHandlerWithMocks(nil, mockAdminService, nil, nil, mockAuditService, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-v
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/reject", func(c fiber.Ctx) error {
@@ -1488,6 +1493,7 @@ func TestAdminHandler_RejectUser_ServiceError(t *testing.T) {
 	}
 
 	handler := createAdminHandlerWithMocks(nil, mockAdminService, nil, nil, nil, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-v
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/reject", func(c fiber.Ctx) error {
@@ -1512,6 +1518,10 @@ func TestAdminHandler_RejectRegistrationRequest_Success(t *testing.T) {
 	requestID := uuid.New()
 
 	mockRegistrationService := &MockRegistrationServiceImpl{
+		GetRegistrationRequestFunc: func(ctx context.Context, reqID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+			oID := orgID
+			return &domain.UserRegistrationRequest{ID: reqID, OrganizationID: &oID, Status: domain.RegistrationStatusPending}, nil
+		},
 		RejectRegistrationRequestFunc: func(ctx context.Context, reqID, adminID uuid.UUID, reason string) error {
 			return nil
 		},
@@ -1547,6 +1557,10 @@ func TestAdminHandler_RejectRegistrationRequest_ServiceError(t *testing.T) {
 	requestID := uuid.New()
 
 	mockRegistrationService := &MockRegistrationServiceImpl{
+		GetRegistrationRequestFunc: func(ctx context.Context, reqID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+			oID := orgID
+			return &domain.UserRegistrationRequest{ID: reqID, OrganizationID: &oID, Status: domain.RegistrationStatusPending}, nil
+		},
 		RejectRegistrationRequestFunc: func(ctx context.Context, reqID, adminID uuid.UUID, reason string) error {
 			return errors.New("request not found")
 		},
@@ -1577,6 +1591,10 @@ func TestAdminHandler_ApproveRegistrationRequest_Success(t *testing.T) {
 	requestID := uuid.New()
 
 	mockRegistrationService := &MockRegistrationServiceImpl{
+		GetRegistrationRequestFunc: func(ctx context.Context, reqID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+			oID := orgID
+			return &domain.UserRegistrationRequest{ID: reqID, OrganizationID: &oID, Status: domain.RegistrationStatusPending}, nil
+		},
 		ApproveRegistrationRequestFunc: func(ctx context.Context, reqID, adminID, oID uuid.UUID) (*domain.User, error) {
 			return &domain.User{ID: uuid.New(), OrganizationID: oID, Email: "newuser@example.com", Name: "New User"}, nil
 		},
@@ -1610,6 +1628,10 @@ func TestAdminHandler_ApproveRegistrationRequest_ServiceError(t *testing.T) {
 	requestID := uuid.New()
 
 	mockRegistrationService := &MockRegistrationServiceImpl{
+		GetRegistrationRequestFunc: func(ctx context.Context, reqID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+			oID := orgID
+			return &domain.UserRegistrationRequest{ID: reqID, OrganizationID: &oID, Status: domain.RegistrationStatusPending}, nil
+		},
 		ApproveRegistrationRequestFunc: func(ctx context.Context, reqID, adminID, oID uuid.UUID) (*domain.User, error) {
 			return nil, errors.New("request not found")
 		},
@@ -1649,6 +1671,7 @@ func TestAdminHandler_ApproveUser_Success(t *testing.T) {
 	}
 
 	handler := createAdminHandlerWithMocks(nil, mockAdminService, nil, nil, mockAuditService, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-v
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/approve", func(c fiber.Ctx) error {
@@ -1677,6 +1700,7 @@ func TestAdminHandler_ApproveUser_ServiceError(t *testing.T) {
 	}
 
 	handler := createAdminHandlerWithMocks(nil, mockAdminService, nil, nil, nil, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-v
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/approve", func(c fiber.Ctx) error {
