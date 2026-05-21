@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
@@ -480,17 +481,22 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 		})
 	}
 
-	// Revoke the attestation
-	err = h.attestationService.RevokeAttestation(c.Context(), attestationID, userID, req.Reason)
+	// Revoke the attestation. The service enforces tenant-scoping (A3c
+	// #47) by collapsing "not found" and "cross-tenant" into a single
+	// sentinel error; map both to 404 with the standard not-found body
+	// shape to preserve existence-secrecy.
+	err = h.attestationService.RevokeAttestation(c.Context(), attestationID, orgID, userID, req.Reason)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "attestation not found" {
-			statusCode = fiber.StatusNotFound
+		if errors.Is(err, application.ErrAttestationNotFound) {
+			respondResourceNotFound(c)
+			return nil
 		}
-
-		return c.Status(statusCode).JSON(fiber.Map{
-			"error":   "Failed to revoke attestation",
-			"message": err.Error(),
+		// Server-side log preserves the underlying cause without
+		// leaking it to the client.
+		fmt.Printf("⚠️  RevokeAttestation failed: attestationID=%s callerOrgID=%s err=%v\n",
+			attestationID, orgID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to revoke attestation",
 		})
 	}
 
