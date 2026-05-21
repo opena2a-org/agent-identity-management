@@ -467,3 +467,49 @@ func TestA2AHandler_AgentScoped_CrossOrgReturns404(t *testing.T) {
 		})
 	}
 }
+
+// SECURITY (body-class #2, LogTask phantom-task IDOR): a POST
+// /api/v1/a2a/tasks with body `{"_clientAgentId": "<victim-org-agent>",
+// "remoteAgentId": "<attacker-org-agent>"}` from a token in the
+// attacker's org must return 404, NOT create a phantom A2ATask row
+// in the victim org. RemoteAgentID is intentionally NOT scoped (A2A
+// tasks are cross-org by protocol design). a2aService is nil — any
+// bypass would 500-panic rather than returning the asserted 404.
+func TestA2AHandler_LogTask_CrossOrgClientAgentReturns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	clientAgentID := uuid.New() // victim's agent UUID (body-supplied)
+	remoteAgentID := uuid.New() // attacker's own agent (legit cross-org)
+
+	agentLoaded := false
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(_ context.Context, id uuid.UUID) (*domain.Agent, error) {
+			agentLoaded = true
+			return &domain.Agent{ID: id, OrganizationID: victimOrgID}, nil
+		},
+	}
+
+	handler := &A2AHandler{agentService: mockAgentService}
+
+	app := fiber.New()
+	app.Post("/a2a/tasks", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		c.Locals("agent_id", uuid.New()) // attacker's own agent in Locals
+		return handler.LogTask(c)
+	})
+
+	body := `{"externalTaskId":"phantom-1","_clientAgentId":"` + clientAgentID.String() +
+		`","remoteAgentId":"` + remoteAgentID.String() + `","skillId":"exfiltrate"}`
+	req := httptest.NewRequest("POST", "/a2a/tasks", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(bodyBytes))
+	assert.True(t, agentLoaded, "agentService.GetAgent must be called to verify ClientAgentID ownership")
+	assert.NotContains(t, string(bodyBytes), clientAgentID.String(), "response must not echo the supplied ClientAgentID")
+	assert.NotContains(t, string(bodyBytes), victimOrgID.String(), "response must not echo the victim's org UUID")
+}

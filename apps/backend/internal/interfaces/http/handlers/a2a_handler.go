@@ -600,10 +600,39 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		}
 	}
 
+	// SECURITY (body-class #2): the ClientAgentID has been resolved
+	// from one of three paths (SDK body, internal body, or Locals
+	// context). All three are attacker-controlled in the body-supplied
+	// cases — without this check, an attacker holding any valid
+	// A2A token can plant a phantom A2ATask row claiming the VICTIM's
+	// agent initiated a task against the attacker's RemoteAgentID,
+	// polluting the victim org's analytics + peer-trust history.
+	// RemoteAgentID is intentionally NOT scoped (A2A tasks are
+	// cross-org by protocol design — the remote side may legitimately
+	// belong to another organization).
+	//
+	// Filed as defect in
+	// todo/2026-05-21-a3d-logtask-phantom-task-idor.md (P2). Fix uses
+	// the existing agentService.GetAgent loader closure mirroring
+	// GetSkillAttestations:1226 and UpdateTaskState (A3d-vii.b).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	agentLoader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	if LoadOwned(c, agentLoader, req.ClientAgentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	task, err := h.a2aService.LogA2ATask(c.Context(), req)
 	if err != nil {
+		// err.Error() is NOT echoed — could carry victim agent state
+		// via wrapped service errors (mirrors A3d-vii.b PR #187 +
+		// AttestMCP PR #188 no-echo discipline).
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to log task: " + err.Error(),
+			"error": "Failed to log task",
 		})
 	}
 
