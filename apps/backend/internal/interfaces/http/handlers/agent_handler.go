@@ -900,8 +900,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 // @Param id path string true "Agent ID"
 // @Success 200 {object} CredentialsResponse
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
-// @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Router /agents/{id}/credentials [get]
 func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
@@ -2160,8 +2159,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 // @Param offset query int false "Pagination offset (default 0)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
-// @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Router /agents/{id}/activity [get]
 func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
