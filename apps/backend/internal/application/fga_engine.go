@@ -587,6 +587,95 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 }
 
 // emitDecisionTelemetry emits the per-decision metric + structured log line.
+// EmitSDKVerificationSpan emits an fga.authorize parent span (plus an
+// fga.capability_check child) that mirrors the shape produced by the
+// /api/v1/agents/{id}/authorize path, but from the SDK route at
+// /api/v1/sdk-api/verifications. The SDK route's enforcement still flows
+// through AgentService.VerifyCapability; this method exists only so the
+// observability surface is consistent across both routes, matching the
+// nine SemConv attributes locked in the OBSERVABILITY.md proposal.
+//
+// No DB writes, no engine state changes, no NanoMind dispatch. Span
+// emission only. Safe to call from any handler that has already made the
+// authorization decision and just needs the trace to show up in Tempo.
+func (e *FGAEngine) EmitSDKVerificationSpan(
+	ctx context.Context,
+	agentID uuid.UUID,
+	keyAlgorithm string,
+	trustScore float64,
+	capability string,
+	allowed bool,
+	denialReason string,
+) {
+	if e == nil || e.tracer == nil {
+		return
+	}
+	ctx, parent := e.tracer.Start(ctx, "fga.authorize",
+		trace.WithAttributes(
+			attribute.String("agent.id", agentID.String()),
+			attribute.String("agent.capability", capability),
+		),
+	)
+	defer parent.End()
+
+	if keyAlgorithm != "" {
+		parent.SetAttributes(attribute.String("agent.public_key.algorithm", keyAlgorithm))
+	}
+	parent.SetAttributes(attribute.Float64("agent.trust_score", trustScore))
+
+	// agent.scan_verdict + agent.drift_score + agent.active_alerts come from
+	// the local ASC summary (fail-open: if not present, those three attrs
+	// simply do not land on the span, matching the /authorize path's behavior).
+	if summary := e.fetchASCRiskSummary(ctx, agentID); summary != nil {
+		if summary.ScanVerdict != "" {
+			parent.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+		}
+		parent.SetAttributes(attribute.Float64("agent.drift_score", summary.DriftScore))
+		parent.SetAttributes(attribute.Int("agent.active_alerts", summary.ActiveAlerts))
+	}
+
+	// The trace reflects the policy decision, not the SDK response.
+	// VerifyCapability returns a non-empty denialReason on both ALLOW and DENY
+	// paths (the clean-allow path emits "Action matches registered capabilities
+	// and passes all security policies"). The discriminator is the word
+	// "violation": the monitoring-mode-observed-but-not-blocked path emits
+	// "capability violation logged". Anything containing "violation" is a real
+	// policy violation that observability tools should see as DENY.
+	//
+	// This is the "truth diverges from UX" observability story: SDK callers in
+	// monitoring mode receive allowed=true; the trace records DENY anyway.
+	violated := !allowed || strings.Contains(strings.ToLower(denialReason), "violation")
+	outcome := "ALLOW"
+	deniedBy := ""
+	if violated {
+		outcome = "DENY"
+		// SDK route only runs the capability check today, so denials all map
+		// to capability_check. If/when other checks land on this route, this
+		// mapping should grow to reflect them.
+		deniedBy = "capability_check"
+	}
+	parent.SetAttributes(attribute.String("fga.outcome", outcome))
+	if deniedBy != "" {
+		parent.SetAttributes(attribute.String("fga.denied_by", deniedBy))
+	}
+
+	// Emit the fga.capability_check child span so fga.step lands on the
+	// trace where the proposal expects it (per-step child, not parent).
+	// fga.allowed mirrors the policy decision, not the SDK response.
+	_, child := e.tracer.Start(ctx, "fga.capability_check",
+		trace.WithAttributes(
+			attribute.String("fga.step", "capability_check"),
+			attribute.String("agent.id", agentID.String()),
+			attribute.String("agent.capability", capability),
+			attribute.Bool("fga.allowed", !violated),
+		),
+	)
+	if violated {
+		child.SetAttributes(attribute.String("fga.denied_reason", denialReason))
+	}
+	child.End()
+}
+
 // Called from the deferred span finalizer in Authorize so it runs on every
 // return path (allow, deny, error). The slog logger is bridged through
 // telemetry, so trace.id and span.id auto-attach.
