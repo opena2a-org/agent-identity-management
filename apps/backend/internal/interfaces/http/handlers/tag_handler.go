@@ -9,13 +9,8 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// mcpServerByIDLookup is the single-method subset of any MCP server
-// repository this handler needs. Mirrors agentByIDLookup in
-// capability_handler.go — concrete *repository.MCPServerRepository and
-// any test-side mock satisfy it via Go structural typing.
-type mcpServerByIDLookup interface {
-	GetByID(id uuid.UUID) (*domain.MCPServer, error)
-}
+// mcpServerByIDLookup is defined in mcp_attestation_handler.go and
+// reused here for the same MCP-server-scoped LoadOwned pattern.
 
 // TagHandler handles HTTP requests for tag management.
 //
