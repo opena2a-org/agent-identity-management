@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -1003,8 +1004,17 @@ func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
 	}
 
 	if err := h.getAlertService().AcknowledgeAlert(c.Context(), alertID, orgID, userID); err != nil {
+		// SECURITY (A3d-v R7 follow-up): cross-tenant and not-found
+		// collapse to ErrAlertNotFound. The 404 is intentional —
+		// existence-secrecy across tenants. err.Error() is NOT echoed
+		// so the SQL error / wrapped detail cannot leak through.
+		if errors.Is(err, application.ErrAlertNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "not found",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to acknowledge alert",
 		})
 	}
 
@@ -1056,8 +1066,13 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 
 	ackCount, err := h.getAlertService().BulkAcknowledgeAlerts(c.Context(), orgID, userID)
 	if err != nil {
+		// Parity with AcknowledgeAlert / ResolveAlert above: do not
+		// echo err.Error() (could carry SQL detail / wrapped state).
+		// Bulk path is tenant-scoped at the repo (WHERE organization_id
+		// = $3) so there is no IDOR, but the no-echo discipline keeps
+		// the file consistent.
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to bulk acknowledge alerts",
 		})
 	}
 
@@ -1105,8 +1120,14 @@ func (h *AdminHandler) ResolveAlert(c fiber.Ctx) error {
 	}
 
 	if err := h.getAlertService().ResolveAlert(c.Context(), alertID, orgID, userID, req.Resolution); err != nil {
+		// SECURITY (A3d-v R7 follow-up): see AcknowledgeAlert above.
+		if errors.Is(err, application.ErrAlertNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "not found",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to resolve alert",
 		})
 	}
 

@@ -216,16 +216,6 @@ var serviceParamAllowlist = map[string]string{
 	// future-API surface; no current callsite. (alert_service.go:108-117)
 	"AlertService.CheckAPIKeyExpiry": "stub no-op; orgID reserved for future API key expiry implementation",
 
-	// HIGH IDOR — already tracked. AlertService.AcknowledgeAlert and
-	// ResolveAlert both accept orgID but call alertRepo.Acknowledge
-	// without the tenant filter, so any caller can acknowledge/resolve
-	// any tenant's alert by guessing the UUID. Fix is filed at
-	// todo/2026-05-21-a3d-v-followup-alert-handler-idors.md
-	// (handler-layer LoadOwned via alertRepo.GetByID is the preferred
-	// shape). Remove these entries once the follow-up PR lands.
-	"AlertService.AcknowledgeAlert": "audit-baseline IDOR: see todo/2026-05-21-a3d-v-followup-alert-handler-idors.md",
-	"AlertService.ResolveAlert":     "audit-baseline IDOR: see todo/2026-05-21-a3d-v-followup-alert-handler-idors.md",
-
 	// Pure function on the passed-in baseline argument; no DB call.
 	// orgID is vestigial — kept because callers still pass it but the
 	// method's logic uses only `baseline.CapabilityUsage`. Not an IDOR
