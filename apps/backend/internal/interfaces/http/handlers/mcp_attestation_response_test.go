@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,10 +49,17 @@ func TestMCPAttestationHandler_AttestMCP_FailedSentinelMapsToFixed403(t *testing
 		},
 	}
 
-	handler := &MCPAttestationHandler{verifier: mockVerifier}
+	orgID := uuid.New()
+	handler := &MCPAttestationHandler{
+		verifier:      mockVerifier,
+		mcpServerRepo: mcpRepoReturning(orgID),
+	}
 
 	app := fiber.New()
-	app.Post("/mcp-servers/:id/attest", handler.AttestMCP)
+	app.Post("/mcp-servers/:id/attest", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.AttestMCP(c)
+	})
 
 	body := `{"attestation":{"agentId":"` + uuid.New().String() + `"},"signature":"sig"}`
 	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/attest", strings.NewReader(body))
@@ -88,10 +96,17 @@ func TestMCPAttestationHandler_AttestMCP_WrappedFailedSentinelMapsToFixed403(t *
 		},
 	}
 
-	handler := &MCPAttestationHandler{verifier: mockVerifier}
+	orgID := uuid.New()
+	handler := &MCPAttestationHandler{
+		verifier:      mockVerifier,
+		mcpServerRepo: mcpRepoReturning(orgID),
+	}
 
 	app := fiber.New()
-	app.Post("/mcp-servers/:id/attest", handler.AttestMCP)
+	app.Post("/mcp-servers/:id/attest", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.AttestMCP(c)
+	})
 
 	body := `{"attestation":{"agentId":"` + uuid.New().String() + `"},"signature":"sig"}`
 	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/attest", strings.NewReader(body))
@@ -117,10 +132,17 @@ func TestMCPAttestationHandler_AttestMCP_InvalidSentinelMapsToFixed403(t *testin
 		},
 	}
 
-	handler := &MCPAttestationHandler{verifier: mockVerifier}
+	orgID := uuid.New()
+	handler := &MCPAttestationHandler{
+		verifier:      mockVerifier,
+		mcpServerRepo: mcpRepoReturning(orgID),
+	}
 
 	app := fiber.New()
-	app.Post("/mcp-servers/:id/attest", handler.AttestMCP)
+	app.Post("/mcp-servers/:id/attest", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.AttestMCP(c)
+	})
 
 	body := `{"attestation":{"agentId":"` + uuid.New().String() + `"},"signature":"sig"}`
 	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/attest", strings.NewReader(body))
@@ -143,10 +165,17 @@ func TestMCPAttestationHandler_AttestMCP_UnknownErrorMapsToFixed500(t *testing.T
 		},
 	}
 
-	handler := &MCPAttestationHandler{verifier: mockVerifier}
+	orgID := uuid.New()
+	handler := &MCPAttestationHandler{
+		verifier:      mockVerifier,
+		mcpServerRepo: mcpRepoReturning(orgID),
+	}
 
 	app := fiber.New()
-	app.Post("/mcp-servers/:id/attest", handler.AttestMCP)
+	app.Post("/mcp-servers/:id/attest", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.AttestMCP(c)
+	})
 
 	body := `{"attestation":{"agentId":"` + uuid.New().String() + `"},"signature":"sig"}`
 	req := httptest.NewRequest("POST", "/mcp-servers/"+uuid.New().String()+"/attest", strings.NewReader(body))
@@ -159,6 +188,20 @@ func TestMCPAttestationHandler_AttestMCP_UnknownErrorMapsToFixed500(t *testing.T
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	assert.NotContains(t, string(bodyBytes), "org_xyz_secret_table")
 	assert.NotContains(t, string(bodyBytes), "database connection")
+}
+
+// mcpRepoReturning returns a mcpServerByIDLookup fake whose GetByID
+// always yields an MCPServer in the given org. Lets the AttestMCP
+// handler's path-MCP LoadOwned guard (A3d-vi) pass so the test can
+// exercise the sentinel-mapping branch we care about here.
+func mcpRepoReturning(orgID uuid.UUID) mcpServerByIDLookup {
+	return mcpRepoFake{orgID: orgID}
+}
+
+type mcpRepoFake struct{ orgID uuid.UUID }
+
+func (m mcpRepoFake) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
+	return &domain.MCPServer{ID: id, OrganizationID: m.orgID}, nil
 }
 
 // errorWrap mirrors the fmt.Errorf("%w: %s") pattern the service uses
