@@ -881,6 +881,7 @@ func (m *MockComplianceServiceImpl) ListEvidence(ctx context.Context, orgID uuid
 // MockRegistrationServiceImpl implements RegistrationServicer interface
 type MockRegistrationServiceImpl struct {
 	ListPendingRegistrationRequestsFunc func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error)
+	GetRegistrationRequestFunc          func(ctx context.Context, requestID uuid.UUID) (*domain.UserRegistrationRequest, error)
 	ApproveRegistrationRequestFunc      func(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error)
 	RejectRegistrationRequestFunc       func(ctx context.Context, requestID, adminID uuid.UUID, reason string) error
 }
@@ -890,6 +891,13 @@ func (m *MockRegistrationServiceImpl) ListPendingRegistrationRequests(ctx contex
 		return m.ListPendingRegistrationRequestsFunc(ctx, orgID, limit, offset)
 	}
 	return []*domain.UserRegistrationRequest{}, 0, nil
+}
+
+func (m *MockRegistrationServiceImpl) GetRegistrationRequest(ctx context.Context, requestID uuid.UUID) (*domain.UserRegistrationRequest, error) {
+	if m.GetRegistrationRequestFunc != nil {
+		return m.GetRegistrationRequestFunc(ctx, requestID)
+	}
+	return nil, nil
 }
 
 func (m *MockRegistrationServiceImpl) ApproveRegistrationRequest(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error) {

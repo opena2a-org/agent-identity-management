@@ -25,6 +25,11 @@ func verificationEventOrgID(v *domain.VerificationEvent) uuid.UUID { return v.Or
 // mcpServerOrgID extracts OrganizationID from a *domain.MCPServer.
 func mcpServerOrgID(m *domain.MCPServer) uuid.UUID { return m.OrganizationID }
 
+// userOrgID extracts OrganizationID from a *domain.User. Used by
+// AdminHandler approval flows (A3d-v) to gate cross-tenant approve /
+// reject on a target user before the service is invoked.
+func userOrgID(u *domain.User) uuid.UUID { return u.OrganizationID }
+
 // LoadOwned loads a resource by ID via the provided loader and verifies the
 // caller's organization owns it. On any failure path (loader error,
 // cross-tenant mismatch, nil resource) the helper writes HTTP 404 to the

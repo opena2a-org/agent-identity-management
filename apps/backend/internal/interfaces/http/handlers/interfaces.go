@@ -150,6 +150,7 @@ type AlertServicerExtended interface {
 // RegistrationServicer defines the methods from RegistrationService that handlers use
 type RegistrationServicer interface {
 	ListPendingRegistrationRequests(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.UserRegistrationRequest, int, error)
+	GetRegistrationRequest(ctx context.Context, requestID uuid.UUID) (*domain.UserRegistrationRequest, error)
 	ApproveRegistrationRequest(ctx context.Context, requestID, adminID, orgID uuid.UUID) (*domain.User, error)
 	RejectRegistrationRequest(ctx context.Context, requestID, adminID uuid.UUID, reason string) error
 }
