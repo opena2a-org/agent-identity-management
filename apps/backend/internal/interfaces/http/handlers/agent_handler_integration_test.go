@@ -2184,7 +2184,11 @@ func TestAgentHandler_DetectAndMapMCPServers_AccessDenied(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	// A3b-ii: cross-tenant access returns 404 (not 403) to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body2, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body2))
 }
 
 // ===========================
@@ -2805,4 +2809,178 @@ func TestAgentHandler_GetAgentActivity_CrossOrgReturns404(t *testing.T) {
 	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
 	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+}
+
+// ===========================
+// A3b-ii: cross-tenant access on mutation/lifecycle handlers returns
+// 404 (not 403). Table-driven sweep — each row exercises one of the
+// 12 LoadOwned conversions in this PR. The mock GetAgent returns an
+// agent in a different org; every handler must short-circuit at
+// LoadOwned and never reach the mutation service call. Body content
+// is minimal — handlers that parse JSON before LoadOwned just need a
+// parseable payload to reach the LoadOwned check.
+// ===========================
+
+func TestAgentHandler_MutationHandlers_CrossOrgReturns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	callerUserID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID,
+				Name:           "victim-agent",
+			}, nil
+		},
+	}
+
+	tests := []struct {
+		name        string
+		method      string
+		requestPath string
+		body        string
+		setup       func(*fiber.App, *AgentHandler)
+	}{
+		{
+			name:        "UpdateAgent",
+			method:      "PUT",
+			requestPath: "/agents/" + agentID.String(),
+			body:        `{"name":"x"}`,
+			setup:       func(app *fiber.App, h *AgentHandler) { app.Put("/agents/:id", h.UpdateAgent) },
+		},
+		{
+			name:        "DeleteAgent",
+			method:      "DELETE",
+			requestPath: "/agents/" + agentID.String(),
+			body:        "",
+			setup:       func(app *fiber.App, h *AgentHandler) { app.Delete("/agents/:id", h.DeleteAgent) },
+		},
+		{
+			name:        "VerifyAgent",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/verify",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Post("/agents/:id/verify", h.VerifyAgent)
+			},
+		},
+		{
+			name:        "AddMCPServersToAgent",
+			method:      "PUT",
+			requestPath: "/agents/" + agentID.String() + "/mcp-servers",
+			// Non-empty list — handler validates that mcpServerIds is
+			// non-empty BEFORE LoadOwned. The empty-list path returns
+			// 400 from body validation, which is independent of the
+			// cross-tenant check we're verifying here.
+			body: `{"mcpServerIds":["some-server"]}`,
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Put("/agents/:id/mcp-servers", h.AddMCPServersToAgent)
+			},
+		},
+		{
+			name:        "RemoveMCPServerFromAgent",
+			method:      "DELETE",
+			requestPath: "/agents/" + agentID.String() + "/mcp-servers/foo",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Delete("/agents/:id/mcp-servers/:mcp_id", h.RemoveMCPServerFromAgent)
+			},
+		},
+		{
+			name:        "UpdateAgentTrustScore",
+			method:      "PUT",
+			requestPath: "/agents/" + agentID.String() + "/trust-score",
+			body:        `{"score":50.0}`,
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Put("/agents/:id/trust-score", h.UpdateAgentTrustScore)
+			},
+		},
+		{
+			name:        "SuspendAgent",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/suspend",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Post("/agents/:id/suspend", h.SuspendAgent)
+			},
+		},
+		{
+			name:        "ReactivateAgent",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/reactivate",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Post("/agents/:id/reactivate", h.ReactivateAgent)
+			},
+		},
+		{
+			name:        "RevokeAgent",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/revoke",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Post("/agents/:id/revoke", h.RevokeAgent)
+			},
+		},
+		{
+			name:        "RotateCredentials",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/rotate-credentials",
+			body:        "",
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Post("/agents/:id/rotate-credentials", h.RotateCredentials)
+			},
+		},
+		{
+			name:        "UpdateAgentKeys",
+			method:      "PUT",
+			requestPath: "/agents/" + agentID.String() + "/keys",
+			body:        `{"publicKey":"AAAA"}`,
+			setup: func(app *fiber.App, h *AgentHandler) {
+				app.Put("/agents/:id/keys", h.UpdateAgentKeys)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewAgentHandlerWithInterfaces(
+				mockAgentService,
+				&MockMCPServiceImpl{},
+				&MockAuditServiceImpl{},
+				&MockAPIKeyServiceImpl{},
+				nil,
+				&MockAlertServiceImpl{},
+				&MockVerificationEventServiceImpl{},
+				&MockCapabilityServiceImpl{},
+				&MockTagServiceImpl{},
+				&MockOrganizationRepository{},
+				&MockMCPAttestationServiceImpl{},
+			)
+
+			app := createTestAppWithAuth(handler, callerOrgID, callerUserID)
+			tt.setup(app, handler)
+
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.requestPath, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.requestPath, strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+				"%s: cross-tenant request must return 404, got %d", tt.name, resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			assert.JSONEq(t, `{"error":"not found"}`, string(body),
+				"%s: cross-tenant 404 body must be existence-secrecy shape, got %s", tt.name, string(body))
+		})
+	}
 }
