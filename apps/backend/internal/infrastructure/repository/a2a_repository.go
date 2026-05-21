@@ -1362,7 +1362,12 @@ func (r *A2AConsentRepository) CheckConsent(ctx context.Context, userID string, 
 	return exists, nil
 }
 
-func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
+func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, orgID uuid.UUID, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
+	// SECURITY (A3c #42): scope by organization_id to prevent cross-tenant
+	// userId enumeration. A caller in org A must not be able to read a
+	// userId's consents from org B. NULL organization_id rows are
+	// deliberately excluded — those are system-wide / pre-migration
+	// records and need a separate admin path. See tenant_scope.go:41-46.
 	var query string
 	if includeRevoked {
 		query = `
@@ -1372,7 +1377,7 @@ func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, in
 				revoked, revoked_at, revoked_reason, consent_method, evidence,
 				ip_address, user_agent, created_at, updated_at
 			FROM a2a_consent_records
-			WHERE user_id = $1
+			WHERE user_id = $1 AND organization_id = $2
 			ORDER BY granted_at DESC
 		`
 	} else {
@@ -1383,11 +1388,11 @@ func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, in
 				revoked, revoked_at, revoked_reason, consent_method, evidence,
 				ip_address, user_agent, created_at, updated_at
 			FROM a2a_consent_records
-			WHERE user_id = $1 AND revoked = FALSE
+			WHERE user_id = $1 AND organization_id = $2 AND revoked = FALSE
 			ORDER BY granted_at DESC
 		`
 	}
-	return r.queryConsents(ctx, query, userID)
+	return r.queryConsents(ctx, query, userID, orgID)
 }
 
 func (r *A2AConsentRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {

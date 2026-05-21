@@ -847,6 +847,11 @@ func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
 // ListUserConsents lists all consent records for a user
 // GET /api/v1/a2a/consent/user/:userId
 func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	userID := c.Params("userId")
 	if userID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -856,7 +861,11 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 
 	includeRevoked := c.Query("includeRevoked") == "true"
 
-	consents, err := h.a2aService.ListUserConsents(c.Context(), userID, includeRevoked)
+	// SECURITY (A3c #42): the service scopes the query by the caller's
+	// orgID. Cross-tenant userId enumeration returns an empty list, which
+	// is indistinguishable from "user has no consents in your org" — no
+	// existence side channel is exposed.
+	consents, err := h.a2aService.ListUserConsents(c.Context(), userID, orgID, includeRevoked)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1188,6 +1197,11 @@ func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
 // GetSkillAttestations returns all attestations for an agent's skill
 // GET /api/v1/a2a/attestations/:agentId/:skillId
 func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("agentId"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1196,6 +1210,17 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 	}
 
 	skillID := c.Params("skillId")
+
+	// SECURITY (A3c #43): tenant-scope by verifying the agent belongs to
+	// caller's org BEFORE reading attestations. Returns 404 for
+	// cross-tenant access to preserve existence-secrecy (see
+	// tenant_scope.go:41-46).
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	if LoadOwned(c, loader, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
 
 	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
 	if err != nil {

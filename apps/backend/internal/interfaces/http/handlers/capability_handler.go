@@ -393,6 +393,11 @@ func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /agents/{agentId}/capabilities/{capabilityId} [delete]
 func (h *CapabilityHandler) RevokeCapability(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	capabilityID, err := uuid.Parse(c.Params("capabilityId"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
@@ -408,9 +413,32 @@ func (h *CapabilityHandler) RevokeCapability(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3c #44): tenant-scope the capability before revocation.
+	// CapabilityService.RevokeCapability does NOT enforce org scoping
+	// internally — without this check, a caller in org A could revoke a
+	// capability in org B by passing the foreign capability UUID. Load
+	// the capability, look up its owning agent, verify the agent's org
+	// matches the caller's org. Returns 404 (not 403) for both "not
+	// found" and "exists in another org" to avoid the cross-tenant
+	// existence side channel; see tenant_scope.go:41-46.
 	capSvc := h.getCapabilityService()
+	capability, err := capSvc.GetCapabilityByID(c.Context(), capabilityID)
+	if err != nil || capability == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	agent, err := h.agentRepo.GetByID(capability.AgentID)
+	if err != nil || agent == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	if agent.OrganizationID != orgID {
+		respondResourceNotFound(c)
+		return nil
+	}
+
 	if err := capSvc.RevokeCapability(
-		context.Background(),
+		c.Context(),
 		capabilityID,
 		&userID,
 	); err != nil {
@@ -544,62 +572,6 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 	})
 }
 
-// GetViolationsByOrganization godoc
-// @Summary Get violations for an organization
-// @Description Retrieve all capability violations for an organization
-// @Tags capabilities
-// @Produce json
-// @Param orgId path string true "Organization ID"
-// @Param limit query int false "Limit" default(20)
-// @Param offset query int false "Offset" default(0)
-// @Success 200 {object} ViolationsResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /organizations/{orgId}/violations [get]
-func (h *CapabilityHandler) GetViolationsByOrganization(c fiber.Ctx) error {
-	orgID, err := uuid.Parse(c.Params("orgId"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid organization ID",
-		})
-	}
-
-	limit := 20
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
-			limit = parsedLimit
-		}
-	}
-
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil {
-			offset = parsedOffset
-		}
-	}
-
-	capSvc := h.getCapabilityService()
-	violations, total, err := capSvc.GetViolationsByOrganization(
-		context.Background(),
-		orgID,
-		limit,
-		offset,
-	)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
-	}
-
-	return c.JSON(ViolationsResponse{
-		Violations: violations,
-		Total:      total,
-		Limit:      limit,
-		Offset:     offset,
-	})
-}
-
 // ListCapabilities godoc
 // @Summary List all available capabilities
 // @Description Get all capability types available in the system with metadata
@@ -635,48 +607,6 @@ func (h *CapabilityHandler) ListCapabilities(c fiber.Ctx) error {
 	}
 
 	return c.JSON(response)
-}
-
-// GetRecentViolations godoc
-// @Summary Get recent violations
-// @Description Retrieve violations from the last N minutes for an organization
-// @Tags capabilities
-// @Produce json
-// @Param orgId path string true "Organization ID"
-// @Param minutes query int false "Minutes to look back" default(60)
-// @Success 200 {array} domain.CapabilityViolation
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /organizations/{orgId}/violations/recent [get]
-func (h *CapabilityHandler) GetRecentViolations(c fiber.Ctx) error {
-	orgID, err := uuid.Parse(c.Params("orgId"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid organization ID",
-		})
-	}
-
-	minutes := 60
-	if minutesStr := c.Query("minutes"); minutesStr != "" {
-		if parsedMinutes, err := strconv.Atoi(minutesStr); err == nil {
-			minutes = parsedMinutes
-		}
-	}
-
-	capSvc := h.getCapabilityService()
-	violations, err := capSvc.GetRecentViolations(
-		context.Background(),
-		orgID,
-		minutes,
-	)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
-	}
-
-	return c.JSON(violations)
 }
 
 // Helper function to extract user ID from JWT claims or use system user for API key auth

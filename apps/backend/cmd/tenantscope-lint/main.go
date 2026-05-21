@@ -153,31 +153,28 @@ var allowlist = map[string]string{
 	"VerificationHandler.UpdateExecutionStatus":             "audit-baseline: needs review",
 
 	// ---------------------------------------------------------------
-	// A3c-FLAGGED: 6 handlers surfaced 2026-05-20 by broadening
-	// paramKeys to cover the snake_case + camelCase URL-param
-	// spellings for tenant-scoped resources beyond `id`/`agent_id`.
-	// Each handler reads its resource ID from the path without
-	// invoking LoadOwned and without a visible OrganizationID
-	// identifier check at the handler layer. Service-layer
-	// enforcement (if any) needs manual verification before these
-	// can be moved to a per-entry justification or wired through
-	// LoadOwned. Filed as defects #42-47 in
-	// todo/2026-05-18-aim-defect-audit-from-lf-demo-prep.md.
-	// Closing these is A3b/A3d scope.
-	//
-	// Historical note: a seventh defensive entry for
-	// CapabilityHandler.RegisterCapability (#48) lived here from
-	// PR #144 (A3c) until PR #145 wrapped the handler with
-	// LoadOwned. The entry was removed because the handler now
-	// satisfies the lint structurally (LoadOwned recognition path).
-	// The audit doc #48 retains the full historical record.
+	// Service-layer-enforced tenant scoping. The lint's AST scan cannot
+	// see across the handler/service boundary, so handlers that push
+	// the org check into the service (rather than wrapping the path
+	// load in LoadOwned at the handler layer) need an allowlist entry
+	// with the enforcement mechanism cited.
 	// ---------------------------------------------------------------
-	"A2AHandler.GetSkillAttestations":               "audit-baseline: needs review (A3c-flagged #43)",
-	"A2AHandler.ListUserConsents":                   "audit-baseline: needs review (A3c-flagged #42)",
-	"CapabilityHandler.GetRecentViolations":         "audit-baseline: needs review (A3c-flagged #46)",
-	"CapabilityHandler.GetViolationsByOrganization": "audit-baseline: needs review (A3c-flagged #45)",
-	"CapabilityHandler.RevokeCapability":            "audit-baseline: needs review (A3c-flagged #44)",
-	"MCPAttestationHandler.RevokeAttestation":       "audit-baseline: needs review (A3c-flagged #47)",
+	"A2AHandler.ListUserConsents":             "service-layer scoping: A2AService.ListUserConsents requires callerOrgID and the repo query filters by organization_id (A3c #42 closed in PR TBD).",
+	"MCPAttestationHandler.RevokeAttestation": "service-layer scoping: MCPAttestationService.RevokeAttestation requires callerOrgID and returns application.ErrAttestationNotFound for both not-found and cross-tenant (A3c #47 closed in PR TBD).",
+
+	// ---------------------------------------------------------------
+	// Historical notes:
+	// - A3c-FLAGGED defects #42, #43, #44, #45, #46, #47 were
+	//   surfaced 2026-05-20 by broadening paramKeys (PR #144).
+	//   Defects #43, #44 now satisfy the lint structurally via
+	//   LoadOwned/agent.OrganizationID checks at the handler layer.
+	//   Defects #45, #46 were dead-handler removals (handlers were
+	//   never mounted). Defects #42 and #47 require allowlist
+	//   entries above because their fix lives at the service layer.
+	// - Defect #48 (RegisterCapability) lived here from PR #144 until
+	//   PR #145 wrapped the handler with LoadOwned. The audit doc
+	//   #48 retains the full historical record.
+	// ---------------------------------------------------------------
 }
 
 // recognizedHelpers names the helper functions that satisfy the lint.
