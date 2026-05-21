@@ -1094,6 +1094,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.MCPAttestation,
 			services.Audit,
 			repos.Agent,
+			repos.MCPServer,
 		),
 		Security: handlers.NewSecurityHandler(
 			services.Security,
