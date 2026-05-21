@@ -1129,6 +1129,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
+			repos.Agent,     // A3d-iv: agent-keyed verification-event reads verify agent.OrganizationID via LoadOwned
+			repos.MCPServer, // A3d-iv: MCP-keyed verification-event reads verify mcpServer.OrganizationID via LoadOwned
 		),
 		PublicAgent: handlers.NewPublicAgentHandler(
 			services.Agent,
