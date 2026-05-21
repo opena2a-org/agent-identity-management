@@ -290,8 +290,8 @@ func (m *MockMCPServerRepoForTags) GetByName(orgID uuid.UUID, name string) (*dom
 	return args.Get(0).(*domain.MCPServer), args.Error(1)
 }
 
-func (m *MockMCPServerRepoForTags) GetByURL(url string) (*domain.MCPServer, error) {
-	args := m.Called(url)
+func (m *MockMCPServerRepoForTags) GetByURL(url string, orgID uuid.UUID) (*domain.MCPServer, error) {
+	args := m.Called(url, orgID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

@@ -96,8 +96,18 @@ type AddPublicKeyRequest struct {
 // sdkTokenID is optional - tracks which SDK token was used to create this server
 // apiKeyID is optional - tracks which API key was used to create this server
 func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error) {
-	// Check if MCP server with this URL already exists
-	existing, _ := s.mcpRepo.GetByURL(req.URL)
+	// Check if THIS organization already has an MCP server at this URL.
+	// SECURITY (defect #40): The lookup is org-scoped at the repository
+	// layer. The mcp_servers table has UNIQUE(organization_id, url), so
+	// the same URL can legally coexist across organizations; a global
+	// lookup would leak cross-tenant existence via the 409 response
+	// (returning the victim's UUID + name), allow attackers to create
+	// agent-MCP connections to cross-org MCP servers, and let them
+	// mutate the victim's capabilities/version in the update branch
+	// below. With the org filter, cross-org collisions return nil here
+	// and execution proceeds to create a same-URL MCP server in the
+	// caller's org — which the DB constraint permits.
+	existing, _ := s.mcpRepo.GetByURL(req.URL, orgID)
 	if existing != nil {
 		// ✅ Even if MCP server exists, create agent-MCP connection for THIS agent
 		// This allows multiple agents to register connections to the same MCP server

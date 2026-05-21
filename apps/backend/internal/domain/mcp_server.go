@@ -61,7 +61,12 @@ type MCPServerRepository interface {
 	Create(server *MCPServer) error
 	GetByID(id uuid.UUID) (*MCPServer, error)
 	GetByOrganization(orgID uuid.UUID) ([]*MCPServer, error)
-	GetByURL(url string) (*MCPServer, error)
+	// GetByURL returns the MCP server with the given URL within the
+	// caller's organization, or nil if none exists. The orgID filter is
+	// load-bearing: the mcp_servers table has UNIQUE(organization_id,
+	// url), so the same URL can legally exist in multiple organizations.
+	// A nil-org lookup would leak cross-tenant existence (defect #40).
+	GetByURL(url string, orgID uuid.UUID) (*MCPServer, error)
 	Update(server *MCPServer) error
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*MCPServer, error)
