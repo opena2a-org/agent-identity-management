@@ -25,6 +25,11 @@ func verificationEventOrgID(v *domain.VerificationEvent) uuid.UUID { return v.Or
 // mcpServerOrgID extracts OrganizationID from a *domain.MCPServer.
 func mcpServerOrgID(m *domain.MCPServer) uuid.UUID { return m.OrganizationID }
 
+// userOrgID extracts OrganizationID from a *domain.User. Used by
+// AdminHandler approval flows (A3d-v) to gate cross-tenant approve /
+// reject on a target user before the service is invoked.
+func userOrgID(u *domain.User) uuid.UUID { return u.OrganizationID }
+
 // consentOrgID extracts OrganizationID from a *domain.A2AConsentRecord.
 // A2AConsentRecord.OrganizationID is *uuid.UUID (nullable); a nil pointer
 // surfaces as uuid.Nil. LoadOwned treats both uuid.Nil resource org and

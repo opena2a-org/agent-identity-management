@@ -26,6 +26,14 @@ type AdminHandler struct {
 	registrationService *application.RegistrationService
 	securityService     *application.SecurityService
 
+	// Repository handle for handler-layer tenant scoping.
+	// SECURITY (A3d-v): used by ApproveUser / RejectUser to load the
+	// target user and verify it belongs to the caller's org BEFORE
+	// invoking the service. The service-layer check exists but returns
+	// a distinct error string for cross-tenant vs not-found (existence
+	// side channel) — handler-layer LoadOwned collapses both to 404.
+	userRepo domain.UserRepository
+
 	// Interface fields for testability (used when set)
 	authServicer         AuthServicer
 	adminServicer        AdminServicer
@@ -46,6 +54,7 @@ func NewAdminHandler(
 	alertService *application.AlertService,
 	registrationService *application.RegistrationService,
 	securityService *application.SecurityService,
+	userRepo domain.UserRepository,
 ) *AdminHandler {
 	return &AdminHandler{
 		authService:         authService,
@@ -56,6 +65,7 @@ func NewAdminHandler(
 		alertService:        alertService,
 		registrationService: registrationService,
 		securityService:     securityService,
+		userRepo:            userRepo,
 	}
 }
 
@@ -70,6 +80,7 @@ func NewAdminHandlerWithInterfaces(
 	alertService AlertServicerExtended,
 	registrationService RegistrationServicer,
 	securityService SecurityServicer,
+	userRepo domain.UserRepository,
 ) *AdminHandler {
 	return &AdminHandler{
 		authServicer:         authService,
@@ -80,6 +91,7 @@ func NewAdminHandlerWithInterfaces(
 		alertServicer:        alertService,
 		registrationServicer: registrationService,
 		securityServicer:     securityService,
+		userRepo:             userRepo,
 	}
 }
 
@@ -1303,6 +1315,16 @@ func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-v): verify the target user belongs to the caller's
+	// org before invoking the approve flow. The service-layer check
+	// exists but returns a distinct error string for cross-tenant vs
+	// not-found, which the handler then serialises as 500 with the
+	// error in the body — an existence side channel. Handler-layer
+	// LoadOwned collapses both to 404.
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
+		return nil
+	}
+
 	if err := h.getAdminService().ApproveUser(c.Context(), targetUserID, adminID, orgID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1349,6 +1371,12 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 		req.Reason = ""
 	}
 
+	// SECURITY (A3d-v): see ApproveUser comment. Same existence-secrecy
+	// fix applied to the reject path.
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
+		return nil
+	}
+
 	if err := h.getAdminService().RejectUser(c.Context(), targetUserID, adminID, orgID, req.Reason); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1385,6 +1413,23 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request ID",
 		})
+	}
+
+	// SECURITY (A3d-v): verify the registration request either belongs
+	// to the caller's org or is unassigned (OrganizationID == nil). The
+	// service ignores request.OrganizationID and stamps the new user
+	// with the admin's org — fine for unassigned-claim flows, but a
+	// cross-tenant write IDOR if the request was already tied to a
+	// different org. Returns 404 with body {"error":"not found"} on
+	// cross-tenant or non-existent ID.
+	regReq, err := h.getRegistrationService().GetRegistrationRequest(c.Context(), requestID)
+	if err != nil || regReq == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	if regReq.OrganizationID != nil && *regReq.OrganizationID != orgID {
+		respondResourceNotFound(c)
+		return nil
 	}
 
 	// Approve registration request
@@ -1436,6 +1481,20 @@ func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		// Reason is optional
 		req.Reason = "Rejected by admin"
+	}
+
+	// SECURITY (A3d-v): see ApproveRegistrationRequest comment. The
+	// reject path is even worse pre-fix — the service signature does
+	// not take orgID at all, so any admin can reject any pending
+	// request system-wide. Handler-layer guard closes it.
+	regReq, err := h.getRegistrationService().GetRegistrationRequest(c.Context(), requestID)
+	if err != nil || regReq == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	if regReq.OrganizationID != nil && *regReq.OrganizationID != orgID {
+		respondResourceNotFound(c)
+		return nil
 	}
 
 	// Reject registration request

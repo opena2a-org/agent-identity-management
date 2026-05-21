@@ -1076,6 +1076,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Alert,
 			services.Registration, // ✅ Renamed from OAuth to Registration
 			services.Security,     // ✅ For security incidents tracking
+			repos.User,            // A3d-v: ApproveUser / RejectUser handler-layer LoadOwned guard
 		),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,

@@ -81,11 +81,7 @@ var allowlist = map[string]string{
 	// ---------------------------------------------------------------
 	"A2AHandler.DeleteSkill": "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
 	"AdminHandler.AcknowledgeAlert":                         "audit-baseline: needs review",
-	"AdminHandler.ApproveRegistrationRequest":               "audit-baseline: needs review",
-	"AdminHandler.ApproveUser":                              "audit-baseline: needs review",
 	"AdminHandler.DeactivateUser":                           "audit-baseline: needs review",
-	"AdminHandler.RejectRegistrationRequest":                "audit-baseline: needs review",
-	"AdminHandler.RejectUser":                               "audit-baseline: needs review",
 	"AdminHandler.ResolveAlert":                             "audit-baseline: needs review",
 	"AdminHandler.UpdateUserRole":                           "audit-baseline: needs review",
 	"AgentHandler.LogCapabilityResult":                      "audit-baseline: needs review",
