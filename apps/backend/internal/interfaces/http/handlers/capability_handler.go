@@ -48,10 +48,12 @@ func NewCapabilityHandler(
 }
 
 // NewCapabilityHandlerWithInterfaces creates a CapabilityHandler using
-// interfaces for testability. Tests that exercise paths past the
-// tenant-scoping check (defect #25 fix) must overwrite handler.agentRepo
-// with a scenario-specific mock that returns an agent whose
-// OrganizationID matches the caller's org in the test's c.Locals.
+// interfaces for testability. Tests that exercise paths past either of
+// the tenant-scoping checks (defect #25 in GrantCapability, defect #44
+// in RevokeCapability) must overwrite handler.agentRepo with a
+// scenario-specific mock that returns an agent whose OrganizationID
+// matches the caller's org in the test's c.Locals. Without that, the
+// nil agentRepo will panic on first GetByID dispatch.
 func NewCapabilityHandlerWithInterfaces(
 	capabilityService CapabilityServicer,
 ) *CapabilityHandler {

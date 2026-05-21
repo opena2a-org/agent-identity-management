@@ -720,6 +720,14 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3c #42 pair): always stamp the caller's orgID onto the
+	// consent record. Without this, the record lands with
+	// organization_id = NULL and becomes invisible to the new
+	// org-scoped ListUserConsents read path. Any body-supplied
+	// organizationId is overridden — caller's authenticated org is the
+	// only source of truth.
+	req.OrganizationID = &orgID
+
 	// Set IP and User-Agent from request
 	req.IPAddress = c.IP()
 	req.UserAgent = c.Get("User-Agent")

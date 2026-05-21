@@ -1366,8 +1366,14 @@ func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, or
 	// SECURITY (A3c #42): scope by organization_id to prevent cross-tenant
 	// userId enumeration. A caller in org A must not be able to read a
 	// userId's consents from org B. NULL organization_id rows are
-	// deliberately excluded — those are system-wide / pre-migration
-	// records and need a separate admin path. See tenant_scope.go:41-46.
+	// deliberately excluded — including them would reintroduce a
+	// cross-tenant leak (a NULL-org row would be visible to every
+	// caller). The companion fix in A2AHandler.RecordConsent now stamps
+	// caller orgID on every new write, so future rows are always
+	// org-scoped. Existing NULL-org rows from the pre-fix write path
+	// remain dark to this query; a backfill migration (infer org from
+	// grantor_agent_id → agents.organization_id) is filed as audit-doc
+	// follow-up. See tenant_scope.go:41-46.
 	var query string
 	if includeRevoked {
 		query = `

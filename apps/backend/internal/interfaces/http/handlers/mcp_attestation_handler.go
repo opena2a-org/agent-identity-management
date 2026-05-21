@@ -491,6 +491,10 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 			respondResourceNotFound(c)
 			return nil
 		}
+		// Server-side log preserves the underlying cause without
+		// leaking it to the client.
+		fmt.Printf("⚠️  RevokeAttestation failed: attestationID=%s callerOrgID=%s err=%v\n",
+			attestationID, orgID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to revoke attestation",
 		})
