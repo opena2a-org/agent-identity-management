@@ -53,12 +53,21 @@ func (h *SecurityPolicyHandler) GetPolicy(c fiber.Ctx) error {
 			"error": "Invalid policy ID",
 		})
 	}
-
-	policy, err := h.policyService.GetPolicy(c.Context(), policyID)
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Policy not found",
-		})
+		return err
+	}
+
+	// SECURITY: gate cross-tenant policy reads. Without this, ANY
+	// authenticated user could read ANY tenant's security policies
+	// (rules / enforcement actions / severity thresholds) by guessing
+	// the policy UUID — leaks the victim org's detection logic.
+	loader := func(id uuid.UUID) (*domain.SecurityPolicy, error) {
+		return h.policyService.GetPolicy(c.Context(), id)
+	}
+	policy := LoadOwned(c, loader, policyID, orgID, securityPolicyOrgID)
+	if policy == nil {
+		return nil
 	}
 
 	return c.JSON(policy)
@@ -120,6 +129,10 @@ func (h *SecurityPolicyHandler) UpdatePolicy(c fiber.Ctx) error {
 			"error": "Invalid policy ID",
 		})
 	}
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	var req CreatePolicyRequest
 	if err := c.Bind().JSON(&req); err != nil {
@@ -128,11 +141,15 @@ func (h *SecurityPolicyHandler) UpdatePolicy(c fiber.Ctx) error {
 		})
 	}
 
-	policy, err := h.policyService.GetPolicy(c.Context(), policyID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Policy not found",
-		})
+	// SECURITY: gate cross-tenant policy updates. Without this, ANY
+	// authenticated user could mutate ANY tenant's policy rules,
+	// effectively disabling/weakening the victim org's detection.
+	loader := func(id uuid.UUID) (*domain.SecurityPolicy, error) {
+		return h.policyService.GetPolicy(c.Context(), id)
+	}
+	policy := LoadOwned(c, loader, policyID, orgID, securityPolicyOrgID)
+	if policy == nil {
+		return nil
 	}
 
 	// Update fields
@@ -163,6 +180,20 @@ func (h *SecurityPolicyHandler) DeletePolicy(c fiber.Ctx) error {
 			"error": "Invalid policy ID",
 		})
 	}
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY: gate cross-tenant policy deletes. Without this, ANY
+	// authenticated user could delete ANY tenant's security policy,
+	// effectively turning off the victim org's detection.
+	loader := func(id uuid.UUID) (*domain.SecurityPolicy, error) {
+		return h.policyService.GetPolicy(c.Context(), id)
+	}
+	if LoadOwned(c, loader, policyID, orgID, securityPolicyOrgID) == nil {
+		return nil
+	}
 
 	if err := h.policyService.DeletePolicy(c.Context(), policyID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -186,12 +217,26 @@ func (h *SecurityPolicyHandler) TogglePolicy(c fiber.Ctx) error {
 			"error": "Invalid policy ID",
 		})
 	}
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	var req TogglePolicyRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
+	}
+
+	// SECURITY: gate cross-tenant policy toggle. Without this, ANY
+	// authenticated user could disable ANY tenant's policy, leaving
+	// the victim org's enforcement actions silently inactive.
+	loader := func(id uuid.UUID) (*domain.SecurityPolicy, error) {
+		return h.policyService.GetPolicy(c.Context(), id)
+	}
+	if LoadOwned(c, loader, policyID, orgID, securityPolicyOrgID) == nil {
+		return nil
 	}
 
 	if req.IsEnabled {
