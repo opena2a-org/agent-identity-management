@@ -10,16 +10,33 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 )
 
+// SecretsHandler handles HTTP requests for the identity-native secrets
+// management API.
+//
+// SECURITY (A3d-iii): the handler holds an agentRepo so the four
+// namespace-path-id routes (GetNamespace, DeleteNamespace,
+// StoreCredential, RotateCredential) can verify the namespace's owning
+// agent belongs to the caller's organization BEFORE invoking the
+// service. SecretNamespace has no OrganizationID column; ownership is
+// established via the namespace.AgentID -> Agent.OrganizationID chain,
+// so the LoadOwnedViaAgent helper is the correct guard. Cross-tenant
+// requests return 404 with body {"error":"not found"} (existence
+// secrecy). See tenant_scope.go:84-121.
 type SecretsHandler struct {
 	secretsService *application.SecretsService
+	agentRepo      domain.AgentRepository
 }
 
-func NewSecretsHandler(secretsService *application.SecretsService) *SecretsHandler {
-	return &SecretsHandler{secretsService: secretsService}
+func NewSecretsHandler(secretsService *application.SecretsService, agentRepo domain.AgentRepository) *SecretsHandler {
+	return &SecretsHandler{
+		secretsService: secretsService,
+		agentRepo:      agentRepo,
+	}
 }
 
 // --- Request/Response types ---
@@ -188,17 +205,24 @@ func (h *SecretsHandler) ListNamespaces(c fiber.Ctx) error {
 // GetNamespace handles GET /api/v1/secrets/namespaces/:id
 // Auth: AuthMiddleware (JWT)
 func (h *SecretsHandler) GetNamespace(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid namespace ID"})
 	}
 
-	ns, err := h.secretsService.GetNamespace(id)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
+	// SECURITY (A3d-iii): verify the namespace's owning agent belongs to
+	// the caller's org before returning namespace metadata. Returns 404
+	// for any cross-tenant or non-existent ID (existence secrecy).
+	ns := LoadOwnedViaAgent(c, h.secretsService.GetNamespace, id, orgID,
+		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
+		h.agentRepo)
 	if ns == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Namespace not found"})
+		return nil
 	}
 
 	return c.Status(fiber.StatusOK).JSON(ns)
@@ -207,9 +231,23 @@ func (h *SecretsHandler) GetNamespace(c fiber.Ctx) error {
 // DeleteNamespace handles DELETE /api/v1/secrets/namespaces/:id
 // Auth: AuthMiddleware + MemberMiddleware (JWT)
 func (h *SecretsHandler) DeleteNamespace(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid namespace ID"})
+	}
+
+	// SECURITY (A3d-iii): verify the namespace's owning agent belongs to
+	// the caller's org before deletion. Returns 404 for any cross-tenant
+	// or non-existent ID (existence secrecy + delete-protection).
+	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, id, orgID,
+		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
+		h.agentRepo) == nil {
+		return nil
 	}
 
 	if err := h.secretsService.DeleteNamespace(id); err != nil {
@@ -222,6 +260,11 @@ func (h *SecretsHandler) DeleteNamespace(c fiber.Ctx) error {
 // StoreCredential handles POST /api/v1/secrets/namespaces/:id/credentials
 // Auth: AuthMiddleware + MemberMiddleware (JWT)
 func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	nsID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid namespace ID"})
@@ -246,6 +289,16 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 		alg = "X25519-ChaCha20-Poly1305"
 	}
 
+	// SECURITY (A3d-iii): verify the namespace's owning agent belongs to
+	// the caller's org before writing credential material. Without this
+	// check, a caller in org A could plant credentials inside a namespace
+	// owned by an agent in org B. Returns 404 on cross-tenant.
+	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
+		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
+		h.agentRepo) == nil {
+		return nil
+	}
+
 	if err := h.secretsService.StoreCredential(nsID, blob, alg); err != nil {
 		if strings.Contains(err.Error(), "exceeds maximum size") {
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
@@ -259,6 +312,11 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 // RotateCredential handles POST /api/v1/secrets/namespaces/:id/rotate
 // Auth: AuthMiddleware + MemberMiddleware (JWT)
 func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	nsID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid namespace ID"})
@@ -281,6 +339,16 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	alg := req.EncryptionAlg
 	if alg == "" {
 		alg = "X25519-ChaCha20-Poly1305"
+	}
+
+	// SECURITY (A3d-iii): verify the namespace's owning agent belongs to
+	// the caller's org before rotating credentials. Without this check, a
+	// caller in org A could overwrite credentials inside a namespace
+	// owned by an agent in org B. Returns 404 on cross-tenant.
+	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
+		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
+		h.agentRepo) == nil {
+		return nil
 	}
 
 	if err := h.secretsService.RotateCredential(nsID, blob, alg); err != nil {

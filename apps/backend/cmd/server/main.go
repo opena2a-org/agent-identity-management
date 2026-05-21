@@ -1220,6 +1220,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Secrets: handlers.NewSecretsHandler(
 			services.Secrets,
+			repos.Agent, // A3d-iii: namespace-path-id handlers verify namespace.AgentID -> agent.OrganizationID via LoadOwnedViaAgent
 		),
 		Authorize: handlers.NewAuthorizeHandler(services.FGA),
 	}
