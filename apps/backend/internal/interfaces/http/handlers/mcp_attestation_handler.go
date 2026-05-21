@@ -825,6 +825,17 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 		return nil
 	}
 
+	// SECURITY (defect #19, body-class #2): also gate the body-supplied
+	// mcpServerID. PR #185 closed the URL-path MCP cross-org class; the
+	// body-supplied mcpServerId on this endpoint is a separate IDOR:
+	// an SDK token for org A could record a connection between A's own
+	// agent and ANY tenant's MCP server by guessing the MCP UUID.
+	// Without this LoadOwned, the analytics rollup attributes a
+	// fictitious connection-graph edge to the victim org's MCP.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Record the connection
 	connection, err := h.attestationService.RecordAgentMCPConnection(
 		c.Context(),
@@ -932,6 +943,25 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 			"error":   "Invalid request body",
 			"message": err.Error(),
 		})
+	}
+
+	// SECURITY (defect #19b, body-class #2): pre-validation pass over
+	// every parseable mcpServerId in the body. Any cross-org UUID
+	// anywhere in the batch aborts the entire request with 404 BEFORE
+	// any service call — otherwise an attacker could plant a
+	// fictitious usage report against a victim org's MCP server,
+	// poisoning their analytics + invocation counters. Malformed UUIDs
+	// preserve the existing silent-skip behavior in the main loop
+	// (the malformed-vs-cross-org reporting oracle is a separate
+	// follow-up); only well-formed cross-org UUIDs are blocking.
+	for serverIDStr := range req.MCPServers {
+		mcpServerID, parseErr := uuid.Parse(serverIDStr)
+		if parseErr != nil {
+			continue
+		}
+		if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+			return nil
+		}
 	}
 
 	// Calculate totals for response
