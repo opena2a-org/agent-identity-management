@@ -19,7 +19,7 @@ import (
 // ===========================
 
 func TestNewAdminHandler_NilDeps(t *testing.T) {
-	handler := NewAdminHandler(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAdminHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

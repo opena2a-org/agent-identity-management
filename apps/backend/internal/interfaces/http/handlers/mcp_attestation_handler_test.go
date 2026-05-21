@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // Helper function for MCP attestation tests that need org/user context
@@ -25,7 +28,7 @@ func withMCPAttestationContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewMCPAttestationHandler_NilDeps(t *testing.T) {
-	handler := NewMCPAttestationHandler(nil, nil, nil)
+	handler := NewMCPAttestationHandler(nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 
@@ -542,4 +545,241 @@ func TestMCPAttestationHandler_GetConsensusStatus_InvalidMCPID(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+// ===========================
+// A3d-vi: cross-tenant access on all 8 path-id MCPAttestationHandler
+// routes must return 404 with existence-secrecy body. The LoadOwned
+// guards wired in this PR short-circuit BEFORE any service dispatch;
+// attestationService is nil, so any bypass that reached the service
+// would panic and fiber would emit 500 — observably distinct from the
+// 404 we assert. Mirrors A3d-i (TagHandler) and PR #150's panic-proof
+// pattern. Never use t.Fatalf inside fiber app.Test mock goroutines:
+// app.Test runs the handler on a separate goroutine and runtime.Goexit
+// from a non-test goroutine does not fail the test (memory:
+// feedback_fiber_app_test_goroutine_t_fatalf_race).
+// ===========================
+
+// stubMCPServerByIDRepo satisfies mcpServerByIDLookup for cross-tenant
+// tests. The lookup returns an MCPServer owned by a foreign org so that
+// LoadOwned in the handler short-circuits to 404.
+type stubMCPServerByIDRepo struct {
+	getByID func(id uuid.UUID) (*domain.MCPServer, error)
+}
+
+func (s *stubMCPServerByIDRepo) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
+	return s.getByID(id)
+}
+
+func TestMCPAttestationHandler_CrossOrgReturns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	callerUserID := uuid.New()
+	differentOrgID := uuid.New()
+	pathID := uuid.New()
+
+	mcpServerRepo := &stubMCPServerByIDRepo{
+		getByID: func(id uuid.UUID) (*domain.MCPServer, error) {
+			return &domain.MCPServer{
+				ID:             id,
+				OrganizationID: differentOrgID,
+				Name:           "victim-mcp",
+			}, nil
+		},
+	}
+	agentRepo := &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             id,
+				OrganizationID: differentOrgID,
+				Name:           "victim-agent",
+			}, nil
+		},
+	}
+
+	// attestationService and auditService are intentionally nil — the
+	// LoadOwned gates must short-circuit before any service dispatch.
+	// Reaching a nil service would panic (which fiber maps to 500 — a
+	// distinct status from the 404 we assert).
+	handler := &MCPAttestationHandler{
+		attestationService: nil,
+		auditService:       nil,
+		agentRepo:          agentRepo,
+		mcpServerRepo:      mcpServerRepo,
+	}
+
+	setLocals := func(c fiber.Ctx) {
+		c.Locals("organization_id", callerOrgID)
+		c.Locals("user_id", callerUserID)
+	}
+
+	cases := []struct {
+		name        string
+		method      string
+		mount       func(app *fiber.App)
+		requestPath string
+		body        string
+	}{
+		{
+			name:   "GetAttestationChallenge_CrossOrgMCP",
+			method: "GET",
+			mount: func(app *fiber.App) {
+				app.Get("/mcp-servers/:id/challenge", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.GetAttestationChallenge(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/challenge?agent_id=" + uuid.New().String(),
+		},
+		{
+			name:   "AttestMCP_CrossOrgMCP",
+			method: "POST",
+			mount: func(app *fiber.App) {
+				app.Post("/mcp-servers/:id/attest", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.AttestMCP(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/attest",
+			body:        `{"attestation":{"agentId":"` + uuid.New().String() + `","challenge":"x","capabilitiesFound":[]},"signature":"x"}`,
+		},
+		{
+			name:   "GetMCPAttestations_CrossOrgMCP",
+			method: "GET",
+			mount: func(app *fiber.App) {
+				app.Get("/mcp-servers/:id/attestations", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.GetMCPAttestations(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/attestations",
+		},
+		{
+			name:   "GetConnectedAgents_CrossOrgMCP",
+			method: "GET",
+			mount: func(app *fiber.App) {
+				app.Get("/mcp-servers/:id/connected-agents", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.GetConnectedAgents(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/connected-agents",
+		},
+		{
+			name:   "GetAgentMCPServers_CrossOrgAgent",
+			method: "GET",
+			mount: func(app *fiber.App) {
+				app.Get("/agents/:id/mcp-servers", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.GetAgentMCPServers(c)
+				})
+			},
+			requestPath: "/agents/" + pathID.String() + "/mcp-servers",
+		},
+		{
+			name:   "ManualAttestMCP_CrossOrgMCP",
+			method: "POST",
+			mount: func(app *fiber.App) {
+				app.Post("/mcp-servers/:id/manual-attest", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.ManualAttestMCP(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/manual-attest",
+			body:        `{"notes":"x"}`,
+		},
+		{
+			name:   "RevokeAllAttestationsByAgent_CrossOrgAgent",
+			method: "POST",
+			mount: func(app *fiber.App) {
+				app.Post("/agents/:agent_id/attestations/revoke-all", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.RevokeAllAttestationsByAgent(c)
+				})
+			},
+			requestPath: "/agents/" + pathID.String() + "/attestations/revoke-all",
+			body:        `{"reason":"x"}`,
+		},
+		{
+			name:   "GetConsensusStatus_CrossOrgMCP",
+			method: "GET",
+			mount: func(app *fiber.App) {
+				app.Get("/mcp-servers/:id/consensus-status", func(c fiber.Ctx) error {
+					setLocals(c)
+					return handler.GetConsensusStatus(c)
+				})
+			},
+			requestPath: "/mcp-servers/" + pathID.String() + "/consensus-status",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			tc.mount(app)
+
+			r := httptest.NewRequest(tc.method, tc.requestPath, strings.NewReader(tc.body))
+			if tc.body != "" {
+				r.Header.Set("Content-Type", "application/json")
+			}
+
+			resp, err := app.Test(r)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+				"cross-org request must return 404 (existence-secrecy); 500 would mean LoadOwned was bypassed and the nil service was reached")
+			body, _ := io.ReadAll(resp.Body)
+			assert.JSONEq(t, `{"error":"not found"}`, string(body),
+				"cross-org body must be the standard not-found shape; any other body means the response was rewritten downstream")
+		})
+	}
+}
+
+// TestMCPAttestationHandler_GetAttestationChallenge_CrossOrgQueryAgent
+// closes class-#1 lint blindspot (c.Query() tenant UUID): the path MCP
+// is in the caller's org but the query agent_id points to a victim org.
+// The handler must short-circuit on the second LoadOwned to 404.
+func TestMCPAttestationHandler_GetAttestationChallenge_CrossOrgQueryAgent(t *testing.T) {
+	callerOrgID := uuid.New()
+	callerUserID := uuid.New()
+	differentOrgID := uuid.New()
+	mcpID := uuid.New()
+	queryAgentID := uuid.New()
+
+	// Path MCP is owned by caller (passes the first LoadOwned).
+	mcpServerRepo := &stubMCPServerByIDRepo{
+		getByID: func(id uuid.UUID) (*domain.MCPServer, error) {
+			return &domain.MCPServer{ID: id, OrganizationID: callerOrgID, Name: "own-mcp"}, nil
+		},
+	}
+	// Query agent is owned by a victim org (must fail the second LoadOwned).
+	agentRepo := &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: differentOrgID, Name: "victim-agent"}, nil
+		},
+	}
+	handler := &MCPAttestationHandler{
+		attestationService: nil,
+		auditService:       nil,
+		agentRepo:          agentRepo,
+		mcpServerRepo:      mcpServerRepo,
+	}
+
+	app := fiber.New()
+	app.Get("/mcp-servers/:id/challenge", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		c.Locals("user_id", callerUserID)
+		return handler.GetAttestationChallenge(c)
+	})
+
+	r := httptest.NewRequest("GET",
+		"/mcp-servers/"+mcpID.String()+"/challenge?agent_id="+queryAgentID.String(), nil)
+	resp, err := app.Test(r)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"cross-org query-supplied agent_id must yield 404")
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
 }

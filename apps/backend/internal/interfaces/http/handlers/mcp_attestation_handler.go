@@ -10,22 +10,44 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
+// mcpServerByIDLookup is the single-method subset of any MCP server
+// repository this handler needs. Both domain.MCPServerRepository (the
+// production type) and a test-side stub satisfy it via Go structural
+// typing — matching the agentByIDLookup pattern from capability_handler.go.
+type mcpServerByIDLookup interface {
+	GetByID(id uuid.UUID) (*domain.MCPServer, error)
+}
+
 type MCPAttestationHandler struct {
 	attestationService *application.MCPAttestationService
+	verifier           MCPAttestationVerifier
 	auditService       *application.AuditService
-	agentRepo          domain.AgentRepository
+	agentRepo          agentByIDLookup
+	mcpServerRepo      mcpServerByIDLookup
 }
 
 func NewMCPAttestationHandler(
 	attestationService *application.MCPAttestationService,
 	auditService *application.AuditService,
 	agentRepo domain.AgentRepository,
+	mcpServerRepo domain.MCPServerRepository,
 ) *MCPAttestationHandler {
 	return &MCPAttestationHandler{
 		attestationService: attestationService,
+		verifier:           attestationService,
 		auditService:       auditService,
 		agentRepo:          agentRepo,
+		mcpServerRepo:      mcpServerRepo,
 	}
+}
+
+// getVerifier returns the injected verifier (set by NewMCPAttestationHandler
+// to attestationService, or overwritten in tests).
+func (h *MCPAttestationHandler) getVerifier() MCPAttestationVerifier {
+	if h.verifier != nil {
+		return h.verifier
+	}
+	return h.attestationService
 }
 
 // GetAttestationChallenge generates a server-side challenge for proof of private key possession
@@ -65,6 +87,24 @@ func (h *MCPAttestationHandler) GetAttestationChallenge(c fiber.Ctx) error {
 			"error":   "Invalid agent ID",
 			"message": err.Error(),
 		})
+	}
+
+	// SECURITY (A3d-vi): tenant-scope BOTH the path MCP server and the
+	// query-supplied agent before calling the service. The service has
+	// distinct error strings ("agent not found" vs "mcp server not found")
+	// which would otherwise function as a cross-tenant existence oracle for
+	// either resource. Collapsing to 404 + "not found" via LoadOwned
+	// removes the side channel. The query-agent check also closes the
+	// class-#1 lint blindspot (c.Query() tenant UUID).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Generate challenge
@@ -118,22 +158,45 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify and record attestation
-	// SECURITY: No error logging to prevent information leakage
-	response, err := h.attestationService.VerifyAndRecordAttestation(c.Context(), mcpServerID, &req)
+	// SECURITY (A3d-vi): tenant-scope the path MCP server before the
+	// service runs the cryptographic signature check. Without this,
+	// "mcp server not found" from the service is observably distinct
+	// from "invalid attestation signature", giving any authenticated
+	// agent a cross-tenant existence oracle on MCP UUIDs. The body's
+	// AgentID is NOT scoped here — the signature check against the
+	// agent's pubkey is the trust boundary, and body-IDOR via AgentID
+	// is tracked as out-of-scope class-#2 (lint blindspot) follow-up.
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
 
-		// Determine status code based on error
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "only verified agents can attest MCPs" ||
-			err.Error() == "invalid attestation signature" ||
-			err.Error() == "attestation expired (older than 5 minutes)" {
-			statusCode = fiber.StatusForbidden
+	// Verify and record attestation
+	// SECURITY: error.Error() is NOT echoed back to the client. The
+	// service collapses existence-or-ownership failures to
+	// ErrAttestationFailed and signature/payload failures to
+	// ErrAttestationInvalid; both map to the SAME fixed-body 403 so an
+	// attacker holding a valid Ed25519 token cannot distinguish "I'm
+	// targeting a victim agent in another org" from "my signature is
+	// bad." Other errors (DB failure, etc.) surface as 500 with a fixed
+	// message — never the wrapped error text, which can carry victim
+	// agent status / trust score / UUID.
+	response, err := h.getVerifier().VerifyAndRecordAttestation(c.Context(), mcpServerID, &req)
+	if err != nil {
+		if errors.Is(err, application.ErrAttestationFailed) || errors.Is(err, application.ErrAttestationInvalid) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "Attestation failed",
+				"message": "Attestation could not be verified.",
+			})
 		}
-
-		return c.Status(statusCode).JSON(fiber.Map{
+		// Unexpected error path (DB outage, marshaling bug, etc.).
+		// Generic 500 — no error string surfaced to the client.
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "Attestation failed",
-			"message": err.Error(),
+			"message": "Internal error processing attestation.",
 		})
 	}
 
@@ -226,6 +289,18 @@ func (h *MCPAttestationHandler) GetMCPAttestations(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vi): tenant-scope the path MCP server. The service
+	// returns "mcp server not found" only when the row is absent — for a
+	// row in another org, it would return the attestation list (an
+	// IDOR + existence leak). LoadOwned collapses both to 404.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Get attestations
 	attestations, confidenceScore, lastAttestedAt, err := h.attestationService.GetMCPAttestations(c.Context(), mcpServerID)
 	if err != nil {
@@ -269,6 +344,20 @@ func (h *MCPAttestationHandler) GetConnectedAgents(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vi): tenant-scope the path MCP server. This handler
+	// is not currently bound to any route (the live /mcp-servers/:id/agents
+	// route uses MCPHandler.GetMCPServerAgents), but the handler is
+	// reachable as a Go symbol and the tenant-scope lint correctly flags
+	// it. LoadOwned here is defense-in-depth in case the route is
+	// re-wired in a future change.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Get connected agents
 	agents, err := h.attestationService.GetConnectedAgentsForMCP(c.Context(), mcpServerID)
 	if err != nil {
@@ -303,6 +392,19 @@ func (h *MCPAttestationHandler) GetAgentMCPServers(c fiber.Ctx) error {
 			"error":   "Invalid agent ID",
 			"message": err.Error(),
 		})
+	}
+
+	// SECURITY (A3d-vi): tenant-scope the path agent. This handler is not
+	// currently bound to any route (the live /agents/:id/mcp-servers route
+	// uses AgentHandler.GetAgentMCPServers), but the symbol is still
+	// reachable and the lint flags it. LoadOwned here is defense-in-depth
+	// for any future rewire.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Get MCP servers
@@ -373,6 +475,19 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 			"error":   "Invalid request body",
 			"message": err.Error(),
 		})
+	}
+
+	// SECURITY (A3d-vi): tenant-scope the path MCP server AFTER body
+	// validation. Placed here (not before the JSON parse) so that
+	// malformed-input tests retain their 400-shape contract; the
+	// security boundary is the service call below, not the JSON parse.
+	// The underlying service does take orgID and scopes correctly, but
+	// the service's "mcp server not found" error string is observably
+	// distinct from other failure modes — this handler-layer LoadOwned
+	// collapses any cross-tenant attempt to the same 404 + "not found"
+	// body, matching the existence-secrecy guarantee used elsewhere.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Call service method for manual attestation
@@ -582,6 +697,20 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Revocation reason is required",
 		})
+	}
+
+	// SECURITY (A3d-vi): tenant-scope the path agent. Placed AFTER body
+	// validation so that malformed-input tests retain their 400-shape
+	// contract; the security boundary is the service call below. The
+	// underlying service does NOT take an orgID parameter today —
+	// without this LoadOwned, ANY authenticated Manager in ANY org can
+	// revoke ALL attestations made by ANY agent in ANY org (destructive
+	// cross-tenant blast radius: invalidates the agent's attestation
+	// records and recomputes MCP confidence scores for every MCP the
+	// victim agent has attested). Handler-layer LoadOwned confines the
+	// revoke to agents in the caller's own org.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Revoke all attestations by this agent
@@ -898,6 +1027,18 @@ func (h *MCPAttestationHandler) GetConsensusStatus(c fiber.Ctx) error {
 			"error":   "Invalid MCP server ID",
 			"message": err.Error(),
 		})
+	}
+
+	// SECURITY (A3d-vi): tenant-scope the path MCP server. Consensus
+	// status for an MCP in another org would otherwise be readable by
+	// anyone who can guess the UUID — a cross-tenant existence + state
+	// leak. LoadOwned collapses both to 404.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Get consensus status
