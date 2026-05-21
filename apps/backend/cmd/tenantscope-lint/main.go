@@ -79,18 +79,7 @@ var allowlist = map[string]string{
 	// Tracking: ~/workspace/opena2a-org/todo/2026-05-18-aim-defect-audit-
 	// from-lf-demo-prep.md (defect #18-25 follow-up section to be added).
 	// ---------------------------------------------------------------
-	"A2AHandler.DeleteSkill":                                "audit-baseline: needs review",
-	"A2AHandler.GetA2ATrustScore":                           "audit-baseline: needs review",
-	"A2AHandler.GetAgentAttestations":                       "audit-baseline: needs review",
-	"A2AHandler.GetAgentCard":                               "audit-baseline: needs review",
-	"A2AHandler.GetAgentSkills":                             "audit-baseline: needs review",
-	"A2AHandler.GetConsensusStatus":                         "audit-baseline: needs review",
-	"A2AHandler.GetPeerTrustScore":                          "audit-baseline: needs review",
-	"A2AHandler.GetTrustScoreAlt":                           "audit-baseline: needs review",
-	"A2AHandler.RecordInteraction":                          "audit-baseline: needs review",
-	"A2AHandler.SignRequest":                                "audit-baseline: needs review",
-	"A2AHandler.UpdateAgentCard":                            "audit-baseline: needs review",
-	"A2AHandler.UpdateTrustScore":                           "audit-baseline: needs review",
+	"A2AHandler.DeleteSkill": "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
 	"AdminHandler.AcknowledgeAlert":                         "audit-baseline: needs review",
 	"AdminHandler.ApproveRegistrationRequest":               "audit-baseline: needs review",
 	"AdminHandler.ApproveUser":                              "audit-baseline: needs review",
@@ -172,9 +161,16 @@ var allowlist = map[string]string{
 // recognizedHelpers names the helper functions that satisfy the lint.
 // Any handler invoking one of these on a path that derives from
 // c.Params("id"|"agent_id"|"agent-id") is considered properly tenant-scoped.
+//
+// `loadOwnedAgent` is the A2A-specific wrapper (a2a_handler.go) that
+// hides the agentService.GetAgent->LoadOwned closure boilerplate. The
+// lint recognizes it the same as LoadOwned because the unwrapping is
+// a one-line forwarder; treating it as a recognized helper avoids
+// every A2A handler having to repeat the closure inline.
 var recognizedHelpers = map[string]bool{
 	"LoadOwned":         true,
 	"LoadOwnedViaAgent": true,
+	"loadOwnedAgent":    true,
 }
 
 // paramKeys names the URL-param keys whose reads we want to gate. Reading
