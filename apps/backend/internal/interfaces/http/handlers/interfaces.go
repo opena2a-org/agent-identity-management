@@ -114,6 +114,15 @@ type MCPAttestationServicer interface {
 	GetMCPServersForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.MCPServer, error)
 }
 
+// MCPAttestationVerifier is the narrow verification slice of
+// MCPAttestationService that the AttestMCP handler dispatches to. Kept
+// small so tests can inject a fake that returns ErrAttestationFailed /
+// ErrAttestationInvalid without standing up a real attestation service
+// with its concrete repository pointers.
+type MCPAttestationVerifier interface {
+	VerifyAndRecordAttestation(ctx context.Context, mcpServerID uuid.UUID, req *application.AttestMCPRequest) (*application.AttestMCPResponse, error)
+}
+
 // AuthServicer defines the methods from AuthService that handlers use
 type AuthServicer interface {
 	GetUsersByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error)
