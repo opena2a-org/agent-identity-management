@@ -697,6 +697,14 @@ func (s *A2AService) LogA2ATask(ctx context.Context, req LogA2ATaskRequest) (*do
 	return task, nil
 }
 
+// GetA2ATask loads an A2A task by ID. Returns nil + nil when not found.
+// This accessor exists so the HTTP layer can run a LoadOwnedViaAgent
+// tenant-ownership check (via the task's ClientAgentID) before
+// UpdateA2ATaskState (audit doc A3d-vii.b).
+func (s *A2AService) GetA2ATask(ctx context.Context, taskID uuid.UUID) (*domain.A2ATask, error) {
+	return s.taskRepo.GetByID(ctx, taskID)
+}
+
 // UpdateA2ATaskState updates the state of an A2A task
 func (s *A2AService) UpdateA2ATaskState(
 	ctx context.Context,
@@ -808,6 +816,13 @@ func (s *A2AService) CheckConsent(
 // RevokeConsent revokes a consent record
 func (s *A2AService) RevokeConsent(ctx context.Context, consentID uuid.UUID, reason string) error {
 	return s.consentRepo.Revoke(ctx, consentID, reason)
+}
+
+// GetConsent loads a consent record by ID. Returns nil + nil when not
+// found. This accessor exists so the HTTP layer can run a LoadOwned
+// tenant-ownership check before RevokeConsent (audit doc A3d-vii.b).
+func (s *A2AService) GetConsent(ctx context.Context, consentID uuid.UUID) (*domain.A2AConsentRecord, error) {
+	return s.consentRepo.GetByID(ctx, consentID)
 }
 
 // ListUserConsents lists all consent records for a user
