@@ -10,14 +10,40 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// VerificationEventHandler handles verification event HTTP requests
+// VerificationEventHandler handles verification event HTTP requests.
+//
+// SECURITY (A3d-iv): the handler holds agent + MCP repository lookups
+// alongside the verification-event service so cross-tenant access on
+// the four path-id routes can be denied at handler layer before the
+// service is invoked.
+//
+//   - GetVerificationEvent / DeleteVerificationEvent — load the event
+//     and check event.OrganizationID == callerOrgID via LoadOwned +
+//     verificationEventOrgID (the event row carries org directly).
+//   - GetAgentVerificationEvents — verify agent.OrganizationID via
+//     LoadOwned + agentOrgID before reading the agent's events.
+//   - GetMCPVerificationEvents — verify mcpServer.OrganizationID via
+//     LoadOwned + mcpServerOrgID before reading the MCP's events.
+//
+// Cross-tenant returns 404 with body {"error":"not found"} for
+// existence secrecy. See tenant_scope.go:41-46.
 type VerificationEventHandler struct {
-	service *application.VerificationEventService
+	service       *application.VerificationEventService
+	agentRepo     domain.AgentRepository
+	mcpServerRepo domain.MCPServerRepository
 }
 
-// NewVerificationEventHandler creates a new verification event handler
-func NewVerificationEventHandler(service *application.VerificationEventService) *VerificationEventHandler {
-	return &VerificationEventHandler{service: service}
+// NewVerificationEventHandler creates a new verification event handler.
+func NewVerificationEventHandler(
+	service *application.VerificationEventService,
+	agentRepo domain.AgentRepository,
+	mcpServerRepo domain.MCPServerRepository,
+) *VerificationEventHandler {
+	return &VerificationEventHandler{
+		service:       service,
+		agentRepo:     agentRepo,
+		mcpServerRepo: mcpServerRepo,
+	}
 }
 
 // getOrganizationID extracts organization ID from fiber context
@@ -89,6 +115,18 @@ func (h *VerificationEventHandler) ListVerificationEvents(c fiber.Ctx) error {
 				"error": "Invalid agent ID format",
 			})
 		}
+
+		// SECURITY (A3d-iv R1): verify the query-supplied agentID belongs
+		// to the caller's org before reading the agent's verification
+		// events. The lint cannot catch this — it reads c.Query("agent_id")
+		// rather than c.Params, so the AST scan that fires for path-id
+		// IDORs is structurally blind to this path. Returns 404 on
+		// cross-tenant for existence secrecy (same as the path-id
+		// GetAgentVerificationEvents fix in this PR).
+		if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+			return nil
+		}
+
 		events, total, err = h.service.ListAgentVerificationEvents(c.Context(), agentID, limit, offset)
 	} else {
 		events, total, err = h.service.ListVerificationEvents(c.Context(), orgID, limit, offset)
@@ -122,8 +160,7 @@ func (h *VerificationEventHandler) ListVerificationEvents(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/verification-events/{id} [get]
 func (h *VerificationEventHandler) GetVerificationEvent(c fiber.Ctx) error {
-	// Get organization ID from auth context
-	_, err := getOrganizationID(c)
+	orgID, err := getOrganizationID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
@@ -138,12 +175,15 @@ func (h *VerificationEventHandler) GetVerificationEvent(c fiber.Ctx) error {
 		})
 	}
 
-	// Get event
-	event, err := h.service.GetVerificationEvent(c.Context(), eventID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Verification event not found",
-		})
+	// SECURITY (A3d-iv): verify the event belongs to the caller's org
+	// before returning it. Returns 404 on cross-tenant or non-existent
+	// IDs (existence secrecy).
+	loader := func(id uuid.UUID) (*domain.VerificationEvent, error) {
+		return h.service.GetVerificationEvent(c.Context(), id)
+	}
+	event := LoadOwned(c, loader, eventID, orgID, verificationEventOrgID)
+	if event == nil {
+		return nil
 	}
 
 	return c.JSON(event)
@@ -411,8 +451,7 @@ func (h *VerificationEventHandler) GetStatistics(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/verification-events/agent/{id} [get]
 func (h *VerificationEventHandler) GetAgentVerificationEvents(c fiber.Ctx) error {
-	// Get organization ID from auth context
-	_, err := getOrganizationID(c)
+	orgID, err := getOrganizationID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
@@ -425,6 +464,14 @@ func (h *VerificationEventHandler) GetAgentVerificationEvents(c fiber.Ctx) error
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID format",
 		})
+	}
+
+	// SECURITY (A3d-iv): verify the path agentID belongs to the caller's
+	// org before reading the agent's verification events. Cross-tenant
+	// callers can no longer enumerate another org's agent activity
+	// timeline. Returns 404 on cross-tenant (existence secrecy).
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Parse pagination parameters
@@ -469,8 +516,7 @@ func (h *VerificationEventHandler) GetAgentVerificationEvents(c fiber.Ctx) error
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/verification-events/mcp/{id} [get]
 func (h *VerificationEventHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
-	// Get organization ID from auth context
-	_, err := getOrganizationID(c)
+	orgID, err := getOrganizationID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
@@ -483,6 +529,13 @@ func (h *VerificationEventHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid MCP server ID format",
 		})
+	}
+
+	// SECURITY (A3d-iv): verify the path mcpServerID belongs to the
+	// caller's org before reading the MCP server's verification events.
+	// Returns 404 on cross-tenant (existence secrecy).
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Parse pagination parameters
@@ -577,8 +630,7 @@ func (h *VerificationEventHandler) GetVerificationStats(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/verification-events/{id} [delete]
 func (h *VerificationEventHandler) DeleteVerificationEvent(c fiber.Ctx) error {
-	// Get organization ID from auth context
-	_, err := getOrganizationID(c)
+	orgID, err := getOrganizationID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
@@ -591,6 +643,18 @@ func (h *VerificationEventHandler) DeleteVerificationEvent(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid event ID format",
 		})
+	}
+
+	// SECURITY (A3d-iv): verify the event belongs to the caller's org
+	// before deletion. Cross-tenant deletion would let a caller in org A
+	// delete an event row in org B; without this check the deletion
+	// also leaks existence through 204 vs 500 (depending on which
+	// errors the underlying repo returns). Returns 404 on cross-tenant.
+	loader := func(id uuid.UUID) (*domain.VerificationEvent, error) {
+		return h.service.GetVerificationEvent(c.Context(), id)
+	}
+	if LoadOwned(c, loader, eventID, orgID, verificationEventOrgID) == nil {
+		return nil
 	}
 
 	// Delete event
