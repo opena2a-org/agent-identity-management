@@ -28,6 +28,11 @@ type VerificationHandler struct {
 	verificationEventService *application.VerificationEventService
 	orgRepo                  domain.OrganizationRepository
 
+	// Observability shim: emits an fga.authorize span shape mirroring the
+	// /api/v1/agents/{id}/authorize path. SDK route's actual enforcement
+	// still flows through AgentService.VerifyCapability. Optional; nil-safe.
+	fgaEngine *application.FGAEngine
+
 	// Interface fields for testability (used when set)
 	agentServicer             AgentServicerForVerification
 	auditServicer             AuditServicerForVerification
@@ -44,6 +49,7 @@ func NewVerificationHandler(
 	trustService *application.TrustCalculator,
 	verificationEventService *application.VerificationEventService,
 	orgRepo domain.OrganizationRepository,
+	fgaEngine *application.FGAEngine,
 ) *VerificationHandler {
 	return &VerificationHandler{
 		agentService:             agentService,
@@ -52,6 +58,7 @@ func NewVerificationHandler(
 		trustService:             trustService,
 		verificationEventService: verificationEventService,
 		orgRepo:                  orgRepo,
+		fgaEngine:                fgaEngine,
 	}
 }
 
@@ -223,6 +230,22 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		req.Context,
 		c.IP(), // Capture source IP for security tracking
 	)
+
+	// Emit the fga.authorize observability surface so SDK-route verifications
+	// show up in Tempo with the same nine SemConv attributes as the
+	// /api/v1/agents/{id}/authorize path. Decision is already made above; this
+	// is span emission only, no side effects.
+	if h.fgaEngine != nil {
+		h.fgaEngine.EmitSDKVerificationSpan(
+			c.Context(),
+			agentID,
+			agent.KeyAlgorithm,
+			trustScore,
+			req.Capability,
+			allowed,
+			denialReason,
+		)
+	}
 
 	// Check if this is a JIT (Just-In-Time) access request that needs admin approval
 	isJITRequest := false
