@@ -25,6 +25,19 @@ func verificationEventOrgID(v *domain.VerificationEvent) uuid.UUID { return v.Or
 // mcpServerOrgID extracts OrganizationID from a *domain.MCPServer.
 func mcpServerOrgID(m *domain.MCPServer) uuid.UUID { return m.OrganizationID }
 
+// consentOrgID extracts OrganizationID from a *domain.A2AConsentRecord.
+// A2AConsentRecord.OrganizationID is *uuid.UUID (nullable); a nil pointer
+// surfaces as uuid.Nil. LoadOwned treats both uuid.Nil resource org and
+// uuid.Nil caller org as cross-tenant (404), so unassigned consent
+// records are unreachable via LoadOwned. This is intentional: an
+// unassigned consent has no tenant owner authorized to mutate it.
+func consentOrgID(c *domain.A2AConsentRecord) uuid.UUID {
+	if c.OrganizationID == nil {
+		return uuid.Nil
+	}
+	return *c.OrganizationID
+}
+
 // LoadOwned loads a resource by ID via the provided loader and verifies the
 // caller's organization owns it. On any failure path (loader error,
 // cross-tenant mismatch, nil resource) the helper writes HTTP 404 to the
@@ -69,12 +82,24 @@ func LoadOwned[T any](
 	callerOrgID uuid.UUID,
 	orgIDOf func(*T) uuid.UUID,
 ) *T {
+	// Defense-in-depth: refuse to compare against a uuid.Nil caller or
+	// resource org. A uuid.Nil callerOrgID would indicate a bug in the
+	// middleware chain (auth pipeline failed to populate Locals but the
+	// handler proceeded); a uuid.Nil resource org indicates an
+	// unassigned record (e.g. an A2AConsentRecord with OrganizationID
+	// nil — see consentOrgID in this file). Matching uuid.Nil to
+	// uuid.Nil would let either bug surface as cross-tenant access.
+	if callerOrgID == uuid.Nil || orgIDOf == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
 	resource, err := loader(resourceID)
 	if err != nil || resource == nil {
 		respondResourceNotFound(c)
 		return nil
 	}
-	if orgIDOf(resource) != callerOrgID {
+	resourceOrgID := orgIDOf(resource)
+	if resourceOrgID == uuid.Nil || resourceOrgID != callerOrgID {
 		respondResourceNotFound(c)
 		return nil
 	}
@@ -98,6 +123,12 @@ func LoadOwnedViaAgent[T any](
 	agentIDOf func(*T) uuid.UUID,
 	agentRepo domain.AgentRepository,
 ) *T {
+	// Defense-in-depth: refuse to compare against a uuid.Nil caller.
+	// See LoadOwned for the rationale.
+	if callerOrgID == uuid.Nil {
+		respondResourceNotFound(c)
+		return nil
+	}
 	resource, err := loader(resourceID)
 	if err != nil || resource == nil {
 		respondResourceNotFound(c)
@@ -113,7 +144,7 @@ func LoadOwnedViaAgent[T any](
 		respondResourceNotFound(c)
 		return nil
 	}
-	if agent.OrganizationID != callerOrgID {
+	if agent.OrganizationID == uuid.Nil || agent.OrganizationID != callerOrgID {
 		respondResourceNotFound(c)
 		return nil
 	}

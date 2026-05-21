@@ -15,11 +15,16 @@ import (
 // A2AHandler handles A2A (Agent-to-Agent) protocol endpoints
 type A2AHandler struct {
 	a2aService   *application.A2AService
-	agentService *application.AgentService
+	a2aReader    A2AReader
+	agentService AgentServicer
 	auditService *application.AuditService
 }
 
-// NewA2AHandler creates a new A2A handler
+// NewA2AHandler creates a new A2A handler. a2aService is wired into both
+// the concrete-pointer slot (used for mutation methods like
+// RegisterAgentCard, RevokeConsent, UpdateA2ATaskState) and the narrow
+// A2AReader slot (used by ownership-check LoadOwned loaders). Tests may
+// overwrite a2aReader and/or agentService independently with mocks.
 func NewA2AHandler(
 	a2aService *application.A2AService,
 	agentService *application.AgentService,
@@ -27,6 +32,7 @@ func NewA2AHandler(
 ) *A2AHandler {
 	return &A2AHandler{
 		a2aService:   a2aService,
+		a2aReader:    a2aService,
 		agentService: agentService,
 		auditService: auditService,
 	}
@@ -526,6 +532,11 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 // UpdateTaskState updates the state of an A2A task
 // PUT /api/v1/a2a/tasks/:id/state
 func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	taskID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -549,6 +560,26 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid task state",
 		})
+	}
+
+	// SECURITY (A3d-vii.b): tenant-scope by verifying the task's
+	// ClientAgentID belongs to caller's org BEFORE mutating state.
+	// Without this gate ANY authenticated A2A caller could forge a
+	// completed/failed/cancelled transition on any tenant's task,
+	// poisoning downstream analytics and trust scores in the victim
+	// org. A2ATask has no direct OrganizationID; ownership flows
+	// through the client-side agent. RemoteAgentID is intentionally
+	// NOT scoped — A2A tasks are cross-org by protocol design.
+	task, err := h.a2aReader.GetA2ATask(c.Context(), taskID)
+	if err != nil || task == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	agentLoader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	if LoadOwned(c, agentLoader, task.ClientAgentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	if err := h.a2aService.UpdateA2ATaskState(c.Context(), taskID, state, req.ErrorCode, req.ErrorMessage); err != nil {
@@ -807,14 +838,32 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 // RevokeConsent revokes a consent record
 // POST /api/v1/a2a/consent/:id/revoke
 func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
 
 	consentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid consent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.b): tenant-scope by verifying the consent record
+	// belongs to caller's org BEFORE revoking. Without this gate ANY
+	// authenticated A2A caller could revoke any tenant's consent by
+	// guessing the UUID. A2AConsentRecord.OrganizationID is *uuid.UUID
+	// (nullable); consentOrgID returns uuid.Nil for unassigned records,
+	// which never matches a real caller's org → 404. The LoadOwned guard
+	// also precedes the auditService.LogAction call so a forged revoke
+	// attempt does NOT emit an audit row against the caller's org for a
+	// victim's resource.
+	consentLoader := func(id uuid.UUID) (*domain.A2AConsentRecord, error) {
+		return h.a2aReader.GetConsent(c.Context(), id)
+	}
+	if LoadOwned(c, consentLoader, consentID, orgID, consentOrgID) == nil {
+		return nil
 	}
 
 	var req struct {
