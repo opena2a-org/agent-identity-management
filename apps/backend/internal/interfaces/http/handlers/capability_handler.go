@@ -353,9 +353,15 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 // @Success 200 {array} domain.AgentCapability
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Failure 500 {object} ErrorResponse
 // @Router /agents/{id}/capabilities [get]
 func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
@@ -363,11 +369,20 @@ func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (audit doc #51): tenant-scope by verifying the path
+	// agentID belongs to the caller's org BEFORE reading capabilities.
+	// Same IDOR shape as #49 (GetViolationsByAgent); the lint's
+	// audit-baseline grandfathered both since PR #136. Returns 404 on
+	// cross-tenant access for existence-secrecy.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	activeOnly := c.Query("activeOnly", "true") == "true"
 
 	capSvc := h.getCapabilityService()
 	capabilities, err := capSvc.GetAgentCapabilities(
-		context.Background(),
+		c.Context(),
 		agentID,
 		activeOnly,
 	)
@@ -499,14 +514,28 @@ func (h *CapabilityHandler) VerifyAction(c fiber.Ctx) error {
 // @Success 200 {object} ViolationsResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Failure 500 {object} ErrorResponse
 // @Router /agents/{id}/violations [get]
 func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (audit doc #49): tenant-scope by verifying the path
+	// agentID belongs to the caller's org BEFORE reading violations.
+	// Returns 404 — not 403 — on cross-tenant access to preserve
+	// existence-secrecy. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	limit := 20
@@ -525,7 +554,7 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 
 	capSvc := h.getCapabilityService()
 	violations, total, err := capSvc.GetViolationsByAgent(
-		context.Background(),
+		c.Context(),
 		agentID,
 		limit,
 		offset,
