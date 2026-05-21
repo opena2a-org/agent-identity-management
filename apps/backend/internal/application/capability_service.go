@@ -331,6 +331,16 @@ func (s *CapabilityService) GrantCapability(
 	return capability, nil
 }
 
+// GetCapabilityByID returns a single capability by its UUID. Callers
+// must enforce tenant scoping themselves — this method does NOT filter
+// by organization.
+func (s *CapabilityService) GetCapabilityByID(
+	ctx context.Context,
+	capabilityID uuid.UUID,
+) (*domain.AgentCapability, error) {
+	return s.capabilityRepo.GetCapabilityByID(capabilityID)
+}
+
 // RevokeCapability revokes a capability from an agent
 func (s *CapabilityService) RevokeCapability(
 	ctx context.Context,

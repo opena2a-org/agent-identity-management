@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -15,6 +16,12 @@ import (
 	infracrypto "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 )
+
+// ErrAttestationNotFound is returned by RevokeAttestation when the
+// attestation does not exist OR exists in another organization. The two
+// cases are deliberately collapsed to preserve existence-secrecy across
+// tenant boundaries; see tenant_scope.go:41-46 in handlers.
+var ErrAttestationNotFound = errors.New("attestation not found")
 
 // Multi-Agent Consensus Configuration
 // These thresholds determine when an MCP server is considered "verified" by the community
@@ -1021,13 +1028,37 @@ func (s *MCPAttestationService) InvalidateExpiredAttestations(ctx context.Contex
 func (s *MCPAttestationService) RevokeAttestation(
 	ctx context.Context,
 	attestationID uuid.UUID,
+	callerOrgID uuid.UUID,
 	revokerID uuid.UUID,
 	reason string,
 ) error {
 	// Get the attestation to find the MCP server ID
 	attestation, err := s.attestationRepo.GetAttestationByID(attestationID)
-	if err != nil {
-		return fmt.Errorf("attestation not found: %w", err)
+	if err != nil || attestation == nil {
+		return ErrAttestationNotFound
+	}
+
+	// SECURITY (A3c #47): tenant-scope the revocation. The attestation
+	// belongs to either the attester's org (when AgentID is set) or the
+	// attested MCP server's org (for manual attestations). Verify the
+	// caller's org matches; on mismatch, return ErrAttestationNotFound
+	// (same as "not in DB") to avoid disclosing cross-tenant existence.
+	var attestationOrgID uuid.UUID
+	if attestation.AgentID != nil {
+		agent, err := s.agentRepo.GetByID(*attestation.AgentID)
+		if err != nil || agent == nil {
+			return ErrAttestationNotFound
+		}
+		attestationOrgID = agent.OrganizationID
+	} else {
+		mcpServer, err := s.mcpRepo.GetByID(attestation.MCPServerID)
+		if err != nil || mcpServer == nil {
+			return ErrAttestationNotFound
+		}
+		attestationOrgID = mcpServer.OrganizationID
+	}
+	if attestationOrgID != callerOrgID {
+		return ErrAttestationNotFound
 	}
 
 	// Invalidate the attestation

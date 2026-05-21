@@ -811,8 +811,12 @@ func (s *A2AService) RevokeConsent(ctx context.Context, consentID uuid.UUID, rea
 }
 
 // ListUserConsents lists all consent records for a user
-func (s *A2AService) ListUserConsents(ctx context.Context, userID string, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
-	return s.consentRepo.ListByUser(ctx, userID, includeRevoked)
+// ListUserConsents lists consent records for a userID that belong to
+// the caller's organization. SECURITY (A3c #42): orgID is required;
+// without it, any authenticated caller could enumerate consents across
+// tenants by walking userIDs.
+func (s *A2AService) ListUserConsents(ctx context.Context, userID string, orgID uuid.UUID, includeRevoked bool) ([]*domain.A2AConsentRecord, error) {
+	return s.consentRepo.ListByUser(ctx, userID, orgID, includeRevoked)
 }
 
 // ListAllConsents lists all consent records with pagination

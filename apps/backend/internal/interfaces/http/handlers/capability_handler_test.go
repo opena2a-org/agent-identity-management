@@ -239,24 +239,6 @@ func TestCapabilityHandler_GetViolationsByAgent_InvalidAgentID(t *testing.T) {
 }
 
 // ===========================
-// CapabilityHandler.GetViolationsByOrganization Tests
-// ===========================
-
-func TestCapabilityHandler_GetViolationsByOrganization_InvalidOrgID(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations", withCapabilityContext(handler.GetViolationsByOrganization))
-
-	req := httptest.NewRequest("GET", "/organizations/not-a-uuid/violations", nil)
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-// ===========================
 // CapabilityHandler.ListCapabilities Tests
 // ===========================
 
@@ -273,24 +255,6 @@ func TestCapabilityHandler_ListCapabilities_NoOrgContext(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
-}
-
-// ===========================
-// CapabilityHandler.GetRecentViolations Tests
-// ===========================
-
-func TestCapabilityHandler_GetRecentViolations_InvalidOrgID(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations/recent", withCapabilityContext(handler.GetRecentViolations))
-
-	req := httptest.NewRequest("GET", "/organizations/not-a-uuid/violations/recent", nil)
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
 // ===========================

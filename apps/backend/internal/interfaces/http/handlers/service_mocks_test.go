@@ -368,6 +368,7 @@ type MockCapabilityServiceImpl struct {
 	VerifyActionFunc                  func(ctx context.Context, agentID uuid.UUID, requestedCapability string, signature []byte, payload []byte, sourceIP *string, metadata map[string]interface{}) (*application.VerificationResult, error)
 	GrantCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error)
 	RevokeCapabilityFunc              func(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
+	GetCapabilityByIDFunc             func(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error)
 	GetAgentCapabilitiesFunc          func(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
 	ListCapabilitiesFunc              func(ctx context.Context, orgID uuid.UUID) ([]application.CapabilityDefinition, error)
 	ListCapabilitiesWithMetadataFunc  func(ctx context.Context, orgID uuid.UUID) (*application.ListCapabilitiesResponse, error)
@@ -396,6 +397,13 @@ func (m *MockCapabilityServiceImpl) RevokeCapability(ctx context.Context, capabi
 		return m.RevokeCapabilityFunc(ctx, capabilityID, revokedBy)
 	}
 	return nil
+}
+
+func (m *MockCapabilityServiceImpl) GetCapabilityByID(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error) {
+	if m.GetCapabilityByIDFunc != nil {
+		return m.GetCapabilityByIDFunc(ctx, capabilityID)
+	}
+	return nil, nil
 }
 
 func (m *MockCapabilityServiceImpl) GetAgentCapabilities(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {

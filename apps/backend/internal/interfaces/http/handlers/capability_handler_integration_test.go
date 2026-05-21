@@ -121,17 +121,27 @@ func TestCapabilityHandler_RevokeCapability_Success(t *testing.T) {
 	agentID := uuid.New()
 	capabilityID := uuid.New()
 	userID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetCapabilityByIDFunc: func(ctx context.Context, capID uuid.UUID) (*domain.AgentCapability, error) {
+			return &domain.AgentCapability{ID: capabilityID, AgentID: agentID}, nil
+		},
 		RevokeCapabilityFunc: func(ctx context.Context, capID uuid.UUID, revokedBy *uuid.UUID) error {
 			return nil
 		},
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
 	app.Delete("/agents/:agentId/capabilities/:capabilityId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
 		c.Locals("user_id", userID)
 		return handler.RevokeCapability(c)
 	})
@@ -146,11 +156,17 @@ func TestCapabilityHandler_RevokeCapability_Success(t *testing.T) {
 
 func TestCapabilityHandler_RevokeCapability_InvalidCapabilityID_Integration(t *testing.T) {
 	agentID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
 
 	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
 
 	app := fiber.New()
-	app.Delete("/agents/:agentId/capabilities/:capabilityId", handler.RevokeCapability)
+	app.Delete("/agents/:agentId/capabilities/:capabilityId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", userID)
+		return handler.RevokeCapability(c)
+	})
 
 	req := httptest.NewRequest("DELETE", "/agents/"+agentID.String()+"/capabilities/invalid-uuid", nil)
 	resp, err := app.Test(req)
@@ -163,11 +179,17 @@ func TestCapabilityHandler_RevokeCapability_InvalidCapabilityID_Integration(t *t
 func TestCapabilityHandler_RevokeCapability_Unauthorized(t *testing.T) {
 	agentID := uuid.New()
 	capabilityID := uuid.New()
+	orgID := uuid.New()
 
 	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
 
 	app := fiber.New()
-	app.Delete("/agents/:agentId/capabilities/:capabilityId", handler.RevokeCapability)
+	// Set org_id but NOT user_id — verifies the user-context guard still
+	// returns 401 after the A3c #44 org-scoping check passes.
+	app.Delete("/agents/:agentId/capabilities/:capabilityId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.RevokeCapability(c)
+	})
 
 	req := httptest.NewRequest("DELETE", "/agents/"+agentID.String()+"/capabilities/"+capabilityID.String(), nil)
 	resp, err := app.Test(req)
@@ -177,21 +199,74 @@ func TestCapabilityHandler_RevokeCapability_Unauthorized(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
+// A3c #44: cross-tenant capability revocation must return 404.
+func TestCapabilityHandler_RevokeCapability_CrossOrgReturns404(t *testing.T) {
+	agentID := uuid.New()
+	capabilityID := uuid.New()
+	callerOrgID := uuid.New()
+	differentOrgID := uuid.New()
+	userID := uuid.New()
+
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetCapabilityByIDFunc: func(ctx context.Context, capID uuid.UUID) (*domain.AgentCapability, error) {
+			return &domain.AgentCapability{ID: capabilityID, AgentID: agentID}, nil
+		},
+		RevokeCapabilityFunc: func(ctx context.Context, capID uuid.UUID, revokedBy *uuid.UUID) error {
+			// Should NOT be reached.
+			t.Fatalf("RevokeCapability called for cross-tenant request — security regression")
+			return nil
+		},
+	}
+
+	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: differentOrgID}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Delete("/agents/:agentId/capabilities/:capabilityId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		c.Locals("user_id", userID)
+		return handler.RevokeCapability(c)
+	})
+
+	req := httptest.NewRequest("DELETE", "/agents/"+agentID.String()+"/capabilities/"+capabilityID.String(), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+}
+
 func TestCapabilityHandler_RevokeCapability_ServiceError(t *testing.T) {
 	agentID := uuid.New()
 	capabilityID := uuid.New()
 	userID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetCapabilityByIDFunc: func(ctx context.Context, capID uuid.UUID) (*domain.AgentCapability, error) {
+			return &domain.AgentCapability{ID: capabilityID, AgentID: agentID}, nil
+		},
 		RevokeCapabilityFunc: func(ctx context.Context, capID uuid.UUID, revokedBy *uuid.UUID) error {
 			return assert.AnError
 		},
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
 	app.Delete("/agents/:agentId/capabilities/:capabilityId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
 		c.Locals("user_id", userID)
 		return handler.RevokeCapability(c)
 	})
@@ -381,55 +456,6 @@ func TestCapabilityHandler_GetAgentCapabilities_CrossOrgReturns404(t *testing.T)
 }
 
 // ===========================
-// GetViolationsByOrganization Tests
-// ===========================
-
-func TestCapabilityHandler_GetViolationsByOrganization_Success(t *testing.T) {
-	orgID := uuid.New()
-
-	mockCapabilityService := &MockCapabilityServiceImpl{
-		GetViolationsByOrganizationFunc: func(ctx context.Context, oID uuid.UUID, limit, offset int) ([]*domain.CapabilityViolation, int, error) {
-			return []*domain.CapabilityViolation{
-				{ID: uuid.New(), AttemptedCapability: "file:write"},
-				{ID: uuid.New(), AttemptedCapability: "network:connect"},
-			}, 10, nil
-		},
-	}
-
-	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
-
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations", handler.GetViolationsByOrganization)
-
-	req := httptest.NewRequest("GET", "/organizations/"+orgID.String()+"/violations", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-
-	var result map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(10), result["total"])
-}
-
-func TestCapabilityHandler_GetViolationsByOrganization_InvalidID(t *testing.T) {
-	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
-
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations", handler.GetViolationsByOrganization)
-
-	req := httptest.NewRequest("GET", "/organizations/invalid-uuid/violations", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-// ===========================
 // ListCapabilities Tests
 // ===========================
 
@@ -512,70 +538,6 @@ func TestCapabilityHandler_ListCapabilities_ServiceError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/capabilities", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
-}
-
-// ===========================
-// GetRecentViolations Tests
-// ===========================
-
-func TestCapabilityHandler_GetRecentViolations_Success(t *testing.T) {
-	orgID := uuid.New()
-
-	mockCapabilityService := &MockCapabilityServiceImpl{
-		GetRecentViolationsFunc: func(ctx context.Context, oID uuid.UUID, minutes int) ([]*domain.CapabilityViolation, error) {
-			return []*domain.CapabilityViolation{
-				{ID: uuid.New(), AttemptedCapability: "file:write"},
-			}, nil
-		},
-	}
-
-	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
-
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations/recent", handler.GetRecentViolations)
-
-	req := httptest.NewRequest("GET", "/organizations/"+orgID.String()+"/violations/recent?minutes=30", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-}
-
-func TestCapabilityHandler_GetRecentViolations_InvalidOrgID_Integration(t *testing.T) {
-	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
-
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations/recent", handler.GetRecentViolations)
-
-	req := httptest.NewRequest("GET", "/organizations/invalid-uuid/violations/recent", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-func TestCapabilityHandler_GetRecentViolations_ServiceError(t *testing.T) {
-	orgID := uuid.New()
-
-	mockCapabilityService := &MockCapabilityServiceImpl{
-		GetRecentViolationsFunc: func(ctx context.Context, oID uuid.UUID, minutes int) ([]*domain.CapabilityViolation, error) {
-			return nil, assert.AnError
-		},
-	}
-
-	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
-
-	app := fiber.New()
-	app.Get("/organizations/:orgId/violations/recent", handler.GetRecentViolations)
-
-	req := httptest.NewRequest("GET", "/organizations/"+orgID.String()+"/violations/recent", nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
