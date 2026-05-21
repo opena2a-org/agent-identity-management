@@ -321,18 +321,15 @@ func (h *AgentHandler) GetAgent(c fiber.Ctx) error {
 		})
 	}
 
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-
-	// Verify agent belongs to organization
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	return c.JSON(h.enrichAgentResponse(c, agent))
@@ -812,17 +809,15 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Get agent credentials (decrypts private key)
@@ -905,8 +900,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 // @Param id path string true "Agent ID"
 // @Success 200 {object} CredentialsResponse
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
-// @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Router /agents/{id}/credentials [get]
 func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
@@ -921,17 +915,15 @@ func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Get agent credentials (decrypts private key)
@@ -1197,17 +1189,15 @@ func (h *AgentHandler) GetAgentMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Return MCP server details with connection metadata
@@ -1462,19 +1452,19 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 	var agent *domain.Agent
 
 	if err == nil {
-		// It's a UUID, get by ID
-		agent, err = h.agentService.GetAgent(c.Context(), agentID)
-		if err != nil {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Agent not found",
-			})
+		// It's a UUID, get by ID.
+		// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via
+		// LoadOwned. Returns 404 — not 403 — for cross-tenant access to
+		// avoid leaking resource existence across orgs. The name branch
+		// below uses GetAgentByName which already filters by orgID, so a
+		// cross-org name lookup naturally returns "not found" with no
+		// existence side channel either way.
+		loader := func(id uuid.UUID) (*domain.Agent, error) {
+			return h.agentService.GetAgent(c.Context(), id)
 		}
-
-		// Verify agent belongs to the organization
-		if agent.OrganizationID != orgID {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Agent does not belong to your organization",
-			})
+		agent = LoadOwned(c, loader, agentID, orgID, agentOrgID)
+		if agent == nil {
+			return nil
 		}
 	} else {
 		// It's a name, get by name
@@ -1581,18 +1571,14 @@ func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	if LoadOwned(c, loader, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Parse pagination params
@@ -2173,8 +2159,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 // @Param offset query int false "Pagination offset (default 0)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
-// @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Router /agents/{id}/activity [get]
 func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
@@ -2189,17 +2174,14 @@ func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization first
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY (A3b / defects #18-25 follow-on): tenant-scoping via LoadOwned.
+	// Returns 404 — not 403 — for cross-tenant access to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	if LoadOwned(c, loader, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// SECURITY: Validate pagination to prevent DoS
