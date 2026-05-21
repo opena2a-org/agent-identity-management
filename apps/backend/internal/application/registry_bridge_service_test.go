@@ -154,7 +154,7 @@ func (m *mockMCPServerRepoForBridge) GetByID(id uuid.UUID) (*domain.MCPServer, e
 func (m *mockMCPServerRepoForBridge) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPServer, error) {
 	return nil, nil
 }
-func (m *mockMCPServerRepoForBridge) GetByURL(url string) (*domain.MCPServer, error) {
+func (m *mockMCPServerRepoForBridge) GetByURL(url string, orgID uuid.UUID) (*domain.MCPServer, error) {
 	return nil, nil
 }
 func (m *mockMCPServerRepoForBridge) Update(s *domain.MCPServer) error  { return nil }

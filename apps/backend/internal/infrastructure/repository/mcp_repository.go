@@ -253,7 +253,12 @@ func (r *MCPServerRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.MCPS
 	return servers, nil
 }
 
-func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
+// GetByURL returns the MCP server matching the URL within the given
+// organization. The org filter is the security guarantee — the
+// mcp_servers table has UNIQUE(organization_id, url), so the same URL
+// can legally exist in multiple organizations; a nil-org lookup would
+// leak cross-tenant existence (defect #40).
+func (r *MCPServerRepository) GetByURL(url string, orgID uuid.UUID) (*domain.MCPServer, error) {
 	query := `
 		SELECT
 			id, organization_id, name, description, url, version,
@@ -261,7 +266,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 			capabilities, trust_score, registered_by_agent, created_by, created_at, updated_at,
 			verification_method, attestation_count, confidence_score, last_attested_at
 		FROM mcp_servers
-		WHERE url = $1
+		WHERE url = $1 AND organization_id = $2
 	`
 
 	server := &domain.MCPServer{}
@@ -271,7 +276,7 @@ func (r *MCPServerRepository) GetByURL(url string) (*domain.MCPServer, error) {
 	var publicKey sql.NullString
 	var verificationURL sql.NullString
 
-	err := r.db.QueryRow(query, url).Scan(
+	err := r.db.QueryRow(query, url, orgID).Scan(
 		&server.ID,
 		&server.OrganizationID,
 		&server.Name,

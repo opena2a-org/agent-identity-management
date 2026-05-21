@@ -1,11 +1,16 @@
 package application
 
 import (
+	"database/sql"
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ========================================
@@ -454,4 +459,79 @@ func TestMCPService_DefaultVerificationURLPath(t *testing.T) {
 
 	expectedURL := baseURL + defaultPath
 	assert.Equal(t, "https://mcp.example.com/.well-known/mcp/verify", expectedURL)
+}
+
+// ========================================
+// MCPServerRepository.GetByURL — defect #40 cross-org scoping
+// ========================================
+//
+// SECURITY context: defect #40 was a cross-tenant existence leak via
+// MCPService.CreateMCPServer's URL-collision check. The repository's
+// GetByURL was unscoped and returned any org's matching row, which
+// then leaked the victim's UUID + name in the handler's 409 response
+// AND allowed the service's existing-found branch to create a
+// cross-org agent-MCP connection AND mutate the victim's
+// capabilities/version. The fix adds an organization_id filter at
+// the SQL layer; these tests pin that filter so a future edit that
+// drops it (or transposes args) is caught at unit-test time.
+//
+// The mcp_servers table has UNIQUE(organization_id, url), so the
+// same URL can legally exist in multiple organizations — the lookup
+// MUST be org-scoped or the schema and the application contradict.
+
+func TestMCPServerRepository_GetByURL_FiltersByOrganization(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := repository.NewMCPServerRepository(db)
+	url := "https://mcp.example.com"
+	callerOrgID := uuid.New()
+
+	// The query MUST contain the organization_id filter clause and MUST
+	// be invoked with both (url, orgID) args, in that order, matching
+	// the placeholders $1 and $2.
+	mock.ExpectQuery(regexp.QuoteMeta("WHERE url = $1 AND organization_id = $2")).
+		WithArgs(url, callerOrgID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "organization_id", "name", "description", "url", "version",
+			"public_key", "status", "is_verified", "last_verified_at",
+			"verification_url", "capabilities", "trust_score",
+			"registered_by_agent", "created_by", "created_at", "updated_at",
+			"verification_method", "attestation_count", "confidence_score",
+			"last_attested_at",
+		}))
+
+	_, _ = repo.GetByURL(url, callerOrgID)
+
+	require.NoError(t, mock.ExpectationsWereMet(),
+		"GetByURL must issue SQL filtered by organization_id; a mismatch here means the security filter has regressed")
+}
+
+func TestMCPServerRepository_GetByURL_CrossOrgReturnsNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := repository.NewMCPServerRepository(db)
+	url := "https://victim.example.com"
+	callerOrgID := uuid.New()
+
+	// Simulate the cross-org case: the victim's row exists in the DB
+	// but the WHERE-clause filter on organization_id eliminates it,
+	// so the query returns no rows.
+	mock.ExpectQuery(regexp.QuoteMeta("WHERE url = $1 AND organization_id = $2")).
+		WithArgs(url, callerOrgID).
+		WillReturnError(sql.ErrNoRows)
+
+	server, err := repo.GetByURL(url, callerOrgID)
+
+	// Pre-fix behaviour: server would be a populated *MCPServer from
+	// the victim's org. Post-fix: nil. The caller (MCPService.CreateMCPServer)
+	// treats nil-existing as "no collision" and proceeds to create —
+	// which the DB's UNIQUE(organization_id, url) constraint permits.
+	assert.Nil(t, server,
+		"GetByURL must return nil on cross-org URL collision; returning a populated server would leak cross-tenant existence")
+	require.Error(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
