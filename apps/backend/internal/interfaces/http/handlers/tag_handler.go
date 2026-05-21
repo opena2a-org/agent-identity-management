@@ -9,15 +9,27 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// TagHandler handles HTTP requests for tag management
+// TagHandler handles HTTP requests for tag management.
+//
+// SECURITY (A3d-i): the handler holds an agentRepo lookup so that agent-
+// scoped tag operations (AddTagsToAgent, RemoveTagFromAgent, GetAgentTags,
+// SuggestTagsForAgent) can verify the path-supplied agentID belongs to
+// the caller's org BEFORE invoking the tag service. The tag service
+// itself does not enforce org scoping on these methods — adding the
+// check at the service layer would require a larger refactor (service
+// signature changes touching all callers); handler-layer LoadOwned is
+// the smaller change that closes the cross-tenant existence side
+// channel today. See tenant_scope.go:41-46.
 type TagHandler struct {
 	tagService *application.TagService
+	agentRepo  agentByIDLookup
 }
 
-// NewTagHandler creates a new tag handler instance
-func NewTagHandler(tagService *application.TagService) *TagHandler {
+// NewTagHandler creates a new tag handler instance.
+func NewTagHandler(tagService *application.TagService, agentRepo domain.AgentRepository) *TagHandler {
 	return &TagHandler{
 		tagService: tagService,
+		agentRepo:  agentRepo,
 	}
 }
 
@@ -267,6 +279,11 @@ func (h *TagHandler) DeleteTag(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/agents/{id}/tags [post]
 func (h *TagHandler) AddTagsToAgent(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Get authenticated user
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
@@ -303,6 +320,14 @@ func (h *TagHandler) AddTagsToAgent(c fiber.Ctx) error {
 		tagIDs[i] = id
 	}
 
+	// SECURITY (A3d-i): verify the path agentID belongs to the caller's
+	// org before mutating tag relations. Cross-tenant tagging would let
+	// a caller in org A label agent B in org B with their own tags.
+	// Returns 404 on cross-tenant for existence-secrecy.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	// Add tags to agent
 	if err := h.tagService.AddTagsToAgent(c.Context(), agentID, tagIDs, userID); err != nil {
 		// Check if it's a Community Edition limit error
@@ -332,6 +357,11 @@ func (h *TagHandler) AddTagsToAgent(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/agents/{id}/tags/{tagId} [delete]
 func (h *TagHandler) RemoveTagFromAgent(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse agent ID
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -346,6 +376,12 @@ func (h *TagHandler) RemoveTagFromAgent(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid tag ID",
 		})
+	}
+
+	// SECURITY (A3d-i): verify the path agentID belongs to the caller's
+	// org before mutating tag relations. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Remove tag from agent
@@ -371,12 +407,23 @@ func (h *TagHandler) RemoveTagFromAgent(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/agents/{id}/tags [get]
 func (h *TagHandler) GetAgentTags(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse agent ID
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-i): verify the path agentID belongs to the caller's
+	// org before reading tag list. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Get agent tags
@@ -403,12 +450,23 @@ func (h *TagHandler) GetAgentTags(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/agents/{id}/tags/suggestions [get]
 func (h *TagHandler) SuggestTagsForAgent(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse agent ID
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-i): verify the path agentID belongs to the caller's
+	// org before reading tag suggestions. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	// Get tag suggestions

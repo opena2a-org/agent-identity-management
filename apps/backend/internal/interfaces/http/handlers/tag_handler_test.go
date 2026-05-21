@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +68,7 @@ func TestContainsMiddle_NotFound(t *testing.T) {
 // ===========================
 
 func TestNewTagHandler_NilService(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	assert.NotNil(t, handler)
 	assert.Nil(t, handler.tagService)
@@ -126,7 +128,7 @@ func TestUpdateTagRequest_Struct(t *testing.T) {
 // ===========================
 
 func TestTagHandler_CreateTag_NoUserContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/tags", handler.CreateTag)
@@ -149,7 +151,7 @@ func TestTagHandler_CreateTag_NoUserContext(t *testing.T) {
 }
 
 func TestTagHandler_CreateTag_NoOrgContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/tags", func(c fiber.Ctx) error {
@@ -175,7 +177,7 @@ func TestTagHandler_CreateTag_NoOrgContext(t *testing.T) {
 }
 
 func TestTagHandler_CreateTag_InvalidJSON(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/tags", func(c fiber.Ctx) error {
@@ -195,7 +197,7 @@ func TestTagHandler_CreateTag_InvalidJSON(t *testing.T) {
 }
 
 func TestTagHandler_GetTags_NoOrgContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/tags", handler.GetTags)
@@ -210,7 +212,7 @@ func TestTagHandler_GetTags_NoOrgContext(t *testing.T) {
 }
 
 func TestTagHandler_UpdateTag_InvalidID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Put("/tags/:id", handler.UpdateTag)
@@ -233,7 +235,7 @@ func TestTagHandler_UpdateTag_InvalidID(t *testing.T) {
 }
 
 func TestTagHandler_UpdateTag_NoUserContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	tagID := uuid.New()
 
 	app := fiber.New()
@@ -251,7 +253,7 @@ func TestTagHandler_UpdateTag_NoUserContext(t *testing.T) {
 }
 
 func TestTagHandler_DeleteTag_InvalidID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Delete("/tags/:id", handler.DeleteTag)
@@ -266,11 +268,16 @@ func TestTagHandler_DeleteTag_InvalidID(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToAgent_NoUserContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	agentID := uuid.New()
 
 	app := fiber.New()
-	app.Post("/agents/:id/tags", handler.AddTagsToAgent)
+	// Set org but NOT user — verifies the user-context guard returns
+	// 401 after the A3d-i org-scoping check passes.
+	app.Post("/agents/:id/tags", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		return handler.AddTagsToAgent(c)
+	})
 
 	body := `{"tagIds":["` + uuid.New().String() + `"]}`
 	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/tags", strings.NewReader(body))
@@ -284,10 +291,11 @@ func TestTagHandler_AddTagsToAgent_NoUserContext(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToAgent_InvalidAgentID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/agents/:id/tags", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
 		c.Locals("user_id", uuid.New())
 		return handler.AddTagsToAgent(c)
 	})
@@ -304,11 +312,12 @@ func TestTagHandler_AddTagsToAgent_InvalidAgentID(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToAgent_InvalidTagIDFormat(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	agentID := uuid.New()
 
 	app := fiber.New()
 	app.Post("/agents/:id/tags", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
 		c.Locals("user_id", uuid.New())
 		return handler.AddTagsToAgent(c)
 	})
@@ -331,11 +340,14 @@ func TestTagHandler_AddTagsToAgent_InvalidTagIDFormat(t *testing.T) {
 }
 
 func TestTagHandler_RemoveTagFromAgent_InvalidAgentID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	tagID := uuid.New()
 
 	app := fiber.New()
-	app.Delete("/agents/:id/tags/:tagId", handler.RemoveTagFromAgent)
+	app.Delete("/agents/:id/tags/:tagId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		return handler.RemoveTagFromAgent(c)
+	})
 
 	req := httptest.NewRequest("DELETE", "/agents/not-a-uuid/tags/"+tagID.String(), nil)
 
@@ -347,11 +359,14 @@ func TestTagHandler_RemoveTagFromAgent_InvalidAgentID(t *testing.T) {
 }
 
 func TestTagHandler_RemoveTagFromAgent_InvalidTagID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	agentID := uuid.New()
 
 	app := fiber.New()
-	app.Delete("/agents/:id/tags/:tagId", handler.RemoveTagFromAgent)
+	app.Delete("/agents/:id/tags/:tagId", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		return handler.RemoveTagFromAgent(c)
+	})
 
 	req := httptest.NewRequest("DELETE", "/agents/"+agentID.String()+"/tags/not-a-uuid", nil)
 
@@ -363,10 +378,13 @@ func TestTagHandler_RemoveTagFromAgent_InvalidTagID(t *testing.T) {
 }
 
 func TestTagHandler_GetAgentTags_InvalidAgentID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
-	app.Get("/agents/:id/tags", handler.GetAgentTags)
+	app.Get("/agents/:id/tags", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		return handler.GetAgentTags(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/not-a-uuid/tags", nil)
 
@@ -378,10 +396,13 @@ func TestTagHandler_GetAgentTags_InvalidAgentID(t *testing.T) {
 }
 
 func TestTagHandler_SuggestTagsForAgent_InvalidAgentID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
-	app.Get("/agents/:id/tags/suggestions", handler.SuggestTagsForAgent)
+	app.Get("/agents/:id/tags/suggestions", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
+		return handler.SuggestTagsForAgent(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/not-a-uuid/tags/suggestions", nil)
 
@@ -393,7 +414,7 @@ func TestTagHandler_SuggestTagsForAgent_InvalidAgentID(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToMCPServer_NoUserContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	mcpServerID := uuid.New()
 
 	app := fiber.New()
@@ -411,7 +432,7 @@ func TestTagHandler_AddTagsToMCPServer_NoUserContext(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToMCPServer_InvalidID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/mcp-servers/:id/tags", func(c fiber.Ctx) error {
@@ -431,7 +452,7 @@ func TestTagHandler_AddTagsToMCPServer_InvalidID(t *testing.T) {
 }
 
 func TestTagHandler_RemoveTagFromMCPServer_InvalidMCPServerID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	tagID := uuid.New()
 
 	app := fiber.New()
@@ -447,7 +468,7 @@ func TestTagHandler_RemoveTagFromMCPServer_InvalidMCPServerID(t *testing.T) {
 }
 
 func TestTagHandler_RemoveTagFromMCPServer_InvalidTagID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	mcpServerID := uuid.New()
 
 	app := fiber.New()
@@ -463,7 +484,7 @@ func TestTagHandler_RemoveTagFromMCPServer_InvalidTagID(t *testing.T) {
 }
 
 func TestTagHandler_GetMCPServerTags_InvalidID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/mcp-servers/:id/tags", handler.GetMCPServerTags)
@@ -478,7 +499,7 @@ func TestTagHandler_GetMCPServerTags_InvalidID(t *testing.T) {
 }
 
 func TestTagHandler_SuggestTagsForMCPServer_InvalidID(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/mcp-servers/:id/tags/suggestions", handler.SuggestTagsForMCPServer)
@@ -493,7 +514,7 @@ func TestTagHandler_SuggestTagsForMCPServer_InvalidID(t *testing.T) {
 }
 
 func TestTagHandler_GetPopularTags_NoOrgContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/tags/popular", handler.GetPopularTags)
@@ -508,7 +529,7 @@ func TestTagHandler_GetPopularTags_NoOrgContext(t *testing.T) {
 }
 
 func TestTagHandler_SearchTags_MissingQuery(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/tags/search", handler.SearchTags)
@@ -529,7 +550,7 @@ func TestTagHandler_SearchTags_MissingQuery(t *testing.T) {
 }
 
 func TestTagHandler_SearchTags_NoOrgContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 
 	app := fiber.New()
 	app.Get("/tags/search", handler.SearchTags)
@@ -548,7 +569,7 @@ func TestTagHandler_SearchTags_NoOrgContext(t *testing.T) {
 // ===========================
 
 func TestTagHandler_UpdateTag_NoOrgContext(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	tagID := uuid.New()
 
 	app := fiber.New()
@@ -570,7 +591,7 @@ func TestTagHandler_UpdateTag_NoOrgContext(t *testing.T) {
 }
 
 func TestTagHandler_UpdateTag_InvalidJSON(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	tagID := uuid.New()
 
 	app := fiber.New()
@@ -591,11 +612,12 @@ func TestTagHandler_UpdateTag_InvalidJSON(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToAgent_InvalidJSON(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	agentID := uuid.New()
 
 	app := fiber.New()
 	app.Post("/agents/:id/tags", func(c fiber.Ctx) error {
+		c.Locals("organization_id", uuid.New())
 		c.Locals("user_id", uuid.New())
 		return handler.AddTagsToAgent(c)
 	})
@@ -611,7 +633,7 @@ func TestTagHandler_AddTagsToAgent_InvalidJSON(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToMCPServer_InvalidJSON(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	mcpServerID := uuid.New()
 
 	app := fiber.New()
@@ -631,7 +653,7 @@ func TestTagHandler_AddTagsToMCPServer_InvalidJSON(t *testing.T) {
 }
 
 func TestTagHandler_AddTagsToMCPServer_InvalidTagIDFormat(t *testing.T) {
-	handler := NewTagHandler(nil)
+	handler := NewTagHandler(nil, nil)
 	mcpServerID := uuid.New()
 
 	app := fiber.New()
@@ -660,3 +682,114 @@ func TestTagHandler_AddTagsToMCPServer_InvalidTagIDFormat(t *testing.T) {
 // Note: Some tag handler methods don't have authorization checks at the handler level
 // and rely on middleware for auth. Tests for these would require mocked services
 // to avoid nil pointer dereferences when auth passes but service is nil.
+
+// ===========================
+// A3d-i: cross-tenant access on agent-scoped tag handlers must return
+// 404 with existence-secrecy body. Each row exercises the LoadOwned
+// guard wired in this PR. The mock GetAgent returns an agent in a
+// different org; every handler must short-circuit at LoadOwned and
+// never reach the tagService (which is nil here — a service dispatch
+// would panic, proving the LoadOwned gate fired). Captured-flag
+// pattern matches PR #150's panic-proof tests.
+// ===========================
+
+func TestTagHandler_AgentScoped_CrossOrgReturns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	callerUserID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	agentRepo := &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: differentOrgID, Name: "victim"}, nil
+		},
+	}
+	// tagService is intentionally nil: the LoadOwned gate must short-
+	// circuit BEFORE any tagService dispatch, so reaching the nil
+	// service would panic (which the harness records as a test failure
+	// independent of the assertion below).
+	handler := &TagHandler{tagService: nil, agentRepo: agentRepo}
+
+	tests := []struct {
+		name        string
+		method      string
+		requestPath string
+		body        string
+		setup       func(*fiber.App, *TagHandler)
+	}{
+		{
+			name:        "AddTagsToAgent",
+			method:      "POST",
+			requestPath: "/agents/" + agentID.String() + "/tags",
+			body:        `{"tagIds":["` + uuid.New().String() + `"]}`,
+			setup: func(app *fiber.App, h *TagHandler) {
+				app.Post("/agents/:id/tags", func(c fiber.Ctx) error {
+					c.Locals("organization_id", callerOrgID)
+					c.Locals("user_id", callerUserID)
+					return h.AddTagsToAgent(c)
+				})
+			},
+		},
+		{
+			name:        "RemoveTagFromAgent",
+			method:      "DELETE",
+			requestPath: "/agents/" + agentID.String() + "/tags/" + uuid.New().String(),
+			body:        "",
+			setup: func(app *fiber.App, h *TagHandler) {
+				app.Delete("/agents/:id/tags/:tagId", func(c fiber.Ctx) error {
+					c.Locals("organization_id", callerOrgID)
+					return h.RemoveTagFromAgent(c)
+				})
+			},
+		},
+		{
+			name:        "GetAgentTags",
+			method:      "GET",
+			requestPath: "/agents/" + agentID.String() + "/tags",
+			body:        "",
+			setup: func(app *fiber.App, h *TagHandler) {
+				app.Get("/agents/:id/tags", func(c fiber.Ctx) error {
+					c.Locals("organization_id", callerOrgID)
+					return h.GetAgentTags(c)
+				})
+			},
+		},
+		{
+			name:        "SuggestTagsForAgent",
+			method:      "GET",
+			requestPath: "/agents/" + agentID.String() + "/tags/suggestions",
+			body:        "",
+			setup: func(app *fiber.App, h *TagHandler) {
+				app.Get("/agents/:id/tags/suggestions", func(c fiber.Ctx) error {
+					c.Locals("organization_id", callerOrgID)
+					return h.SuggestTagsForAgent(c)
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := fiber.New()
+			tt.setup(app, handler)
+
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.requestPath, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.requestPath, strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+				"%s: cross-tenant request must return 404, got %d", tt.name, resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			assert.JSONEq(t, `{"error":"not found"}`, string(body),
+				"%s: cross-tenant 404 body must be existence-secrecy shape, got %s", tt.name, string(body))
+		})
+	}
+}
