@@ -88,3 +88,75 @@ func equal(a, b []string) bool {
 	}
 	return true
 }
+
+// TestScanServiceDirectoryFlagsAcceptedButUnusedOrgID runs the new
+// class-#3 service-param scan against the testdata fixtures. The
+// violating fixture (service_violating.go) MUST be flagged; the clean
+// fixtures (service_clean.go and the handler files) MUST NOT.
+func TestScanServiceDirectoryFlagsAcceptedButUnusedOrgID(t *testing.T) {
+	violations, err := scanServiceDirectory("testdata")
+	if err != nil {
+		t.Fatalf("scanServiceDirectory(testdata): %v", err)
+	}
+
+	gotMethods := make([]string, 0, len(violations))
+	for _, v := range violations {
+		gotMethods = append(gotMethods, v.Handler)
+	}
+	sort.Strings(gotMethods)
+
+	wantMethods := []string{
+		"LintTestViolatingSelectorService.AcknowledgeAlert (param OrganizationID)",
+		"LintTestViolatingService.AcknowledgeAlert (param orgID)",
+	}
+
+	if !equal(gotMethods, wantMethods) {
+		t.Fatalf("scanServiceDirectory(testdata) flagged %v, want %v",
+			gotMethods, wantMethods)
+	}
+
+	for _, v := range violations {
+		if !strings.HasSuffix(v.File, "service_violating.go") &&
+			!strings.HasSuffix(v.File, "service_violating_selector.go") {
+			t.Errorf("violation in unexpected file: %s", v.File)
+		}
+		if v.Line == 0 {
+			t.Errorf("violation has zero line number: %+v", v)
+		}
+	}
+}
+
+// TestOrgParamNamesCoversCommonSpellings is a structural guard against
+// silently dropping a parameter-name spelling. If callsites in this
+// codebase introduce a new spelling, add it here AND walk the existing
+// service surface for references.
+func TestOrgParamNamesCoversCommonSpellings(t *testing.T) {
+	mustHave := []string{"orgID", "OrgID", "organizationID", "OrganizationID", "adminOrgID", "callerOrgID"}
+	for _, name := range mustHave {
+		if !orgParamNames[name] {
+			t.Errorf("orgParamNames is missing %q", name)
+		}
+	}
+}
+
+// TestClassifyServiceDirRouting confirms the path-classifier sends
+// `./internal/application` to the service scanner and any other path
+// (including the default handlers path) to the handler scanner.
+func TestClassifyServiceDirRouting(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"./internal/application", true},
+		{"internal/application", true},
+		{"/abs/path/to/internal/application", true},
+		{"./internal/interfaces/http/handlers", false},
+		{"./cmd/tenantscope-lint", false},
+		{".", false},
+	}
+	for _, c := range cases {
+		if got := classifyServiceDir(c.path); got != c.want {
+			t.Errorf("classifyServiceDir(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}

@@ -79,9 +79,7 @@ var allowlist = map[string]string{
 	// Tracking: ~/workspace/opena2a-org/todo/2026-05-18-aim-defect-audit-
 	// from-lf-demo-prep.md (defect #18-25 follow-up section to be added).
 	// ---------------------------------------------------------------
-	"A2AHandler.DeleteSkill":                                "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
-	"A2AHandler.RevokeConsent":                              "P1 IDOR deferred (A3d-vii.b): path :id is a consent UUID and the service calls a2aRepo.Revoke with no ownership check. domain.A2AConsentRecord.OrganizationID *uuid.UUID is nullable but direct; fix is plain LoadOwned with a nullable-aware accessor (A2APolicy-style, mirroring A3d-v RegistrationRequest pattern). Live IDOR — any authenticated A2A caller can revoke any tenant's consent by guessing UUIDs.",
-	"A2AHandler.UpdateTaskState":                            "P1 IDOR deferred (A3d-vii.b): path :id is an A2ATask UUID; the task has ClientAgentID + RemoteAgentID but NO direct OrganizationID. Fix is LoadOwnedViaAgent on ClientAgentID (caller-side participant; RemoteAgentID may be cross-org per A2A protocol). Live IDOR — any authenticated A2A caller can mutate any tenant's task state by guessing UUIDs.",
+	"A2AHandler.DeleteSkill": "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
 	"AdminHandler.AcknowledgeAlert":                         "audit-baseline: needs review",
 	"AdminHandler.ApproveRegistrationRequest":               "audit-baseline: needs review",
 	"AdminHandler.ApproveUser":                              "audit-baseline: needs review",
@@ -222,36 +220,95 @@ type violation struct {
 	Handler string
 }
 
+// serviceParamAllowlist names application/service methods that legitimately
+// accept an `orgID` / `organizationID` parameter but do not reference it in
+// their body. The lint catches the "service param accepted-but-unused"
+// class-#3 IDOR (see feedback_tenantscope_lint_three_blindspot_classes in
+// the memory): a service whose signature looks tenant-aware but whose
+// repository call runs `WHERE id = $1` system-wide.
+//
+// Each entry must include a one-line justification. The allowlist must
+// stay small; the goal is to refactor or remove the unused parameter
+// rather than to add entries.
+var serviceParamAllowlist = map[string]string{
+	// AUDIT-BASELINE: pre-existing methods discovered when the
+	// class-#3 scan first landed. Each entry MUST cite the rationale
+	// or the tracking todo. Reviewers fixing the underlying defect
+	// should remove the entry; the allowlist must NOT grow over time.
+
+	// Stub: documented no-op kept for future expansion. orgID is the
+	// future-API surface; no current callsite. (alert_service.go:108-117)
+	"AlertService.CheckAPIKeyExpiry": "stub no-op; orgID reserved for future API key expiry implementation",
+
+	// HIGH IDOR — already tracked. AlertService.AcknowledgeAlert and
+	// ResolveAlert both accept orgID but call alertRepo.Acknowledge
+	// without the tenant filter, so any caller can acknowledge/resolve
+	// any tenant's alert by guessing the UUID. Fix is filed at
+	// todo/2026-05-21-a3d-v-followup-alert-handler-idors.md
+	// (handler-layer LoadOwned via alertRepo.GetByID is the preferred
+	// shape). Remove these entries once the follow-up PR lands.
+	"AlertService.AcknowledgeAlert": "audit-baseline IDOR: see todo/2026-05-21-a3d-v-followup-alert-handler-idors.md",
+	"AlertService.ResolveAlert":     "audit-baseline IDOR: see todo/2026-05-21-a3d-v-followup-alert-handler-idors.md",
+
+	// Pure function on the passed-in baseline argument; no DB call.
+	// orgID is vestigial — kept because callers still pass it but the
+	// method's logic uses only `baseline.CapabilityUsage`. Not an IDOR
+	// risk. Refactor candidate: remove the parameter and update the
+	// (private) callsite in behavior_analysis_service.go.
+	"BehaviorAnalysisService.detectCapabilityDrift": "pure baseline analysis; orgID vestigial; refactor candidate",
+}
+
+// classifyServiceDir treats a directory as the service scan target if
+// its trailing component is "application". Heuristic, but works for
+// every layout this lint targets.
+func classifyServiceDir(dir string) bool {
+	return strings.HasSuffix(filepath.Clean(dir), "/application") ||
+		strings.HasSuffix(filepath.Clean(dir), string(filepath.Separator)+"application")
+}
+
 func main() {
-	dir := "./internal/interfaces/http/handlers"
+	// Default behavior: scan BOTH the handlers directory (handler
+	// param-id-without-LoadOwned class) AND the application services
+	// directory (orgID-param-accepted-but-unused class). Either scan
+	// failing makes the whole invocation fail; allowlists are
+	// independent.
+	handlersDir := "./internal/interfaces/http/handlers"
+	servicesDir := "./internal/application"
 	if len(os.Args) > 1 {
-		dir = os.Args[1]
-	}
-	dir = filepath.Clean(dir)
-
-	violations, err := scanDirectory(dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "tenantscope-lint: %v\n", err)
-		os.Exit(2)
-	}
-
-	if len(violations) == 0 {
-		fmt.Printf("tenantscope-lint: ok (%d allowlist entries; scanned %s)\n", len(allowlist), dir)
-		os.Exit(0)
-	}
-
-	sort.Slice(violations, func(i, j int) bool {
-		if violations[i].File != violations[j].File {
-			return violations[i].File < violations[j].File
+		// Single-directory mode: route based on path. Preserves the
+		// legacy invocation `go run ./cmd/tenantscope-lint
+		// ./internal/interfaces/http/handlers`.
+		dir := filepath.Clean(os.Args[1])
+		if classifyServiceDir(dir) {
+			handlersDir = ""
+			servicesDir = dir
+		} else {
+			handlersDir = dir
+			servicesDir = ""
 		}
-		return violations[i].Line < violations[j].Line
-	})
-
-	fmt.Fprintf(os.Stderr, "tenantscope-lint: %d handler(s) read a tenant-scoped c.Params(...) key without invoking LoadOwned/LoadOwnedViaAgent:\n\n", len(violations))
-	for _, v := range violations {
-		fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.File, v.Line, v.Handler)
 	}
-	fmt.Fprintln(os.Stderr, `
+
+	failed := false
+
+	if handlersDir != "" {
+		violations, err := scanDirectory(handlersDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "tenantscope-lint: %v\n", err)
+			os.Exit(2)
+		}
+		if len(violations) > 0 {
+			failed = true
+			sort.Slice(violations, func(i, j int) bool {
+				if violations[i].File != violations[j].File {
+					return violations[i].File < violations[j].File
+				}
+				return violations[i].Line < violations[j].Line
+			})
+			fmt.Fprintf(os.Stderr, "tenantscope-lint: %d handler(s) read a tenant-scoped c.Params(...) key without invoking LoadOwned/LoadOwnedViaAgent:\n\n", len(violations))
+			for _, v := range violations {
+				fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.File, v.Line, v.Handler)
+			}
+			fmt.Fprintln(os.Stderr, `
 To fix each violation:
   1. Add RequireOrganizationID(c) at the top of the handler.
   2. Wrap the resource load in LoadOwned or LoadOwnedViaAgent before
@@ -260,9 +317,54 @@ To fix each violation:
      name (HandlerStructName.MethodName) to the allowlist in
      cmd/tenantscope-lint/main.go with a one-line justification.
 
-See apps/backend/internal/interfaces/http/handlers/tenant_scope.go for the
-helper documentation and the SECURITY rationale for 404-not-403.`)
-	os.Exit(1)
+See apps/backend/internal/interfaces/http/handlers/tenant_scope.go for
+the helper documentation and the SECURITY rationale for 404-not-403.`)
+		} else {
+			fmt.Printf("tenantscope-lint: ok (%d allowlist entries; scanned %s)\n", len(allowlist), handlersDir)
+		}
+	}
+
+	if servicesDir != "" {
+		serviceViolations, err := scanServiceDirectory(servicesDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "tenantscope-lint: %v\n", err)
+			os.Exit(2)
+		}
+		if len(serviceViolations) > 0 {
+			failed = true
+			sort.Slice(serviceViolations, func(i, j int) bool {
+				if serviceViolations[i].File != serviceViolations[j].File {
+					return serviceViolations[i].File < serviceViolations[j].File
+				}
+				return serviceViolations[i].Line < serviceViolations[j].Line
+			})
+			fmt.Fprintf(os.Stderr, "\nserviceparam-lint: %d service method(s) accept an orgID/organizationID parameter but never reference it in the body (class-#3 IDOR — likely repository call runs WHERE id = $1 system-wide):\n\n", len(serviceViolations))
+			for _, v := range serviceViolations {
+				fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.File, v.Line, v.Handler)
+			}
+			fmt.Fprintln(os.Stderr, `
+To fix each violation:
+  1. Use orgID in the repository call's WHERE clause (e.g. add it to
+     a "WHERE id = $1 AND organization_id = $2" query).
+  2. If the orgID parameter is genuinely unused (e.g. legacy callsite
+     that no longer needs it), REMOVE the parameter — do not add to
+     the allowlist.
+  3. If the orgID is used through a struct field accessor (e.g. it
+     was unpacked into a local), refactor to reference orgID directly
+     OR add the method to serviceParamAllowlist in
+     cmd/tenantscope-lint/main.go with a one-line justification.
+
+See feedback_tenantscope_lint_three_blindspot_classes (memory) for
+the broader taxonomy. False-negative class: orgID referenced only in
+logging without flowing to the repo call still passes this check.`)
+		} else {
+			fmt.Printf("serviceparam-lint: ok (%d allowlist entries; scanned %s)\n", len(serviceParamAllowlist), servicesDir)
+		}
+	}
+
+	if failed {
+		os.Exit(1)
+	}
 }
 
 func scanDirectory(dir string) ([]violation, error) {
@@ -430,6 +532,189 @@ func bodyReadsTenantParam(fset *token.FileSet, body *ast.BlockStmt) (bool, int) 
 		return true
 	})
 	return found, line
+}
+
+// orgParamNames are the parameter names recognized as carrying a
+// caller-org UUID into a service method. These are the names we expect
+// to appear in the body if the method is genuinely tenant-scoped.
+//
+// Spelling variants reflect the codebase's current mix; the lint should
+// tolerate any reasonable casing. Names not in this set (e.g. `tenantID`)
+// are excluded because they introduce false-positive risk on unrelated
+// methods.
+var orgParamNames = map[string]bool{
+	"orgID":          true,
+	"OrgID":          true,
+	"organizationID": true,
+	"OrganizationID": true,
+	"adminOrgID":     true,
+	"callerOrgID":    true,
+}
+
+// scanServiceDirectory walks the application/services directory and
+// returns class-#3 violations: function declarations whose signature
+// includes an `orgID`-shaped parameter (per orgParamNames) that the
+// body never references. This catches methods like the historical
+// `AlertService.AcknowledgeAlert(ctx, alertID, orgID, userID uuid.UUID)`
+// where orgID is accepted in the signature but the repo call ran
+// `WHERE id = $1` with no tenant filter — making it a system-wide IDOR.
+//
+// Allowlist is `serviceParamAllowlist` (qualified by ReceiverType.Method).
+//
+// False-negative class to be aware of: a method that references orgID
+// only inside a log statement (without flowing it to a repo call) will
+// pass this check. The narrower "is orgID actually used in the repo
+// query?" check requires cross-function flow analysis beyond what the
+// AST scan provides here. Reviewers should still verify, but the
+// structural pattern catches the common case where orgID is forgotten
+// outright.
+func scanServiceDirectory(dir string) ([]violation, error) {
+	var violations []violation
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", dir, err)
+	}
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+		violations = append(violations, scanServiceFile(fset, file, path)...)
+	}
+	return violations, nil
+}
+
+// scanServiceFile walks one parsed Go file for class-#3 service-method
+// violations. A method qualifies for inspection when:
+//   - It has a receiver (i.e. it's a method, not a free function).
+//   - It has at least one parameter whose name is in orgParamNames and
+//     whose type is uuid.UUID.
+//
+// For each qualifying parameter, the body is searched for any *ast.Ident
+// matching the parameter name. Zero matches → violation.
+func scanServiceFile(fset *token.FileSet, file *ast.File, path string) []violation {
+	var out []violation
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		// Service-layer methods always have a receiver. Skip free
+		// functions (constructors, helpers).
+		if fn.Recv == nil {
+			continue
+		}
+		methodName := receiverTypeName(fn) + "." + fn.Name.Name
+		if _, allowed := serviceParamAllowlist[methodName]; allowed {
+			continue
+		}
+		if fn.Type == nil || fn.Type.Params == nil {
+			continue
+		}
+		for _, field := range fn.Type.Params.List {
+			if !isUUIDType(field.Type) {
+				continue
+			}
+			for _, name := range field.Names {
+				if !orgParamNames[name.Name] {
+					continue
+				}
+				if bodyReferencesIdent(fn.Body, name.Name) {
+					continue
+				}
+				out = append(out, violation{
+					File:    path,
+					Line:    fset.Position(name.Pos()).Line,
+					Handler: methodName + " (param " + name.Name + ")",
+				})
+			}
+		}
+	}
+	return out
+}
+
+// isUUIDType returns true if the parameter type expression is a
+// `uuid.UUID` selector. Recognizes the typical `uuid.UUID` spelling;
+// does NOT match pointer types or slices (callers passing a *uuid.UUID
+// or []uuid.UUID are not in scope for this lint — those are
+// non-canonical and rare in this codebase).
+func isUUIDType(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	return pkg.Name == "uuid" && sel.Sel != nil && sel.Sel.Name == "UUID"
+}
+
+// bodyReferencesIdent returns true if any *ast.Ident in the function
+// body — EXCLUDING selector right-hand sides (`Sel`) — matches the
+// given parameter name. Parameter declarations are outside the body,
+// so the lookup is purely usage-based.
+//
+// SECURITY: a naive `ast.Inspect` walk visits the `Sel` field of every
+// `*ast.SelectorExpr`. If we didn't skip it, expressions like
+// `agent.OrganizationID` or `req.OrgID` would match parameter names
+// `OrganizationID`/`OrgID`, silently making the lint pass for any
+// method that touches a domain object with the same field name. This
+// is the exact class-of-bug the lint was designed to catch on the
+// OPPOSITE side — Phase 4.5 review caught it as a HIGH (H1) before
+// landing.
+//
+// Implementation: a custom `ast.Visitor` intercepts `*ast.SelectorExpr`
+// and recurses only into the LHS (`X`) — `Sel` is never visited as
+// an ident match candidate.
+func bodyReferencesIdent(body *ast.BlockStmt, name string) bool {
+	var found bool
+	ast.Walk(identMatchVisitor{name: name, found: &found}, body)
+	return found
+}
+
+// identMatchVisitor walks a Go AST node tree counting how many times a
+// top-level (non-selector-RHS) identifier matches a given name. It
+// short-circuits as soon as a match is found.
+type identMatchVisitor struct {
+	name  string
+	found *bool
+}
+
+func (v identMatchVisitor) Visit(n ast.Node) ast.Visitor {
+	if *v.found || n == nil {
+		return nil
+	}
+	switch x := n.(type) {
+	case *ast.SelectorExpr:
+		// Walk the LHS (e.g. `agent` in `agent.OrganizationID`).
+		// Sel is intentionally NOT walked: a field name match on
+		// `OrganizationID` should not be mistaken for a param match.
+		ast.Walk(v, x.X)
+		return nil
+	case *ast.KeyValueExpr:
+		// Struct literal: `domain.Alert{OrganizationID: orgID}`. The
+		// Key is a field name (skip); the Value is a real expression
+		// (walk). Treating Key as a potential ident match would
+		// produce the same false-negative as the selector case.
+		ast.Walk(v, x.Value)
+		return nil
+	case *ast.Ident:
+		if x.Name == v.name {
+			*v.found = true
+		}
+		return nil
+	}
+	return v
 }
 
 // bodyInvokesHelper returns true if any call inside the function body has

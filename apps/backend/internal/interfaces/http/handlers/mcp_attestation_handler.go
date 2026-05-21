@@ -12,6 +12,7 @@ import (
 
 type MCPAttestationHandler struct {
 	attestationService *application.MCPAttestationService
+	verifier           MCPAttestationVerifier
 	auditService       *application.AuditService
 	agentRepo          domain.AgentRepository
 }
@@ -23,9 +24,19 @@ func NewMCPAttestationHandler(
 ) *MCPAttestationHandler {
 	return &MCPAttestationHandler{
 		attestationService: attestationService,
+		verifier:           attestationService,
 		auditService:       auditService,
 		agentRepo:          agentRepo,
 	}
+}
+
+// getVerifier returns the injected verifier (set by NewMCPAttestationHandler
+// to attestationService, or overwritten in tests).
+func (h *MCPAttestationHandler) getVerifier() MCPAttestationVerifier {
+	if h.verifier != nil {
+		return h.verifier
+	}
+	return h.attestationService
 }
 
 // GetAttestationChallenge generates a server-side challenge for proof of private key possession
@@ -119,21 +130,28 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 	}
 
 	// Verify and record attestation
-	// SECURITY: No error logging to prevent information leakage
-	response, err := h.attestationService.VerifyAndRecordAttestation(c.Context(), mcpServerID, &req)
+	// SECURITY: error.Error() is NOT echoed back to the client. The
+	// service collapses existence-or-ownership failures to
+	// ErrAttestationFailed and signature/payload failures to
+	// ErrAttestationInvalid; both map to the SAME fixed-body 403 so an
+	// attacker holding a valid Ed25519 token cannot distinguish "I'm
+	// targeting a victim agent in another org" from "my signature is
+	// bad." Other errors (DB failure, etc.) surface as 500 with a fixed
+	// message — never the wrapped error text, which can carry victim
+	// agent status / trust score / UUID.
+	response, err := h.getVerifier().VerifyAndRecordAttestation(c.Context(), mcpServerID, &req)
 	if err != nil {
-
-		// Determine status code based on error
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "only verified agents can attest MCPs" ||
-			err.Error() == "invalid attestation signature" ||
-			err.Error() == "attestation expired (older than 5 minutes)" {
-			statusCode = fiber.StatusForbidden
+		if errors.Is(err, application.ErrAttestationFailed) || errors.Is(err, application.ErrAttestationInvalid) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "Attestation failed",
+				"message": "Attestation could not be verified.",
+			})
 		}
-
-		return c.Status(statusCode).JSON(fiber.Map{
+		// Unexpected error path (DB outage, marshaling bug, etc.).
+		// Generic 500 — no error string surfaced to the client.
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "Attestation failed",
-			"message": err.Error(),
+			"message": "Internal error processing attestation.",
 		})
 	}
 
