@@ -1127,6 +1127,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Trust,
 			services.VerificationEvent,
 			repos.Organization,
+			services.FGA,
 		),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,

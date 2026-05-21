@@ -114,6 +114,25 @@ type MCPAttestationServicer interface {
 	GetMCPServersForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.MCPServer, error)
 }
 
+// MCPAttestationVerifier is the narrow verification slice of
+// MCPAttestationService that the AttestMCP handler dispatches to. Kept
+// small so tests can inject a fake that returns ErrAttestationFailed /
+// ErrAttestationInvalid without standing up a real attestation service
+// with its concrete repository pointers.
+type MCPAttestationVerifier interface {
+	VerifyAndRecordAttestation(ctx context.Context, mcpServerID uuid.UUID, req *application.AttestMCPRequest) (*application.AttestMCPResponse, error)
+}
+
+// A2AReader is the narrow read-side interface A2AHandler uses to load
+// resources for tenant-ownership checks (LoadOwned / LoadOwnedViaAgent).
+// Kept deliberately small so test fakes can implement just these two
+// methods; the full A2AService surface is intentionally NOT promoted to
+// an interface in this PR.
+type A2AReader interface {
+	GetConsent(ctx context.Context, consentID uuid.UUID) (*domain.A2AConsentRecord, error)
+	GetA2ATask(ctx context.Context, taskID uuid.UUID) (*domain.A2ATask, error)
+}
+
 // AuthServicer defines the methods from AuthService that handlers use
 type AuthServicer interface {
 	GetUsersByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error)

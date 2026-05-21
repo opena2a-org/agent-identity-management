@@ -14,12 +14,25 @@ import (
 
 // A2AHandler handles A2A (Agent-to-Agent) protocol endpoints
 type A2AHandler struct {
-	a2aService   *application.A2AService
-	agentService *application.AgentService
+	a2aService *application.A2AService
+	// a2aReader is the narrow read-side interface used by ownership-check
+	// LoadOwned loaders (RevokeConsent + UpdateTaskState — A3d-vii.b).
+	// Defaults to a2aService in NewA2AHandler; tests can swap a mock.
+	a2aReader A2AReader
+	// agentService is typed as the interface (AgentServicer) rather than the
+	// concrete *application.AgentService so tests can swap a mock. The
+	// constructor still accepts the concrete service — Go satisfies the
+	// interface implicitly at assignment. Used by loadOwnedAgent
+	// (A3d-vii.a) for tenant scoping.
+	agentService AgentServicer
 	auditService *application.AuditService
 }
 
-// NewA2AHandler creates a new A2A handler
+// NewA2AHandler creates a new A2A handler. a2aService is wired into both
+// the concrete-pointer slot (used for mutation methods like
+// RegisterAgentCard, RevokeConsent, UpdateA2ATaskState) and the narrow
+// A2AReader slot (used by ownership-check LoadOwned loaders). Tests may
+// overwrite a2aReader and/or agentService independently with mocks.
 func NewA2AHandler(
 	a2aService *application.A2AService,
 	agentService *application.AgentService,
@@ -27,9 +40,27 @@ func NewA2AHandler(
 ) *A2AHandler {
 	return &A2AHandler{
 		a2aService:   a2aService,
+		a2aReader:    a2aService,
 		agentService: agentService,
 		auditService: auditService,
 	}
+}
+
+// loadOwnedAgent is the A2A-specific wrapper around LoadOwned. It adapts
+// agentService.GetAgent (the only agent loader A2AHandler has access to)
+// to the LoadOwned loader signature. On any failure path (loader error,
+// cross-tenant mismatch, nil resource) it writes a 404 + {"error":"not
+// found"} body to the response and returns nil. Callers MUST `return
+// nil` to let fiber finalize the response.
+//
+// Mirrors the inline closure first used at GetSkillAttestations (A3c #43)
+// and consolidates the pattern for the A3d-vii.a sweep — wraps 11
+// agent-scoped handlers with a single line each.
+func (h *A2AHandler) loadOwnedAgent(c fiber.Ctx, agentID, orgID uuid.UUID) *domain.Agent {
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	return LoadOwned(c, loader, agentID, orgID, agentOrgID)
 }
 
 // ============================================================================
@@ -117,6 +148,17 @@ func (h *A2AHandler) GetAgentCard(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. Bound on both
+	// `/agents/:id/card` and `/cards/:id` (SDK alt); :id is the agent
+	// UUID in both. Cross-tenant access → 404 not found.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	// Get enhanced card with AIM extensions
@@ -212,6 +254,19 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vii.a): tenant-scope the path agent AFTER body
+	// validation (matches RecordMCPConnection precedent — preserves
+	// existing 400-shape contracts). Signing for a cross-tenant agent
+	// would expose key material via the signing service; LoadOwned
+	// short-circuits to 404.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
+
 	signature, err := h.a2aService.SignA2ARequest(
 		c.Context(),
 		agentID,
@@ -280,6 +335,17 @@ func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. Trust scores
+	// disclose competitive/operational information; cross-tenant reads
+	// are an existence + value leak. LoadOwned → 404 on mismatch.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	// First try to get existing trust score
@@ -371,10 +437,31 @@ func (h *A2AHandler) GetPeerTrustScore(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vii.a): tenant-scope the PATH agent only. A2A peer
+	// trust is fundamentally cross-org by protocol design — agents in
+	// different orgs build trust relationships through interactions, so
+	// the peer agent MUST NOT be scoped. The path agent however is the
+	// subject of the trust query and must belong to the caller's org;
+	// otherwise this endpoint becomes an enumeration oracle for which
+	// org-B agents trust which org-C peers.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
+
 	trust, err := h.a2aService.GetPeerTrustScore(c.Context(), agentID, peerID)
 	if err != nil {
+		// SECURITY (A3d-vii.a Phase 4.5): normalize the post-LoadOwned
+		// "not found" body to match `tenant_scope.go:respondResourceNotFound`.
+		// Pre-fix the body text differed between cross-tenant access ({"error":"not found"})
+		// and "peer relation missing for a same-org agent"
+		// ({"error":"Peer trust relationship not found"}), giving a same-org
+		// caller a side channel to distinguish the two states.
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Peer trust relationship not found",
+			"error": "not found",
 		})
 	}
 
@@ -525,7 +612,18 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 
 // UpdateTaskState updates the state of an A2A task
 // PUT /api/v1/a2a/tasks/:id/state
+// NOTE (A3d-vii): UpdateTaskState is intentionally NOT closed in
+// A3d-vii.a. The path :id is a TASK UUID, not an agent UUID — the
+// service does not take orgID and there is no current FK-via-agent
+// resolution helper. Tracked in the audit doc as A3d-vii.c follow-up
+// (LoadOwnedViaAgent on tasks once domain.A2ATask gets an AgentID
+// accessor exposed at the handler layer).
 func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	taskID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -549,6 +647,26 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid task state",
 		})
+	}
+
+	// SECURITY (A3d-vii.b): tenant-scope by verifying the task's
+	// ClientAgentID belongs to caller's org BEFORE mutating state.
+	// Without this gate ANY authenticated A2A caller could forge a
+	// completed/failed/cancelled transition on any tenant's task,
+	// poisoning downstream analytics and trust scores in the victim
+	// org. A2ATask has no direct OrganizationID; ownership flows
+	// through the client-side agent. RemoteAgentID is intentionally
+	// NOT scoped — A2A tasks are cross-org by protocol design.
+	task, err := h.a2aReader.GetA2ATask(c.Context(), taskID)
+	if err != nil || task == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	agentLoader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	if LoadOwned(c, agentLoader, task.ClientAgentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	if err := h.a2aService.UpdateA2ATaskState(c.Context(), taskID, state, req.ErrorCode, req.ErrorMessage); err != nil {
@@ -576,6 +694,15 @@ func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the path agent.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	skills, err := h.a2aService.GetAgentSkills(c.Context(), agentID)
@@ -807,14 +934,32 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 // RevokeConsent revokes a consent record
 // POST /api/v1/a2a/consent/:id/revoke
 func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
-	userID := c.Locals("user_id").(uuid.UUID)
+	orgID, userID, err := RequireOrgAndUserID(c)
+	if err != nil {
+		return err
+	}
 
 	consentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid consent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.b): tenant-scope by verifying the consent record
+	// belongs to caller's org BEFORE revoking. Without this gate ANY
+	// authenticated A2A caller could revoke any tenant's consent by
+	// guessing the UUID. A2AConsentRecord.OrganizationID is *uuid.UUID
+	// (nullable); consentOrgID returns uuid.Nil for unassigned records,
+	// which never matches a real caller's org → 404. The LoadOwned guard
+	// also precedes the auditService.LogAction call so a forged revoke
+	// attempt does NOT emit an audit row against the caller's org for a
+	// victim's resource.
+	consentLoader := func(id uuid.UUID) (*domain.A2AConsentRecord, error) {
+		return h.a2aReader.GetConsent(c.Context(), id)
+	}
+	if LoadOwned(c, consentLoader, consentID, orgID, consentOrgID) == nil {
+		return nil
 	}
 
 	var req struct {
@@ -1192,6 +1337,21 @@ func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. Bound on both
+	// `/consensus/:agentId/:skillId` and `/agents/:id/skills/:skillId/consensus`
+	// — both route forms identify the SAME agent UUID via the fallback
+	// parameter lookup above. SkillID is a non-UUID identifier and is
+	// not scoped here; cross-tenant skill enumeration via a same-org
+	// agent is bounded by what skills that agent has, which is already
+	// authorized.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
+
 	result, err := h.a2aService.GetConsensusStatus(c.Context(), agentID, skillID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1248,6 +1408,17 @@ func (h *A2AHandler) GetAgentAttestations(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. Sibling of
+	// GetSkillAttestations (A3c #43, already merged) on the SDK route
+	// `/a2a/agents/:id/attestations`.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	skillID := c.Query("skillId")
@@ -1417,6 +1588,16 @@ func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. SDK alt route
+	// `/a2a/trust/:id` — same semantics as GetA2ATrustScore above.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
+
 	// First try to get existing trust score
 	score, err := h.a2aService.GetA2ATrustScore(c.Context(), agentID)
 	if err != nil || score == nil || score.A2ATrustScore == nil || *score.A2ATrustScore == 0 {
@@ -1542,6 +1723,18 @@ func (h *A2AHandler) UpdateTrustScore(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-vii.a): tenant-scope the path agent AFTER body
+	// validation (preserves 400-shape contract for _InvalidJSON tests).
+	// Trust-score writes have integrity impact across the trust graph;
+	// LoadOwned confines the write to agents in caller's org.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, targetAgentID, orgID) == nil {
+		return nil
+	}
+
 	// Compute and return the updated trust score
 	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), targetAgentID)
 	if err != nil {
@@ -1580,6 +1773,25 @@ func (h *A2AHandler) RecordInteraction(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the PATH target agent.
+	// Placed AFTER body validation per the RecordMCPConnection
+	// precedent so existing `_InvalidJSON` tests retain their
+	// 400-shape contract. Note this is the opposite role from
+	// GetPeerTrustScore (where path :id is the caller-side agent and
+	// peer_id is the cross-org peer): here path :id IS the target
+	// peer, so scoping it confines the recompute side effect
+	// (`ComputeA2ATrustScore(targetAgentID)` at line ~1635) to agents
+	// in caller's own org. Without this gate, any authenticated A2A
+	// caller could trigger trust-score recomputation across any org
+	// by submitting fake interactions against a guessed target UUID.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, targetAgentID, orgID) == nil {
+		return nil
 	}
 
 	// Update peer trust based on interaction
@@ -1745,6 +1957,16 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
+	}
+
+	// SECURITY (A3d-vii.a): tenant-scope the path agent. SDK alt
+	// route `PUT /a2a/cards/:id`. Placed AFTER body validation.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	// Get existing card

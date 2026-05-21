@@ -17,7 +17,7 @@ import (
 // ===========================
 
 func TestNewVerificationHandler_NilDeps(t *testing.T) {
-	handler := NewVerificationHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewVerificationHandler(nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

@@ -23,6 +23,27 @@ import (
 // tenant boundaries; see tenant_scope.go:41-46 in handlers.
 var ErrAttestationNotFound = errors.New("attestation not found")
 
+// ErrAttestationFailed is returned by VerifyAndRecordAttestation when
+// the attestation cannot proceed because of an existence-or-ownership
+// problem: the MCP server does not exist, the agent does not exist, the
+// agent belongs to a different organization than the MCP server, the
+// agent is unverified, or its trust score is too low. The cases are
+// deliberately collapsed to a single sentinel so the HTTP layer cannot
+// echo distinguishable error strings back to the caller — that would
+// leak victim-org state (agent status enum, trust score, agent existence)
+// to a same-token-different-body attacker.
+var ErrAttestationFailed = errors.New("attestation failed")
+
+// ErrAttestationInvalid is returned by VerifyAndRecordAttestation when
+// the attestation payload itself is malformed or fails cryptographic
+// validation: malformed agent_id, missing public key, signature
+// verification failure, challenge replay, expired timestamp. Separate
+// from ErrAttestationFailed because the HTTP layer maps both to a
+// single 403 response — keeping them as distinct sentinels lets server
+// logs differentiate the two without exposing the difference to the
+// client.
+var ErrAttestationInvalid = errors.New("attestation invalid")
+
 // Multi-Agent Consensus Configuration
 // These thresholds determine when an MCP server is considered "verified" by the community
 const (
@@ -221,7 +242,27 @@ func (s *MCPAttestationService) GenerateChallenge(
 	}, nil
 }
 
-// VerifyAndRecordAttestation verifies and records an agent's attestation of an MCP server
+// VerifyAndRecordAttestation verifies and records an agent's attestation of an MCP server.
+//
+// Gate ordering is security-critical (see todo
+// 2026-05-21-attestmcp-body-agentid-class2-idor.md). The body-supplied
+// AgentID lets a holder of org-A's Ed25519 token target a victim agent
+// in org B. Every existence- and ownership-related check MUST happen
+// BEFORE any status / trust / signature path that would leak victim
+// state or write into the victim's alert table:
+//
+//	1. Parse agent_id from the body payload.
+//	2. Load the path-MCP. Not-found → ErrAttestationFailed.
+//	3. Load the body-Agent.  Not-found → ErrAttestationFailed.
+//	4. ORG ISOLATION: mcpServer.OrganizationID == agent.OrganizationID.
+//	   Mismatch → ErrAttestationFailed.
+//	5. Only NOW: status, trust score, alert writes, signature, challenge,
+//	   timestamp, persistence.
+//
+// All early-gate failures collapse to a single sentinel
+// (ErrAttestationFailed) so the HTTP layer cannot leak which check
+// fired. Post-gate signature/payload errors collapse to
+// ErrAttestationInvalid.
 func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	ctx context.Context,
 	mcpServerID uuid.UUID,
@@ -230,25 +271,64 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	// 1. Parse agent ID from attestation
 	agentID, err := uuid.Parse(req.Attestation.AgentID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid agent_id in attestation: %w", err)
+		return nil, fmt.Errorf("%w: invalid agent_id in attestation: %v", ErrAttestationInvalid, err)
 	}
 
-	// 2. Fetch agent (MUST be Ed25519 verified)
+	// 2. Verify MCP server exists FIRST (before any agent lookup or alert
+	// write). Collapsing not-found to ErrAttestationFailed prevents a
+	// cross-tenant MCP-ID probe from differentiating "MCP exists in
+	// another org" from "MCP does not exist."
+	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
+	if err != nil || mcpServer == nil {
+		fmt.Printf("🔒 AttestMCP: mcp server lookup failed for %s: %v\n", mcpServerID, err)
+		return nil, ErrAttestationFailed
+	}
+
+	// 3. Load agent. Same sentinel for not-found.
 	agent, err := s.agentRepo.GetByID(agentID)
-	if err != nil {
-		return nil, fmt.Errorf("agent not found: %w", err)
+	if err != nil || agent == nil {
+		fmt.Printf("🔒 AttestMCP: agent lookup failed for %s: %v\n", agentID, err)
+		return nil, ErrAttestationFailed
+	}
+
+	// 4. ORGANIZATION ISOLATION: agent and MCP server must share an
+	// organization. This check MUST precede every status / trust /
+	// alert / signature path — otherwise a holder of org-A's Ed25519
+	// token can use a body-supplied victim AgentID in org B to probe
+	// victim agent status, leak the victim's trust score, and plant
+	// attacker-controlled Alert rows in the victim org. The check is
+	// the single trust boundary for body-supplied AgentIDs and replaces
+	// what would otherwise be a handler-layer LoadOwned (which the
+	// handler comment correctly rejects because Ed25519 signature is
+	// the canonical caller-identity proof).
+	//
+	// Defense-in-depth: explicitly reject uuid.Nil on either side. The
+	// DB enforces NOT NULL on agents.organization_id and
+	// mcp_servers.organization_id, so production rows never have
+	// uuid.Nil here — but a future repo bug that returns a zero-valued
+	// struct on miss would otherwise satisfy the equality check
+	// (uuid.Nil == uuid.Nil). Failing fast on uuid.Nil collapses both
+	// "row not found" and "row has zero org" into ErrAttestationFailed
+	// without touching the cross-org disclosure surface.
+	if agent.OrganizationID == uuid.Nil || mcpServer.OrganizationID == uuid.Nil ||
+		mcpServer.OrganizationID != agent.OrganizationID {
+		fmt.Printf("🔒 AttestMCP organization isolation: agent %s (org: %s) targeted MCP %s (org: %s)\n",
+			agentID, agent.OrganizationID, mcpServerID, mcpServer.OrganizationID)
+		return nil, ErrAttestationFailed
 	}
 
 	fmt.Printf("🔍 Agent fetched from DB: ID=%s, Status=%s, VerifiedAt=%v\n", agent.ID, agent.Status, agent.VerifiedAt)
 
 	if agent.Status != domain.AgentStatusVerified {
 		fmt.Printf("❌ Agent status check failed: expected %s, got %s\n", domain.AgentStatusVerified, agent.Status)
-		return nil, fmt.Errorf("only verified agents can attest MCPs (agent status: %s)", agent.Status)
+		return nil, fmt.Errorf("%w: agent status %s", ErrAttestationFailed, agent.Status)
 	}
 
 	fmt.Printf("✅ Agent status check passed: %s\n", agent.Status)
 
-	// 2b. Check agent trust score - block if too low, warn if borderline
+	// 5. Check agent trust score - block if too low, warn if borderline.
+	// SAFE: any alert.Create below runs with agent.OrganizationID, which
+	// EQUALS mcpServer.OrganizationID by the gate at step 4.
 	minTrust := getMinAgentTrustForAttestation()
 	warnThreshold := getWarnAgentTrustThreshold()
 
@@ -262,19 +342,13 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 
 		// Create security alert for blocked attestation
 		if s.alertRepo != nil {
-			mcpServer, _ := s.mcpRepo.GetByID(mcpServerID)
-			mcpName := mcpServerID.String()
-			if mcpServer != nil {
-				mcpName = mcpServer.Name
-			}
-
 			alert := &domain.Alert{
 				ID:             uuid.New(),
 				OrganizationID: agent.OrganizationID,
 				AlertType:      domain.AlertLowTrustAttestationBlock,
 				Severity:       domain.AlertSeverityHigh,
 				Title:          fmt.Sprintf("Low-trust agent blocked from attesting MCP server"),
-				Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) attempted to attest MCP server '%s' but was blocked due to trust score below threshold (%.0f%%).", agent.DisplayName, agent.TrustScore*100, mcpName, minTrust*100),
+				Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) attempted to attest MCP server '%s' but was blocked due to trust score below threshold (%.0f%%).", agent.DisplayName, agent.TrustScore*100, mcpServer.Name, minTrust*100),
 				ResourceType:   "agent",
 				ResourceID:     agent.ID,
 				AgentName:      agent.DisplayName,
@@ -282,7 +356,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 					"agentTrustScore": agent.TrustScore * 100,
 					"minThreshold":    minTrust * 100,
 					"mcpServerId":     mcpServerID.String(),
-					"mcpServerName":   mcpName,
+					"mcpServerName":   mcpServer.Name,
 					"action":          "blocked",
 				},
 				CreatedAt: time.Now().UTC(),
@@ -294,7 +368,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 			}
 		}
 
-		return nil, fmt.Errorf("agent trust score (%.1f%%) is below minimum threshold (%.0f%%) required for attestation", agent.TrustScore*100, minTrust*100)
+		return nil, fmt.Errorf("%w: trust score %.1f%% below minimum %.0f%%", ErrAttestationFailed, agent.TrustScore*100, minTrust*100)
 	}
 
 	// Check for borderline trust score - allow but create warning alert
@@ -302,19 +376,13 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		fmt.Printf("⚠️ Agent trust score %.2f%% is below warning threshold %.0f%% - creating alert\n",
 			agent.TrustScore*100, warnThreshold*100)
 
-		mcpServer, _ := s.mcpRepo.GetByID(mcpServerID)
-		mcpName := mcpServerID.String()
-		if mcpServer != nil {
-			mcpName = mcpServer.Name
-		}
-
 		alert := &domain.Alert{
 			ID:             uuid.New(),
 			OrganizationID: agent.OrganizationID,
 			AlertType:      domain.AlertLowTrustAttestation,
 			Severity:       domain.AlertSeverityWarning,
 			Title:          fmt.Sprintf("Low-trust agent attesting MCP server"),
-			Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) is attesting MCP server '%s'. This attestation will have reduced weight in confidence calculations.", agent.DisplayName, agent.TrustScore*100, mcpName),
+			Description:    fmt.Sprintf("Agent '%s' (trust score: %.1f%%) is attesting MCP server '%s'. This attestation will have reduced weight in confidence calculations.", agent.DisplayName, agent.TrustScore*100, mcpServer.Name),
 			ResourceType:   "agent",
 			ResourceID:     agent.ID,
 			AgentName:      agent.DisplayName,
@@ -322,7 +390,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 				"agentTrustScore": agent.TrustScore * 100,
 				"warnThreshold":   warnThreshold * 100,
 				"mcpServerId":     mcpServerID.String(),
-				"mcpServerName":   mcpName,
+				"mcpServerName":   mcpServer.Name,
 				"action":          "allowed_with_warning",
 			},
 			CreatedAt: time.Now().UTC(),
@@ -335,13 +403,13 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	}
 
 	if agent.PublicKey == nil || *agent.PublicKey == "" {
-		return nil, fmt.Errorf("agent has no public key registered")
+		return nil, fmt.Errorf("%w: agent has no public key registered", ErrAttestationInvalid)
 	}
 
-	// 3. Verify signature using agent's public key
+	// 6. Verify signature using agent's public key
 	attestationJSON, err := req.Attestation.ToCanonicalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize attestation: %w", err)
+		return nil, fmt.Errorf("%w: failed to serialize attestation: %v", ErrAttestationInvalid, err)
 	}
 
 	// Debug: Print what we're verifying
@@ -353,17 +421,17 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	valid, err := s.cryptoService.Verify(*agent.PublicKey, attestationJSON, req.Signature)
 	if err != nil {
 		fmt.Printf("❌ Crypto verification error: %v\n", err)
-		return nil, fmt.Errorf("signature verification failed: %w", err)
+		return nil, fmt.Errorf("%w: signature verification error: %v", ErrAttestationInvalid, err)
 	}
 
 	if !valid {
 		fmt.Printf("❌ Signature verification returned FALSE\n")
-		return nil, fmt.Errorf("invalid attestation signature")
+		return nil, ErrAttestationInvalid
 	}
 
 	fmt.Printf("✅ Attestation signature verification PASSED\n")
 
-	// 4. PROOF OF KEY POSSESSION: Validate server-generated challenge (prevents replay attacks)
+	// 7. PROOF OF KEY POSSESSION: Validate server-generated challenge (prevents replay attacks)
 	// If a challenge is provided, validate it. For backward compatibility, challenge is optional
 	// but required for new attestations (when challenge is present in payload)
 	var challengeRecord *domain.AttestationChallenge
@@ -371,33 +439,33 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		challengeRecord, err = s.attestationRepo.GetChallengeByValue(req.Attestation.Challenge)
 		if err != nil {
 			fmt.Printf("❌ Challenge not found: %s\n", req.Attestation.Challenge)
-			return nil, fmt.Errorf("invalid or unknown challenge - please request a new challenge")
+			return nil, fmt.Errorf("%w: invalid or unknown challenge", ErrAttestationInvalid)
 		}
 
 		// Validate challenge hasn't expired
 		if time.Now().UTC().After(challengeRecord.ExpiresAt) {
 			fmt.Printf("❌ Challenge expired at %s\n", challengeRecord.ExpiresAt)
-			return nil, fmt.Errorf("challenge expired - please request a new challenge")
+			return nil, fmt.Errorf("%w: challenge expired", ErrAttestationInvalid)
 		}
 
 		// Validate challenge hasn't been used (replay attack prevention)
 		if challengeRecord.UsedAt != nil {
 			fmt.Printf("❌ Challenge already used at %s (replay attack detected)\n", challengeRecord.UsedAt)
-			return nil, fmt.Errorf("challenge already used (possible replay attack)")
+			return nil, fmt.Errorf("%w: challenge already used", ErrAttestationInvalid)
 		}
 
 		// Validate challenge was issued for this agent
 		if challengeRecord.AgentID != agentID {
 			fmt.Printf("❌ Challenge was issued for different agent: %s (expected %s)\n",
 				challengeRecord.AgentID, agentID)
-			return nil, fmt.Errorf("challenge was issued for a different agent")
+			return nil, fmt.Errorf("%w: challenge agent mismatch", ErrAttestationInvalid)
 		}
 
 		// Validate challenge was issued for this MCP server
 		if challengeRecord.MCPServerID != mcpServerID {
 			fmt.Printf("❌ Challenge was issued for different MCP: %s (expected %s)\n",
 				challengeRecord.MCPServerID, mcpServerID)
-			return nil, fmt.Errorf("challenge was issued for a different MCP server")
+			return nil, fmt.Errorf("%w: challenge mcp mismatch", ErrAttestationInvalid)
 		}
 
 		fmt.Printf("✅ Challenge validated: proof of private key possession confirmed\n")
@@ -405,27 +473,14 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		fmt.Printf("⚠️  No challenge provided (legacy attestation mode - consider upgrading SDK)\n")
 	}
 
-	// 5. Check attestation is recent (< 5 minutes old)
+	// 8. Check attestation is recent (< 5 minutes old)
 	attestationTime, err := time.Parse(time.RFC3339, req.Attestation.Timestamp)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timestamp format: %w", err)
+		return nil, fmt.Errorf("%w: invalid timestamp format: %v", ErrAttestationInvalid, err)
 	}
 
 	if time.Since(attestationTime) > 5*time.Minute {
-		return nil, fmt.Errorf("attestation expired (older than 5 minutes)")
-	}
-
-	// 6. Verify MCP server exists and organization isolation
-	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
-	if err != nil {
-		return nil, fmt.Errorf("mcp server not found: %w", err)
-	}
-
-	// ORGANIZATION ISOLATION: Agent can only attest MCP servers in the same organization
-	if mcpServer.OrganizationID != agent.OrganizationID {
-		fmt.Printf("🔒 Organization isolation violation: agent %s (org: %s) attempted to attest MCP %s (org: %s)\n",
-			agentID, agent.OrganizationID, mcpServerID, mcpServer.OrganizationID)
-		return nil, fmt.Errorf("cannot attest MCP servers from other organizations")
+		return nil, fmt.Errorf("%w: attestation expired (older than 5 minutes)", ErrAttestationInvalid)
 	}
 
 	// 7. Mark challenge as used (MUST happen before storing attestation to prevent race conditions)
