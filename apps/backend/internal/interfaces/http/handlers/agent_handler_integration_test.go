@@ -282,7 +282,11 @@ func TestAgentHandler_GetAgent_WrongOrganization(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	// A3b: cross-tenant access returns 404 (not 403) to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
 }
 
 // ===========================
@@ -1920,7 +1924,11 @@ func TestAgentHandler_GetAgentAlerts_AccessDenied(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	// A3b: cross-tenant access returns 404 (not 403) to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
 }
 
 func TestAgentHandler_GetAgentAlerts_SuccessWithPagination(t *testing.T) {
@@ -2376,7 +2384,11 @@ func TestAgentHandler_DownloadSDK_WrongOrganization(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	// A3b: cross-tenant access returns 404 (not 403) to avoid leaking
+	// resource existence across orgs. See tenant_scope.go:41-46.
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
 }
 
 func TestAgentHandler_DownloadSDK_CredentialsError(t *testing.T) {
@@ -2614,4 +2626,183 @@ func TestAgentHandler_GetAgentTrustScoreHistory_InvalidAgentID(t *testing.T) {
 
 	// The handler delegates to trustScoreHandler which is nil, so expect 500
 	assert.True(t, resp.StatusCode >= 400, "Expected error status")
+}
+
+// ===========================
+// A3b: cross-tenant access on read-only handlers returns 404 (not 403).
+// New tests for handlers previously without cross-org coverage. Pairs with
+// the flips of *_WrongOrganization / *_AccessDenied tests above for the
+// same handler family.
+// ===========================
+
+func TestAgentHandler_GetCredentials_CrossOrgReturns404(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/credentials", handler.GetCredentials)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/credentials", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+}
+
+func TestAgentHandler_GetAgentMCPServers_CrossOrgReturns404(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/mcp-servers", handler.GetAgentMCPServers)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/mcp-servers", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+}
+
+func TestAgentHandler_GetAgentByIdentifier_UUID_CrossOrgReturns404(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/by-identifier/:identifier", handler.GetAgentByIdentifier)
+
+	req := httptest.NewRequest("GET", "/agents/by-identifier/"+agentID.String(), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+}
+
+func TestAgentHandler_GetAgentActivity_CrossOrgReturns404(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+	differentOrgID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: differentOrgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/activity", handler.GetAgentActivity)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/activity", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
 }
