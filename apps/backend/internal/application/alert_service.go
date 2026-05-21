@@ -3,12 +3,25 @@ package application
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrAlertNotFound is returned by AlertService write paths
+// (AcknowledgeAlert / ResolveAlert) when the alert does not exist OR
+// exists in another organization. The two cases are deliberately
+// collapsed to preserve existence-secrecy across tenant boundaries —
+// without this collapse, the response distinguishes "wrong UUID" from
+// "right UUID, wrong org" and becomes a cross-tenant existence oracle
+// for alert IDs (also enabling the historical system-wide ack/resolve
+// IDOR closed here). Handler maps this sentinel to 404 with a fixed
+// body; see tenant_scope.go:respondResourceNotFound for the matching
+// shape on the path-id helper side.
+var ErrAlertNotFound = errors.New("alert not found")
 
 // AlertService handles alert management
 type AlertService struct {
@@ -190,17 +203,32 @@ func (s *AlertService) GetAlerts(
 	return alerts, total, nil
 }
 
-// AcknowledgeAlert acknowledges an alert
+// AcknowledgeAlert acknowledges an alert.
+//
+// SECURITY (A3d-v R7 follow-up): before the prior fix, orgID was
+// accepted in the signature but never used — the repo call ran
+// `WHERE id = $1` system-wide, so any authenticated caller could
+// acknowledge any tenant's alert by guessing the UUID. The lint
+// extension shipped in PR #189 flagged this as class #3
+// (accepted-but-unused). The fix loads the alert via GetByID, compares
+// alert.OrganizationID to the caller's orgID, and collapses
+// not-found + cross-tenant + uuid.Nil mismatch to ErrAlertNotFound so
+// the handler returns a fixed 404 with no existence-oracle side
+// channel. Phase 4.5 defense-in-depth: the gate also rejects uuid.Nil
+// on either side (production rows are NOT NULL but defends against
+// future repo bugs returning zero-valued structs).
 func (s *AlertService) AcknowledgeAlert(
 	ctx context.Context,
 	alertID uuid.UUID,
 	orgID uuid.UUID,
 	userID uuid.UUID,
 ) error {
-	// Get alert first to have full data for webhook
 	alert, err := s.alertRepo.GetByID(alertID)
-	if err != nil {
-		return err
+	if err != nil || alert == nil {
+		return ErrAlertNotFound
+	}
+	if orgID == uuid.Nil || alert.OrganizationID == uuid.Nil || alert.OrganizationID != orgID {
+		return ErrAlertNotFound
 	}
 
 	if err := s.alertRepo.Acknowledge(alertID, userID); err != nil {
@@ -226,7 +254,16 @@ func (s *AlertService) BulkAcknowledgeAlerts(
 	return s.alertRepo.BulkAcknowledge(orgID, userID)
 }
 
-// ResolveAlert marks an alert as resolved
+// ResolveAlert marks an alert as resolved.
+//
+// SECURITY (A3d-v R7 follow-up): same orgID-accepted-but-unused IDOR
+// as AcknowledgeAlert above. Same Load → org-check → ErrAlertNotFound
+// collapse pattern. See AcknowledgeAlert comment for the rationale.
+//
+// Implementation note: the underlying ResolveAlert call still maps to
+// alertRepo.Acknowledge until the domain model gains a resolved
+// status (preserves pre-existing TODO behavior; not in scope of the
+// security fix).
 func (s *AlertService) ResolveAlert(
 	ctx context.Context,
 	alertID uuid.UUID,
@@ -234,8 +271,13 @@ func (s *AlertService) ResolveAlert(
 	userID uuid.UUID,
 	resolution string,
 ) error {
-	// For now, just acknowledge it
-	// TODO: Add a resolved status to the domain model
+	alert, err := s.alertRepo.GetByID(alertID)
+	if err != nil || alert == nil {
+		return ErrAlertNotFound
+	}
+	if orgID == uuid.Nil || alert.OrganizationID == uuid.Nil || alert.OrganizationID != orgID {
+		return ErrAlertNotFound
+	}
 	return s.alertRepo.Acknowledge(alertID, userID)
 }
 

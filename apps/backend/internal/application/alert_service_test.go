@@ -534,8 +534,10 @@ func TestAlertService_AcknowledgeAlert_NotFound(t *testing.T) {
 	ctx := context.Background()
 	err := service.AcknowledgeAlert(ctx, alertID, orgID, userID)
 
-	// Assert
-	assert.Error(t, err)
+	// Assert: not-found MUST collapse to the existence-secret sentinel
+	// — a regression that returned the raw GetByID error would silently
+	// pass `assert.Error` but is an existence-oracle leak.
+	assert.ErrorIs(t, err, ErrAlertNotFound)
 
 	mockAlertRepo.AssertExpectations(t)
 }
@@ -951,7 +953,14 @@ func TestAlertService_ResolveAlert_Success(t *testing.T) {
 	alertID := uuid.New()
 	orgID := uuid.New()
 	userID := uuid.New()
+	alert := createTestAlertForAlerts(orgID)
+	alert.ID = alertID
 
+	// A3d-v R7 follow-up: ResolveAlert now loads the alert via GetByID
+	// to enforce tenant ownership before mutating. Same-org test must
+	// set up the GetByID mock or the load fails and the call returns
+	// ErrAlertNotFound.
+	mockAlertRepo.On("GetByID", alertID).Return(alert, nil)
 	mockAlertRepo.On("Acknowledge", alertID, userID).Return(nil)
 
 	// Act
@@ -974,7 +983,10 @@ func TestAlertService_ResolveAlert_Error(t *testing.T) {
 	alertID := uuid.New()
 	orgID := uuid.New()
 	userID := uuid.New()
+	alert := createTestAlertForAlerts(orgID)
+	alert.ID = alertID
 
+	mockAlertRepo.On("GetByID", alertID).Return(alert, nil)
 	mockAlertRepo.On("Acknowledge", alertID, userID).Return(errors.New("database error"))
 
 	// Act
@@ -984,6 +996,84 @@ func TestAlertService_ResolveAlert_Error(t *testing.T) {
 	// Assert
 	assert.Error(t, err)
 
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// A3d-v R7 follow-up: cross-tenant AcknowledgeAlert must collapse to
+// ErrAlertNotFound. Before the fix, the orgID parameter was accepted
+// but never used and ANY caller could acknowledge ANY tenant's alert
+// by guessing the UUID. The new behavior loads the alert, compares
+// alert.OrganizationID to the caller's orgID, and returns the
+// existence-secret sentinel on mismatch.
+func TestAlertService_AcknowledgeAlert_CrossTenantReturnsNotFound(t *testing.T) {
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	alertID := uuid.New()
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	userID := uuid.New()
+	victimAlert := createTestAlertForAlerts(victimOrgID)
+	victimAlert.ID = alertID
+
+	// The repo returns the victim's alert. The service MUST reject
+	// before reaching Acknowledge — Acknowledge is intentionally NOT
+	// set up on the mock so a regression that calls it surfaces as a
+	// mock-unexpected-call failure.
+	mockAlertRepo.On("GetByID", alertID).Return(victimAlert, nil)
+
+	err := service.AcknowledgeAlert(context.Background(), alertID, callerOrgID, userID)
+
+	assert.ErrorIs(t, err, ErrAlertNotFound)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// A3d-v R7 follow-up: cross-tenant ResolveAlert must collapse to
+// ErrAlertNotFound. Same shape as AcknowledgeAlert above.
+func TestAlertService_ResolveAlert_CrossTenantReturnsNotFound(t *testing.T) {
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	alertID := uuid.New()
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	userID := uuid.New()
+	victimAlert := createTestAlertForAlerts(victimOrgID)
+	victimAlert.ID = alertID
+
+	mockAlertRepo.On("GetByID", alertID).Return(victimAlert, nil)
+
+	err := service.ResolveAlert(context.Background(), alertID, callerOrgID, userID, "x")
+
+	assert.ErrorIs(t, err, ErrAlertNotFound)
+	mockAlertRepo.AssertExpectations(t)
+}
+
+// A3d-v R7 follow-up defense-in-depth: a uuid.Nil callerOrgID MUST
+// NOT match a uuid.Nil alert.OrganizationID. DB enforces NOT NULL on
+// alerts.organization_id, but defends against future repo bugs that
+// might return a zero-valued struct.
+func TestAlertService_AcknowledgeAlert_NilCallerOrgRejected(t *testing.T) {
+	mockAlertRepo := new(MockAlertRepoForAlerts)
+	mockAgentRepo := new(MockAgentRepoForAlerts)
+
+	service := NewAlertService(mockAlertRepo, mockAgentRepo, nil)
+
+	alertID := uuid.New()
+	userID := uuid.New()
+	// Both alert and caller have uuid.Nil orgID — a naive equality
+	// check would match. The guard MUST reject.
+	pathologicalAlert := &domain.Alert{ID: alertID, OrganizationID: uuid.Nil}
+
+	mockAlertRepo.On("GetByID", alertID).Return(pathologicalAlert, nil)
+
+	err := service.AcknowledgeAlert(context.Background(), alertID, uuid.Nil, userID)
+
+	assert.ErrorIs(t, err, ErrAlertNotFound)
 	mockAlertRepo.AssertExpectations(t)
 }
 
