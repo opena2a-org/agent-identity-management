@@ -1073,6 +1073,20 @@ func (m *MockAgentRepositoryerImpl) GetByMCPServerName(mcpServerName string, org
 	return []*domain.Agent{}, nil
 }
 
+// MockMCPServerRepositoryerImpl satisfies the mcpServerByIDLookup
+// single-method subset used by TagHandler (A3d-ii). Mirrors
+// MockAgentRepositoryerImpl in shape.
+type MockMCPServerRepositoryerImpl struct {
+	GetByIDFunc func(id uuid.UUID) (*domain.MCPServer, error)
+}
+
+func (m *MockMCPServerRepositoryerImpl) GetByID(id uuid.UUID) (*domain.MCPServer, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(id)
+	}
+	return nil, nil
+}
+
 // MockVerificationEventRepositoryerImpl implements VerificationEventRepositoryer interface
 type MockVerificationEventRepositoryerImpl struct {
 	GetByMCPServerFunc func(mcpServerID uuid.UUID, limit, offset int) ([]*domain.VerificationEvent, int, error)

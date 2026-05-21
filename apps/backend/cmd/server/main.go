@@ -1142,7 +1142,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,
-			repos.Agent, // A3d-i: agent-scoped tag handlers verify agent.OrganizationID via LoadOwned
+			repos.Agent,     // A3d-i: agent-scoped tag handlers verify agent.OrganizationID via LoadOwned
+			repos.MCPServer, // A3d-ii: MCP-scoped tag handlers verify mcpServer.OrganizationID via LoadOwned
 		),
 		SDK: handlers.NewSDKHandler(
 			jwtService,

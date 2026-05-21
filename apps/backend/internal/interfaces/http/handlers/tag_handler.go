@@ -9,11 +9,21 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
+// mcpServerByIDLookup is the single-method subset of any MCP server
+// repository this handler needs. Mirrors agentByIDLookup in
+// capability_handler.go — concrete *repository.MCPServerRepository and
+// any test-side mock satisfy it via Go structural typing.
+type mcpServerByIDLookup interface {
+	GetByID(id uuid.UUID) (*domain.MCPServer, error)
+}
+
 // TagHandler handles HTTP requests for tag management.
 //
-// SECURITY (A3d-i): the handler holds an agentRepo lookup so that agent-
-// scoped tag operations (AddTagsToAgent, RemoveTagFromAgent, GetAgentTags,
-// SuggestTagsForAgent) can verify the path-supplied agentID belongs to
+// SECURITY (A3d-i, A3d-ii): the handler holds repository lookups so
+// agent-scoped (AddTagsToAgent, RemoveTagFromAgent, GetAgentTags,
+// SuggestTagsForAgent) and MCP-server-scoped (AddTagsToMCPServer,
+// RemoveTagFromMCPServer, GetMCPServerTags, SuggestTagsForMCPServer)
+// tag operations can verify the path-supplied resource ID belongs to
 // the caller's org BEFORE invoking the tag service. The tag service
 // itself does not enforce org scoping on these methods — adding the
 // check at the service layer would require a larger refactor (service
@@ -21,15 +31,17 @@ import (
 // the smaller change that closes the cross-tenant existence side
 // channel today. See tenant_scope.go:41-46.
 type TagHandler struct {
-	tagService *application.TagService
-	agentRepo  agentByIDLookup
+	tagService    *application.TagService
+	agentRepo     agentByIDLookup
+	mcpServerRepo mcpServerByIDLookup
 }
 
 // NewTagHandler creates a new tag handler instance.
-func NewTagHandler(tagService *application.TagService, agentRepo domain.AgentRepository) *TagHandler {
+func NewTagHandler(tagService *application.TagService, agentRepo domain.AgentRepository, mcpServerRepo domain.MCPServerRepository) *TagHandler {
 	return &TagHandler{
-		tagService: tagService,
-		agentRepo:  agentRepo,
+		tagService:    tagService,
+		agentRepo:     agentRepo,
+		mcpServerRepo: mcpServerRepo,
 	}
 }
 
@@ -495,6 +507,11 @@ func (h *TagHandler) SuggestTagsForAgent(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/mcp-servers/{id}/tags [post]
 func (h *TagHandler) AddTagsToMCPServer(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Get authenticated user
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
@@ -531,6 +548,14 @@ func (h *TagHandler) AddTagsToMCPServer(c fiber.Ctx) error {
 		tagIDs[i] = id
 	}
 
+	// SECURITY (A3d-ii): verify the path mcpServerID belongs to the caller's
+	// org before mutating tag relations. Cross-tenant tagging would let a
+	// caller in org A label an MCP server in org B with their own tags.
+	// Returns 404 on cross-tenant for existence-secrecy.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Add tags to MCP server
 	if err := h.tagService.AddTagsToMCPServer(c.Context(), mcpServerID, tagIDs, userID); err != nil {
 		// Check if it's a Community Edition limit error
@@ -560,6 +585,11 @@ func (h *TagHandler) AddTagsToMCPServer(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/mcp-servers/{id}/tags/{tagId} [delete]
 func (h *TagHandler) RemoveTagFromMCPServer(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse MCP server ID
 	mcpServerID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -574,6 +604,12 @@ func (h *TagHandler) RemoveTagFromMCPServer(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid tag ID",
 		})
+	}
+
+	// SECURITY (A3d-ii): verify the path mcpServerID belongs to the caller's
+	// org before mutating tag relations. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Remove tag from MCP server
@@ -599,12 +635,23 @@ func (h *TagHandler) RemoveTagFromMCPServer(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/mcp-servers/{id}/tags [get]
 func (h *TagHandler) GetMCPServerTags(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse MCP server ID
 	mcpServerID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid MCP server ID",
 		})
+	}
+
+	// SECURITY (A3d-ii): verify the path mcpServerID belongs to the caller's
+	// org before reading tag list. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Get MCP server tags
@@ -631,12 +678,23 @@ func (h *TagHandler) GetMCPServerTags(c fiber.Ctx) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/mcp-servers/{id}/tags/suggestions [get]
 func (h *TagHandler) SuggestTagsForMCPServer(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	// Parse MCP server ID
 	mcpServerID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid MCP server ID",
 		})
+	}
+
+	// SECURITY (A3d-ii): verify the path mcpServerID belongs to the caller's
+	// org before reading tag suggestions. See tenant_scope.go:41-46.
+	if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	// Get tag suggestions
