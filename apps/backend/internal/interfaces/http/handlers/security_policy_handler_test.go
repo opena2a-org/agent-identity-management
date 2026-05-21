@@ -158,7 +158,12 @@ func TestSecurityPolicyHandler_TogglePolicy_InvalidID(t *testing.T) {
 func TestSecurityPolicyHandler_TogglePolicy_InvalidJSON(t *testing.T) {
 	handler := &SecurityPolicyHandler{}
 	app := fiber.New()
-	app.Put("/security/policies/:id/toggle", handler.TogglePolicy)
+	// Use the org-context wrapper so the new RequireOrganizationID
+	// guard added in the SecurityPolicyHandler cross-tenant fix is
+	// satisfied, leaving JSON-bind as the failure mode the test
+	// asserts on (matches the wrapper convention used by the
+	// UpdatePolicy_InvalidJSON test in this file).
+	app.Put("/security/policies/:id/toggle", withSecurityPolicyContext(handler.TogglePolicy))
 
 	req := httptest.NewRequest("PUT", "/security/policies/"+uuid.New().String()+"/toggle", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
