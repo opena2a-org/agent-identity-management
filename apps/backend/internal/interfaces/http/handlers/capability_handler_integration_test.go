@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -26,6 +27,7 @@ import (
 
 func TestCapabilityHandler_GetAgentCapabilities_Success(t *testing.T) {
 	agentID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
 		GetAgentCapabilitiesFunc: func(ctx context.Context, aID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {
@@ -37,9 +39,17 @@ func TestCapabilityHandler_GetAgentCapabilities_Success(t *testing.T) {
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
-	app.Get("/agents/:id/capabilities", handler.GetAgentCapabilities)
+	app.Get("/agents/:id/capabilities", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetAgentCapabilities(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/capabilities", nil)
 	resp, err := app.Test(req)
@@ -55,10 +65,14 @@ func TestCapabilityHandler_GetAgentCapabilities_Success(t *testing.T) {
 }
 
 func TestCapabilityHandler_GetAgentCapabilities_InvalidID(t *testing.T) {
+	orgID := uuid.New()
 	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
 
 	app := fiber.New()
-	app.Get("/agents/:id/capabilities", handler.GetAgentCapabilities)
+	app.Get("/agents/:id/capabilities", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetAgentCapabilities(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/invalid-uuid/capabilities", nil)
 	resp, err := app.Test(req)
@@ -70,6 +84,7 @@ func TestCapabilityHandler_GetAgentCapabilities_InvalidID(t *testing.T) {
 
 func TestCapabilityHandler_GetAgentCapabilities_ServiceError(t *testing.T) {
 	agentID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
 		GetAgentCapabilitiesFunc: func(ctx context.Context, aID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {
@@ -78,9 +93,17 @@ func TestCapabilityHandler_GetAgentCapabilities_ServiceError(t *testing.T) {
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
-	app.Get("/agents/:id/capabilities", handler.GetAgentCapabilities)
+	app.Get("/agents/:id/capabilities", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetAgentCapabilities(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/capabilities", nil)
 	resp, err := app.Test(req)
@@ -187,6 +210,7 @@ func TestCapabilityHandler_RevokeCapability_ServiceError(t *testing.T) {
 
 func TestCapabilityHandler_GetViolationsByAgent_Success(t *testing.T) {
 	agentID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
 		GetViolationsByAgentFunc: func(ctx context.Context, aID uuid.UUID, limit, offset int) ([]*domain.CapabilityViolation, int, error) {
@@ -197,9 +221,17 @@ func TestCapabilityHandler_GetViolationsByAgent_Success(t *testing.T) {
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
-	app.Get("/agents/:id/violations", handler.GetViolationsByAgent)
+	app.Get("/agents/:id/violations", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetViolationsByAgent(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/violations", nil)
 	resp, err := app.Test(req)
@@ -216,10 +248,14 @@ func TestCapabilityHandler_GetViolationsByAgent_Success(t *testing.T) {
 }
 
 func TestCapabilityHandler_GetViolationsByAgent_InvalidID(t *testing.T) {
+	orgID := uuid.New()
 	handler := NewCapabilityHandlerWithInterfaces(&MockCapabilityServiceImpl{})
 
 	app := fiber.New()
-	app.Get("/agents/:id/violations", handler.GetViolationsByAgent)
+	app.Get("/agents/:id/violations", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetViolationsByAgent(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/invalid-uuid/violations", nil)
 	resp, err := app.Test(req)
@@ -231,6 +267,7 @@ func TestCapabilityHandler_GetViolationsByAgent_InvalidID(t *testing.T) {
 
 func TestCapabilityHandler_GetViolationsByAgent_ServiceError(t *testing.T) {
 	agentID := uuid.New()
+	orgID := uuid.New()
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
 		GetViolationsByAgentFunc: func(ctx context.Context, aID uuid.UUID, limit, offset int) ([]*domain.CapabilityViolation, int, error) {
@@ -239,9 +276,17 @@ func TestCapabilityHandler_GetViolationsByAgent_ServiceError(t *testing.T) {
 	}
 
 	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID}, nil
+		},
+	}
 
 	app := fiber.New()
-	app.Get("/agents/:id/violations", handler.GetViolationsByAgent)
+	app.Get("/agents/:id/violations", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.GetViolationsByAgent(c)
+	})
 
 	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/violations", nil)
 	resp, err := app.Test(req)
@@ -249,6 +294,90 @@ func TestCapabilityHandler_GetViolationsByAgent_ServiceError(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+}
+
+// Audit-doc #49: cross-tenant violation read must return 404 with
+// existence-secrecy body, never disclose that the agent exists in
+// another org. Uses a captured-flag pattern (NOT t.Fatalf) because
+// fiber's app.Test runs the handler on a separate goroutine; t.Fatalf
+// from a non-test-goroutine calls runtime.Goexit on that goroutine
+// only and would NOT fail this test. Mirrors the panic-proof pattern
+// from PR #146.
+func TestCapabilityHandler_GetViolationsByAgent_CrossOrgReturns404(t *testing.T) {
+	agentID := uuid.New()
+	callerOrgID := uuid.New()
+	differentOrgID := uuid.New()
+
+	serviceCalled := false
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetViolationsByAgentFunc: func(ctx context.Context, aID uuid.UUID, limit, offset int) ([]*domain.CapabilityViolation, int, error) {
+			serviceCalled = true
+			return nil, 0, nil
+		},
+	}
+
+	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: differentOrgID}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Get("/agents/:id/violations", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.GetViolationsByAgent(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/violations", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+	assert.False(t, serviceCalled, "service must NOT be called for a cross-tenant request — security regression")
+}
+
+// Audit-doc #51: GetAgentCapabilities cross-tenant must return 404,
+// not 200 with the foreign agent's capability list. Same panic-proof
+// pattern as the #49 test.
+func TestCapabilityHandler_GetAgentCapabilities_CrossOrgReturns404(t *testing.T) {
+	agentID := uuid.New()
+	callerOrgID := uuid.New()
+	differentOrgID := uuid.New()
+
+	serviceCalled := false
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetAgentCapabilitiesFunc: func(ctx context.Context, aID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {
+			serviceCalled = true
+			return nil, nil
+		},
+	}
+
+	handler := NewCapabilityHandlerWithInterfaces(mockCapabilityService)
+	handler.agentRepo = &MockAgentRepositoryerImpl{
+		GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: differentOrgID}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Get("/agents/:id/capabilities", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.GetAgentCapabilities(c)
+	})
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/capabilities", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.JSONEq(t, `{"error":"not found"}`, string(body))
+	assert.False(t, serviceCalled, "service must NOT be called for a cross-tenant request — security regression")
 }
 
 // ===========================
