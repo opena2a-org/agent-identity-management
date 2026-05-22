@@ -15,9 +15,9 @@ from aim_sdk import secure
 
 agent = secure("my-first-agent")
 
-@agent.perform_action(capability="weather:fetch")
-def fetch_weather(city):
-    return f"Weather in {city}: Sunny"
+@agent.perform_action(capability="db:read")
+def get_customer(customer_id):
+    return db.query("SELECT * FROM customers WHERE id = ?", customer_id)
 ```
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization on the server, and records the outcome in the audit log.
@@ -74,10 +74,10 @@ Disable: `secure("my-agent", auto_hooks=False)`.
 When namespace and action disagree the higher risk wins. `SPECIFIC_CAPABILITY_MAP` overrides both for known patterns (for example `user:delete` escalates to critical).
 
 ```python
-@agent.perform_action(capability="db:read")               # low
+@agent.perform_action(capability="db:read")               # medium (db: medium, :read low → max = medium)
 def get_customer(customer_id): ...
 
-@agent.perform_action(capability="db:delete")             # high
+@agent.perform_action(capability="db:delete")             # high (SPECIFIC_CAPABILITY_MAP override)
 def delete_customer(customer_id): ...
 
 @agent.perform_action(capability="payment:refund",
