@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // FGAAuthorizer is the slice of FGAEngine that AuthorizeHandler depends on.
@@ -20,20 +21,30 @@ type FGAAuthorizer interface {
 // AuthorizeHandler exposes FGAEngine.Authorize over HTTP. It is the entry
 // point that produces the parent `fga.authorize` span and its 5-step child
 // tree against the real backend (vs the synthetic gen-signal harness).
+//
+// SECURITY: FGAEngine is org-blind — FGARequest carries no caller-org
+// field, and FGAEngine.Authorize never reads any caller context.
+// The handler-layer agentRepo + LoadOwned is the SOLE tenant-scope
+// gate. Without it, any authenticated caller in org A could POST
+// /agents/<victim-agent-in-org-B>/authorize and receive the full
+// 5-step FGA decision against the victim's policies + trust score +
+// scan verdict, plus pollute the fga.authorize OTel span tree
+// against the victim org.
 type AuthorizeHandler struct {
-	fga FGAAuthorizer
+	fga       FGAAuthorizer
+	agentRepo domain.AgentRepository
 }
 
 // NewAuthorizeHandler constructs an AuthorizeHandler against a concrete
 // FGAEngine. Test code should use NewAuthorizeHandlerWithInterface.
-func NewAuthorizeHandler(fga *application.FGAEngine) *AuthorizeHandler {
-	return &AuthorizeHandler{fga: fga}
+func NewAuthorizeHandler(fga *application.FGAEngine, agentRepo domain.AgentRepository) *AuthorizeHandler {
+	return &AuthorizeHandler{fga: fga, agentRepo: agentRepo}
 }
 
 // NewAuthorizeHandlerWithInterface constructs an AuthorizeHandler against any
 // FGAAuthorizer implementation, for testability.
-func NewAuthorizeHandlerWithInterface(fga FGAAuthorizer) *AuthorizeHandler {
-	return &AuthorizeHandler{fga: fga}
+func NewAuthorizeHandlerWithInterface(fga FGAAuthorizer, agentRepo domain.AgentRepository) *AuthorizeHandler {
+	return &AuthorizeHandler{fga: fga, agentRepo: agentRepo}
 }
 
 // authorizeRequestBody mirrors application.FGARequest minus AgentID. The
@@ -87,6 +98,21 @@ func (h *AuthorizeHandler) Authorize(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "capability is required",
 		})
+	}
+
+	// SECURITY: tenant-scope the agent before invoking FGAEngine.
+	// FGAEngine is org-blind (no CallerOrgID field on FGARequest;
+	// no caller-context reads in FGAEngine.Authorize), so the
+	// handler-layer LoadOwned is the only gate. Cross-tenant and
+	// not-found both collapse to a fixed 404, preventing
+	// cross-tenant FGA decision leaks and victim-org OTel span
+	// pollution.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	req := &application.FGARequest{
