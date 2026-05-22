@@ -22,9 +22,9 @@ from aim_sdk import secure
 
 agent = secure("my-first-agent")
 
-@agent.perform_action(capability="weather:fetch")
-def fetch_weather(city):
-    return f"Weather in {city}: Sunny"
+@agent.perform_action(capability="db:read")
+def get_customer(customer_id):
+    return db.query("SELECT * FROM customers WHERE id = ?", customer_id)
 ```
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
@@ -76,9 +76,9 @@ Full example: [`examples/flight-search-agent/flight_agent.py`](examples/flight-s
 ```java
 AIMClient agent = AIMClient.secure("my-first-agent");
 
-@SecureAction(capability = "weather:fetch")
-public String fetchWeather(String city) {
-    return "Weather in " + city + ": Sunny";
+@SecureAction(capability = "db:read", resource = "users_table")
+public User getCustomer(String customerId) {
+    return userRepository.findById(customerId);
 }
 ```
 
@@ -90,7 +90,7 @@ Production-ready at v1.0.0. Same Ed25519 signing, same FGA flow, same audit trai
 import { AIMClient } from "@opena2a/aim-core";
 
 const agent = new AIMClient({ agentId: "my-first-agent" });
-await agent.verify({ capability: "weather:fetch", resource: city });
+await agent.verify({ capability: "db:read", resource: "users_table" });
 ```
 
 The only SDK that runs without a server today. Backs local mode. See [`sdk/typescript/README.md`](sdk/typescript/README.md).
