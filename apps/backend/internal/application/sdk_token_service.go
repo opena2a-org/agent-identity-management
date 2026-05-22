@@ -2,11 +2,19 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrSDKTokenNotFound is returned by SDKTokenService.RevokeToken for
+// both "token does not exist" and "token belongs to a different user"
+// — collapsing the two cases closes an existence-oracle side channel
+// that let an attacker enumerate SDK token UUIDs across users. The
+// handler maps this sentinel to a fixed 404 body.
+var ErrSDKTokenNotFound = errors.New("sdk token not found")
 
 // SDKTokenService handles SDK token business logic
 type SDKTokenService struct {
@@ -30,17 +38,26 @@ func (s *SDKTokenService) GetOrganizationTokens(ctx context.Context, organizatio
 	return s.sdkTokenRepo.GetByOrganizationID(organizationID, includeRevoked)
 }
 
-// RevokeToken revokes a specific SDK token
+// RevokeToken revokes a specific SDK token.
+//
+// SECURITY: both "not found" and "wrong user" return ErrSDKTokenNotFound.
+// The pre-fix implementation returned distinct error strings
+// ("token not found: …" vs "unauthorized: token belongs to different
+// user") which the handler then mapped to 500 vs 403 with distinct
+// bodies — an existence-oracle side channel that let an attacker
+// enumerate token UUIDs and distinguish "exists owned by another
+// user" from "doesn't exist". Both branches now collapse to the
+// sentinel and the handler emits a fixed 404 body.
 func (s *SDKTokenService) RevokeToken(ctx context.Context, tokenID uuid.UUID, userID uuid.UUID, reason string) error {
 	// Get token to verify ownership
 	token, err := s.sdkTokenRepo.GetByID(tokenID)
-	if err != nil {
-		return fmt.Errorf("token not found: %w", err)
+	if err != nil || token == nil {
+		return ErrSDKTokenNotFound
 	}
 
 	// Verify user owns this token
 	if token.UserID != userID {
-		return fmt.Errorf("unauthorized: token belongs to different user")
+		return ErrSDKTokenNotFound
 	}
 
 	// Revoke token

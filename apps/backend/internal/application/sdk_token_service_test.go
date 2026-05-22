@@ -287,7 +287,10 @@ func TestSDKTokenService_RevokeToken_NotFound(t *testing.T) {
 
 	err := service.RevokeToken(ctx, nonExistentID, userID, "test")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "token not found")
+	// SECURITY: not-found and wrong-user both collapse to the
+	// ErrSDKTokenNotFound sentinel (existence-oracle close).
+	assert.True(t, errors.Is(err, ErrSDKTokenNotFound),
+		"not-found revoke must return ErrSDKTokenNotFound sentinel, got %v", err)
 }
 
 func TestSDKTokenService_RevokeToken_WrongUser(t *testing.T) {
@@ -303,10 +306,14 @@ func TestSDKTokenService_RevokeToken_WrongUser(t *testing.T) {
 	err := repo.Create(token)
 	require.NoError(t, err)
 
-	// Try to revoke with different user
+	// Try to revoke with different user — must return the SAME
+	// sentinel as the not-found case so the handler-layer 404
+	// response is indistinguishable from the perspective of the
+	// caller. This is the existence-oracle close.
 	err = service.RevokeToken(ctx, token.ID, otherUserID, "unauthorized attempt")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unauthorized")
+	assert.True(t, errors.Is(err, ErrSDKTokenNotFound),
+		"cross-user revoke must collapse to ErrSDKTokenNotFound (same sentinel as not-found), got %v", err)
 }
 
 func TestSDKTokenService_RevokeByTokenHash(t *testing.T) {

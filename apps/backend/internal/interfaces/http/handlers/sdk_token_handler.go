@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -132,9 +134,14 @@ func (h *SDKTokenHandler) RevokeToken(c fiber.Ctx) error {
 
 	err = h.sdkTokenService.RevokeToken(c.Context(), tokenID, userID, req.Reason)
 	if err != nil {
-		if err.Error() == "unauthorized: token belongs to different user" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "You don't have permission to revoke this token",
+		// SECURITY: the service collapses "not found" and
+		// "wrong user" to ErrSDKTokenNotFound. The handler maps
+		// the sentinel to a fixed 404, closing the existence
+		// oracle that previously distinguished 403 (cross-user)
+		// from 500 (not-found) with distinct body strings.
+		if errors.Is(err, application.ErrSDKTokenNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "not found",
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
