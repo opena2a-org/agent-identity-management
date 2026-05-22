@@ -15,39 +15,123 @@ Cryptographic identity, capability authorization, and audit trails for AI agents
 
 ## Quick start
 
-```bash
-npx opena2a-cli identity create --name my-agent
+Integrate AIM into your agent:
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-first-agent")
+
+@agent.perform_action(capability="weather:fetch")
+def fetch_weather(city):
+    return f"Weather in {city}: Sunny"
 ```
 
-```
-Identity created
-  Agent ID:    aim_xxxxxxxx
-  Name:        my-agent
-  Public Key:  <base64-Ed25519-public-key>
-  Stored in:   ~/.opena2a/aim-core/
-```
-
-The agent has an Ed25519 keypair, a local audit log at `~/.opena2a/aim-core/audit.jsonl`, and a trust score. No server required.
-
-After an incident:
+`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
 
 ```bash
-opena2a identity audit
+pip install aim-sdk
+aim-sdk login                    # OAuth to aim.opena2a.org, or --url for self-hosted
 ```
 
-Reads back credential injections, file accesses, config changes, and capability checks captured by the OpenA2A toolchain.
+The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
+
+Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
 
 ## Three deployment modes
 
 | Mode | When | Includes |
 |---|---|---|
-| **Local-only** | Solo developer, single machine | Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor trust score, cross-tool event bridges |
-| **Self-hosted** | Team or fleet | Above plus PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor real-time trust, MCP attestation, PAM, SIEM adapters |
-| **AIM Cloud** | Same as self-hosted with no infrastructure to operate | Managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started) |
+| **AIM Cloud** | Managed, fastest path | Production-managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
+| **Self-hosted** | Team or fleet, your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor real-time trust, MCP attestation, PAM, SIEM adapters. |
+| **Local-only** | Solo developer, single machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score, cross-tool event bridges. Python and Java local mode is on the roadmap. |
 
 All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
 
-## Dashboard
+## SDKs
+
+| SDK | Install | Mode | API |
+|---|---|---|---|
+| Python | `pip install aim-sdk` | Server (today) | `secure("name")` + `@perform_action` |
+| Java | `org.opena2a:aim-sdk:1.0.0` | Server | `AIMClient.secure("name")` + `@SecureAction` |
+| TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMClient({ agentId })` |
+
+Working examples for all three live in [`examples/`](examples/).
+
+### Python
+
+`secure()` auto-detects your framework from imports (`langchain`, `crewai`, `llama_index`, `anthropic`, `openai`). When both a framework and an LLM provider are present, the framework wins.
+
+`@agent.perform_action` signs each invocation, runs it through 5-step FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`sdk/python/aim_sdk/risk_detector.py`](sdk/python/aim_sdk/risk_detector.py):
+
+- **Namespace prefix.** `payment:`, `admin:`, `system:`, `billing:`, `finance:` map to critical. `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` map to high. `db:`, `database:`, `file:`, `storage:`, `cache:` map to medium. `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` map to low.
+- **Action suffix.** `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` map to low. `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` map to medium. `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` map to high. `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` map to critical.
+
+When namespace and action disagree the higher risk wins. A `SPECIFIC_CAPABILITY_MAP` in the same file overrides both for known patterns (for example `user:delete` escalates to critical). Pass `risk_level="critical"` to override, and `jit_access=True` to pause execution until a human approves in the dashboard.
+
+Full example: [`examples/flight-search-agent/flight_agent.py`](examples/flight-search-agent/flight_agent.py).
+
+### Java
+
+```java
+AIMClient agent = AIMClient.secure("my-first-agent");
+
+@SecureAction(capability = "weather:fetch")
+public String fetchWeather(String city) {
+    return "Weather in " + city + ": Sunny";
+}
+```
+
+Production-ready at v1.0.0. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
+
+### TypeScript
+
+```typescript
+import { AIMClient } from "@opena2a/aim-core";
+
+const agent = new AIMClient({ agentId: "my-first-agent" });
+await agent.verify({ capability: "weather:fetch", resource: city });
+```
+
+The only SDK that runs without a server today. Backs local mode. See [`sdk/typescript/README.md`](sdk/typescript/README.md).
+
+## Server features
+
+### 5-step Fine-Grained Authorization
+
+Every privileged action runs through five checks before execution.
+
+| Step | Check | Latency budget |
+|---|---|---|
+| 1 | Capability | <10ms |
+| 2 | Attribute | <10ms |
+| 3 | Context | <10ms |
+| 4 | Chain | <10ms |
+| 5 | Intent (NanoMind) | up to 800ms on HIGH-risk operations |
+
+Step 5 uses the [NanoMind security classifier](https://huggingface.co/opena2a/nanomind-security-classifier), a 3M-parameter local Mamba model. No external calls.
+
+### Trust-gated capabilities
+
+9-factor real-time trust scoring runs on every action. Per-capability thresholds gate access.
+
+### MCP attestation
+
+Multi-agent consensus. 3+ attesters across 2+ owners equals verified.
+
+### Privileged Access Management
+
+Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
+
+### CyberArk integration
+
+CCP for vaulted credential retrieval. PSM for privileged session recording.
+
+### SIEM adapters
+
+Splunk HEC and Microsoft Sentinel Data Collector. Buffered batch delivery, retry, severity filtering.
+
+### Web dashboard
 
 Available in Self-hosted and AIM Cloud modes.
 
@@ -63,20 +147,41 @@ Available in Self-hosted and AIM Cloud modes.
 ![MCP supply chain](docs/images/supply-chain.png)
 *MCP server dependencies with multi-agent attestation status.*
 
-## Install
+## Operations: the opena2a CLI
 
-### npm
-
-```bash
-npm install -g opena2a-cli      # CLI
-npm install @opena2a/aim-core   # TypeScript library
-```
-
-### Homebrew
+The [opena2a CLI](https://github.com/opena2a-org/opena2a) is a separate tool for SecOps workflows: auditing a codebase, hardening configs on disk, monitoring runtime events. Not required to integrate the SDK.
 
 ```bash
-brew install opena2a-org/tap/opena2a
+opena2a review                  # 6-phase audit of a codebase
+opena2a protect                 # migrate hardcoded credentials → env vars
+opena2a guard sign              # filesystem integrity signing
+opena2a runtime tail            # ARP event stream
+opena2a identity audit          # cross-tool audit log
+opena2a identity attach --all   # install cross-tool event bridges
 ```
+
+Install:
+
+```bash
+brew install opena2a-org/tap/opena2a    # or
+npm install -g opena2a-cli
+```
+
+`opena2a identity attach --all` installs bridges that read other OpenA2A tools' event logs and re-emit each event into one unified JSONL:
+
+```text
+Secretless events    ──┐
+HMA scan findings    ──┤
+HMA ARP runtime      ──┼─→ ~/.opena2a/aim-core/audit.jsonl
+ConfigGuard events   ──┤
+Shield events        ──┘
+```
+
+No decorator. No library import in agent code. Run `attach --all` once, work normally, and after an incident the audit log holds a deduplicated, timestamp-ordered trail of credential injections, file accesses, network calls, config tampering, and scan findings.
+
+Capability authorization (deny-before-execute, FGA, intent classification) requires the server. See [Server features](#server-features).
+
+## Install AIM (self-hosted)
 
 ### Docker
 
@@ -126,97 +231,6 @@ npm view @opena2a/aim-core dist.attestations --json
 ```
 
 Identity files (`~/.opena2a/aim-core/identity.json`) are written `mode 0600`. OAuth tokens live in the OS keychain by default. `~/.opena2a/auth.json` stores metadata only.
-
-## How the local audit log fills up
-
-`opena2a identity attach --all` installs cross-tool bridges. Each OpenA2A tool already writes its own event log. The bridges read those logs and re-emit each event through `aim.logEvent()` into one unified JSONL.
-
-```text
-Secretless events    ──┐
-HMA scan findings    ──┤
-HMA ARP runtime      ──┼─→ ~/.opena2a/aim-core/audit.jsonl
-ConfigGuard events   ──┤
-Shield events        ──┘
-```
-
-No decorator. No library import in agent code. Run `attach --all` once, work normally, and after an incident the audit log holds a deduplicated, timestamp-ordered trail of credential injections, file accesses, network calls, config tampering, and scan findings.
-
-Capability authorization (deny-before-execute, FGA, intent classification) requires the server. See [Server features](#server-features).
-
-## SDKs
-
-| SDK | Install | Talks to |
-|---|---|---|
-| TypeScript | `npm install @opena2a/aim-core` | Local files or server |
-| Python | `pip install -e sdk/python`, or download from [dashboard](https://aim.opena2a.org) Settings → SDK Downloads | Server |
-| Java | `org.opena2a:aim-sdk:1.0.0`, or `cd sdk/java && mvn package` | Server |
-
-TypeScript is the only SDK that runs without a server. It backs local mode. Python and Java SDKs talk to the AIM backend over HTTP. Working examples for all three live in [`examples/`](examples/).
-
-### Python
-
-Register an agent in one line. Add `@agent.perform_action` to each function that performs a capability.
-
-```python
-from aim_sdk import secure
-
-agent = secure("my-first-agent")
-
-@agent.perform_action(capability="weather:fetch")
-def fetch_weather(city):
-    return f"Weather in {city}: Sunny"
-```
-
-`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, stores credentials, and auto-detects the framework from imports (`langchain`, `crewai`, `llama_index`, `anthropic`, `openai`). When both a framework and an LLM provider are present, the framework wins.
-
-`@agent.perform_action` signs each invocation, runs it through 5-step FGA on the server, and records the outcome in the audit log. Risk level auto-detects from the capability string using two lookup tables in [`sdk/python/aim_sdk/risk_detector.py`](sdk/python/aim_sdk/risk_detector.py):
-
-- **Namespace prefix.** `payment:`, `admin:`, `system:`, `billing:`, `finance:` map to critical. `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` map to high. `db:`, `database:`, `file:`, `storage:`, `cache:` map to medium. `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` map to low.
-- **Action suffix.** `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` map to low. `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` map to medium. `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` map to high. `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` map to critical.
-
-When namespace and action disagree the higher risk wins. A `SPECIFIC_CAPABILITY_MAP` in the same file overrides both for known patterns (for example `user:delete` escalates to critical). Pass `risk_level="critical"` to override, and `jit_access=True` to pause execution until a human approves in the dashboard.
-
-Full example: [`examples/flight-search-agent/flight_agent.py`](examples/flight-search-agent/flight_agent.py).
-
-## Server features
-
-### 5-step Fine-Grained Authorization
-
-Every privileged action runs through five checks before execution.
-
-| Step | Check | Latency budget |
-|---|---|---|
-| 1 | Capability | <10ms |
-| 2 | Attribute | <10ms |
-| 3 | Context | <10ms |
-| 4 | Chain | <10ms |
-| 5 | Intent (NanoMind) | up to 800ms on HIGH-risk operations |
-
-Step 5 uses the [NanoMind security classifier](https://huggingface.co/opena2a/nanomind-security-classifier), a 3M-parameter local Mamba model. No external calls.
-
-### Trust-gated capabilities
-
-9-factor real-time trust scoring runs on every action. Per-capability thresholds gate access.
-
-### MCP attestation
-
-Multi-agent consensus. 3+ attesters across 2+ owners equals verified.
-
-### Privileged Access Management
-
-Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
-
-### CyberArk integration
-
-CCP for vaulted credential retrieval. PSM for privileged session recording.
-
-### SIEM adapters
-
-Splunk HEC and Microsoft Sentinel Data Collector. Buffered batch delivery, retry, severity filtering.
-
-### Web dashboard
-
-Agent registry, trust score breakdowns, MCP network graph, audit timeline, capability requests, policy editor.
 
 ## Trust scoring
 
