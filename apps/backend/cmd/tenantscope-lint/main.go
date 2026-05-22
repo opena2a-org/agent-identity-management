@@ -84,8 +84,6 @@ var allowlist = map[string]string{
 	"AdminHandler.DeactivateUser":                           "audit-baseline: needs review",
 	"AdminHandler.ResolveAlert":                             "audit-baseline: needs review",
 	"AdminHandler.UpdateUserRole":                           "audit-baseline: needs review",
-	"APIKeyHandler.DeleteAPIKey":                            "audit-baseline: needs review",
-	"APIKeyHandler.DisableAPIKey":                           "audit-baseline: needs review",
 	"DetectionHandler.GetDetectionStatus":                   "audit-baseline: needs review",
 	"DetectionHandler.GetLatestCapabilityReport":            "audit-baseline: needs review",
 	"DetectionHandler.ReportCapabilities":                   "audit-baseline: needs review",
