@@ -1612,6 +1612,13 @@ func TestAgentHandler_LogCapabilityResult_Success(t *testing.T) {
 	auditID := uuid.New()
 
 	mockAgentService := &MockAgentServiceImpl{
+		// GetAgent stub satisfies the LoadOwned tenant-scope gate
+		// added in this PR. The returned agent's OrganizationID
+		// matches the caller's orgID so the gate passes through to
+		// the success path.
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: id, OrganizationID: orgID}, nil
+		},
 		LogCapabilityResultFunc: func(ctx context.Context, agentID uuid.UUID, auditID uuid.UUID, success bool, errorMsg string, result map[string]interface{}) error {
 			return nil
 		},
