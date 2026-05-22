@@ -43,12 +43,22 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 		})
 	}
 
-	// Fetch the agent to get the user ID from the agent's CreatedBy field
-	agent, err := h.agentRepo.GetByID(agentID)
+	// SECURITY (A3d-ix): the PQC SDK auth middleware authenticates the
+	// caller via the X-Agent-ID header, but this handler trusts the
+	// URL path :id for the target agent — these are independent
+	// values. Without LoadOwned, an SDK client with X-Agent-ID =
+	// agent-in-org-A could send the body to a URL containing
+	// agent-in-org-B and plant a phantom capability request on the
+	// victim's agent (the handler used `agent.CreatedBy` from the
+	// victim's record as RequestedBy). LoadOwned collapses any
+	// cross-tenant agentID to a fixed 404 BEFORE the service call.
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "agent not found",
-		})
+		return err
+	}
+	agent := LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Parse request body
@@ -322,6 +332,25 @@ func (h *CapabilityRequestHandlers) RejectCapabilityRequest(c fiber.Ctx) error {
 		})
 	}
 
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	// SECURITY (A3d-ix, mirror of defect #22 fix on ApproveCapabilityRequest
+	// at line 270): admin in org A could otherwise reject a pending
+	// capability request belonging to an agent in org B by guessing the
+	// request UUID. CapabilityRequest has no OrganizationID field; ownership
+	// is determined by the request's AgentID -> Agent.OrganizationID.
+	loader := func(reqID uuid.UUID) (*domain.CapabilityRequestWithDetails, error) {
+		return h.service.GetRequest(c.Context(), reqID)
+	}
+	if LoadOwnedViaAgent(c, loader, id, orgID,
+		func(r *domain.CapabilityRequestWithDetails) uuid.UUID { return r.AgentID },
+		h.agentRepo) == nil {
+		return nil
+	}
+
 	if err := h.service.RejectRequest(c.Context(), id, userID); err != nil {
 		if err.Error() == "capability request not found" {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -352,6 +381,19 @@ func (h *CapabilityRequestHandlers) ListAgentCapabilityRequests(c fiber.Ctx) err
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid agent ID",
 		})
+	}
+
+	// SECURITY (A3d-ix): same shape as CreateCapabilityRequest — the
+	// PQC SDK auth middleware authenticates via X-Agent-ID header,
+	// but the handler trusts the URL path :id. Without LoadOwned, any
+	// SDK client could read the pending capability-request queue for
+	// any agent in any tenant by supplying the victim's UUID.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	filter := domain.CapabilityRequestFilter{
