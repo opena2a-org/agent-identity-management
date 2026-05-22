@@ -153,8 +153,10 @@ func (s *RegistryBridgeService) buildOrgContribution(ctx context.Context, orgID 
 				}
 			}
 
-			// Count audit log entries for this agent as a proxy for interaction count
-			auditLogs, err := s.auditLogRepo.GetByAgent(agent.ID, 1000, 0)
+			// Count audit log entries for this agent as a proxy for interaction count.
+			// SECURITY: scoped to the agent's own organization — see
+			// AuditLogRepository.GetByAgent docstring for the IDOR rationale.
+			auditLogs, err := s.auditLogRepo.GetByAgent(agent.OrganizationID, agent.ID, 1000, 0)
 			interactionCount := 0
 			if err == nil {
 				interactionCount = len(auditLogs)

@@ -2153,8 +2153,10 @@ func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 	// SECURITY: Validate pagination to prevent DoS
 	p := ParsePagination(c)
 
-	// Get agent activity from audit logs
-	activities, err := h.auditService.GetAgentActivity(c.Context(), agentID, p.Limit, p.Offset)
+	// Get agent activity from audit logs (orgID-scoped — LoadOwned above
+	// already verified the agent belongs to orgID; the orgID filter is
+	// defense-in-depth against future refactors of the agent loader).
+	activities, err := h.auditService.GetAgentActivity(c.Context(), orgID, agentID, p.Limit, p.Offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agent activity",

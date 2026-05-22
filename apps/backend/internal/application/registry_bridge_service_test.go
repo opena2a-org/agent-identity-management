@@ -177,17 +177,17 @@ func (m *mockAuditLogRepoForBridge) GetByID(id uuid.UUID) (*domain.AuditLog, err
 func (m *mockAuditLogRepoForBridge) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	return nil, nil
 }
-func (m *mockAuditLogRepoForBridge) GetByUser(userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *mockAuditLogRepoForBridge) GetByUser(orgID, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	return nil, nil
 }
-func (m *mockAuditLogRepoForBridge) GetByResource(resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+func (m *mockAuditLogRepoForBridge) GetByResource(orgID uuid.UUID, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
 	return nil, nil
 }
 func (m *mockAuditLogRepoForBridge) Search(query string, limit, offset int) ([]*domain.AuditLog, error) {
 	return nil, nil
 }
-func (m *mockAuditLogRepoForBridge) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	args := m.Called(agentID, limit, offset)
+func (m *mockAuditLogRepoForBridge) GetByAgent(orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	args := m.Called(orgID, agentID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -342,7 +342,9 @@ func TestAggregateAndPush_FullFlow(t *testing.T) {
 	}, nil)
 
 	auditLogRepo := &mockAuditLogRepoForBridge{}
-	auditLogRepo.On("GetByAgent", agentID, 1000, 0).Return([]*domain.AuditLog{
+	// orgID is the new first arg per the audit-log query IDOR fix
+	// (todo/2026-05-21-a3d-viii-followup-audit-log-query-idor.md).
+	auditLogRepo.On("GetByAgent", orgID, agentID, 1000, 0).Return([]*domain.AuditLog{
 		{ID: uuid.New()},
 		{ID: uuid.New()},
 		{ID: uuid.New()},

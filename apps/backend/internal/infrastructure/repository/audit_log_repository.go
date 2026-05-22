@@ -109,16 +109,21 @@ func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset in
 	return r.scanLogs(rows)
 }
 
-func (r *AuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+// GetByUser returns audit rows in the caller's organization performed
+// by a given user. SECURITY: the `AND organization_id = $2` clause is
+// the IDOR fix — without it, an authenticated admin in org A could
+// read audit rows from org B by supplying the victim's user UUID
+// (todo/2026-05-21-a3d-viii-followup-audit-log-query-idor.md).
+func (r *AuditLogRepository) GetByUser(orgID, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
 		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
 		FROM audit_logs
-		WHERE user_id = $1
+		WHERE user_id = $1 AND organization_id = $2
 		ORDER BY timestamp DESC
-		LIMIT $2 OFFSET $3
+		LIMIT $3 OFFSET $4
 	`
 
-	rows, err := r.db.Query(query, userID, limit, offset)
+	rows, err := r.db.Query(query, userID, orgID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -127,9 +132,10 @@ func (r *AuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) ([]*
 	return r.scanLogs(rows)
 }
 
-// GetByAgent retrieves audit logs for actions performed BY a specific agent
-// This queries by agent_id field (the agent that performed the action), not resource_id
-func (r *AuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+// GetByAgent retrieves audit logs in the caller's organization for
+// actions performed BY a specific agent. SECURITY: see GetByUser for
+// the orgID-filter rationale; same defect class.
+func (r *AuditLogRepository) GetByAgent(orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
 		SELECT
 			al.id, al.organization_id, al.user_id, al.agent_id, al.action,
@@ -140,12 +146,12 @@ func (r *AuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([
 		FROM audit_logs al
 		LEFT JOIN agents a ON al.agent_id = a.id
 		LEFT JOIN users u ON al.user_id = u.id
-		WHERE al.agent_id = $1
+		WHERE al.agent_id = $1 AND al.organization_id = $2
 		ORDER BY al.timestamp DESC
-		LIMIT $2 OFFSET $3
+		LIMIT $3 OFFSET $4
 	`
 
-	rows, err := r.db.Query(query, agentID, limit, offset)
+	rows, err := r.db.Query(query, agentID, orgID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +160,10 @@ func (r *AuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([
 	return r.scanLogsWithNames(rows)
 }
 
-func (r *AuditLogRepository) GetByResource(resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+// GetByResource returns audit rows in the caller's organization for
+// a given (resourceType, resourceID). SECURITY: see GetByUser for
+// the orgID-filter rationale; same defect class.
+func (r *AuditLogRepository) GetByResource(orgID uuid.UUID, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
 	query := `
 		SELECT
 			al.id, al.organization_id, al.user_id, al.agent_id, al.action,
@@ -165,11 +174,11 @@ func (r *AuditLogRepository) GetByResource(resourceType string, resourceID uuid.
 		FROM audit_logs al
 		LEFT JOIN agents a ON al.agent_id = a.id
 		LEFT JOIN users u ON al.user_id = u.id
-		WHERE al.resource_type = $1 AND al.resource_id = $2
+		WHERE al.resource_type = $1 AND al.resource_id = $2 AND al.organization_id = $3
 		ORDER BY al.timestamp DESC
 	`
 
-	rows, err := r.db.Query(query, resourceType, resourceID)
+	rows, err := r.db.Query(query, resourceType, resourceID, orgID)
 	if err != nil {
 		return nil, err
 	}

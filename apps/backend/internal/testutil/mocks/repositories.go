@@ -455,8 +455,8 @@ func (m *MockAuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offse
 	return args.Get(0).([]*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	args := m.Called(agentID, limit, offset)
+func (m *MockAuditLogRepository) GetByAgent(orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	args := m.Called(orgID, agentID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

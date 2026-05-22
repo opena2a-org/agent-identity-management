@@ -1151,7 +1151,7 @@ func TestAgentHandler_GetAgentActivity_Success(t *testing.T) {
 	}
 
 	mockAuditService := &MockAuditServiceImpl{
-		GetAgentActivityFunc: func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+		GetAgentActivityFunc: func(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 			return []*domain.AuditLog{
 				{ID: uuid.New(), Action: domain.AuditActionCreate, ResourceType: "agent"},
 				{ID: uuid.New(), Action: domain.AuditActionUpdate, ResourceType: "agent"},
