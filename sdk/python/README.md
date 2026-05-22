@@ -1,636 +1,259 @@
 # AIM Python SDK
 
-**Open Source AI Agent Security - One line of code. Complete protection.**
+Cryptographic identity, capability authorization, and audit trails for Python AI agents. Apache 2.0.
 
-Cryptographic verification with zero configuration.
+[![PyPI version](https://img.shields.io/pypi/v/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)
+[![Python](https://img.shields.io/pypi/pyversions/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../../LICENSE)
 
-Managed hosting available at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Self-host instructions below.
+Part of [Agent Identity Management (AIM)](../../README.md). Managed hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started); self-host via the [main README](../../README.md#install-aim-self-hosted).
 
----
+## Quick start
 
-## See It Work in 60 Seconds!
+```python
+from aim_sdk import secure
+
+agent = secure("my-first-agent")
+
+@agent.perform_action(capability="weather:fetch")
+def fetch_weather(city):
+    return f"Weather in {city}: Sunny"
+```
+
+`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization on the server, and records the outcome in the audit log.
+
+Install:
 
 ```bash
-# After downloading and extracting the SDK:
-cd aim-sdk-python
-pip install -e .
-python demo_agent.py
-```
-
-Open your AIM dashboard side-by-side and watch it update in real-time as you trigger actions!
-
-**Dashboard URL:** http://localhost:3000/dashboard/agents
-
----
-
-## Quick Start - Zero Configuration
-
-### One Line. Complete Security.
-
-```python
-from aim_sdk import secure
-import langchain  # SDK auto-detects your framework!
-
-# ONE LINE - Complete security
-agent = secure("my-agent")  # Auto-detected as "langchain" agent
-
-# That's it. Your agent now has:
-# - Agent type auto-detected from imports
-# - Ed25519 cryptographic signatures
-# - Real-time trust scoring
-# - Complete audit trail
-# - Auto-instrumented frameworks (LangChain, CrewAI, OpenAI, Anthropic)
-# - Zero configuration
-```
-
-### Manual Mode (With API Key)
-
-```python
-from aim_sdk import secure
-
-# Still one line - just add your API key
-agent = secure("my-agent", api_key="aim_abc123")
-```
-
-### Auto-Instrumentation
-
-After `secure()` registers your agent, the SDK automatically detects and hooks into your AI frameworks:
-
-```python
-from aim_sdk import secure
-import openai  # SDK detects this
-
-agent = secure("my-agent")
-# Console: "Auto-instrumented: openai"
-
-# All OpenAI calls are now logged to AIM automatically
-client = openai.OpenAI()
-client.chat.completions.create(model="gpt-4", messages=[...])
-# ^ This call is logged to your AIM audit trail
-```
-
-Supported frameworks: LangChain, CrewAI, OpenAI, Anthropic. Hooks are fail-safe and never block your code.
-
-To disable: `secure("my-agent", auto_hooks=False)`
-
-### Offline Policy Enforcement
-
-```python
-from aim_sdk import secure, PolicyCache
-
-agent = secure("my-agent")
-cache = PolicyCache(agent, ttl_seconds=300)  # 5-min cache
-
-if cache.check("db:write"):
-    # Capability allowed by cached policy
-    perform_write()
-```
-
-## Installation
-
-### Option A: Install from PyPI (Recommended)
-
-```bash
-# 1. Install the SDK
 pip install aim-sdk
-
-# 2. Login to AIM Cloud (or your self-hosted instance)
-aim-sdk login                              # AIM Cloud (aim.opena2a.org)
-aim-sdk login --url http://localhost:8080  # Self-hosted
-
-# 3. Start using!
-python -c "from aim_sdk import secure; agent = secure('my-agent')"
+aim-sdk login                              # OAuth to aim.opena2a.org
+aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-The `aim-sdk login` command will:
-- Open your browser for secure OAuth authentication (Google, etc.)
-- Use PKCE (Proof Key for Code Exchange) for security - same as AWS CLI
-- Save credentials to `~/.aim/sdk_credentials.json`
-- No password prompts or browser permission dialogs
+Login uses OAuth 2.0 with PKCE. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
 
-### Option B: Download from Dashboard
+## Framework auto-detection
 
-For pre-configured credentials without login:
+`secure()` reads `sys.modules` to detect the agent's framework or LLM provider from imports:
 
-1. Log in to AIM at http://localhost:3000 (or your AIM instance)
-2. Go to **Settings → SDK Download**
-3. Click **"Download SDK"** → Includes pre-configured credentials
-4. Extract and install:
-   ```bash
-   unzip ~/Downloads/aim-sdk-python.zip
-   cd aim-sdk-python
-   pip install -e .
-   ```
+| Category | Detected from | Mapped agent_type |
+|---|---|---|
+| Frameworks | `langchain`, `crewai`, `autogen`, `llama_index`, `haystack`, `semantic_kernel`, `langgraph` | `langchain`, `crewai`, etc. |
+| LLM providers | `anthropic`, `openai`, `google.generativeai`, `mistralai`, `cohere` | `claude`, `gpt`, `gemini`, `mistral`, `cohere` |
 
-### CLI Commands
+Frameworks take priority over LLM providers. If both `langchain` and `anthropic` are imported, the agent type is `langchain`.
 
-```bash
-aim-sdk login                    # Authenticate with AIM
-aim-sdk login --url <URL>        # Authenticate with self-hosted AIM
-aim-sdk logout                   # Clear saved credentials
-aim-sdk status                   # Check authentication status
-aim-sdk --version                # Show SDK version
-```
+Override explicitly:
 
-## Why AIM?
-
-**Before AIM:** 50+ lines of boilerplate for basic agent security
-**After AIM:** 1 line
-
-### What You Get
-
-| Feature | Description | Zero Config? |
-|---------|-------------|--------------|
-| **Agent Type Detection** | Auto-detects LangChain, CrewAI, Claude, GPT, etc. from imports | ✅ Automatic |
-| **Cryptographic Identity** | Ed25519 signatures on every action | ✅ Automatic |
-| **Trust Scoring** | Real-time ML risk assessment | ✅ Automatic |
-| **Capability Detection** | Scans your code, finds what your agent does | ✅ Automatic |
-| **MCP Server Detection** | Finds Claude Desktop configs automatically | ✅ Automatic |
-| **MCP Capability Discovery** | Queries MCP servers for actual tools | ✅ Automatic |
-| **Audit Trail** | SOC 2 compliant logging | ✅ Automatic |
-| **Action Verification** | Every API call cryptographically signed | ✅ Automatic |
-
-### Supported Agent Types
-
-The SDK automatically detects your agent type from imported packages:
-
-| Category | Types | Auto-Detected From |
-|----------|-------|-------------------|
-| **Frameworks** | LangChain, LlamaIndex, CrewAI, AutoGen, LangGraph, Haystack, Semantic Kernel | `langchain`, `crewai`, `autogen`, etc. |
-| **LLM Providers** | Claude, GPT, Gemini, Llama, Mistral, Cohere | `anthropic`, `openai`, `google.generativeai`, etc. |
-| **Copilots** | Copilot, Assistant, Chatbot | For interactive assistants |
-| **Autonomous** | AutoGPT, BabyAGI | Self-directed agents |
-
-**Priority**: Frameworks are detected before LLM providers. If you import both `langchain` and `anthropic`, the agent type will be `langchain`.
-
-**Explicit Override**:
 ```python
 from aim_sdk import secure, AgentType
 
 agent = secure("my-agent", agent_type=AgentType.CREWAI)
 ```
 
-## Usage Examples
+## Auto-instrumentation
 
-### 1. Zero Config (Downloaded SDK)
-```python
-from aim_sdk import secure
-agent = secure("my-agent")  # Done. Complete security.
-```
+After `secure()` registers the agent, the SDK installs no-op-on-failure hooks for any of these libraries that are present:
 
-### 2. With API Key
-```python
-from aim_sdk import secure
-agent = secure("my-agent", api_key="aim_abc123")
-```
+- LangChain
+- CrewAI
+- OpenAI
+- Anthropic
 
-### 3. Full-Featured Registration
-```python
-from aim_sdk import secure, AgentType
+Each model call (chat completion, embedding, tool call) is recorded to the audit trail. The hooks never raise — a hook failure logs a warning and the call proceeds.
 
-agent = secure(
-    "my-ai-assistant",
-    agent_type=AgentType.LANGCHAIN,  # CREWAI, AUTOGEN, GPT, CLAUDE, etc.
-    capabilities=["db:read", "api:call"],
-    mcp_servers=["filesystem"],
-    version="1.0.0",  # Note: version defaults to "1.0.0" if undeclared
-    description="Customer support AI agent",
-    tags=["production", "customer-facing", "gpt-4", "support-team"],
-    metadata={
-        "model": "gpt-4",
-        "department": "support"
-    }
-)
-```
+Disable: `secure("my-agent", auto_hooks=False)`.
 
-### Performing Verified Actions
+## Capability decorators
 
-Use `@agent.perform_action()` for all action verification. Risk level is **auto-detected** from the capability name:
+`@agent.perform_action` signs each invocation, runs it through FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`aim_sdk/risk_detector.py`](aim_sdk/risk_detector.py):
+
+- **Namespace prefix** maps `payment:`, `admin:`, `system:`, `billing:`, `finance:` to critical; `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` to high; `db:`, `database:`, `file:`, `storage:`, `cache:` to medium; `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` to low.
+- **Action suffix** maps `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` to low; `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` to medium; `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` to high; `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` to critical.
+
+When namespace and action disagree the higher risk wins. `SPECIFIC_CAPABILITY_MAP` overrides both for known patterns (for example `user:delete` escalates to critical).
 
 ```python
-# Auto risk detection - db:read detected as "low" risk
-@agent.perform_action(capability="db:read")
-def get_customer(customer_id: str):
-    return {"id": customer_id, "name": "Jane Doe"}
+@agent.perform_action(capability="db:read")               # low
+def get_customer(customer_id): ...
 
-# Auto risk detection - db:delete detected as "high" risk
-@agent.perform_action(capability="db:delete")
-def delete_customer(customer_id: str):
-    return db.execute("DELETE FROM customers WHERE id = ?", customer_id)
+@agent.perform_action(capability="db:delete")             # high
+def delete_customer(customer_id): ...
 
-# Explicit risk level override when needed
-@agent.perform_action(capability="api:call", risk_level="medium", resource="external-api")
-def call_external_api(endpoint):
-    return requests.get(endpoint)
-
-# Critical action with JIT access - requires admin approval
-@agent.perform_action(capability="payment:refund", jit_access=True)
-def process_refund(order_id: str, amount: float):
-    """Waits for admin approval before executing"""
-    return stripe.refund(order_id, amount)
+@agent.perform_action(capability="payment:refund",
+                      risk_level="critical",
+                      jit_access=True,
+                      timeout_seconds=300)
+def process_refund(order_id, amount): ...                 # waits for admin approval
 ```
 
-#### Risk Levels
+### JIT access
 
-| Risk Level | Approval Required? | When to Use |
-|------------|-------------------|-------------|
-| `low` | No - executes immediately | Read operations, safe actions |
-| `medium` | No - executes immediately | Write operations, data modification |
-| `high` | No (unless `jit_access=True`) | Sensitive operations, closely monitored |
-| `critical` | Recommended with `jit_access=True` | Destructive operations, requires approval |
+`jit_access=True` pauses execution and creates an approval request in the AIM dashboard. The function returns only after a human approves, or raises `JITAccessTimeoutError` after `timeout_seconds`.
 
-#### JIT (Just-In-Time) Access
+### Enforcement mode
 
-For critical operations that require human oversight, add `jit_access=True`:
+The organization's enforcement mode (configured in dashboard Settings → Security → Policies) controls what happens on verification failure:
+
+- **Monitoring** (default) — warning logged, function executes anyway. For dev and gradual rollout.
+- **Strict** — `PermissionError` raised, function blocked. For production and compliance.
+
+Override locally for testing: `AIM_STRICT_MODE=true python my_agent.py`. Production deployments configure in the dashboard, not via env var.
+
+## Capability declaration
+
+The SDK supports three ways to declare capabilities. Decorators are preferred.
+
+1. **Decorators** — `@agent.perform_action(capability="...")` in code. Most accurate.
+2. **Config file** — `~/.aim/capabilities.json` with `{"capabilities": ["db:read", ...]}`. For static declarations.
+3. **Explicit at registration** — `secure("my-agent", capabilities=["api:call", "db:read"])`.
+
+Auto-detection from `sys.modules` is disabled by default — it's noisy and misleading (almost every Python agent imports the same generic packages).
+
+### Request additional capabilities
+
+After registration, new capabilities require admin approval (prevents privilege escalation per CVE-2025-32711):
 
 ```python
-@agent.perform_action(risk_level="critical", jit_access=True, timeout_seconds=300)
-def transfer_money(from_account, to_account, amount):
-    """Transfer funds - BLOCKED until admin approves"""
-    return banking_api.transfer(from_account, to_account, amount)
-```
-
-With `jit_access=True`:
-- Pauses execution and creates approval request in AIM dashboard
-- Notifies admin with action details
-- Waits for admin decision (approve/reject)
-- Times out after `timeout_seconds` if no decision
-
-#### What Happens During Verification
-
-Every `@agent.perform_action()` call:
-1. Verifies agent identity with Ed25519 signature
-2. Checks trust score (must be above threshold)
-3. Logs action to immutable audit trail
-4. Monitors for behavioral anomalies
-5. Updates trust score based on result
-
-## Enforcement Mode: Strict vs Monitoring
-
-AIM supports two enforcement modes that control what happens when verification fails. **As of v1.4.0, enforcement mode is configured by admins in the dashboard**, not via environment variables.
-
-### Configure in Dashboard (Recommended)
-
-Go to **Settings → Security → Policies** in your AIM dashboard to set your organization's enforcement mode:
-
-| Mode | What Happens on Verification Failure | Best For |
-|------|-------------------------------------|----------|
-| **Monitoring** (default) | ⚠️ Warning logged, function executes anyway | Development, testing, gradual rollout |
-| **Strict** | ❌ Exception raised, function blocked | Production, compliance (SOC 2, HIPAA) |
-
-The SDK automatically reads your organization's enforcement setting from the backend - no code changes needed.
-
-### Monitoring Mode (Default)
-
-In **monitoring mode**, verification failures are logged but **functions still execute**:
-- ⚠️ Verification failures log a warning
-- ✅ Functions execute anyway (safe for testing)
-- 📊 All events are tracked in the dashboard
-- 🔔 Dashboard shows: "Executed despite denial (monitoring mode)"
-
-This is ideal for:
-- Development and testing
-- Gradual rollout of verification
-- Understanding your agent's behavior before enforcement
-
-### Strict Mode (Production)
-
-In **strict mode**, verification failures **block execution**:
-- ❌ Verification failures raise `PermissionError`
-- 🛑 Functions are NOT executed if verification fails
-- 📊 Dashboard shows: "Action BLOCKED (strict mode enforced)"
-- 🔐 Provides actual security enforcement
-
-This is required for:
-- Production deployments
-- Security-critical applications
-- Compliance requirements (SOC 2, HIPAA)
-
-### Environment Variable Override (Testing Only)
-
-For local testing, you can override the backend setting with the `AIM_STRICT_MODE` environment variable:
-
-```bash
-# Force strict mode locally (overrides backend setting)
-export AIM_STRICT_MODE=true
-python my_agent.py
-
-# Force monitoring mode locally (overrides backend setting)
-export AIM_STRICT_MODE=false
-python my_agent.py
-
-# Use backend setting (default - no env var needed)
-unset AIM_STRICT_MODE
-python my_agent.py
-```
-
-**Note**: The environment variable is for testing purposes only. In production, configure enforcement mode in the dashboard for consistent behavior across all agents.
-
-### Example Code
-
-```python
-from aim_sdk import secure
-from aim_sdk.decorators import aim_verify
-
-agent = secure("my-agent")
-
-@aim_verify(agent, action_type="database_delete", risk_level="critical")
-def delete_all_records():
-    """Behavior depends on org's enforcement mode (set in dashboard)"""
-    db.execute("DELETE FROM records")
-
-# If org is in strict mode, this raises PermissionError on verification failure
-# If org is in monitoring mode, this logs a warning but executes anyway
-try:
-    delete_all_records()
-except PermissionError as e:
-    print(f"Action blocked by strict mode: {e}")
-```
-
-### Execution Status Tracking
-
-The SDK automatically reports execution status back to the AIM backend, so you can see exactly what happened:
-
-1. **Verified + Executed**: Action was approved and ran successfully
-2. **Denied + Executed (Monitoring Mode)**: Action was denied but ran anyway (warning logged)
-3. **Denied + Blocked (Strict Mode)**: Action was denied and prevented from running
-
-This information is visible in the AIM dashboard's verification history and alert details.
-
-## Capability Management
-
-### How It Works
-
-1. **Registration = Auto-Grant**: All capabilities detected during registration are automatically granted
-2. **Updates = Admin Approval**: New capabilities after registration require admin review
-3. **Security**: Prevents privilege escalation attacks (CVE-2025-32711)
-
-```python
-# Initial registration - capabilities auto-granted
-agent = secure("my-agent")  # ✅ Can use all detected capabilities immediately
-
-# Later, need new capability? Admin must approve
-client.capabilities.request("data:delete", reason="Cleanup feature")
-```
-
-### Request Additional Capabilities
-
-Use `request_capability()` to request capabilities that weren't detected during registration:
-
-```python
-# Request a new capability (requires admin approval)
 result = agent.request_capability(
-    capability_type="db:write",  # namespace:action format
+    capability_type="db:write",
     reason="Need to update user preferences"
 )
 
 if result["status"] == "pending":
     print(f"Request {result['id']} submitted - awaiting admin approval")
 elif result["status"] == "approved":
-    print("Capability granted!")
+    print("Capability granted")
 ```
 
-## MCP Server Registration
+## MCP server registration
 
-### Automatic Registration with Dynamic Capability Discovery
-
-When you specify MCP servers, the SDK **automatically discovers their capabilities** by querying each server using the MCP protocol:
+`secure()` auto-discovers MCP servers via Claude Desktop config and queries each server using the MCP protocol (`tools/list`):
 
 ```python
-from aim_sdk import secure
-
-# Just provide server names - capabilities discovered automatically!
-agent = secure(
-    "my-agent",
-    mcp_servers=["filesystem", "github"]  # Capabilities auto-discovered
-)
-
-# What happens:
-# 1. SDK finds these servers in Claude Desktop config
-# 2. SDK queries each server via MCP protocol (tools/list)
-# 3. Agent auto-attests with discovered capabilities
-# 4. Console shows: "Auto-attested MCP server 'filesystem' with 14 capabilities"
+agent = secure("my-agent", mcp_servers=["filesystem", "github"])
+# SDK queries each server, discovers actual capabilities, auto-attests.
 ```
 
-### Register MCP Servers Programmatically
-
-Use `register_mcp()` for manual registration:
+Manual registration:
 
 ```python
-# Register an MCP server
-mcp_result = agent.register_mcp(
+agent.register_mcp(
     server_name="my-database-server",
     server_url="http://localhost:3001",
-    capabilities=["db:read", "db:write", "data:delete"]  # namespace:action format
+    capabilities=["db:read", "db:write", "data:delete"]
 )
-
-print(f"MCP Server registered: {mcp_result['id']}")
 ```
 
-This is useful when:
-- Auto-detection doesn't find your MCP servers
-- You're connecting to dynamically provisioned MCP servers
-- You want to pre-register servers before connecting
-
-### Discover MCP Capabilities Programmatically
+Discover capabilities without attesting:
 
 ```python
 from aim_sdk.detection import discover_mcp_capabilities
 
-# Discover what tools MCP servers actually have
 caps = discover_mcp_capabilities(["filesystem", "github"])
-
-for server, tools in caps.items():
-    print(f"{server}: {len(tools)} tools - {tools[:3]}...")
-# filesystem: 14 tools - ['read_file', 'write_file', 'edit_file']...
-# github: 26 tools - ['create_repository', 'create_issue', 'create_pull_request']...
+# {"filesystem": ["read_file", "write_file", ...], "github": [...]}
 ```
 
-## Credential Storage
+## Credential storage
 
-Credentials are automatically saved to `~/.aim/credentials.json` with secure permissions (0600).
+| Path | Contents | Mode |
+|---|---|---|
+| `~/.aim/sdk_credentials.json` | OAuth tokens (from `aim-sdk login`) | 0600 |
+| `~/.aim/agents/<name>.json` | Per-agent Ed25519 keypair + metadata | 0600 |
+| `~/.aim/credentials.json` | Legacy combined-store; auto-migrated | 0600 |
+| `~/.aim/capabilities.json` | Explicit capability declarations (optional) | 0644 |
 
-**⚠️ Security Warning**: The private key is only returned ONCE during registration. Keep it safe!
+The private key is returned **once** at registration. The SDK saves it locally. Losing the private key means rotating credentials via the dashboard.
 
-```json
-{
-  "my-agent": {
-    "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-    "public_key": "base64-encoded-public-key",
-    "private_key": "base64-encoded-private-key",
-    "aim_url": "http://localhost:8080",
-    "status": "verified",
-    "trust_score": 75.0,
-    "registered_at": "2025-10-07T16:05:27.143786Z"
-  }
-}
-```
-
-## Capability Declaration 🎯
-
-AIM uses two reliable methods to detect your agent's capabilities:
-
-### How to Declare Capabilities
-
-| Method | Description | Confidence |
-|--------|-------------|------------|
-| **Decorators** | Use `@agent.perform_action(capability="...")` in your code | 100% |
-| **Config File** | Explicit capabilities in `~/.aim/capabilities.json` | 100% |
-
-> **Note**: Import-based detection (scanning `sys.modules`) is disabled by default because it's too noisy—almost every Python agent would show the same generic capabilities. Use decorators or config files for accurate capability declaration.
-
-### Option 1: Use Decorators (Recommended)
+To force a fresh registration that bypasses the local cache and reconnects to the backend:
 
 ```python
-from aim_sdk import secure
-
-agent = secure("my-agent")
-
-# Declare capabilities with decorators
-@agent.perform_action(capability="db:read")
-def read_database():
-    pass
-
-@agent.perform_action(capability="email:send")
-def send_email():
-    pass
+agent = secure("my-agent", force_new=True)
 ```
 
-### Option 2: Use Config File
+`force_new=True` is for credential rotation, debugging, or post-database-reset recovery. To create an entirely new agent, use a different name.
 
-Create `~/.aim/capabilities.json`:
-```json
-{
-  "capabilities": ["db:read", "db:write", "email:send"]
-}
+## CLI commands
+
+The SDK ships with a small CLI for authentication and status:
+
+```bash
+aim-sdk login                    # OAuth to AIM Cloud
+aim-sdk login --url <URL>        # OAuth to self-hosted instance
+aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
+aim-sdk status                   # Show authentication state
+aim-sdk --version                # Show SDK version
 ```
 
-### Option 3: Explicit Declaration
+For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
+
+## Manual mode (no OAuth)
+
+For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key:
 
 ```python
-# Declare capabilities at registration time
-agent = secure("my-agent", capabilities=["api:call", "db:read"])
-
-# Or disable auto-detection entirely
-agent = secure("my-agent", auto_detect=False, capabilities=["db:read", "db:write"])
+agent = secure("my-agent", api_key="aim_abc123")
 ```
 
-## Advanced Options
-
-### Force New Credentials (`force_new`)
-
-By default, the SDK caches credentials locally in `~/.aim/agents/{name}.json`. Use `force_new=True` to bypass cached credentials and reconnect to the backend:
+Or supply full credentials:
 
 ```python
-# Force a fresh connection (ignores local credential cache)
-agent = secure(
-    "my-agent",
-    force_new=True  # Bypasses local cache, reconnects to backend
+from aim_sdk import AIMClient
+
+client = AIMClient(
+    agent_id="550e8400-e29b-41d4-a716-446655440000",
+    public_key="<base64-Ed25519>",
+    private_key="<base64-Ed25519>",
+    aim_url="https://aim.opena2a.org"
 )
-```
 
-**When to use `force_new=True`:**
-- Your cached credentials became stale (e.g., after database reset)
-- You want to update agent metadata or capabilities on the server
-- You're debugging credential issues
-- Testing credential rotation
-
-**Note:** If an agent with the same name already exists on the server, `force_new=True` will reconnect to it (with fresh local credentials). To create a completely new agent, use a different name.
-
-## 📁 SDK Structure
-
-```
-sdk/python/
-├── aim_sdk/              # Core SDK package
-├── docs/                 # Integration guides and documentation
-│   ├── CREWAI_INTEGRATION.md
-│   ├── LANGCHAIN_INTEGRATION.md
-│   ├── MCP_INTEGRATION.md
-│   ├── ENV_CONFIG.md
-│   └── VERSIONING.md    # Versioning strategy
-├── examples/             # Working code examples
-│   ├── example.py
-│   ├── example_auto_detection.py
-│   └── example_one_line_setup.py
-├── tests/                # Comprehensive test suite
-├── demos/                # Demo projects
-├── README.md             # This file
-├── CHANGELOG.md          # Version history
-├── VERSION               # Current SDK version (1.21.0)
-├── requirements.txt      # Dependencies
-└── setup.py              # Package setup
+@client.perform_action(capability="db:read")
+def get_customer(customer_id): ...
 ```
 
 ## Examples
 
-### Quick Auto-Detection Demo (No Backend Required)
-```bash
-python examples/example_auto_detection.py
-```
-Demonstrates automatic capability and MCP server detection.
+Working examples in [`examples/`](examples/):
 
-### Full Zero-Config Demo
-```bash
-python examples/example_one_line_setup.py
-```
-Shows zero-config registration and verified actions (requires backend running).
+| Example | Shows |
+|---|---|
+| [`example.py`](examples/example.py) | Decorator-based verification, manual mode |
+| [`example_auto_detection.py`](examples/example_auto_detection.py) | Framework + MCP auto-discovery (no backend required) |
+| [`example_one_line_setup.py`](examples/example_one_line_setup.py) | Zero-config `secure()` flow (requires backend) |
 
-### Classic Example
-```bash
-python examples/example.py
-```
-Traditional example with decorator-based verification.
-
-**See [examples/README.md](./examples/README.md) for detailed documentation of all examples.**
-
-## Framework Integration Guides
-
-- **[LangChain](./docs/LANGCHAIN_INTEGRATION.md)** - Complete LangChain integration guide
-- **[CrewAI](./docs/CREWAI_INTEGRATION.md)** - CrewAI agent integration
-- **[MCP Servers](./docs/MCP_INTEGRATION.md)** - Model Context Protocol integration
-
-**See [docs/README.md](./docs/README.md) for all integration guides.**
+Framework integration guides:
+- [LangChain](docs/LANGCHAIN_INTEGRATION.md)
+- [CrewAI](docs/CREWAI_INTEGRATION.md)
+- [MCP servers](docs/MCP_INTEGRATION.md)
 
 ## Requirements
 
-All dependencies auto-install with pip:
-
 - Python 3.8+
-- requests (HTTP client)
-- PyNaCl (Ed25519 cryptography)
-- cryptography (secure encryption)
-- keyring (system keyring integration)
+- `requests` (HTTP)
+- `pynacl` (Ed25519)
+- `cryptography` (TLS, secure storage)
+- `keyring` (OS keychain for OAuth tokens)
 
-All dependencies are included in the downloaded SDK's `requirements.txt`.
+All install via `pip install aim-sdk`.
 
 ## Versioning
 
-The SDK follows [Semantic Versioning 2.0.0](https://semver.org/):
+[Semantic Versioning 2.0.0](https://semver.org/). Current: see `VERSION` file. SDK 1.x.x is compatible with backend 1.x.x; SDK 2.x.x requires backend 2.x.x.
 
-```
-1.1.0
-│ │ │
-│ │ └─── PATCH: Bug fixes
-│ └───── MINOR: New features (backward-compatible)
-└─────── MAJOR: Breaking changes
-```
-
-**Current Version**: 1.21.0
-
-**Version Compatibility**:
-- SDK 1.x.x works with Backend 1.x.x ✅
-- SDK 1.x.x does NOT work with Backend 2.x.x ❌
-
-**Check Your Version**:
 ```python
 import aim_sdk
-print(aim_sdk.__version__)  # "1.21.0"
+print(aim_sdk.__version__)
 ```
 
-**See Also**:
-- [CHANGELOG.md](./CHANGELOG.md) - Complete version history
-- [docs/VERSIONING.md](./docs/VERSIONING.md) - Versioning strategy and support policy
+See [CHANGELOG.md](CHANGELOG.md) for history, [docs/VERSIONING.md](docs/VERSIONING.md) for the support policy.
+
+## Related
+
+- [Java SDK](../java/README.md) — same API shape, AspectJ-based decoration
+- [TypeScript SDK](../typescript/README.md) — local-or-server mode
+- [opena2a CLI](https://github.com/opena2a-org/opena2a) — codebase auditing, credential migration, runtime monitoring
+- [AIM backend](../../README.md) — server, dashboard, deployment
 
 ## License
 
-Apache License 2.0 (Apache-2.0) - See [LICENSE](../../LICENSE) for details
+Apache-2.0. See [LICENSE](../../LICENSE).
