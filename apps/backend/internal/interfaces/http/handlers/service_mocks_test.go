@@ -330,7 +330,7 @@ func (m *MockMCPServiceImpl) GenerateVerificationChallenge(ctx context.Context, 
 // MockAuditServiceImpl implements AuditServicer interface
 type MockAuditServiceImpl struct {
 	LogActionFunc        func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
-	GetAgentActivityFunc func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
+	GetAgentActivityFunc func(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogsFunc     func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
 	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
 }
@@ -342,9 +342,9 @@ func (m *MockAuditServiceImpl) LogAction(ctx context.Context, orgID uuid.UUID, u
 	return nil
 }
 
-func (m *MockAuditServiceImpl) GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *MockAuditServiceImpl) GetAgentActivity(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	if m.GetAgentActivityFunc != nil {
-		return m.GetAgentActivityFunc(ctx, agentID, limit, offset)
+		return m.GetAgentActivityFunc(ctx, orgID, agentID, limit, offset)
 	}
 	return []*domain.AuditLog{}, nil
 }
@@ -1299,7 +1299,7 @@ func (m *MockAgentServiceForVerificationImpl) CreateSecurityAlert(ctx context.Co
 // MockAuditServiceForVerificationImpl implements AuditServicerForVerification interface
 type MockAuditServiceForVerificationImpl struct {
 	LogActionFunc    func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
-	GetAgentActivityFunc func(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
+	GetAgentActivityFunc func(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogsFunc func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
 	GetByIDFunc      func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
 	LogFunc          func(ctx context.Context, entry *domain.AuditLog) error
@@ -1312,9 +1312,9 @@ func (m *MockAuditServiceForVerificationImpl) LogAction(ctx context.Context, org
 	return nil
 }
 
-func (m *MockAuditServiceForVerificationImpl) GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *MockAuditServiceForVerificationImpl) GetAgentActivity(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	if m.GetAgentActivityFunc != nil {
-		return m.GetAgentActivityFunc(ctx, agentID, limit, offset)
+		return m.GetAgentActivityFunc(ctx, orgID, agentID, limit, offset)
 	}
 	return []*domain.AuditLog{}, nil
 }

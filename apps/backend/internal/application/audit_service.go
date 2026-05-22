@@ -80,20 +80,25 @@ func (s *AuditService) GetLogs(ctx context.Context, orgID uuid.UUID, limit, offs
 	return s.auditRepo.GetByOrganization(orgID, limit, offset)
 }
 
-// GetUserLogs retrieves audit logs for a specific user
-func (s *AuditService) GetUserLogs(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	return s.auditRepo.GetByUser(userID, limit, offset)
+// GetUserLogs retrieves audit logs for a specific user, scoped to the
+// caller's organization. SECURITY: orgID is mandatory — see
+// AuditLogRepository.GetByUser in audit_log.go for the rationale.
+func (s *AuditService) GetUserLogs(ctx context.Context, orgID, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	return s.auditRepo.GetByUser(orgID, userID, limit, offset)
 }
 
-// GetAgentActivity retrieves audit logs for actions performed BY a specific agent
-// This includes attestations, verifications, and other agent-initiated actions
-func (s *AuditService) GetAgentActivity(ctx context.Context, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	return s.auditRepo.GetByAgent(agentID, limit, offset)
+// GetAgentActivity retrieves audit logs for actions performed BY a
+// specific agent within the caller's organization (attestations,
+// verifications, other agent-initiated actions). SECURITY: orgID
+// scope as in GetUserLogs.
+func (s *AuditService) GetAgentActivity(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	return s.auditRepo.GetByAgent(orgID, agentID, limit, offset)
 }
 
-// GetResourceLogs retrieves audit logs for a specific resource
-func (s *AuditService) GetResourceLogs(ctx context.Context, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
-	return s.auditRepo.GetByResource(resourceType, resourceID)
+// GetResourceLogs retrieves audit logs for a specific resource within
+// the caller's organization. SECURITY: orgID scope as in GetUserLogs.
+func (s *AuditService) GetResourceLogs(ctx context.Context, orgID uuid.UUID, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+	return s.auditRepo.GetByResource(orgID, resourceType, resourceID)
 }
 
 // SearchLogs searches audit logs
@@ -119,9 +124,20 @@ func (s *AuditService) GetAuditLogs(
 	limit int,
 	offset int,
 ) ([]*domain.AuditLog, int, error) {
+	// SECURITY: every branch below MUST filter by orgID. The pre-fix
+	// implementation passed only the caller-supplied filter (resourceID
+	// or userID) into the repo, leaving the SQL as
+	// `WHERE resource_type = $1 AND resource_id = $2` /
+	// `WHERE user_id = $1` — a system-wide cross-tenant read for any
+	// authenticated admin
+	// (todo/2026-05-21-a3d-viii-followup-audit-log-query-idor.md).
+	// This is the documented sub-variant of the class-#3 lint blindspot
+	// "orgID referenced only on default branch" — every branch in a
+	// multi-filter service method must propagate orgID.
+
 	// If filtering by specific entity (e.g., MCP server), use GetByResource
 	if entityType != "" && entityID != nil {
-		logs, err := s.auditRepo.GetByResource(entityType, *entityID)
+		logs, err := s.auditRepo.GetByResource(orgID, entityType, *entityID)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -140,7 +156,7 @@ func (s *AuditService) GetAuditLogs(
 
 	// If filtering by user
 	if userID != nil {
-		logs, err := s.auditRepo.GetByUser(*userID, limit, offset)
+		logs, err := s.auditRepo.GetByUser(orgID, *userID, limit, offset)
 		if err != nil {
 			return nil, 0, err
 		}

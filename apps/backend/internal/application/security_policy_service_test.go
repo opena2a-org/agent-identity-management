@@ -178,8 +178,8 @@ func (m *MockAuditLogRepoForPolicies) GetByOrganization(orgID uuid.UUID, limit, 
 	return args.Get(0).([]*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepoForPolicies) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	args := m.Called(agentID, limit, offset)
+func (m *MockAuditLogRepoForPolicies) GetByAgent(orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	args := m.Called(orgID, agentID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -207,16 +207,16 @@ func (m *MockAuditLogRepoForPolicies) Search(query string, limit, offset int) ([
 	return args.Get(0).([]*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepoForPolicies) GetByUser(userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
-	args := m.Called(userID, limit, offset)
+func (m *MockAuditLogRepoForPolicies) GetByUser(orgID, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+	args := m.Called(orgID, userID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepoForPolicies) GetByResource(resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
-	args := m.Called(resourceType, resourceID)
+func (m *MockAuditLogRepoForPolicies) GetByResource(orgID uuid.UUID, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+	args := m.Called(orgID, resourceType, resourceID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

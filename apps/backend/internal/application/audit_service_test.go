@@ -69,10 +69,10 @@ func (m *MockAuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offse
 	return result[offset:end], nil
 }
 
-func (m *MockAuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *MockAuditLogRepository) GetByUser(orgID, userID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	var result []*domain.AuditLog
 	for _, log := range m.logs {
-		if log.UserID != nil && *log.UserID == userID {
+		if log.OrganizationID == orgID && log.UserID != nil && *log.UserID == userID {
 			result = append(result, log)
 		}
 	}
@@ -87,10 +87,10 @@ func (m *MockAuditLogRepository) GetByUser(userID uuid.UUID, limit, offset int) 
 	return result[offset:end], nil
 }
 
-func (m *MockAuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *MockAuditLogRepository) GetByAgent(orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	var result []*domain.AuditLog
 	for _, log := range m.logs {
-		if log.AgentID != nil && *log.AgentID == agentID {
+		if log.OrganizationID == orgID && log.AgentID != nil && *log.AgentID == agentID {
 			result = append(result, log)
 		}
 	}
@@ -105,10 +105,10 @@ func (m *MockAuditLogRepository) GetByAgent(agentID uuid.UUID, limit, offset int
 	return result[offset:end], nil
 }
 
-func (m *MockAuditLogRepository) GetByResource(resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+func (m *MockAuditLogRepository) GetByResource(orgID uuid.UUID, resourceType string, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
 	var result []*domain.AuditLog
 	for _, log := range m.logs {
-		if log.ResourceType == resourceType && log.ResourceID == resourceID {
+		if log.OrganizationID == orgID && log.ResourceType == resourceType && log.ResourceID == resourceID {
 			result = append(result, log)
 		}
 	}
@@ -139,7 +139,22 @@ func (m *MockAuditLogRepository) CountActionsByAgentInTimeWindow(agentID uuid.UU
 }
 
 func (m *MockAuditLogRepository) GetRecentActionsByAgent(agentID uuid.UUID, limit int) ([]*domain.AuditLog, error) {
-	return m.GetByAgent(agentID, limit, 0)
+	// GetRecentActionsByAgent is a security-policy method that operates
+	// per-agent without an orgID (used internally for drift detection
+	// where the agent's own org is implicit). The mock filters on
+	// agentID only; production runs SQL with no organization_id filter
+	// (separate defense-in-depth concern, not in scope for the
+	// audit-log query IDOR fix).
+	var result []*domain.AuditLog
+	for _, log := range m.logs {
+		if log.AgentID != nil && *log.AgentID == agentID {
+			result = append(result, log)
+		}
+	}
+	if limit > 0 && limit < len(result) {
+		result = result[:limit]
+	}
+	return result, nil
 }
 
 func (m *MockAuditLogRepository) GetAgentActionsByIPAddress(agentID uuid.UUID, ipAddress string, limit int) ([]*domain.AuditLog, error) {
@@ -320,8 +335,8 @@ func TestAuditService_GetUserLogs(t *testing.T) {
 		ResourceID:     uuid.New(),
 	})
 
-	// Get logs for first user
-	logs, err := service.GetUserLogs(ctx, userID, 10, 0)
+	// Get logs for first user, scoped to the test's org
+	logs, err := service.GetUserLogs(ctx, orgID, userID, 10, 0)
 	require.NoError(t, err)
 	assert.Len(t, logs, 4)
 }
@@ -353,8 +368,8 @@ func TestAuditService_GetAgentActivity(t *testing.T) {
 		ResourceID:     uuid.New(),
 	})
 
-	// Get logs for first agent
-	logs, err := service.GetAgentActivity(ctx, agentID, 10, 0)
+	// Get logs for first agent, scoped to the test's org
+	logs, err := service.GetAgentActivity(ctx, orgID, agentID, 10, 0)
 	require.NoError(t, err)
 	assert.Len(t, logs, 3)
 }
@@ -388,8 +403,8 @@ func TestAuditService_GetResourceLogs(t *testing.T) {
 		ResourceID:     otherResourceID,
 	})
 
-	// Get logs for specific resource
-	logs, err := service.GetResourceLogs(ctx, "agent", resourceID)
+	// Get logs for specific resource, scoped to the test's org
+	logs, err := service.GetResourceLogs(ctx, orgID, "agent", resourceID)
 	require.NoError(t, err)
 	assert.Len(t, logs, 2)
 }
@@ -654,4 +669,189 @@ func TestAuditService_AllAuditActions(t *testing.T) {
 	logs, err := service.GetLogs(ctx, orgID, 100, 0)
 	require.NoError(t, err)
 	assert.Len(t, logs, len(actions))
+}
+
+// ===========================
+// Cross-tenant query IDOR regression tests
+// ===========================
+//
+// These tests are the regression proof for
+// todo/2026-05-21-a3d-viii-followup-audit-log-query-idor.md.
+//
+// Pre-fix shape: AuditService.GetAuditLogs dropped orgID on the
+// entity-filter and user-filter branches; repo methods GetByUser /
+// GetByResource / GetByAgent ran SQL with no organization_id filter.
+// Any authenticated admin in org A could read audit rows from org B
+// by supplying victim UUIDs as query params.
+//
+// Post-fix shape: orgID propagates through every branch; repo SQL
+// includes AND organization_id = $N; MockAuditLogRepository in this
+// file filters by OrganizationID alongside the supplied filter.
+//
+// Each test plants TWO rows for the same victim UUID — one in the
+// caller's org, one in a different org — and asserts the caller
+// sees only its own row.
+
+func TestAuditService_GetAuditLogs_ByEntityID_CrossOrgReturnsOnlyOwn(t *testing.T) {
+	repo := NewMockAuditLogRepository()
+	service := NewAuditService(repo)
+	ctx := context.Background()
+
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	sharedResourceID := uuid.New() // same UUID, two orgs — the IDOR shape
+
+	// Plant a row in the caller's org and a row in the victim's org,
+	// both with the same resource type + resource ID. Pre-fix, the
+	// service would return both because GetByResource dropped orgID.
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: callerOrgID,
+		Action:         domain.AuditActionUpdate,
+		ResourceType:   "mcp_server",
+		ResourceID:     sharedResourceID,
+	}))
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: victimOrgID,
+		Action:         domain.AuditActionUpdate,
+		ResourceType:   "mcp_server",
+		ResourceID:     sharedResourceID,
+	}))
+
+	logs, total, err := service.GetAuditLogs(ctx, callerOrgID, "", "mcp_server", &sharedResourceID, nil, nil, nil, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, logs, 1, "must return only the caller's-org row, not the victim's")
+	assert.Equal(t, 1, total)
+	for _, row := range logs {
+		assert.Equal(t, callerOrgID, row.OrganizationID,
+			"every returned row's OrganizationID must equal the callerOrgID")
+	}
+}
+
+func TestAuditService_GetAuditLogs_ByUserID_CrossOrgReturnsOnlyOwn(t *testing.T) {
+	repo := NewMockAuditLogRepository()
+	service := NewAuditService(repo)
+	ctx := context.Background()
+
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	sharedUserID := uuid.New() // implausible in practice but the IDOR shape was UUID collision via attacker-supplied UUID
+
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: callerOrgID,
+		UserID:         &sharedUserID,
+		Action:         domain.AuditActionLogin,
+		ResourceType:   "session",
+		ResourceID:     uuid.New(),
+	}))
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: victimOrgID,
+		UserID:         &sharedUserID,
+		Action:         domain.AuditActionLogin,
+		ResourceType:   "session",
+		ResourceID:     uuid.New(),
+	}))
+
+	logs, total, err := service.GetAuditLogs(ctx, callerOrgID, "", "", nil, &sharedUserID, nil, nil, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, logs, 1)
+	assert.Equal(t, 1, total)
+	for _, row := range logs {
+		assert.Equal(t, callerOrgID, row.OrganizationID)
+	}
+}
+
+func TestAuditService_GetAgentActivity_CrossOrgReturnsOnlyOwn(t *testing.T) {
+	repo := NewMockAuditLogRepository()
+	service := NewAuditService(repo)
+	ctx := context.Background()
+
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	sharedAgentID := uuid.New()
+
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: callerOrgID,
+		AgentID:        &sharedAgentID,
+		Action:         domain.AuditActionAttest,
+		ResourceType:   "mcp_server",
+		ResourceID:     uuid.New(),
+	}))
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: victimOrgID,
+		AgentID:        &sharedAgentID,
+		Action:         domain.AuditActionAttest,
+		ResourceType:   "mcp_server",
+		ResourceID:     uuid.New(),
+	}))
+
+	logs, err := service.GetAgentActivity(ctx, callerOrgID, sharedAgentID, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, logs, 1)
+	for _, row := range logs {
+		assert.Equal(t, callerOrgID, row.OrganizationID)
+	}
+}
+
+// GetUserLogs cross-org regression — same shape as GetAgentActivity.
+func TestAuditService_GetUserLogs_CrossOrgReturnsOnlyOwn(t *testing.T) {
+	repo := NewMockAuditLogRepository()
+	service := NewAuditService(repo)
+	ctx := context.Background()
+
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	sharedUserID := uuid.New()
+
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: callerOrgID,
+		UserID:         &sharedUserID,
+		Action:         domain.AuditActionLogin,
+		ResourceType:   "session",
+		ResourceID:     uuid.New(),
+	}))
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: victimOrgID,
+		UserID:         &sharedUserID,
+		Action:         domain.AuditActionLogin,
+		ResourceType:   "session",
+		ResourceID:     uuid.New(),
+	}))
+
+	logs, err := service.GetUserLogs(ctx, callerOrgID, sharedUserID, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, logs, 1)
+	for _, row := range logs {
+		assert.Equal(t, callerOrgID, row.OrganizationID)
+	}
+}
+
+// GetResourceLogs cross-org regression — same shape.
+func TestAuditService_GetResourceLogs_CrossOrgReturnsOnlyOwn(t *testing.T) {
+	repo := NewMockAuditLogRepository()
+	service := NewAuditService(repo)
+	ctx := context.Background()
+
+	callerOrgID := uuid.New()
+	victimOrgID := uuid.New()
+	sharedResourceID := uuid.New()
+
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: callerOrgID,
+		Action:         domain.AuditActionCreate,
+		ResourceType:   "agent",
+		ResourceID:     sharedResourceID,
+	}))
+	require.NoError(t, repo.Create(&domain.AuditLog{
+		OrganizationID: victimOrgID,
+		Action:         domain.AuditActionCreate,
+		ResourceType:   "agent",
+		ResourceID:     sharedResourceID,
+	}))
+
+	logs, err := service.GetResourceLogs(ctx, callerOrgID, "agent", sharedResourceID)
+	require.NoError(t, err)
+	assert.Len(t, logs, 1)
+	for _, row := range logs {
+		assert.Equal(t, callerOrgID, row.OrganizationID)
+	}
 }
