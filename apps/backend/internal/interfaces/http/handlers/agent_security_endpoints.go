@@ -43,17 +43,18 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY: replace the pre-fix existence oracle (404 "Agent not
+	// found" vs 403 "Access denied") with the LoadOwned helper. Both
+	// branches now collapse to a fixed 404 body, closing the side
+	// channel that let an attacker enumerate agent UUIDs across
+	// tenants. The returned agent is reused below for audit-metadata
+	// capture (agent.Name) and the response body.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Log audit - viewing key vault is a sensitive action
@@ -137,17 +138,18 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 		fmt.Sscanf(offsetStr, "%d", &offset)
 	}
 
-	// Verify agent belongs to organization
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+	// SECURITY: replace the pre-fix existence oracle (404 "Agent not
+	// found" vs 403 "Access denied") with the LoadOwned helper. Both
+	// branches now collapse to a fixed 404 body, closing the side
+	// channel that let an attacker enumerate agent UUIDs across
+	// tenants. The returned agent is reused below for audit-metadata
+	// capture (agent.Name) and the response body.
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
 	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	// Get audit logs filtered by agent ID (entity_id)

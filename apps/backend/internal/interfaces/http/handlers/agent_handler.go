@@ -537,15 +537,34 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 	detectedRiskLevel := domain.DetectRiskLevel(req.Capability, riskOverride)
 	riskAutoDetected := req.RiskLevel == nil || *req.RiskLevel == ""
 
-	// Get agent and organization details for logging
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
+	// SECURITY (HIGH cross-tenant IDOR): the pre-fix code derived
+	// orgID from the LOADED agent (`orgID := agent.OrganizationID`),
+	// meaning an attacker with any /agents-group auth could POST to
+	// /agents/<victim-org-agent>/verify-capability and the handler
+	// would run the verification + write audit-log + verification-event
+	// + alert rows into the VICTIM org. Cross-tenant pollution and
+	// capability-decision leak. The lint passed because the body
+	// mentions OrganizationID — but only as a victim-side read, not
+	// as a caller-side check (documented blindspot, see memory
+	// feedback_adversarial_subagent_caught_lint_blindspot).
+	//
+	// Post-fix: derive orgID from caller context, then LoadOwned
+	// verifies the agent belongs to caller's org BEFORE any service
+	// call. The downstream audit/event/alert writes still use orgID
+	// (now the caller's, which matches agent.OrganizationID after
+	// LoadOwned's check). Both cross-tenant and not-found collapse
+	// to a fixed 404.
+	orgID, err := RequireOrganizationID(c)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+		return err
 	}
-
-	orgID := agent.OrganizationID
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	agent := LoadOwned(c, loader, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
+	}
 	startTime := time.Now()
 
 	// Fetch agent and verify capabilities
@@ -756,6 +775,22 @@ func (h *AgentHandler) LogCapabilityResult(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
+	}
+
+	// SECURITY: pre-fix handler called h.agentService.LogCapabilityResult
+	// with the path-supplied agentID + auditID and no caller-org check.
+	// LoadOwned now confirms the target agent belongs to caller's org;
+	// the service call only runs for caller-owned agents, preventing
+	// cross-tenant audit-result pollution.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	loader := func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}
+	if LoadOwned(c, loader, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	if err := h.agentService.LogCapabilityResult(c.Context(), agentID, auditID, req.Success, req.Error, req.Result); err != nil {
