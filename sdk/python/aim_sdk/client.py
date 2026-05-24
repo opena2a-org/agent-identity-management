@@ -24,7 +24,8 @@ from .exceptions import (
     AuthenticationError,
     VerificationError,
     ActionDeniedError,
-    ConfigurationError
+    ConfigurationError,
+    StaleCredentialsError,
 )
 
 # Get version - we need to compute it directly to avoid circular import
@@ -3531,11 +3532,14 @@ def register_agent(
             )
 
             if not is_valid:
-                # Credentials are stale - delete and re-register
-                console.warning(f"Cached credentials for '{name}' are stale: {validation_error}")
-                console.info("Deleting stale credentials and re-registering agent...")
+                # Stale credentials: the agent ID in the local file no longer
+                # exists in the backend. Silently re-registering would create a
+                # fresh agent row with default state, wiping any admin-curated
+                # status, trust score, granted capabilities, or MCP grants
+                # applied to the original agent under this name (#178).
+                from pathlib import Path as _Path
+                _creds_path = _Path.home() / ".aim" / "agents" / f"{name}.json"
 
-                # Log the stale credential detection
                 security_logger.log_agent_event(
                     AgentEventType.AGENT_STALE_CREDENTIALS,
                     agent_id=agent_id,
@@ -3543,16 +3547,30 @@ def register_agent(
                     details={
                         "error": "stale_credentials",
                         "reason": validation_error,
-                        "action": "re-registering"
+                        "action": "refused_silent_reregistration",
                     }
                 )
 
-                # Delete stale credentials
-                from .credentials import delete_agent_credentials
-                delete_agent_credentials(name)
-
-                # Fall through to re-registration below
-                existing_creds = None
+                raise StaleCredentialsError(
+                    f"\nCached agent credentials for '{name}' reference agent "
+                    f"{agent_id[:8]}... which is no longer present in the AIM "
+                    f"backend at {cached_aim_url}.\n"
+                    f"\n"
+                    f"Reason: {validation_error}\n"
+                    f"\n"
+                    f"The SDK will not silently re-register, because doing so "
+                    f"would create a fresh agent row and wipe any admin-set "
+                    f"state (status, trust score, granted capabilities, MCP "
+                    f"grants) applied to the previous agent under this name.\n"
+                    f"\n"
+                    f"TO RECOVER:\n"
+                    f"  1. Confirm the AIM URL is correct: {cached_aim_url}\n"
+                    f"  2. Check the dashboard to see if the agent was deleted.\n"
+                    f"  3. If you intend to register a new agent under this "
+                    f"name, remove the cached file explicitly:\n"
+                    f"       rm {_creds_path}\n"
+                    f"     then re-run your script.\n"
+                )
 
             else:
                 # Credentials are valid - use them
