@@ -38,7 +38,7 @@ We are auditing every dashboard tab on the agent and MCP server detail pages to 
 
 ### Post-quantum cryptography surfacing
 
-The backend implements ML-DSA 44/65/87 (FIPS 204) and supports hybrid Ed25519 plus ML-DSA registration. The agent detail dashboard does not yet render these fields. We are adding the matching UI so that the cryptographic identity panel reflects the full key material the backend actually stores.
+The backend implements ML-DSA 44/65/87 (FIPS 204) and supports hybrid Ed25519 plus ML-DSA registration. The agent detail dashboard now renders these fields. The Identity and Signing tab shows the ML-DSA algorithm, a truncated post-quantum public key with copy-to-clipboard, the hybrid-mode badge, and the lifecycle dates. The agent detail API response and the key-vault endpoint both include the PQC fields. Regression tests pin the response shape so the surfacing cannot silently regress.
 
 ## Our process
 

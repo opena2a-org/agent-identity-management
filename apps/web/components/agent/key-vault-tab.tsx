@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Copy, Check, Key, Shield } from 'lucide-react';
+import { Copy, Check, Key, Shield, ShieldCheck } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -13,6 +14,11 @@ interface KeyVault {
   keyAlgorithm: string;
   keyCreatedAt: string;
   hasPreviousPublicKey: boolean;
+  pqcPublicKey?: string | null;
+  pqcKeyAlgorithm?: string | null;
+  hybridModeEnabled?: boolean;
+  pqcKeyCreatedAt?: string | null;
+  pqcKeyExpiresAt?: string | null;
 }
 
 interface KeyVaultTabProps {
@@ -23,6 +29,7 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
   const [keyVault, setKeyVault] = useState<KeyVault | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [pqcCopied, setPqcCopied] = useState(false);
 
   useEffect(() => {
     const fetchKeyVault = async () => {
@@ -47,6 +54,17 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const copyPqcPublicKey = () => {
+    if (keyVault?.pqcPublicKey) {
+      navigator.clipboard.writeText(keyVault.pqcPublicKey);
+      setPqcCopied(true);
+      setTimeout(() => setPqcCopied(false), 2000);
+    }
+  };
+
+  const truncateKey = (key: string, head = 24, tail = 16) =>
+    key.length <= head + tail + 3 ? key : `${key.slice(0, head)}…${key.slice(-tail)}`;
 
   if (loading) {
     return <div className="text-center py-8">Loading key vault...</div>;
@@ -145,6 +163,107 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
             </div>
           )}
         </div>
+      </Card>
+
+      {/* Post-Quantum Companion Key */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-6 flex-wrap">
+          <ShieldCheck className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Post-Quantum Companion Key</h3>
+          {keyVault.pqcPublicKey ? (
+            <Badge variant="secondary" className="ml-2">
+              {keyVault.hybridModeEnabled ? 'Hybrid mode enabled' : 'Registered'}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-2">Not registered</Badge>
+          )}
+        </div>
+
+        {keyVault.pqcPublicKey ? (
+          <div className="space-y-6">
+            {/* PQC Algorithm */}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Algorithm
+              </label>
+              <div className="text-sm font-mono">{keyVault.pqcKeyAlgorithm || 'ML-DSA-65'}</div>
+            </div>
+
+            {/* PQC Public Key (truncated) */}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Public Key (Base64, truncated)
+              </label>
+              <div className="flex gap-2">
+                <code
+                  className="flex-1 p-3 bg-muted rounded-md text-xs font-mono break-all"
+                  title={keyVault.pqcPublicKey}
+                >
+                  {truncateKey(keyVault.pqcPublicKey)}
+                </code>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={copyPqcPublicKey}
+                  className="shrink-0"
+                  aria-label="Copy post-quantum public key"
+                >
+                  {pqcCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                ML-DSA-65 public keys are 1952 bytes ({Math.ceil((keyVault.pqcPublicKey.length * 6) / 8)} chars base64). Click copy for the full value.
+              </p>
+            </div>
+
+            {/* Lifecycle */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground block mb-2">
+                  Key Created
+                </label>
+                <div className="text-sm">
+                  {(() => {
+                    const d = keyVault.pqcKeyCreatedAt ? new Date(keyVault.pqcKeyCreatedAt) : null;
+                    return d && d.getTime() > 0
+                      ? formatDistanceToNow(d, { addSuffix: true })
+                      : 'Unknown';
+                  })()}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground block mb-2">
+                  Key Expires
+                </label>
+                <div className="text-sm">
+                  {(() => {
+                    const d = keyVault.pqcKeyExpiresAt ? new Date(keyVault.pqcKeyExpiresAt) : null;
+                    return d && d.getTime() > 0
+                      ? formatDistanceToNow(d, { addSuffix: true })
+                      : 'No expiry set';
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            <p className="mb-2">
+              No post-quantum public key registered for this agent. The agent currently authenticates
+              with the classical Ed25519 keypair above.
+            </p>
+            <p className="text-xs">
+              To register an ML-DSA-65 companion key, the agent posts to{' '}
+              <code className="font-mono bg-muted px-1 py-0.5 rounded">POST /api/v1/agents/&lt;id&gt;/pqc-key</code>.
+              See the AIM SDK docs for hybrid-mode setup.
+            </p>
+          </div>
+        )}
       </Card>
 
       {/* Security Note */}

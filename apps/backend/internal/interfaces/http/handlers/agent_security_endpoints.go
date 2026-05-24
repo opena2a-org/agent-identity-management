@@ -84,6 +84,11 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 		"keyRotationGraceUntil": agent.KeyRotationGraceUntil,
 		"rotationCount":         agent.RotationCount,
 		"hasPreviousPublicKey":  agent.PreviousPublicKey != nil,
+		"pqcPublicKey":          agent.PQCPublicKey,
+		"pqcKeyAlgorithm":       agent.PQCKeyAlgorithm,
+		"hybridModeEnabled":     agent.HybridModeEnabled,
+		"pqcKeyCreatedAt":       agent.PQCKeyCreatedAt,
+		"pqcKeyExpiresAt":       agent.PQCKeyExpiresAt,
 	})
 }
 

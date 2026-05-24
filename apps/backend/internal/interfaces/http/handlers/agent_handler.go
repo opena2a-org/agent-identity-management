@@ -161,6 +161,11 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		"keyCreatedAt":             agent.KeyCreatedAt,
 		"keyExpiresAt":             agent.KeyExpiresAt,
 		"rotationCount":            agent.RotationCount,
+		"pqcPublicKey":             agent.PQCPublicKey,
+		"pqcKeyAlgorithm":          agent.PQCKeyAlgorithm,
+		"hybridModeEnabled":        agent.HybridModeEnabled,
+		"pqcKeyCreatedAt":          agent.PQCKeyCreatedAt,
+		"pqcKeyExpiresAt":          agent.PQCKeyExpiresAt,
 	}
 }
 

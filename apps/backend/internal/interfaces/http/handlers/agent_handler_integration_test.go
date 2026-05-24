@@ -2991,3 +2991,187 @@ func TestAgentHandler_MutationHandlers_CrossOrgReturns404(t *testing.T) {
 		})
 	}
 }
+
+// ===========================
+// PQC field surfacing tests (issue #128)
+//
+// Backend has always stored the ML-DSA-65 companion key via the
+// /agents/:id/pqc-key registration endpoint, but the agent-detail
+// response and the key-vault response both omitted the fields, so
+// the dashboard could not render them. These tests pin the new
+// response shape so a future refactor does not silently drop them.
+// ===========================
+
+func TestEnrichAgentResponse_WithPQCFields(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	pqcKey := "ML-DSA-65-PUBLIC-KEY-BASE64-PLACEHOLDER"
+	pqcAlg := "ML-DSA-65"
+	now := time.Now()
+	expiresAt := now.Add(365 * 24 * time.Hour)
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/test", func(c fiber.Ctx) error {
+		agent := &domain.Agent{
+			ID:                agentID,
+			OrganizationID:    orgID,
+			Name:              "pqc-agent",
+			Status:            domain.AgentStatusVerified,
+			TrustScore:        90.0,
+			CreatedAt:         now,
+			PQCPublicKey:      &pqcKey,
+			PQCKeyAlgorithm:   &pqcAlg,
+			HybridModeEnabled: true,
+			PQCKeyCreatedAt:   &now,
+			PQCKeyExpiresAt:   &expiresAt,
+		}
+		return c.JSON(handler.enrichAgentResponse(c, agent))
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	assert.Equal(t, pqcKey, result["pqcPublicKey"])
+	assert.Equal(t, pqcAlg, result["pqcKeyAlgorithm"])
+	assert.Equal(t, true, result["hybridModeEnabled"])
+	assert.Contains(t, result, "pqcKeyCreatedAt")
+	assert.NotNil(t, result["pqcKeyCreatedAt"])
+	assert.Contains(t, result, "pqcKeyExpiresAt")
+	assert.NotNil(t, result["pqcKeyExpiresAt"])
+}
+
+func TestEnrichAgentResponse_PQCFields_OmittedWhenUnset(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	handler := NewAgentHandlerWithInterfaces(
+		&MockAgentServiceImpl{},
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/test", func(c fiber.Ctx) error {
+		agent := &domain.Agent{
+			ID:             uuid.New(),
+			OrganizationID: orgID,
+			Name:           "classical-only-agent",
+			Status:         domain.AgentStatusVerified,
+			CreatedAt:      time.Now(),
+			// PQC fields intentionally left nil/false.
+		}
+		return c.JSON(handler.enrichAgentResponse(c, agent))
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	// Classical-only agent: pqc pointer fields serialize to null;
+	// hybridModeEnabled is a plain bool so it serializes as false.
+	// The dashboard relies on pqcPublicKey == null to hide the panel.
+	assert.Nil(t, result["pqcPublicKey"])
+	assert.Nil(t, result["pqcKeyAlgorithm"])
+	assert.Equal(t, false, result["hybridModeEnabled"])
+	assert.Nil(t, result["pqcKeyCreatedAt"])
+	assert.Nil(t, result["pqcKeyExpiresAt"])
+}
+
+func TestAgentHandler_GetAgentKeyVault_IncludesPQCFields(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	pqcKey := "ML-DSA-65-PUBLIC-KEY-BASE64-PLACEHOLDER"
+	pqcAlg := "ML-DSA-65"
+	now := time.Now()
+	expiresAt := now.Add(365 * 24 * time.Hour)
+	ed25519Pub := "ed25519-public-key"
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:                agentID,
+				OrganizationID:    orgID,
+				Name:              "pqc-agent",
+				Status:            domain.AgentStatusVerified,
+				PublicKey:         &ed25519Pub,
+				PQCPublicKey:      &pqcKey,
+				PQCKeyAlgorithm:   &pqcAlg,
+				HybridModeEnabled: true,
+				PQCKeyCreatedAt:   &now,
+				PQCKeyExpiresAt:   &expiresAt,
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/key-vault", handler.GetAgentKeyVault)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/key-vault", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	assert.Equal(t, pqcKey, result["pqcPublicKey"])
+	assert.Equal(t, pqcAlg, result["pqcKeyAlgorithm"])
+	assert.Equal(t, true, result["hybridModeEnabled"])
+	assert.NotNil(t, result["pqcKeyCreatedAt"])
+	assert.NotNil(t, result["pqcKeyExpiresAt"])
+}
