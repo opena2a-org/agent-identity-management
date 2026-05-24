@@ -80,7 +80,7 @@ Audit Log: my-agent (aim_7f3a9c2e)
 Chain integrity: VALID (50 events shown of 128 total, 0 breaks)
 
 #    Timestamp                Action          Target         Outcome
-79   2026-03-16T10:00:12Z     api:call        weather-svc    allowed
+79   2026-03-16T10:00:12Z     db:read         customers      allowed
 80   2026-03-16T10:01:44Z     db:read         orders         allowed
 81   2026-03-16T10:02:03Z     file:write      /tmp/report    denied
 ...
@@ -107,7 +107,7 @@ aim.getIdentity();
 
 // Log events (plugin and result are required fields)
 aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin: 'my-agent' });
-aim.logEvent({ action: 'api:call', target: 'weather-svc', result: 'allowed', plugin: 'my-agent' });
+aim.logEvent({ action: 'db:write', target: 'customers', result: 'allowed', plugin: 'my-agent' });
 aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', plugin: 'my-agent' });
 
 // Each event is appended to the local audit log with a SHA-256 hash chain.
@@ -130,10 +130,6 @@ agent = secure("my-agent")
 @agent.perform_action("db:read", resource="customers")
 def read_customers():
     return db.query("SELECT * FROM customers")
-
-@agent.perform_action("api:call", resource="weather-svc")
-def call_weather():
-    return requests.get("https://weather-svc.example.com/forecast")
 
 # Each decorated call is automatically logged with the agent's identity.
 # When connected to an AIM Server (via aim_url), events are also sent to the central database.

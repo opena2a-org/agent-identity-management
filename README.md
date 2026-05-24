@@ -297,8 +297,6 @@ Four runnable demos in [`examples/`](examples/):
 | [Enforce capabilities](docs/use-cases/enforce-capabilities.md) | 5 min |
 | [Embed in an app](docs/use-cases/embed-in-my-app.md) | 10 min |
 | [Fleet governance](docs/use-cases/fleet-governance.md) | 30 min |
-| [SIEM forwarding](docs/use-cases/siem-forwarding.md) | 15 min |
-| [CyberArk vault integration](docs/use-cases/cyberark-integration.md) | 20 min |
 
 Full index: [docs/USE-CASES.md](docs/USE-CASES.md).
 
