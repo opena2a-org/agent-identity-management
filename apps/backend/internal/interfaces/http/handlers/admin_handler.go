@@ -327,6 +327,16 @@ func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (A3d-viii): verify the target user belongs to the caller's
+	// org before invoking the update flow. The service-layer check returns
+	// a distinct error string for cross-tenant vs not-found, which the
+	// handler then serialises as 500 with the error in the body — an
+	// existence side channel that lets an attacker enumerate user UUIDs
+	// across tenants. Handler-layer LoadOwned collapses both to 404.
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
+		return nil
+	}
+
 	// Update user role
 	user, err := h.getAuthService().UpdateUserRole(c.Context(), targetUserID, orgID, role, adminID)
 	if err != nil {
@@ -374,6 +384,15 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Cannot deactivate your own account",
 		})
+	}
+
+	// SECURITY (A3d-viii): verify the target user belongs to the caller's
+	// org BEFORE the super-admin lookup and the service call. The service
+	// echoes a distinct error string for cross-tenant vs not-found, which
+	// the handler then surfaces as 500 with the body — an existence side
+	// channel. LoadOwned collapses both to 404.
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
+		return nil
 	}
 
 	// Check if target user is the super admin (first admin user in the organization)
@@ -427,18 +446,13 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify user belongs to the same organization
-	user, err := h.getAuthService().GetUserByID(c.Context(), targetUserID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
-
-	if user.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "User not found in organization",
-		})
+	// SECURITY (A3d-viii): replace the pre-fix existence oracle (404
+	// "User not found" vs 403 "User not found in organization") with the
+	// LoadOwned helper. Both branches now collapse to a fixed 404 body,
+	// closing the side channel that let an attacker distinguish "no such
+	// user system-wide" from "user exists in another org".
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
+		return nil
 	}
 
 	// Activate user using admin service
@@ -479,25 +493,21 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 		})
 	}
 
-	// Verify user belongs to the same organization
-	user, err := h.getAuthService().GetUserByID(c.Context(), targetUserID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
-
-	if user.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "User not found in organization",
-		})
-	}
-
 	// Cannot delete yourself
 	if targetUserID == adminID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Cannot delete your own account",
 		})
+	}
+
+	// SECURITY (A3d-viii): replace the pre-fix existence oracle (404
+	// "User not found" vs 403 "User not found in organization") with the
+	// LoadOwned helper. Both branches now collapse to a fixed 404 body,
+	// closing the side channel. The returned user is reused below for
+	// the audit-log email/name capture.
+	user := LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID)
+	if user == nil {
+		return nil
 	}
 
 	// Check if target user is the super admin (first admin user in the organization)
