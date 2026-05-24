@@ -541,7 +541,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		}
 
 		// Identify new capabilities (potential escalations)
-		var newCaps []string
+		newCaps := make([]string, 0)
 		for _, capType := range req.Capabilities {
 			if _, exists := currentCapTypes[capType]; !exists {
 				newCaps = append(newCaps, capType)
@@ -595,7 +595,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		}
 
 		// Capability removal is always allowed (safe direction - reducing privileges)
-		var revokedCaps []string
+		revokedCaps := make([]string, 0)
 		for capType, cap := range currentCapTypes {
 			if !requestedCapTypes[capType] {
 				now := time.Now()
@@ -2070,6 +2070,12 @@ func (s *AgentService) RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID,
 	agent.PQCKeyAlgorithm = &algorithm
 	agent.PQCKeyCreatedAt = &now
 	agent.UpdatedAt = now
+
+	// Bump the rotation counter (#129) — matches RotateCredentials and
+	// UpdateAgentPublicKey, which both already increment. Without this, the
+	// dashboard's rotationCount field stays at 0 for any agent that has only
+	// rotated its PQC key, hiding rotation activity from operators.
+	agent.RotationCount++
 
 	if err := s.agentRepo.Update(agent); err != nil {
 		return fmt.Errorf("failed to rotate agent PQC key: %w", err)

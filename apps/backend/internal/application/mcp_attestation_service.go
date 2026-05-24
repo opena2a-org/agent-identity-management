@@ -780,7 +780,7 @@ func (s *MCPAttestationService) GetConsensusStatus(
 	}
 
 	// Calculate progress and missing criteria
-	var missingCriteria []string
+	missingCriteria := make([]string, 0)
 	agentsProgress := float64(uniqueAgentCount) / float64(minAgents) * 100
 	if agentsProgress > 100 {
 		agentsProgress = 100
@@ -893,7 +893,7 @@ func (s *MCPAttestationService) GetMCPAttestations(
 	}
 
 	// Convert to response format with enriched metadata
-	var result []*domain.AttestationWithAgentDetails
+	result := make([]*domain.AttestationWithAgentDetails, 0)
 	var lastAttestedAt time.Time
 
 	for _, att := range attestations {
@@ -1027,7 +1027,7 @@ func (s *MCPAttestationService) GetConnectedAgentsForMCP(
 	}
 
 	// Fetch agent details
-	var agents []*domain.Agent
+	agents := make([]*domain.Agent, 0)
 	for _, conn := range connections {
 		if !conn.IsActive {
 			continue // Skip inactive connections
@@ -1056,7 +1056,7 @@ func (s *MCPAttestationService) GetMCPServersForAgent(
 	}
 
 	// Fetch MCP server details
-	var mcpServers []*domain.MCPServer
+	mcpServers := make([]*domain.MCPServer, 0)
 	for _, conn := range connections {
 		if !conn.IsActive {
 			continue // Skip inactive connections

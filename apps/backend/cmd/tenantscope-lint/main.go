@@ -80,12 +80,8 @@ var allowlist = map[string]string{
 	// from-lf-demo-prep.md (defect #18-25 follow-up section to be added).
 	// ---------------------------------------------------------------
 	"A2AHandler.DeleteSkill": "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
-	"AdminHandler.AcknowledgeAlert":                         "audit-baseline: needs review",
-	"AdminHandler.DeactivateUser":                           "audit-baseline: needs review",
-	"AdminHandler.ResolveAlert":                             "audit-baseline: needs review",
-	"AdminHandler.UpdateUserRole":                           "audit-baseline: needs review",
-	"APIKeyHandler.DeleteAPIKey":                            "audit-baseline: needs review",
-	"APIKeyHandler.DisableAPIKey":                           "audit-baseline: needs review",
+	"AdminHandler.AcknowledgeAlert": "service-layer scoping: AlertService.AcknowledgeAlert performs Load → caller-org check → ErrAlertNotFound (collapses cross-tenant + not-found + uuid.Nil mismatch) and the handler maps the sentinel to a fixed 404 body (A3d-v R7 closed in PR #190).",
+	"AdminHandler.ResolveAlert":     "service-layer scoping: AlertService.ResolveAlert mirrors AcknowledgeAlert — Load → caller-org check → ErrAlertNotFound → fixed 404 handler mapping (A3d-v R7 closed in PR #190).",
 	"DetectionHandler.GetDetectionStatus":                   "audit-baseline: needs review",
 	"DetectionHandler.GetLatestCapabilityReport":            "audit-baseline: needs review",
 	"DetectionHandler.ReportCapabilities":                   "audit-baseline: needs review",

@@ -118,7 +118,7 @@ func (s *RegistryBridgeService) buildOrgContribution(ctx context.Context, orgID 
 		return nil, nil
 	}
 
-	var events []domain.ContributionEvent
+	events := make([]domain.ContributionEvent, 0)
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	for _, agent := range agents {

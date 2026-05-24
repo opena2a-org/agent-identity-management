@@ -275,7 +275,7 @@ func (s *WebhookService) TriggerEvent(ctx context.Context, orgID uuid.UUID, even
 	}
 
 	// Filter webhooks that are active and subscribed to this event
-	var matchingWebhooks []*domain.Webhook
+	matchingWebhooks := make([]*domain.Webhook, 0)
 	for _, wh := range webhooks {
 		if !wh.IsActive {
 			continue

@@ -589,6 +589,7 @@ func TestAdminHandler_UpdateUserRole_Success(t *testing.T) {
 		nil,
 		nil,
 	)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-viii
 
 	app := fiber.New()
 	app.Put("/admin/users/:id/role", func(c fiber.Ctx) error {
@@ -694,6 +695,7 @@ func TestAdminHandler_DeactivateUser_Success(t *testing.T) {
 		nil,
 		nil,
 	)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-viii
 
 	app := fiber.New()
 	app.Delete("/admin/users/:id/deactivate", func(c fiber.Ctx) error {
@@ -769,6 +771,7 @@ func TestAdminHandler_ActivateUser_Success(t *testing.T) {
 		nil,
 		nil,
 	)
+	handler.userRepo = &adminTestUserRepo{getByID: sameOrgUserStub(targetUserID, orgID)} // A3d-viii
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/activate", func(c fiber.Ctx) error {
@@ -790,22 +793,16 @@ func TestAdminHandler_ActivateUser_NotFound(t *testing.T) {
 	adminID := uuid.New()
 	targetUserID := uuid.New()
 
-	mockAuthService := &MockAuthServiceImpl{
-		GetUserByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	// A3d-viii: existence/not-found is now decided by the userRepo
+	// lookup inside LoadOwned, not AuthService.GetUserByID. The pre-fix
+	// 404 expectation is preserved because LoadOwned writes the same
+	// fixed body on loader error.
+	handler := createAdminHandlerWithMocks(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{
+		getByID: func(id uuid.UUID) (*domain.User, error) {
 			return nil, assert.AnError
 		},
 	}
-
-	handler := createAdminHandlerWithMocks(
-		mockAuthService,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/activate", func(c fiber.Ctx) error {
@@ -828,25 +825,17 @@ func TestAdminHandler_ActivateUser_WrongOrg(t *testing.T) {
 	adminID := uuid.New()
 	targetUserID := uuid.New()
 
-	mockAuthService := &MockAuthServiceImpl{
-		GetUserByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.User, error) {
-			return &domain.User{
-				ID:             id,
-				OrganizationID: otherOrgID, // Different org
-			}, nil
+	// A3d-viii: the cross-org branch is now decided by LoadOwned + the
+	// userRepo lookup. The pre-fix 403 with the "User not found in
+	// organization" body was an existence side channel; the post-fix
+	// response is a fixed 404 indistinguishable from "no such user
+	// system-wide".
+	handler := createAdminHandlerWithMocks(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{
+		getByID: func(id uuid.UUID) (*domain.User, error) {
+			return &domain.User{ID: id, OrganizationID: otherOrgID}, nil
 		},
 	}
-
-	handler := createAdminHandlerWithMocks(
-		mockAuthService,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
 
 	app := fiber.New()
 	app.Post("/admin/users/:id/activate", func(c fiber.Ctx) error {
@@ -860,7 +849,7 @@ func TestAdminHandler_ActivateUser_WrongOrg(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 }
 
 // ===========================
@@ -908,6 +897,21 @@ func TestAdminHandler_PermanentlyDeleteUser_Success(t *testing.T) {
 		nil,
 		nil,
 	)
+	// A3d-viii: LoadOwned now uses userRepo (not AuthService.GetUserByID)
+	// for the existence+ownership check. The returned user is also reused
+	// for the audit-log Email/Name capture, so the stub must populate
+	// those fields.
+	handler.userRepo = &adminTestUserRepo{
+		getByID: func(id uuid.UUID) (*domain.User, error) {
+			return &domain.User{
+				ID:             id,
+				Email:          "user@test.com",
+				Name:           "Test User",
+				OrganizationID: orgID,
+				Role:           "member",
+			}, nil
+		},
+	}
 
 	app := fiber.New()
 	app.Delete("/admin/users/:id/permanent", func(c fiber.Ctx) error {
