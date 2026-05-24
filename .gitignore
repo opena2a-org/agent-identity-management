@@ -71,6 +71,7 @@ logs/
 
 apps/backend/aim-backend
 apps/backend/backend
+apps/backend/tenantscope-lint
 .pytest_cache/
 __pycache__/
 *.pyc
