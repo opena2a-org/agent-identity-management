@@ -1,11 +1,33 @@
-# Use Case: Register My AI Agent with a Cryptographic Identity
+# Use Case: Register an Agent (SDK or CLI)
 
 **Time:** 2 minutes
-**Prerequisites:** Node.js 18+, npm
+**Prerequisites:** Python 3.9+ (Option A) **or** Node.js 18+ and npm (Option B)
 
 ## Problem
 
 Your AI agent has no verifiable identity. Other systems cannot authenticate it, and there is no record of what it does.
+
+## Option A: Register from your application (SDK, recommended)
+
+If you are building an agent in Python, register it directly from your code. The SDK generates an Ed25519 keypair, registers the agent with the AIM backend, and writes credentials to `~/.aim/` — no separate CLI step.
+
+```bash
+pip install aim-sdk
+```
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-first-agent")
+```
+
+That is the full registration. `secure()` is idempotent — subsequent calls with the same agent name return the existing identity. Skip to [Step 2](#step-2-check-initial-trust-score) below to verify the trust score.
+
+The TypeScript and Java SDKs offer equivalent one-line registration; see the per-language READMEs under `sdk/`.
+
+## Option B: Create a local-only identity (CLI)
+
+If you want an identity stored entirely on your machine with no backend dependency, use the CLI. This is useful for offline development, scripted provisioning, or fleets where the agent process is not the registrant.
 
 ## Step 1: Create an Identity
 
