@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Stale agent credentials no longer trigger silent re-registration** (#178). When the
+  cached `~/.aim/agents/<name>.json` references an agent that no longer exists in the
+  backend, the SDK now raises `StaleCredentialsError` with the local file path and
+  recovery steps instead of deleting the file and registering a fresh agent under the
+  same name. Re-registering against admin-curated agent state (status, trust score,
+  granted capabilities, MCP grants) was wiping that state without notice; recovery is
+  now an explicit operator action.
+- **Bundled-SDK install path now prints a visible adoption warning** (#178). When the
+  SDK adopts credentials from a bundled `.aim/sdk_credentials.json` (e.g., a fresh
+  dashboard download in the working directory), the install prints which truncated
+  token ID it is adopting and the long-term home path so operators can see when stale
+  bundled tokens are entering the home store.
+
+### Changed
+- **Token rotation message names the prior refresh token as revoked** (#174). The
+  print after a successful rotation now reads `Token rotated successfully — old
+  refresh token revoked (new id: <8-char-prefix>...)` so the cause of out-of-band
+  copies failing on the next refresh is obvious.
+- **`print_token_expired_error` explains the root cause and surfaces the local
+  path** (#174). The error text names refresh-token rotation as the most common
+  cause, lists the four concrete situations that trigger it, and includes the exact
+  `rm <path>` command instead of pointing the user at the dashboard UI alone.
+
+### Removed
+- **Encrypted shadow credential file** (`~/.aim/sdk_credentials.encrypted`, audit
+  #12). The shadow file written alongside the JSON store became a write-only
+  secondary source that no other code path read, and operators had to delete it
+  manually to recover from corruption. `OAuthTokenManager` now treats
+  `~/.aim/sdk_credentials.json` (mode 0600) as the single source of truth and
+  performs a one-time migration on first instantiation: any leftover `.encrypted`
+  file is decrypted into the JSON store and removed, or — if decryption fails —
+  preserved in place so the operator can recover manually. The `use_secure_storage`
+  and `allow_plaintext_fallback` constructor parameters are preserved for ABI
+  stability and ignored.
+
+### Added
+- **`StaleCredentialsError`** (subclass of `ConfigurationError`). Raised from
+  `register_agent()` when cached agent credentials reference an agent missing from
+  the backend.
+
 ### Planned
 - JavaScript/TypeScript SDK
 - GraphQL API support
