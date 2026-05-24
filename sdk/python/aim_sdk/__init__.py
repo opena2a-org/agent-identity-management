@@ -75,7 +75,7 @@ from .decorators import aim_verify, aim_verify_database, aim_verify_api_call
 # Alias for enterprise security
 secure = register_agent
 
-from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError
+from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError, ConfigurationError, StaleCredentialsError
 from .secrets import SecretsClient, SecretsError
 from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
@@ -162,6 +162,8 @@ __all__ = [
     "AuthenticationError",
     "VerificationError",
     "ActionDeniedError",
+    "ConfigurationError",
+    "StaleCredentialsError",
     "MCPDetector",
     "auto_detect_mcps",
     "CapabilityDetector",

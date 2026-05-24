@@ -275,8 +275,24 @@ def _find_sdk_package_credentials() -> Optional[Dict[str, Any]]:
 
 
 def _install_sdk_credentials(credentials: Dict[str, Any]) -> None:
-    """Install SDK credentials from package to home directory."""
+    """Install SDK credentials from package to home directory.
+
+    Bundled SDK credentials in the package or CWD are adopted as a
+    convenience for the first run after a fresh download. The home
+    location is the long-term source of truth; on subsequent runs the
+    SDK reads from there first and ignores the bundled file (#178).
+    """
     try:
+        token_id = credentials.get("sdkTokenId") or credentials.get("sdk_token_id") or ""
+        token_id_short = (token_id[:8] + "...") if token_id else "unknown"
+        # Visible warning so operators see when bundled (potentially stale)
+        # credentials are being adopted. Audit #37: the silent install path
+        # was how stale bundled tokens crept into the home file across
+        # demo prep runs.
+        print(
+            "INFO: Adopting SDK credentials from bundled package (token "
+            f"{token_id_short}). Long-term source: {SDK_CREDENTIALS_FILE}."
+        )
         save_sdk_credentials(credentials)
         print(f"✅ SDK credentials installed to {SDK_CREDENTIALS_FILE}")
     except Exception as e:
@@ -550,25 +566,40 @@ def print_wrong_credential_type_error(found_type: str, agent_name: str = None, a
 
 
 def print_token_expired_error(aim_url: str = "http://localhost:8080") -> None:
-    """Print a clear error message when SDK token has expired."""
+    """Print a clear error message when the SDK refresh token is rejected.
+
+    Audit #12: the prior wording told the user to "download a fresh SDK"
+    without explaining WHY the local token stopped working — the most
+    common cause is that another SDK installation rotated the refresh
+    token (server-side rotation invalidates prior copies). This version
+    names the cause and surfaces the local path so recovery is obvious.
+    """
     print()
     print("=" * 72)
-    print("⚠️  SDK TOKEN EXPIRED")
+    print("⚠️  SDK REFRESH TOKEN REJECTED")
     print("=" * 72)
     print()
-    print("Your SDK authentication token has expired or been revoked.")
+    print(f"The AIM server rejected the refresh token at {SDK_CREDENTIALS_FILE}.")
     print()
-    print("This can happen if:")
-    print("  • The token expired (90 days since last use)")
-    print("  • The token was revoked for security reasons")
-    print("  • Another SDK installation rotated the token")
+    print("WHAT HAPPENED:")
+    print("  The SDK rotates its refresh token on every successful refresh")
+    print("  and the server only honors the latest one. The token in your")
+    print("  local file is no longer the latest, which means one of these")
+    print("  happened:")
     print()
-    print("TO FIX:")
-    print(f"  1. Visit: {aim_url}")
-    print("  2. Go to Settings → SDK Downloads")
-    print("  3. Download a fresh Python SDK")
-    print("  4. Extract and install: pip install -e aim-sdk-python/")
+    print("  • Another SDK installation (different machine, different venv)")
+    print("    refreshed the token and now holds the current one.")
+    print("  • A previously bundled SDK download was used elsewhere.")
+    print("  • The token was revoked manually from the dashboard.")
+    print("  • The refresh token reached its 90-day expiry.")
     print()
-    print("Your agents and data are safe! Only SDK credentials need updating.")
+    print("TO RECOVER:")
+    print(f"  1. Remove the stale file:  rm {SDK_CREDENTIALS_FILE}")
+    print(f"  2. Download a fresh SDK from {aim_url} (Settings → SDK Downloads).")
+    print("  3. Extract and install: pip install -e aim-sdk-python/")
+    print()
+    print("Your registered agents are not affected; only the SDK auth")
+    print("credential is rotated. Agent Ed25519 keys are separate and remain")
+    print("valid.")
     print("=" * 72)
     print()
