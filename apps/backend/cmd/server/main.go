@@ -316,6 +316,7 @@ func main() {
 	sdkAPI := app.Group("/api/v1/sdk-api")
 	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent)) // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
 	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
+	sdkAPI.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                          // SDK capability reporting (legacy)
@@ -1331,6 +1332,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection := v1.Group("/detection")
 	detection.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Try Ed25519/ML-DSA/hybrid first (for SDK agents)
 	detection.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
+	detection.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
 	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
@@ -1344,6 +1346,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
 	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
+	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus) // Bulk agent status lookup
@@ -1543,6 +1546,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// These endpoints use Ed25519 authentication (agent-to-backend) instead of JWT (user-to-backend)
 	mcpServersAgentAuth := v1.Group("/mcp-servers")
 	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent)) // PQC signature verification (Ed25519, ML-DSA, or hybrid)
+	mcpServersAgentAuth.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
 	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)  // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
 	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                  // ✅ Submit agent attestation (Ed25519 signed, with challenge)
