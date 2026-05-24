@@ -494,6 +494,8 @@ def submit_user_feedback(agent_id: str, rating: int, comment: str):
 
 **Status today**: Conditional. The factor only computes a real signal when `IsolationAttestationRepository` is wired AND the agent has submitted at least one attestation through the SDK. In stock deployments where neither is true, every agent reads `0.3` on this factor.
 
+**Backend handler gap**: The SDK `attestIsolation` method (`AIMClient.ts:432-465`, `client.py:1677`) POSTs to `/api/v1/sdk-api/agents/<id>/isolation-attestation`. As of 2026-05-24, no backend route handler exists for that path and `TrustCalculator.SetIsolationRepo` is not called outside tests. SDK calls return 404; the `isolation_attestations` table is empty; `calculateExecutionIsolation` returns the `0.3` baseline for every agent. The full reasoning and the proposed external-attestation source hierarchy are in [docs/specs/execution-isolation-v1.md](../specs/execution-isolation-v1.md). The implementation is deferred pending a `[CHIEF-CA]` decision on which attestation tier (TEE, orchestrator, scanner, SDK) Phase 1 supports.
+
 **External attestation only**: An agent claiming "I'm in a hardened container" proves nothing on its own — a compromised agent would claim the same thing. The signal must come from outside the agent (orchestrator security context, TEE attestation, or HMA scan of the deployed surface). The SDK collects the attestation; downstream verification is what makes the score load-bearing.
 
 **How to improve**:
