@@ -120,12 +120,12 @@ func (s *CapabilityService) VerifyAction(
 			newTrustScore = 0
 		}
 
-		// Update violation count and trust score
+		// capability_violation_count is bumped by an AFTER INSERT trigger
+		// on capability_violations (migration 091); the local
+		// newViolationCount mirrors what the trigger just wrote and is
+		// used below for the compromised-threshold check.
 		newViolationCount := agent.CapabilityViolationCount + 1
 		if err := s.agentRepo.UpdateTrustScore(agentID, newTrustScore); err != nil {
-			return nil, err
-		}
-		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
 			return nil, err
 		}
 
