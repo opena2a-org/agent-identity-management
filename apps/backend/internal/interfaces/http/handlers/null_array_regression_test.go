@@ -126,6 +126,61 @@ func TestAgentMCPServers_EmptyReturnsArrayNotNull(t *testing.T) {
 	assert.Equal(t, "[]", got, "mcpServers field must serialize as `[]` not `null` when empty")
 }
 
+// Regression for audit #27 (issue #173): `/agents/:id/alerts` must return
+// `"alerts": []` when the agent has zero alerts. Pre-fix, AlertService paths
+// declared `var alerts []*domain.Alert` and could return nil on the cold
+// path, which marshaled as `null` and crashed the dashboard alerts panel.
+func TestAgentAlerts_EmptyReturnsArrayNotNull(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(_ context.Context, _ uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{
+				ID:             agentID,
+				OrganizationID: orgID,
+				Name:           "test-agent",
+			}, nil
+		},
+	}
+
+	alertMock := &MockAlertServiceImpl{
+		GetAlertsByAgentFunc: func(_ context.Context, _ uuid.UUID, _, _ int) ([]*domain.Alert, error) {
+			return make([]*domain.Alert, 0), nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		agentMock,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		alertMock,
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents/:id/alerts", handler.GetAgentAlerts)
+
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/alerts", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	body := make([]byte, resp.ContentLength)
+	_, _ = resp.Body.Read(body)
+
+	got := rawArrayField(t, body, "alerts")
+	assert.Equal(t, "[]", got, "alerts field must serialize as `[]` not `null` when empty")
+}
+
 // Marshal-layer contract: protects the test suite from a hypothetical future
 // stdlib change that would serialize `make([]T, 0)` as anything other than
 // `[]`. If this ever fails, the entire defect class above must be re-audited.

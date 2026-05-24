@@ -40,7 +40,7 @@ func (e *MCPPolicyEvaluator) EvaluateMCPServer(
 		return nil, fmt.Errorf("failed to get active policies: %w", err)
 	}
 
-	var results []*domain.MCPPolicyEvaluationResult
+	results := make([]*domain.MCPPolicyEvaluationResult, 0)
 
 	// Evaluate each MCP-related policy
 	for _, policy := range policies {
