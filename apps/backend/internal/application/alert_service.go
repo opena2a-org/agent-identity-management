@@ -528,7 +528,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 				AlertType:      domain.AlertUnusualActivity,
 				Severity:       domain.AlertSeverityInfo,
 				Title:          fmt.Sprintf("New Resource Access Pattern for '%s'", agentName),
-				Description:    fmt.Sprintf("Agent accessed resource type '%s' for the first time in 7 days. Review if this access is authorized.", resourceType.String),
+				Description:    firstTimeResourceAccessDescription(resourceType.String, "Agent accessed ", " for the first time in 7 days. Review if this access is authorized."),
 				ResourceType:   "agent",
 				ResourceID:     agentID,
 				AgentName:      agentName,
