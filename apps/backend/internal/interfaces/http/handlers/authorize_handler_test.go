@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // fakeAuthorizer is a stand-in for FGAEngine that lets us drive the handler
@@ -30,9 +31,32 @@ func (f *fakeAuthorizer) Authorize(ctx context.Context, req *application.FGARequ
 	return f.result, f.err
 }
 
-func newAuthorizeTestApp(h *AuthorizeHandler) *fiber.App {
+// permissiveAuthorizeAgentRepo returns an agent whose OrganizationID
+// matches whatever the caller asks for via the orgID field. Used by
+// the happy-path tests in this file to satisfy the LoadOwned gate
+// added in the AuthorizeHandler tenant-scope fix; the cross-tenant
+// regression test in authorize_handler_cross_tenant_test.go uses a
+// separate stub that returns a foreign-org agent.
+type permissiveAuthorizeAgentRepo struct {
+	domain.AgentRepository
+	orgID uuid.UUID
+}
+
+func (r *permissiveAuthorizeAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
+	return &domain.Agent{ID: id, OrganizationID: r.orgID}, nil
+}
+
+// newAuthorizeTestApp wires the handler under a Fiber app that sets
+// Locals("organization_id") on every request. callerOrgID is the
+// caller's tenant; the permissive agentRepo (constructed alongside
+// the handler) returns agents in this same org so LoadOwned passes
+// through to the FGAEngine branch the test wants to exercise.
+func newAuthorizeTestApp(h *AuthorizeHandler, callerOrgID uuid.UUID) *fiber.App {
 	app := fiber.New()
-	app.Post("/api/v1/agents/:id/authorize", h.Authorize)
+	app.Post("/api/v1/agents/:id/authorize", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return h.Authorize(c)
+	})
 	return app
 }
 
@@ -46,8 +70,9 @@ func TestAuthorize_AllowResult_Returns200WithBody(t *testing.T) {
 			LatencyMs:      7,
 		},
 	}
-	h := NewAuthorizeHandlerWithInterface(fake)
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(fake, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"capability":"file:read","resource":"/tmp/x","action":"read"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
@@ -83,8 +108,9 @@ func TestAuthorize_DenyResult_Returns200WithDenyBody(t *testing.T) {
 			LatencyMs:      812,
 		},
 	}
-	h := NewAuthorizeHandlerWithInterface(fake)
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(fake, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"capability":"file:write"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
@@ -105,8 +131,9 @@ func TestAuthorize_DenyResult_Returns200WithDenyBody(t *testing.T) {
 }
 
 func TestAuthorize_InvalidAgentID_Returns400(t *testing.T) {
-	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{})
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{}, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"capability":"file:read"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/not-a-uuid/authorize", body)
@@ -120,8 +147,9 @@ func TestAuthorize_InvalidAgentID_Returns400(t *testing.T) {
 
 func TestAuthorize_MissingCapability_Returns400(t *testing.T) {
 	agentID := uuid.New()
-	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{})
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{}, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"resource":"/tmp/x"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
@@ -136,8 +164,9 @@ func TestAuthorize_MissingCapability_Returns400(t *testing.T) {
 func TestAuthorize_BodyAgentIDMismatch_Returns400(t *testing.T) {
 	pathID := uuid.New()
 	bodyID := uuid.New()
-	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{})
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{}, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"agentId":"` + bodyID.String() + `","capability":"file:read"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+pathID.String()+"/authorize", body)
@@ -151,8 +180,9 @@ func TestAuthorize_BodyAgentIDMismatch_Returns400(t *testing.T) {
 
 func TestAuthorize_InvalidJSON_Returns400(t *testing.T) {
 	agentID := uuid.New()
-	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{})
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(&fakeAuthorizer{}, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{not-json`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
@@ -176,8 +206,9 @@ func TestAuthorize_EngineError_Returns500WithErrorResultBody(t *testing.T) {
 		},
 		err: errors.New("failed to load FGA policy: connection refused"),
 	}
-	h := NewAuthorizeHandlerWithInterface(fake)
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(fake, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"capability":"file:read"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
@@ -202,8 +233,9 @@ func TestAuthorize_EngineErrorWithNilResult_Returns500WithErrorResponse(t *testi
 		result: nil, // defensive: handler should still return a clean 500
 		err:    errors.New("totally unexpected"),
 	}
-	h := NewAuthorizeHandlerWithInterface(fake)
-	app := newAuthorizeTestApp(h)
+	orgID := uuid.New()
+	h := NewAuthorizeHandlerWithInterface(fake, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
 
 	body := strings.NewReader(`{"capability":"file:read"}`)
 	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", body)
