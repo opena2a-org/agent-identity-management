@@ -2071,6 +2071,12 @@ func (s *AgentService) RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID,
 	agent.PQCKeyCreatedAt = &now
 	agent.UpdatedAt = now
 
+	// Bump the rotation counter (#129) — matches RotateCredentials and
+	// UpdateAgentPublicKey, which both already increment. Without this, the
+	// dashboard's rotationCount field stays at 0 for any agent that has only
+	// rotated its PQC key, hiding rotation activity from operators.
+	agent.RotationCount++
+
 	if err := s.agentRepo.Update(agent); err != nil {
 		return fmt.Errorf("failed to rotate agent PQC key: %w", err)
 	}

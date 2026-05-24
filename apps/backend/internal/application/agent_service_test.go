@@ -2365,3 +2365,62 @@ func TestAgentService_GetAgentCredentials_DecryptionFails(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decrypt")
 }
+
+// ===========================
+// RotateAgentPQCKey Tests (#129)
+// ===========================
+
+// TestAgentService_RotateAgentPQCKey_IncrementsRotationCount is the regression
+// test for #129: RotateAgentPQCKey persisted the new key but never bumped
+// agent.RotationCount, so the dashboard's "Rotation count" badge stayed at 0
+// for any agent that had only ever rotated its PQC key. The Ed25519 paths
+// (RotateCredentials and UpdateAgentPublicKey) already increment correctly;
+// this test pins the PQC path to the same contract.
+func TestAgentService_RotateAgentPQCKey_IncrementsRotationCount(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	existingPQCKey := "previous-pqc-public-key"
+	existingAlg := "ML-DSA-65"
+	agent := createTestAgentForService()
+	agent.PQCPublicKey = &existingPQCKey
+	agent.PQCKeyAlgorithm = &existingAlg
+	agent.RotationCount = 3 // starting value — any non-zero is fine
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	ctx := context.Background()
+	err := service.RotateAgentPQCKey(ctx, agent.ID, "new-pqc-public-key", "ML-DSA-65")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 4, agent.RotationCount, "RotateAgentPQCKey must increment RotationCount")
+	assert.NotNil(t, agent.PreviousPQCPublicKey, "previous PQC key must be preserved for grace period")
+	assert.Equal(t, existingPQCKey, *agent.PreviousPQCPublicKey)
+	mockAgentRepo.AssertExpectations(t)
+}
+
+// TestAgentService_UpdateAgentPublicKey_IncrementsRotationCount pins the
+// existing Ed25519-SDK-registration increment so it can't regress alongside
+// the PQC fix. Issue #129 erroneously listed this path as broken (the grep
+// pattern `UPDATE agents SET rotation_count = ...` missed the parameterized
+// SQL `rotation_count = $22`); this test makes the working contract explicit.
+func TestAgentService_UpdateAgentPublicKey_IncrementsRotationCount(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	service := &AgentService{agentRepo: mockAgentRepo}
+
+	agent := createTestAgentForService()
+	agent.RotationCount = 7
+
+	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	ctx := context.Background()
+	// authMethod="jwt" because the agent already has a key and the function
+	// rejects Ed25519/mldsa/hybrid auth in that branch.
+	err := service.UpdateAgentPublicKey(ctx, agent.ID, "fresh-public-key", "jwt")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 8, agent.RotationCount, "UpdateAgentPublicKey must increment RotationCount")
+	mockAgentRepo.AssertExpectations(t)
+}

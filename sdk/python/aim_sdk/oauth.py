@@ -29,11 +29,7 @@ from .credentials import (
     save_sdk_credentials as _save_sdk_credentials_to_module,
     get_sdk_credentials_path,
     print_sdk_credentials_not_found_error,
-    print_wrong_credential_type_error,
     print_token_expired_error,
-    detect_credential_type,
-    CredentialType,
-    SDK_CREDENTIALS_FILE,
 )
 from .security_logging import security_logger, AuthnEventType, CredEventType
 
@@ -142,33 +138,85 @@ class OAuthTokenManager:
         self.access_token: Optional[str] = None
         self.access_token_expiry: Optional[float] = None
 
-        # Use secure storage if available and requested
-        self.use_secure_storage = use_secure_storage and SECURE_STORAGE_AVAILABLE
-        if self.use_secure_storage:
-            self.secure_storage = SecureCredentialStorage(str(self.credentials_path))
-        else:
-            self.secure_storage = None
-            # Handle plaintext fallback based on configuration
-            if use_secure_storage and not SECURE_STORAGE_AVAILABLE:
-                if not allow_plaintext_fallback:
-                    raise RuntimeError(
-                        "❌ SECURITY ERROR: Secure storage is required but not available.\n"
-                        "   Install required packages: pip install cryptography keyring\n"
-                        "   Or set allow_plaintext_fallback=True to use plaintext storage (not recommended)."
-                    )
-                elif SECURE_STORAGE_WARNING:
-                    # Warn user about plaintext storage
-                    import warnings
-                    warnings.warn(SECURE_STORAGE_WARNING, UserWarning, stacklevel=2)
+        # Audit #12: the encrypted shadow file (~/.aim/sdk_credentials.encrypted)
+        # used to be written alongside the JSON file by SecureCredentialStorage.
+        # Every other code path read the JSON only, so the encrypted file was a
+        # write-only secondary store that could drift from the JSON and that
+        # operators had to delete manually to recover from corruption. The JSON
+        # at SDK_CREDENTIALS_FILE (mode 0600) is now the single source of truth.
+        # `use_secure_storage` and `allow_plaintext_fallback` are kept for ABI
+        # stability and ignored; the storage layer is JSON in all configurations.
+        self.use_secure_storage = False
+        self.secure_storage = None
+
+        # One-time migration: if the deprecated encrypted shadow file exists,
+        # decrypt it into the JSON store and delete the orphan. Subsequent
+        # runs find no encrypted file and skip the migration.
+        self._migrate_encrypted_shadow_if_present()
 
         # Load credentials if they exist
         if self._credentials_exist():
             self.load_credentials()
 
+    def _migrate_encrypted_shadow_if_present(self) -> None:
+        """Migrate the deprecated encrypted shadow file (audit #12) to JSON.
+
+        Strategy:
+          - If no encrypted file exists, no-op.
+          - If the secure-storage libs are present, attempt to decrypt and
+            save the contents into the JSON store via the centralized module.
+          - If decryption fails (missing keyring entry, corrupted file), the
+            JSON file is authoritative — log and delete the orphan.
+          - Always delete the encrypted file at the end so subsequent runs
+            skip this branch entirely.
+        """
+        encrypted_path = self.credentials_path.with_suffix(".encrypted")
+        if not encrypted_path.exists():
+            return
+
+        migrated = False
+        decrypt_failed = False
+        if SECURE_STORAGE_AVAILABLE:
+            try:
+                legacy_storage = SecureCredentialStorage(str(self.credentials_path))
+                creds = legacy_storage.load_credentials()
+                if creds:
+                    # Persist BEFORE deleting the encrypted file. If the JSON
+                    # write fails, the encrypted file is left in place so the
+                    # next run can retry — we never delete the only copy of
+                    # credentials we still need.
+                    _save_sdk_credentials_to_module(creds)
+                    print(
+                        f"🔄 Migrated credentials from encrypted shadow file to JSON "
+                        f"single source of truth at {self.credentials_path}."
+                    )
+                    migrated = True
+            except Exception as e:
+                decrypt_failed = True
+                print(
+                    f"⚠️  Could not migrate legacy encrypted credentials at "
+                    f"{encrypted_path} ({e}); leaving the file in place."
+                )
+
+        # Only remove the encrypted file when we either migrated successfully
+        # or we know we cannot decrypt it at all (SECURE_STORAGE_AVAILABLE is
+        # False — the keyring + cryptography libs are gone). If decryption was
+        # attempted and failed (decrypt_failed=True), preserve the file so the
+        # operator can recover manually.
+        should_remove = migrated or (not SECURE_STORAGE_AVAILABLE and not decrypt_failed)
+        if should_remove:
+            try:
+                encrypted_path.unlink()
+                if not migrated:
+                    print(
+                        f"🧹 Removed deprecated encrypted credentials file at "
+                        f"{encrypted_path} (single-source-of-truth migration, audit #12)."
+                    )
+            except Exception:
+                pass
+
     def _credentials_exist(self) -> bool:
-        """Check if credentials exist (encrypted or plaintext)."""
-        if self.secure_storage:
-            return self.secure_storage.credentials_exist()
+        """Check if credentials exist on disk (JSON single source of truth)."""
         return self.credentials_path.exists()
 
     def load_credentials(self) -> bool:
@@ -184,35 +232,11 @@ class OAuthTokenManager:
             True if SDK credentials were loaded successfully
         """
         try:
-            # Try secure storage first
-            if self.secure_storage:
-                creds = self.secure_storage.load_credentials()
-                if creds:
-                    # Validate it's SDK credentials, not agent credentials
-                    cred_type = detect_credential_type(creds)
-                    if cred_type == CredentialType.SDK_OAUTH:
-                        self.credentials = creds
-                        return True
-                    elif cred_type == CredentialType.AGENT:
-                        # Wrong credential type in secure storage - this shouldn't happen
-                        # but handle it gracefully
-                        print_wrong_credential_type_error(cred_type)
-                        return False
-
-            # Use centralized credentials module for discovery and migration
             creds = _load_sdk_credentials_from_module()
             if creds:
                 self.credentials = creds
-                # Migrate to secure storage if available
-                if self.secure_storage:
-                    try:
-                        self.secure_storage.save_credentials(creds)
-                    except Exception:
-                        pass  # Continue even if secure storage fails
                 return True
-
             return False
-
         except Exception as e:
             print(f"⚠️  Warning: Failed to load credentials: {e}")
             return False
@@ -231,19 +255,9 @@ class OAuthTokenManager:
             True if saved successfully
         """
         try:
-            # Use centralized module for proper path and schema
             _save_sdk_credentials_to_module(credentials)
-
-            # Also save to secure storage if available
-            if self.secure_storage:
-                try:
-                    self.secure_storage.save_credentials(credentials)
-                except Exception:
-                    pass  # Continue even if secure storage fails
-
             self.credentials = credentials
             return True
-
         except Exception as e:
             print(f"⚠️  Warning: Failed to save credentials: {e}")
             return False
@@ -429,7 +443,13 @@ class OAuthTokenManager:
                         "new_token_id": new_token_id_full[:8] + "..." if new_token_id_full else None
                     }
                 )
-                print("🔄 Token rotated successfully")
+                # Audit #12: explicit that the prior refresh token is now revoked
+                # server-side so the user understands why an out-of-band copy
+                # (other machine, another venv, bundled SDK) would stop working.
+                print(
+                    "🔄 Token rotated successfully \u2014 old refresh token revoked "
+                    f"(new id: {new_token_id_full[:8] + '...' if new_token_id_full else 'unknown'})"
+                )
 
             # Decode token to get expiry using PyJWT
             if self.access_token:
@@ -500,9 +520,7 @@ class OAuthTokenManager:
             )
 
             # Delete local credentials regardless of server response
-            if self.secure_storage:
-                self.secure_storage.delete_credentials()
-            elif self.credentials_path.exists():
+            if self.credentials_path.exists():
                 self.credentials_path.unlink()
 
             self.credentials = None
@@ -515,43 +533,22 @@ class OAuthTokenManager:
         except Exception as e:
             print(f"⚠️  Warning: Token revocation failed: {e}")
             # Still delete local credentials for safety
-            if self.secure_storage:
-                self.secure_storage.delete_credentials()
-            elif self.credentials_path.exists():
+            if self.credentials_path.exists():
                 self.credentials_path.unlink()
 
             return False
 
 
 def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, Any]]:
+    """Load SDK credentials from the JSON single source of truth.
+
+    Audit #12: the encrypted shadow file was removed as a credential store;
+    OAuthTokenManager performs a one-time migration from any leftover
+    `.encrypted` file. The `use_secure_storage` parameter is preserved for
+    ABI stability but ignored.
+
+    Returns SDK OAuth credentials (refreshToken, sdkTokenId) or None.
+    For agent credentials, use load_agent_credentials() from the
+    credentials module.
     """
-    Load SDK credentials with intelligent discovery and migration.
-
-    This function uses the centralized credentials module which:
-    1. Checks ~/.aim/sdk_credentials.json (new location)
-    2. Migrates from ~/.aim/credentials.json if it contains SDK credentials
-    3. Installs from SDK package if found (fresh download)
-
-    Note: This only returns SDK OAuth credentials (refreshToken, sdkTokenId).
-    For agent credentials, use load_agent_credentials() from the credentials module.
-
-    Args:
-        use_secure_storage: Try encrypted storage first (default: True)
-
-    Returns:
-        SDK credentials dict or None if not found
-    """
-    # Try secure storage first
-    if use_secure_storage and SECURE_STORAGE_AVAILABLE:
-        try:
-            storage = SecureCredentialStorage(str(SDK_CREDENTIALS_FILE))
-            credentials = storage.load_credentials()
-            if credentials:
-                cred_type = detect_credential_type(credentials)
-                if cred_type == CredentialType.SDK_OAUTH:
-                    return credentials
-        except Exception:
-            pass
-
-    # Fall back to centralized credentials module
     return _load_sdk_credentials_from_module()
