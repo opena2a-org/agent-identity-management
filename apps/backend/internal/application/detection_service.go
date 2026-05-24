@@ -178,7 +178,7 @@ func (s *DetectionService) ReportDetections(
 				continue
 			}
 
-			var talksTo []string
+			talksTo := make([]string, 0)
 			if len(talksToJSON) > 0 {
 				json.Unmarshal(talksToJSON, &talksTo)
 			}
@@ -336,7 +336,7 @@ func (s *DetectionService) GetDetectionStatus(
 
 	for rows.Next() {
 		var mcp domain.DetectedMCPSummary
-		var methods []string
+		methods := make([]string, 0)
 		var firstDetectedNull, lastSeenNull sql.NullTime
 
 		err := rows.Scan(&mcp.Name, pq.Array(&methods), &mcp.ConfidenceScore,
@@ -545,7 +545,7 @@ func (s *DetectionService) GetLatestCapabilityReport(
 		return nil, fmt.Errorf("failed to parse environment: %w", err)
 	}
 
-	var aiModels []domain.AIModelUsage
+	aiModels := make([]domain.AIModelUsage, 0)
 	if err := json.Unmarshal(aiModelsJSON, &aiModels); err != nil {
 		return nil, fmt.Errorf("failed to parse ai models: %w", err)
 	}

@@ -813,7 +813,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 				}
 
 				// Detect new capabilities (not in baseline)
-				var addedCaps []string
+				addedCaps := make([]string, 0)
 				for cap := range currentCaps {
 					if !baseline[cap] {
 						addedCaps = append(addedCaps, cap)
@@ -821,7 +821,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 				}
 
 				// Detect removed capabilities (in baseline but not current)
-				var removedCaps []string
+				removedCaps := make([]string, 0)
 				for cap := range baseline {
 					if !currentCaps[cap] {
 						removedCaps = append(removedCaps, cap)
@@ -896,7 +896,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			}
 
 			// Check if agent has any dangerous capabilities
-			var foundDangerousCaps []string
+			foundDangerousCaps := make([]string, 0)
 			for _, cap := range agent.Capabilities {
 				for _, dangerousCap := range dangerousCapabilities {
 					if dangerousCapStr, ok := dangerousCap.(string); ok {

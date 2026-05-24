@@ -443,7 +443,8 @@ func TestBuildOrgContribution_NoAttestations(t *testing.T) {
 
 	events, err := svc.buildOrgContribution(context.Background(), orgID)
 	assert.NoError(t, err)
-	assert.Nil(t, events)
+	assert.NotNil(t, events, "must be non-nil empty slice (jsonarray-lint invariant)")
+	assert.Equal(t, 0, len(events))
 }
 
 func TestInferEcosystem(t *testing.T) {
