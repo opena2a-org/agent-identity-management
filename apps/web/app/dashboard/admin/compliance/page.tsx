@@ -1397,7 +1397,7 @@ export default function CompliancePage() {
                     Audit Trail
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Complete activity history for agents, MCP servers, and users
+                    Control-plane lifecycle events (agent create/update, MCP changes, user actions). For runtime verification activity on a specific agent, open that agent and use the <span className="font-medium">Recent Activity</span> timeline.
                   </p>
                 </div>
               </div>
