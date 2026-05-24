@@ -3569,12 +3569,13 @@ def register_agent(
                     }
                 )
 
-                # Use beautiful console output
+                # Use beautiful console output. Note: cached status + trust
+                # score from existing_creds are intentionally NOT passed —
+                # they are stale snapshots from registration time and would
+                # mislead operators (#175). Live values live on the dashboard.
                 console.agent_found(
                     name=name,
                     agent_id=existing_creds['agent_id'],
-                    status=existing_creds.get('status', 'active'),
-                    trust_score=existing_creds.get('trust_score', 0.85)
                 )
 
                 # Create OAuth token manager - prefer SDK credentials (which have refresh_token)
