@@ -162,11 +162,16 @@ class TestLoadSdkCredentials:
 
     def test_load_sdk_credentials_returns_none_for_missing_file(self):
         """Loading from non-existent file should return None."""
+        # _find_sdk_package_credentials walks parent .aim dirs and adopts any
+        # bundled or developer-installed sdk_credentials.json it finds. Without
+        # mocking it, this test fails on any machine whose parent dirs contain
+        # real SDK credentials (the OpenA2A workspace tree does).
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('aim_sdk.credentials.SDK_CREDENTIALS_FILE', Path(tmpdir) / "nonexistent.json"):
                 with patch('aim_sdk.credentials.LEGACY_CREDENTIALS_FILE', Path(tmpdir) / "legacy.json"):
-                    result = load_sdk_credentials()
-                    assert result is None
+                    with patch('aim_sdk.credentials._find_sdk_package_credentials', return_value=None):
+                        result = load_sdk_credentials()
+                        assert result is None
 
     def test_load_sdk_credentials_from_file(self):
         """Should load credentials from file."""
