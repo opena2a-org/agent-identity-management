@@ -198,7 +198,7 @@ func (s *ComplianceService) analyzeAuditActivity(logs []*domain.AuditLog) AuditA
 }
 
 func (s *ComplianceService) generateRecommendations(summary ComplianceSummary, agents []*domain.Agent) []string {
-	var recommendations []string
+	recommendations := make([]string, 0)
 
 	// Check for pending agents
 	if summary.PendingAgents > 0 {
@@ -246,7 +246,7 @@ func (s *ComplianceService) ExportAuditLog(
 	}
 
 	// Filter by date range
-	var filteredLogs []*domain.AuditLog
+	filteredLogs := make([]*domain.AuditLog, 0)
 	for _, log := range logs {
 		if log.Timestamp.After(startDate) && log.Timestamp.Before(endDate) {
 			filteredLogs = append(filteredLogs, log)
@@ -593,7 +593,7 @@ func (s *ComplianceService) evaluateCheckWithDetails(checkName string, agents []
 		Severity  string    `json:"severity,omitempty"`
 	}
 
-	var affectedAgents []affectedItem
+	affectedAgents := make([]affectedItem, 0)
 	var checkPassed bool
 	var checkDetails string
 	var actionURL string
@@ -1523,7 +1523,7 @@ func (s *ComplianceService) GetComplianceViolations(
 		return nil, err
 	}
 
-	var violations []*ComplianceViolation
+	violations := make([]*ComplianceViolation, 0)
 
 	// Check for unverified agents (compliance violation)
 	for _, agent := range agents {
@@ -2316,7 +2316,7 @@ func (s *ComplianceService) ExportComplianceReportFull(
 	}
 
 	// Get evidence
-	var evidenceItems []domain.ComplianceEvidence
+	evidenceItems := make([]domain.ComplianceEvidence, 0)
 	if s.evidenceRepo != nil {
 		evidence, err := s.evidenceRepo.GetByFramework(orgID, frameworkType)
 		if err == nil {
@@ -2327,7 +2327,7 @@ func (s *ComplianceService) ExportComplianceReportFull(
 	}
 
 	// Get trending data
-	var scoreTrend []domain.ComplianceSnapshot
+	scoreTrend := make([]domain.ComplianceSnapshot, 0)
 	if s.snapshotRepo != nil {
 		snapshots, err := s.snapshotRepo.GetTrending(orgID, frameworkType, startDate, endDate)
 		if err == nil {
@@ -2419,7 +2419,7 @@ func (s *ComplianceService) buildAgentInventory(agents []*domain.Agent, now time
 		}
 
 		// Identify compliance issues
-		var issues []string
+		issues := make([]string, 0)
 		if agent.Status != domain.AgentStatusVerified {
 			issues = append(issues, "Not verified")
 		}
@@ -2597,7 +2597,7 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 		summary *domain.UserActivitySummary
 		count   int
 	}
-	var sortedUsers []userActivitySort
+	sortedUsers := make([]userActivitySort, 0)
 	for _, ua := range userActivity {
 		sortedUsers = append(sortedUsers, userActivitySort{summary: ua, count: ua.ActionCount})
 	}
@@ -2832,7 +2832,7 @@ func (s *ComplianceService) buildRecommendations(
 	riskAssessment domain.RiskAssessmentReport,
 	checkResults []domain.ComplianceCheckResult,
 ) []domain.RecommendationItem {
-	var recommendations []domain.RecommendationItem
+	recommendations := make([]domain.RecommendationItem, 0)
 
 	// Critical: Unacknowledged alerts
 	if securityAlerts.UnacknowledgedCount > 10 {
@@ -2974,7 +2974,7 @@ func (s *ComplianceService) ExportToCSV(
 	lowFindings := 0
 
 	var checkResults []map[string]interface{}
-	var domainCheckResults []domain.ComplianceCheckResult
+	domainCheckResults := make([]domain.ComplianceCheckResult, 0)
 	for _, checkName := range checks {
 		result := s.evaluateCheckWithDetails(checkName, agents, orgID)
 		checkResults = append(checkResults, map[string]interface{}{

@@ -214,7 +214,7 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 	}
 
 	// 7. Parse and save skills
-	var skillIDs []string
+	skillIDs := make([]string, 0)
 	for _, skillDef := range parsedCard.Skills {
 		skill := &domain.A2ASkill{
 			AgentID:     req.AgentID,
@@ -884,7 +884,7 @@ func (s *A2AService) EvaluateA2APolicy(ctx context.Context, req EvaluateA2APolic
 	}
 
 	// Evaluate policies (simplified - in production would use CEL or OPA)
-	var evaluatedPolicies []string
+	evaluatedPolicies := make([]string, 0)
 	for _, policy := range policies {
 		evaluatedPolicies = append(evaluatedPolicies, policy.Name)
 
@@ -1283,7 +1283,7 @@ func (s *A2AService) CheckA2ASecurity(ctx context.Context, req *domain.A2ASecuri
 
 	// Get security settings for the target agent's organization
 	settings, _ := s.GetSecuritySettings(ctx, targetAgent.OrganizationID)
-	var violations []domain.A2AViolationType
+	violations := make([]domain.A2AViolationType, 0)
 
 	// Check 1: Is requesting agent revoked?
 	revoked, _ := s.revokedRepo.IsRevoked(ctx, req.RequestingAgentID)

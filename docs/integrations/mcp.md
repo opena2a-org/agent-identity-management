@@ -379,6 +379,36 @@ View all MCP servers with:
 
 ---
 
+## Attestation Lifecycle and Expiry
+
+The attestation lifecycle has three timeframes, none of which trigger an automatic vulnerability re-scan. Re-attestation is **client-driven on use**, not server-cron-driven.
+
+### Server-side TTLs
+
+| Object | TTL | Behavior at expiry |
+|---|---|---|
+| Attestation challenge nonce | 5 minutes | Rejected as `attestation expired` to prevent replay attacks (`mcp_attestation_service.go:483`) |
+| SDK MCP attestation record | 30 days from `verified_at` | Record stays in `mcp_attestations` for history; `is_valid` returns false; the server does NOT automatically queue a re-scan (`mcp_attestation_service.go:504`) |
+| Manual MCP attestation record | 90 days from `verified_at` | Same — history retained, `is_valid` false, no auto re-scan (`mcp_attestation_service.go:1247`) |
+
+No background goroutine in `cmd/server/main.go` walks `mcp_attestations` to mark expired rows or to invoke a re-scan against HackMyAgent. The only periodic cleanup job (`startExpirationCleanupJob`, runs every 5 minutes) operates on `verification_events`, not MCP attestations.
+
+### Client-side refresh interval
+
+The SDK's `AttestationCache` (`sdk/python/aim_sdk/attestation_cache.py:48`) uses `DEFAULT_TTL_HOURS = 24`. On every MCP tool invocation through `use_mcp_tool()`, the SDK checks the cache and re-attests if the cached attestation is older than 24 hours. This is what makes an ACTIVELY USED MCP server effectively re-attested every day; an MCP server that is registered but not invoked sits at its last attestation until the server-side TTL above lapses.
+
+### The 7-day window in the confidence score
+
+A 7-day window does appear in the attestation code, but it is a **recency factor in the confidence-score calculation**, not an expiry trigger. The "recency" component awards points based on the fraction of an MCP server's attestations that fall within the last 7 days (`mcp_attestation_service.go:617`). A server whose most recent attestations are all older than 7 days simply scores lower on the recency axis; it is not invalidated, and no scan is queued.
+
+### Vulnerability discovery is independent of the attestation lifecycle
+
+The attestation flow asserts that an agent currently holds a private key matching an MCP server's public key — it does not, by itself, scan the MCP server for new CVEs in its dependencies. CVE discovery against an MCP server is the job of HackMyAgent / the supply-chain scanner; the attestation lifecycle does not currently invoke it. Treat "re-attestation" and "re-scan" as separate primitives, not as the same cycle.
+
+If your operational requirement is "every MCP server gets a fresh vulnerability scan every N days," that needs to be a separate scheduled job that calls into HackMyAgent — it is not implied by the attestation TTLs above.
+
+---
+
 ## Auto-Attestation
 
 The SDK can automatically create attestations when you use MCP tools, requiring zero manual intervention:

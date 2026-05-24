@@ -321,7 +321,7 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 	}
 
 	config := DefaultUnusualAccessConfig()
-	var alerts []*domain.Alert
+	alerts := make([]*domain.Alert, 0)
 
 	fmt.Printf("📊 [ANOMALY-DETECTION] Starting checks for agent %s in org %s (config: volume=%d/%dmin, offHours=%d:00-%d:00)\n",
 		agentID, orgID, config.HighVolumeThreshold, config.TimeWindowMinutes, config.OffHoursStart, config.OffHoursEnd)
@@ -509,7 +509,7 @@ func (s *AlertService) checkUnusualResourceAccess(ctx context.Context, orgID, ag
 	}
 	defer rows.Close()
 
-	var alerts []*domain.Alert
+	alerts := make([]*domain.Alert, 0)
 	agent, _ := s.agentRepo.GetByID(agentID)
 	agentName := "Unknown Agent"
 	if agent != nil {

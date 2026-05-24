@@ -163,7 +163,7 @@ func (s *CommunityIntelligenceService) GetCommunityBenchmarks(ctx context.Contex
 	}
 
 	totalAgents := 0
-	var allScores []float64
+	allScores := make([]float64, 0)
 	factorAggregates := make(map[string][]float64)
 	var scoreDist domain.ScoreDistribution
 
@@ -236,7 +236,7 @@ func (s *CommunityIntelligenceService) buildTrustDistribution(ctx context.Contex
 	}
 
 	// Collect trust scores for all agents
-	var scores []float64
+	scores := make([]float64, 0)
 	factorValues := map[string][]float64{
 		"verificationStatus": {},
 		"uptime":             {},

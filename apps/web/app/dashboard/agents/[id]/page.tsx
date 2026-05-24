@@ -318,8 +318,24 @@ export default function AgentDetailsPage({
   // Check if agent is verified
   const isVerified = agent?.status === "verified";
 
-  // Check if agent is active
-  const isActive = agent?.status !== "suspended" && agent?.status !== "revoked";
+  // Status-badge color mapping (mirrors the agents list page so the detail
+  // header and the list page describe the same agent the same way — fixes
+  // #165, where the detail page rendered a generic "Active/Inactive" pill
+  // derived from status that read as a second, contradicting status next to
+  // the "Verified" badge).
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case "verified":
+        return "bg-green-500/10 text-green-600";
+      case "pending":
+        return "bg-yellow-500/10 text-yellow-600";
+      case "suspended":
+      case "revoked":
+        return "bg-red-500/10 text-red-600";
+      default:
+        return "bg-gray-500/10 text-gray-600";
+    }
+  };
 
   // Create mapping from MCP server name to ID for clickable navigation
   const serverNameToId = new Map<string, string>();
@@ -465,13 +481,9 @@ export default function AgentDetailsPage({
               <p className="text-muted-foreground mb-2">{agent.description}</p>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline">{agent.agentType}</Badge>
-                {isActive ? (
-                  <Badge className="bg-green-500/10 text-green-600">
-                    Active
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">Inactive</Badge>
-                )}
+                <Badge className={`capitalize ${getStatusBadgeClass(agent.status)}`}>
+                  {agent.status}
+                </Badge>
                 <Badge
                   className={getTrustColor((agent.trustScore ?? 0) * 100)}
                 >
@@ -1108,13 +1120,9 @@ export default function AgentDetailsPage({
                     Status:
                   </span>
                   <span className="col-span-2 text-sm">
-                    {isActive ? (
-                      <Badge className="bg-green-500/10 text-green-600">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
+                    <Badge className={`capitalize ${getStatusBadgeClass(agent.status)}`}>
+                      {agent.status}
+                    </Badge>
                   </span>
                 </div>
                 <Separator />

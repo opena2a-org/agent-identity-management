@@ -93,7 +93,8 @@ jobs:
           go build -o "$LINT_TMP/jsonarray-lint" ./cmd/jsonarray-lint/
           "$LINT_TMP/jsonarray-lint" \
             internal/interfaces/http/handlers \
-            internal/infrastructure/repository
+            internal/infrastructure/repository \
+            internal/application
 
       - name: Test with coverage
         run: |

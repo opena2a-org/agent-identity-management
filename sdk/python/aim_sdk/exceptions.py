@@ -28,6 +28,18 @@ class ConfigurationError(AIMError):
     pass
 
 
+class StaleCredentialsError(ConfigurationError):
+    """Raised when cached agent credentials reference an agent that no longer
+    exists in the AIM backend, and re-registration would silently wipe
+    admin-curated state (status, trust score, granted capabilities, MCPs).
+
+    The SDK refuses to auto-re-register; the operator must take an explicit
+    action to recover. The error message includes the local credential path
+    and the recovery steps.
+    """
+    pass
+
+
 class SecretsError(AIMError):
     """Raised when a secrets operation fails"""
     pass
