@@ -194,28 +194,26 @@ class AIMConsole:
         self,
         name: str,
         agent_id: str,
-        status: str,
-        trust_score: float
     ):
-        """Display message when existing agent credentials are found."""
+        """Display message when existing agent credentials are found.
+
+        Status and trust score are deliberately NOT shown here — the cached
+        credentials file on disk only captures the snapshot at registration
+        time and never refreshes, so anything printed would lie (#175: a
+        promoted agent at status=verified, trust=0.92 server-side would
+        still print pending / 0% from cache). The dashboard is the
+        authoritative source for live status; the CLI banner sticks to
+        identity (name + ID) which is stable.
+        """
         if self.quiet:
             return
 
-        trust_score = self._normalize_trust_score(trust_score)
+        id_short = f"{agent_id[:8]}...{agent_id[-4:]}"
 
         if RICH_AVAILABLE:
-            # Status indicator
-            status_color = "green" if status in ["active", "verified"] else "yellow"
-            status_icon = "●" if status in ["active", "verified"] else "○"
-
-            # Compact output
             self.console.print()
             self.console.print(f"[bold blue]↻[/] [bold]Using existing credentials:[/] [cyan]{name}[/]")
-
-            id_short = f"{agent_id[:8]}...{agent_id[-4:]}"
-            trust_str = self._format_trust_score_inline(trust_score)
-
-            self.console.print(f"  [dim]ID:[/] {id_short}  [dim]Status:[/] [{status_color}]{status_icon} {status}[/]  [dim]Trust:[/] {trust_str}")
+            self.console.print(f"  [dim]ID:[/] {id_short}")
             self.console.print(f"  [dim]Use force_new=True to register a new agent[/]")
             self.console.print()
         else:
@@ -223,10 +221,8 @@ class AIMConsole:
             print("╭─────────────────────────────────────────────────╮")
             print("│  ↻ Using Existing Credentials                   │")
             print("├─────────────────────────────────────────────────┤")
-            print(f"│  Agent:       {name:<32} │")
-            print(f"│  ID:          {agent_id[:8]}...{agent_id[-4:]:<20} │")
-            print(f"│  Status:      {status:<32} │")
-            print(f"│  Trust Score: {trust_score:.0%}{'':>28} │")
+            print(f"│  Agent: {name:<40} │")
+            print(f"│  ID:    {id_short:<40} │")
             print("╰─────────────────────────────────────────────────╯")
             print("  Use force_new=True to register a new agent")
             print()
