@@ -30,6 +30,15 @@ func mcpServerOrgID(m *domain.MCPServer) uuid.UUID { return m.OrganizationID }
 // reject on a target user before the service is invoked.
 func userOrgID(u *domain.User) uuid.UUID { return u.OrganizationID }
 
+// apiKeyOrgID extracts OrganizationID from a *domain.APIKey. Used by
+// APIKeyHandler.DisableAPIKey + DeleteAPIKey to gate cross-tenant
+// API-key revoke + delete BEFORE the service is invoked. The
+// service-layer check (api_key_service.go:102, 117) already returns
+// a "does not belong to organization" error for cross-tenant, but
+// the handler echoes err.Error() in the response body — an
+// existence side channel.
+func apiKeyOrgID(k *domain.APIKey) uuid.UUID { return k.OrganizationID }
+
 // securityPolicyOrgID extracts OrganizationID from a
 // *domain.SecurityPolicy. Used by SecurityPolicyHandler's
 // Get/Update/Delete/Toggle paths to gate cross-tenant policy reads +

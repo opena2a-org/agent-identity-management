@@ -16,7 +16,7 @@ import (
 // ===========================
 
 func TestNewAPIKeyHandler_NilDeps(t *testing.T) {
-	handler := NewAPIKeyHandler(nil, nil)
+	handler := NewAPIKeyHandler(nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

@@ -1061,6 +1061,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
 			services.Audit,
+			repos.APIKey,
 		),
 		TrustScore: handlers.NewTrustScoreHandler(
 			services.Trust,

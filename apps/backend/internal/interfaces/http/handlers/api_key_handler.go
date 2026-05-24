@@ -10,15 +10,26 @@ import (
 type APIKeyHandler struct {
 	apiKeyService *application.APIKeyService
 	auditService  *application.AuditService
+
+	// Repository handle for handler-layer tenant scoping. Used by
+	// DisableAPIKey / DeleteAPIKey to LoadOwned the target key
+	// before invoking the service. The service-layer check exists
+	// (api_key_service.go:102, 117) but returns a distinct error
+	// string for cross-tenant vs not-found which the handler echoes
+	// via err.Error() — existence side channel. Handler-layer
+	// LoadOwned collapses both to a fixed 404.
+	apiKeyRepo domain.APIKeyRepository
 }
 
 func NewAPIKeyHandler(
 	apiKeyService *application.APIKeyService,
 	auditService *application.AuditService,
+	apiKeyRepo domain.APIKeyRepository,
 ) *APIKeyHandler {
 	return &APIKeyHandler{
 		apiKeyService: apiKeyService,
 		auditService:  auditService,
+		apiKeyRepo:    apiKeyRepo,
 	}
 }
 
@@ -213,9 +224,23 @@ func (h *APIKeyHandler) DisableAPIKey(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: verify the key belongs to the caller's org BEFORE
+	// invoking the revoke flow. The service-layer check returns a
+	// distinct error string for cross-tenant vs not-found which the
+	// pre-fix handler echoed via err.Error() — existence side
+	// channel for API key UUID enumeration across tenants.
+	// LoadOwned collapses both branches to a fixed 404.
+	if LoadOwned(c, h.apiKeyRepo.GetByID, keyID, orgID, apiKeyOrgID) == nil {
+		return nil
+	}
+
 	if err := h.apiKeyService.RevokeAPIKey(c.Context(), keyID, orgID); err != nil {
+		// Cross-tenant + not-found already collapsed to 404 above; any
+		// remaining service error is operational. Use a generic body
+		// rather than echoing err.Error() to avoid leaking server-side
+		// detail.
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to revoke API key",
 		})
 	}
 
@@ -273,7 +298,18 @@ func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: see DisableAPIKey for rationale. LoadOwned collapses
+	// cross-tenant and not-found to a fixed 404.
+	if LoadOwned(c, h.apiKeyRepo.GetByID, keyID, orgID, apiKeyOrgID) == nil {
+		return nil
+	}
+
 	if err := h.apiKeyService.DeleteAPIKey(c.Context(), keyID, orgID); err != nil {
+		// The "key must be disabled before deletion" rule is the only
+		// remaining service-level rejection here (the cross-tenant and
+		// not-found cases were collapsed by LoadOwned above). Echo
+		// err.Error() to surface that specific guard message — it
+		// carries no cross-tenant information.
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
 		})
