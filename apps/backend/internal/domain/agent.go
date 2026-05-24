@@ -121,7 +121,6 @@ type AgentRepository interface {
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*Agent, error)
 	UpdateTrustScore(id uuid.UUID, newScore float64) error
-	IncrementViolationCount(id uuid.UUID) error
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
 	GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*Agent, error)

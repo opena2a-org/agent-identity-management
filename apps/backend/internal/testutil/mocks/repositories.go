@@ -66,11 +66,6 @@ func (m *MockAgentRepository) UpdateTrustScore(id uuid.UUID, newScore float64) e
 	return args.Error(0)
 }
 
-func (m *MockAgentRepository) IncrementViolationCount(id uuid.UUID) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
 func (m *MockAgentRepository) MarkAsCompromised(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)

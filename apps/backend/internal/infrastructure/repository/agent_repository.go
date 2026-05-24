@@ -609,17 +609,6 @@ func (r *AgentRepository) UpdateTrustScore(id uuid.UUID, newScore float64) error
 	return err
 }
 
-// IncrementViolationCount increments an agent's capability violation count
-func (r *AgentRepository) IncrementViolationCount(id uuid.UUID) error {
-	query := `
-		UPDATE agents
-		SET capability_violation_count = capability_violation_count + 1, updated_at = $1
-		WHERE id = $2
-	`
-	_, err := r.db.Exec(query, time.Now(), id)
-	return err
-}
-
 // MarkAsCompromised marks an agent as potentially compromised by setting status to suspended
 func (r *AgentRepository) MarkAsCompromised(id uuid.UUID) error {
 	query := `

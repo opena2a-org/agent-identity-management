@@ -1065,12 +1065,9 @@ func (s *AgentService) VerifyCapability(
 				agent.Name, capability, enforcementMode)
 		}
 
-		// Increment violation count
-		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
-			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
-		} else {
-			fmt.Printf("✅ Violation count incremented for agent %s\n", agent.Name)
-		}
+		// capability_violation_count is bumped by an AFTER INSERT trigger
+		// on capability_violations (migration 091); no application-layer
+		// increment needed.
 
 		return false, fmt.Sprintf(
 			"Agent has no granted capabilities - action denied by %s mode (admin must grant capabilities first)",
@@ -1198,10 +1195,9 @@ func (s *AgentService) VerifyCapability(
 			fmt.Printf("⚠️  Warning: failed to update trust_scores table: %v\n", err)
 		}
 
-		// Increment violation count on agent record
-		if err := s.agentRepo.IncrementViolationCount(agentID); err != nil {
-			fmt.Printf("⚠️  Warning: failed to increment violation count: %v\n", err)
-		}
+		// capability_violation_count is bumped by an AFTER INSERT trigger
+		// on capability_violations (migration 091); no application-layer
+		// increment needed.
 
 		// Evaluate trust score policy enforcement (alerts and suspension)
 		previousScore := agent.TrustScore  // Store before updating
