@@ -25,9 +25,15 @@ trap 'rm -rf "$WORKDIR"' EXIT
 ./reset-demo.sh
 
 echo "Minting a fresh SDK refresh token (the existing one may have been rotated)..."
+# Match the same env-var-with-fallback pattern used by scripts/test_a2a_e2e.py
+# and the docs (docs/quick-start.md, docs/guides/QUICK_START.md). Local-dev
+# default is the pre-B2 admin password; set AIM_ADMIN_PASSWORD in the operator
+# environment when the dev stack has been rotated.
+ADMIN_PASSWORD="${AIM_ADMIN_PASSWORD:-AIM2025!Secure}"
+LOGIN_PAYLOAD=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 -c "import json,os; print(json.dumps({'email':'admin@opena2a.org','password':os.environ['ADMIN_PASSWORD']}))")
 TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/public/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@opena2a.org","password":"AIM2025!Secure"}' \
+  -d "$LOGIN_PAYLOAD" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
 if [ -z "$TOKEN" ]; then
   echo "ERROR: admin login failed. Check backend health on localhost:8080."
