@@ -148,17 +148,32 @@ func TestExtractResourceType_EdgeCases(t *testing.T) {
 		{
 			name:     "just slash",
 			resource: "/",
-			expected: "", // Single slash returns empty string
+			expected: "unknown", // bare separator with no segment; was "" pre-#156, now "unknown"
 		},
 		{
-			name:     "no delimiter",
+			name:     "no delimiter (bare value)",
 			resource: "simpleresource",
-			expected: "simpleresource",
+			expected: "unknown", // bare values bucket as "unknown" per #156 fix — see resourceLabelForDisplay docstring
 		},
 		{
 			name:     "dot delimiter",
 			resource: "domain.example.com",
 			expected: "domain",
+		},
+		{
+			name:     "email address",
+			resource: "alice@example.com",
+			expected: "email", // #156: explicit email recognition, was "alice@example" pre-fix
+		},
+		{
+			name:     "colon at start (no prefix)",
+			resource: ":foo",
+			expected: "unknown",
+		},
+		{
+			name:     "colon at end (no suffix)",
+			resource: "foo:",
+			expected: "unknown",
 		},
 	}
 
@@ -166,6 +181,104 @@ func TestExtractResourceType_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractResourceType(tt.resource)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// ========================================
+// resourceLabelForDisplay Tests (issue #156)
+// ========================================
+
+func TestResourceLabelForDisplay(t *testing.T) {
+	tests := []struct {
+		name           string
+		resource       string
+		expectedLabel  string
+		expectedIsType bool
+	}{
+		// Real types (isType=true)
+		{"protocol prefix", "s3://bucket/key", "s3", true},
+		{"protocol prefix file", "file:///path", "file", true},
+		{"custom protocol", "destination:NYC", "destination", true},
+		{"path style", "/api/users/123", "api", true},
+		{"path with single segment", "/users", "users", true},
+		{"email shape", "alice@example.com", "email", true},
+		{"dot delimiter", "users.ssn", "users", true},
+
+		// Bare values (isType=false) — the bug class #156 closes
+		{"bare value all letters", "NYC", "NYC", false},
+		{"bare value with digits", "abc123", "abc123", false},
+		{"empty string", "", "", false},
+		{"colon at start", ":foo", ":foo", false},
+		{"colon at end", "foo:", "foo:", false},
+		{"just slash", "/", "/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label, isType := resourceLabelForDisplay(tt.resource)
+			assert.Equal(t, tt.expectedLabel, label, "label mismatch")
+			assert.Equal(t, tt.expectedIsType, isType, "isType mismatch")
+		})
+	}
+}
+
+// TestFirstTimeResourceAccessDescription_NoFalseTypeClaim is the regression
+// test for issue #156. It guarantees that when the resource parser cannot
+// identify a real type (bare values like "NYC", malformed colon strings),
+// the alert description does NOT contain the literal phrase "resource type"
+// — which was the user-facing bug ("Agent accessed resource type 'NYC'"
+// falsely claimed NYC was a type).
+func TestFirstTimeResourceAccessDescription_NoFalseTypeClaim(t *testing.T) {
+	// Inputs that the parser cannot classify as types.
+	bareValues := []string{
+		"NYC",
+		"alice",
+		"abc123",
+		":foo",
+		"foo:",
+		"/",
+		"",
+	}
+
+	for _, resource := range bareValues {
+		t.Run(resource, func(t *testing.T) {
+			// Both call-site phrasings.
+			d1 := firstTimeResourceAccessDescription(resource, "Agent accessed ", " for the first time in 7 days.")
+			d2 := firstTimeResourceAccessDescription(resource, "First-time access to ", "")
+			assert.NotContains(t, d1, "resource type",
+				"alert_service phrasing must not claim a bare value is a type (input=%q, got=%q)", resource, d1)
+			assert.NotContains(t, d2, "resource type",
+				"behavior_analysis phrasing must not claim a bare value is a type (input=%q, got=%q)", resource, d2)
+			// Positive form: should use the "resource 'X'" phrasing (without "type").
+			assert.Contains(t, d1, "resource '",
+				"alert_service phrasing should fall back to \"resource 'X'\" (input=%q, got=%q)", resource, d1)
+			assert.Contains(t, d2, "resource '",
+				"behavior_analysis phrasing should fall back to \"resource 'X'\" (input=%q, got=%q)", resource, d2)
+		})
+	}
+}
+
+// TestFirstTimeResourceAccessDescription_ClaimsTypeWhenParsed ensures the
+// "resource type 'X'" phrasing is still used when the parser DOES identify
+// a real type. Negative-space partner to NoFalseTypeClaim above.
+func TestFirstTimeResourceAccessDescription_ClaimsTypeWhenParsed(t *testing.T) {
+	cases := []struct {
+		resource      string
+		expectedLabel string
+	}{
+		{"s3://bucket/key", "s3"},
+		{"destination:NYC", "destination"},
+		{"/api/users/123", "api"},
+		{"alice@example.com", "email"},
+		{"users.ssn", "users"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.resource, func(t *testing.T) {
+			d := firstTimeResourceAccessDescription(tc.resource, "Agent accessed ", " for the first time in 7 days.")
+			assert.Contains(t, d, "resource type '"+tc.expectedLabel+"'",
+				"parsed-type inputs must keep the \"resource type 'X'\" phrasing (input=%q, got=%q)", tc.resource, d)
 		})
 	}
 }
