@@ -129,16 +129,33 @@ We conduct regular security assessments:
 
 ## Enterprise Compliance
 
+AIM is pre-1.0 (see the disclosure at the top of this file). This section maps each compliance claim to the code that backs it today, and flags claims that are partial or aspirational so consumers can plan around the actual enforcement boundary. Items marked **Partial** or **Roadmap** are tracked openly in [HARDENING.md](HARDENING.md).
+
 ### SOC 2 Type II Alignment
 
-| Control Area | Implementation |
-|--------------|----------------|
-| CC6.1 Logical Access | RBAC, JWT authentication, API key scoping |
-| CC6.6 System Boundaries | Network segmentation, CORS, rate limiting |
-| CC6.7 Data Classification | Credential encryption, log sanitization |
-| CC6.8 Data Retention | Configurable retention, secure deletion |
-| CC7.1 Configuration Management | Environment variables, no hardcoded secrets |
-| CC7.2 Change Management | Git history, audit logs |
+| Control Area | Status | Implementation today | Notes |
+|---|---|---|---|
+| CC6.1 Logical Access | Enforced | RBAC, JWT authentication, API key scoping | |
+| CC6.3 Privileged Access | Partial | `RiskLevel` constants on capabilities (`apps/backend/internal/domain/capability.go` Low/Medium/High/Critical) gate approval requirements via `CapabilityRequestService` | The SDK registration path can still grant capabilities directly without routing through the approval workflow. See HARDENING.md "Capability lifecycle." |
+| CC6.6 System Boundaries | Enforced | Network segmentation, CORS, rate limiting | |
+| CC6.7 Data Classification | Partial | Credential encryption (Fernet + system keyring on the SDK side; AES-256-GCM at rest on the backend) | "Log sanitization" is per-event truncation of token IDs, not a tested PII redaction pipeline — treat as best-effort. |
+| CC6.8 Data Retention | Partial | `ComplianceService.GetDataRetentionStatus` exposes the configured retention policy (`apps/backend/internal/application/compliance_service.go:458`) | No background job currently enforces the policy via row-level deletion; values are reported, not yet swept. |
+| CC7.1 Configuration Management | Partial | Environment-variable-driven config | Several required secrets currently fall back to weak defaults when unset. Removing those defaults is HARDENING.md "Bootstrap secrets and configuration." |
+| CC7.2 Change Management | Enforced | Git history; `audit_logs` table records every privileged action | |
+
+### Frameworks beyond SOC 2
+
+The product narrative also references ISO 27001, NIST SP 800-53, FedRAMP, EU AI Act, and the OWASP Agentic Top 10. The honest status of those mappings is:
+
+| Framework / control | Status | What is true today |
+|---|---|---|
+| ISO 27001 A.9.2.3 (Privileged Access Management) | Partial | JIT capability grants exist (`apps/backend/internal/application/capability_request_service.go`, with `RiskLevel`-gated approval and TTLs). In **strict** enforcement mode, high-risk requests require admin approval. In **monitoring** mode (the default), the same requests auto-approve and emit an audit row — useful for visibility, not equivalent to PAM. The A.9.2.3 framing is accurate only when the org is in strict mode AND when the SDK registration path also routes through the approval workflow (HARDENING.md "Capability lifecycle"). |
+| NIST SP 800-53 AC-6 (Least Privilege) | Partial | FGA enforces capability allowlists with wildcard prefix matching (`apps/backend/internal/application/fga_engine.go`). The `capability_scope` JSONB column on `agent_capabilities` is persisted at grant time but not consumed by the matcher today, so attribute-level scoping ("read only these columns") is plumbed but not enforced. Tracked separately in #130. |
+| FedRAMP AC-2 / AU-9 (Account Management / Audit Protection) | Roadmap | The `audit_logs` table records actions and is access-controlled, but is not append-only at the database layer and is not cryptographically signed. AU-9's "protection of audit information" requirement is partially met by RBAC; it is not met by a tamper-evident signing scheme. We do not claim FedRAMP authorization. |
+| EU AI Act Article 14 (Human Oversight) | Partial | Approval gates exist for capability requests, and in **strict** enforcement mode high-risk operations require human review before grant. The Article 14 framing is accurate only in that mode; in monitoring mode the human-oversight gate is observational, not blocking. |
+| OWASP Agentic Top 10 | Roadmap | We are working with the OASB community on a per-scenario mapping document. The current AIM enforcement primitives (capability authorization, trust scoring, FGA, audit trail) cover the agentic-identity portion of the threat space; a published one-to-one OWASP-to-AIM mapping is not yet in this repo. |
+
+If you are evaluating AIM against a specific certification, please read [HARDENING.md](HARDENING.md) alongside this section. We do not claim certification under any of the frameworks above today; we describe where AIM's primitives align and where they do not.
 
 ### GDPR Compliance
 
