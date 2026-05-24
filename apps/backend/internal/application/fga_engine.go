@@ -127,11 +127,18 @@ type FGAPolicy struct {
 }
 
 // ASCRiskSummary is the cached risk view from the Registry ASC.
+//
+// Phase 1 of the ATC to ATX rename: both ATCTrustLevel and
+// ATXTrustLevel carry the SAME value, populated from
+// COALESCE(atx_trust_level, atc_trust_level) on the database row.
+// New code should read ATXTrustLevel; legacy code reading ATCTrustLevel
+// continues to work. Phase 3 will drop ATCTrustLevel.
 type ASCRiskSummary struct {
 	OverallRisk   string  `json:"overallRisk"`
 	DriftScore    float64 `json:"driftScore"`
 	ActiveAlerts  int     `json:"activeAlerts"`
 	ATCTrustLevel int     `json:"atcTrustLevel"`
+	ATXTrustLevel int     `json:"atxTrustLevel"`
 	ScanVerdict   string  `json:"scanVerdict"`
 }
 
@@ -969,15 +976,24 @@ func (e *FGAEngine) loadPolicy(ctx context.Context, agentID uuid.UUID, capabilit
 // In production, this reads from a local Redis cache populated by the Registry.
 // If no local cache is available, returns nil (fail open -- context rules skip).
 func (e *FGAEngine) fetchASCRiskSummary(ctx context.Context, agentID uuid.UUID) *ASCRiskSummary {
-	// Read from local DB if available (the ASC table is replicated locally)
+	// Read from local DB if available (the ASC table is replicated locally).
+	// COALESCE(atx_trust_level, atc_trust_level) handles the Phase 1
+	// transition window: opena2a-registry migration 231 added the
+	// atx_trust_level column with NULL defaults, and Phase 2 writers
+	// will populate it. Until then atx_trust_level is NULL and the
+	// fallback to atc_trust_level keeps the FGA engine working.
 	if e.db != nil {
 		var summary ASCRiskSummary
+		var trustLevel int
 		err := e.db.QueryRowContext(ctx,
-			`SELECT overall_risk, drift_score, active_alerts, atc_trust_level, scan_verdict
+			`SELECT overall_risk, drift_score, active_alerts,
+			        COALESCE(atx_trust_level, atc_trust_level), scan_verdict
 			 FROM agent_security_contexts WHERE agent_id = $1`, agentID,
 		).Scan(&summary.OverallRisk, &summary.DriftScore, &summary.ActiveAlerts,
-			&summary.ATCTrustLevel, &summary.ScanVerdict)
+			&trustLevel, &summary.ScanVerdict)
 		if err == nil {
+			summary.ATCTrustLevel = trustLevel
+			summary.ATXTrustLevel = trustLevel
 			return &summary
 		}
 	}
