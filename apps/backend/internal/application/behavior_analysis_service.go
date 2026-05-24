@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -209,7 +210,7 @@ func (s *BehaviorAnalysisService) DetectAnomalies(
 				OrganizationID:    orgID,
 				AnomalyType:       domain.BehavioralAnomalyNewResource,
 				Severity:          domain.AnomalySeverityMedium,
-				Description:       fmt.Sprintf("First-time access to resource type '%s'", resourceType),
+				Description:       firstTimeResourceAccessDescription(resource, "First-time access to ", ""),
 				TriggerResource:   resource,
 				TriggerAction:     action,
 				TriggerCapability: capability,
@@ -473,36 +474,79 @@ func (s *BehaviorAnalysisService) detectCapabilityDrift(
 	return nil
 }
 
-// extractResourceType extracts a resource type from a resource string
-// e.g., "s3://bucket/key" -> "s3", "/api/users/123" -> "api"
+// firstTimeResourceAccessDescription returns the user-facing description
+// for an alert fired on a first-time resource access. It uses
+// resourceLabelForDisplay to drop the word "type" when the parser cannot
+// classify the input as a real resource type — that is what prevents
+// alerts like "resource type 'NYC'" where NYC is a bare value, not a
+// type.
+//
+// prefix and suffix wrap the noun + label so callers can vary the
+// phrasing (e.g. "Agent accessed " + " for the first time in 7 days..."
+// vs "First-time access to " + "").
+func firstTimeResourceAccessDescription(resource, prefix, suffix string) string {
+	label, isType := resourceLabelForDisplay(resource)
+	noun := "resource"
+	if isType {
+		noun = "resource type"
+	}
+	return fmt.Sprintf("%s%s '%s'%s", prefix, noun, label, suffix)
+}
+
+// resourceLabelForDisplay returns a display-friendly label for a resource
+// string and whether that label is a recognized resource TYPE (true) or
+// just a raw resource value the parser couldn't classify (false). Alert
+// rendering uses the second return value to choose between
+// "resource type 'X'" and "resource 'X'" so we don't falsely claim a
+// bare value is a type.
+//
+//	"destination:NYC"      → ("destination", true)
+//	"s3://bucket/key"      → ("s3",          true)
+//	"/api/users/123"       → ("api",         true)
+//	"users.ssn"            → ("users",       true)
+//	"alice@example.com"    → ("email",       true)
+//	"NYC"                  → ("NYC",         false)
+//	""                     → ("",            false)
+func resourceLabelForDisplay(resource string) (string, bool) {
+	if i := strings.Index(resource, ":"); i > 0 && i < len(resource)-1 {
+		return resource[:i], true
+	}
+	if strings.HasPrefix(resource, "/") {
+		rest := resource[1:]
+		if j := strings.Index(rest, "/"); j > 0 {
+			return rest[:j], true
+		}
+		if rest != "" {
+			return rest, true
+		}
+	}
+	if strings.Contains(resource, "@") {
+		return "email", true
+	}
+	if i := strings.Index(resource, "."); i > 0 {
+		return resource[:i], true
+	}
+	return resource, false
+}
+
+// extractResourceType extracts a resource type from a resource string for
+// use as a stable bucket key in behavior baselines (e.g. baseline.ResourcePatterns).
+// Returns "unknown" for bare values the parser cannot classify, so the map
+// doesn't accumulate one fake "type" entry per distinct bare value (e.g. a
+// flight-search agent that passes "NYC", "LAX", "SFO" as resources would
+// otherwise create three separate "types" — they all bucket as "unknown").
+//
+//	"s3://bucket/key"      → "s3"
+//	"/api/users/123"       → "api"
+//	"alice@example.com"    → "email"
+//	"NYC"                  → "unknown"
+//	""                     → "unknown"
 func extractResourceType(resource string) string {
-	if resource == "" {
+	label, isType := resourceLabelForDisplay(resource)
+	if !isType {
 		return "unknown"
 	}
-
-	// Handle protocol-style resources (s3://, dynamodb://, etc.)
-	for i, c := range resource {
-		if c == ':' && i > 0 {
-			return resource[:i]
-		}
-	}
-
-	// Handle path-style resources (/api/..., /admin/..., etc.)
-	if resource[0] == '/' && len(resource) > 1 {
-		end := 1
-		for ; end < len(resource) && resource[end] != '/'; end++ {
-		}
-		return resource[1:end]
-	}
-
-	// Default: use first segment
-	for i, c := range resource {
-		if c == '/' || c == ':' || c == '.' {
-			return resource[:i]
-		}
-	}
-
-	return resource
+	return label
 }
 
 // GetBaselineStatus returns the baseline status for an agent
