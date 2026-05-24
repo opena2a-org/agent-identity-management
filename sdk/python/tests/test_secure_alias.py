@@ -169,19 +169,24 @@ class TestSecureAlias:
             "trust_score": 80.0
         }
 
+        # Patch load_sdk_credentials to None so the cached-agent path does not
+        # attach a real OAuthTokenManager built from the developer's actual
+        # SDK credentials (or from credentials adopted out of the installed
+        # package by _find_sdk_package_credentials walking parent .aim dirs).
         with patch('aim_sdk.client._load_credentials', return_value=existing_creds):
-            with patch('aim_sdk.client.AIMClient') as mock_client:
-                agent = secure("existing-agent")
+            with patch('aim_sdk.client.load_sdk_credentials', return_value=None):
+                with patch('aim_sdk.client.AIMClient') as mock_client:
+                    agent = secure("existing-agent")
 
-                # Should create client with existing credentials
-                mock_client.assert_called_once_with(
-                    agent_id=existing_creds["agent_id"],
-                    public_key=existing_creds["public_key"],
-                    private_key=existing_creds["private_key"],
-                    aim_url=existing_creds["aim_url"],
-                    api_key=None,
-                    oauth_token_manager=None
-                )
+                    # Should create client with existing credentials
+                    mock_client.assert_called_once_with(
+                        agent_id=existing_creds["agent_id"],
+                        public_key=existing_creds["public_key"],
+                        private_key=existing_creds["private_key"],
+                        aim_url=existing_creds["aim_url"],
+                        api_key=None,
+                        oauth_token_manager=None
+                    )
 
     def test_secure_force_new_registration(self):
         """Test secure() forcing new registration"""
