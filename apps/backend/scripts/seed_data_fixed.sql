@@ -1,5 +1,22 @@
 -- Seed Data for AIM Testing (Schema-Correct Version)
 -- Run with: export PGPASSWORD=postgres && psql -h localhost -U postgres -d identity -f scripts/seed_data_fixed.sql
+--
+-- TEST DATA ONLY. Uses sequential sentinel UUIDs (11111111-*, 22222222-*, ...).
+-- The guard below aborts if a production-shaped org is present so an accidental
+-- `psql -f` against a real cluster cannot create predictable enumerable rows
+-- (CWE-330). See issue #171.
+
+DO $guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM organizations
+        WHERE domain IN ('admin.opena2a.org', 'aim.oa2a.org', 'opena2a.org')
+           OR plan_type = 'enterprise'
+    ) THEN
+        RAISE EXCEPTION 'Refusing to seed test data: this database contains a production-shaped organization. Use a fresh test DB.';
+    END IF;
+END
+$guard$;
 
 -- Create test organization
 INSERT INTO organizations (id, name, created_at, updated_at)
