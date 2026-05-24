@@ -1,4 +1,4 @@
-# 📊 Trust Scoring Guide - 8-Factor Trust Algorithm
+# 📊 Trust Scoring Guide - 9-Factor Trust Algorithm
 
 Understanding and optimizing your agent's trust score.
 
@@ -20,9 +20,9 @@ Understanding and optimizing your agent's trust score.
 
 ---
 
-## The 8 Factors
+## The 9 Factors
 
-Your agent's trust score is calculated from 8 weighted factors:
+Your agent's trust score is calculated from 9 weighted factors that sum to 100%:
 
 ```python
 Trust Score =
@@ -31,10 +31,36 @@ Trust Score =
     (0.15 × Action Success Rate) +
     (0.15 × Security Alerts) +
     (0.10 × Compliance Score) +
-    (0.10 × Age & History) +
-    (0.05 × Drift Detection) +
-    (0.05 × User Feedback)
+    (0.05 × Age & History) +
+    (0.03 × Drift Detection) +
+    (0.02 × User Feedback) +
+    (0.10 × Execution Isolation)
 ```
+
+Implemented in `apps/backend/internal/application/trust_calculator.go`.
+
+## Liveness Status
+
+Not every factor is wired to a live signal source in current AIM. Some factors require optional repositories that may not be configured in every deployment; one factor is currently hardcoded pending a feedback collection mechanism. The honest matrix:
+
+| # | Factor | Status today | Default when not live |
+|---|---|---|---|
+| 1 | Verification Status | **Live** — `verificationEventRepo.GetAgentStatistics` last 30 days; falls back to `agent.Status` proxy when no events exist | Status-based 0.0-1.0 |
+| 2 | Uptime & Availability | **Live** — derived from the same verification-event success rate, with a recency boost/penalty | Status-based 0.50-0.98 |
+| 3 | Action Success Rate | **Live** — `verificationEventRepo.GetAgentStatistics` success rate | Status-based 0.70-0.95 |
+| 4 | Security Alerts | **Live** — `alertRepo.GetUnacknowledgedByResourceID` + `capabilityRepo.GetViolationsByAgentID` (90-day window). Optional NanoMind TME score blends in at 30% influence when wired. | 1.0 (no penalties applied) |
+| 5 | Compliance Score | **Conditional** — requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | 0.5 neutral |
+| 6 | Age & History | **Live** — bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A |
+| 7 | Drift Detection | **Conditional** — requires `alertRepo` AND drift-type alerts (`AlertTypeConfigurationDrift`, `AlertMCPCapabilityDrift`) in the last 30 days | 0.5 neutral (when `alertRepo` is nil OR query errors) |
+| 8 | User Feedback | **Not implemented** — `calculateUserFeedback` hardcoded to return `0.5` pending a `UserFeedbackRepository` and rating-collection UI. TODO at `trust_calculator.go:471-490`. | 0.5 neutral |
+| 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired AND the agent to have submitted a runtime-isolation attestation via the SDK | 0.3 low baseline (incentivizes attestation submission) |
+
+Implications:
+
+- A fresh agent in a default deployment computes its score primarily off Factors 1, 2, 3, 4, and 6 (live with real signals), with Factors 5, 7, 8, 9 contributing neutral or low defaults. That accounts for roughly 75% of the weighted total being live (25 + 15 + 15 + 15 + 5 = 75%) and 25% riding on defaults until the optional repos and feedback path land.
+- Reaching the higher trust bands (>0.85) requires either real signal in the conditional factors OR strong showings across the live ones.
+- If you see a trust score that looks generous against intuition, check whether the live factors are masking neutral defaults in the optional ones. The `factors` JSONB column on `trust_scores` records each factor's contribution; the dashboard breakdown surfaces them.
+- Factor 8 (User Feedback) will always read `0.5` until the feedback collection mechanism ships. Its 2% weight bounds the impact of this gap at ±0.01 on the overall score.
 
 ### Factor 1: Verification Status (25% weight)
 
@@ -311,7 +337,7 @@ def generate_monthly_compliance_report():
 
 ---
 
-### Factor 6: Age & History (10% weight)
+### Factor 6: Age & History (5% weight)
 
 **What it measures**: How long the agent has been operating successfully
 
@@ -351,7 +377,7 @@ else:
 
 ---
 
-### Factor 7: Drift Detection (5% weight)
+### Factor 7: Drift Detection (3% weight)
 
 **What it measures**: Changes in agent behavior patterns
 
@@ -413,7 +439,7 @@ monitor_behavioral_drift()
 
 ---
 
-### Factor 8: User Feedback (5% weight)
+### Factor 8: User Feedback (2% weight)
 
 **What it measures**: Explicit feedback from users about agent performance
 
@@ -457,6 +483,28 @@ def submit_user_feedback(agent_id: str, rating: int, comment: str):
 # If 👍: submit_user_feedback(agent.id, 5, "Very helpful!")
 # If 👎: submit_user_feedback(agent.id, 1, "Incorrect information")
 ```
+
+---
+
+### Factor 9: Execution Isolation (10% weight)
+
+**What it measures**: The runtime isolation posture the agent self-attests via the SDK — sandbox type, network isolation, filesystem isolation, and process isolation. Higher isolation bounds the blast radius if the agent is compromised.
+
+**Calculation**: Computed in `calculateExecutionIsolation` from the agent's most recent isolation attestation. With no attestation present (the default), the score is `0.3` — deliberately low so that not reporting isolation costs trust, incentivizing operators to attest.
+
+**Status today**: Conditional. The factor only computes a real signal when `IsolationAttestationRepository` is wired AND the agent has submitted at least one attestation through the SDK. In stock deployments where neither is true, every agent reads `0.3` on this factor.
+
+**External attestation only**: An agent claiming "I'm in a hardened container" proves nothing on its own — a compromised agent would claim the same thing. The signal must come from outside the agent (orchestrator security context, TEE attestation, or HMA scan of the deployed surface). The SDK collects the attestation; downstream verification is what makes the score load-bearing.
+
+**How to improve**:
+- ✅ Run the agent inside a sandbox (container, VM, or TEE)
+- ✅ Drop unneeded Linux capabilities; pin a seccomp profile
+- ✅ Use read-only rootfs + tmpfs scratch where possible
+- ✅ Apply an egress allowlist limited to declared MCP destinations
+- ✅ Receive credentials through a short-TTL broker rather than long-lived env vars
+- ✅ Submit the isolation attestation through the SDK so the factor stops reading the `0.3` default
+
+This factor was added as Factor 9 in the 9-factor revision; the 8-factor version of this document predated it. Issue #137 tracks the design of the full external-attestation scoring path that makes this factor's signal trustworthy end to end.
 
 ---
 
