@@ -943,7 +943,7 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 // agent-scoped). Caller must own the event (event.AgentID == header agent ID).
 //
 // Required headers:
-//   - X-AIM-Agent-ID: UUID of the calling agent
+//   - X-AIM-Agent-ID: UUID of the calling agent (canonical lowercase form)
 //   - X-AIM-Timestamp: Unix seconds (must be within -60s..+300s of server clock)
 //   - X-AIM-Signature: base64 Ed25519 signature over the canonical message
 //
@@ -952,6 +952,16 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 //	GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<timestamp>
 //
 // SDK 1.22.0+ produces these headers; older clients receive 401.
+//
+// Replay window: the 5-minute past-skew permits the same captured signature to
+// be replayed against the same verification ID by the same agent until ts+300s.
+// This is intentional for now: the endpoint is an idempotent read of a single
+// agent's own verification event, and the fire-and-forget expiration update is
+// idempotent. Tightening to a single-use nonce/JTI cache is tracked as a
+// follow-up; see the post-#160 TODO. Sigs cannot be cross-replayed: the
+// canonical message includes the verification ID and the agent ID, both of
+// which are verified server-side against the requested path and the agent's
+// registered public key.
 //
 // @Summary Get verification status (SDK)
 // @Tags verifications

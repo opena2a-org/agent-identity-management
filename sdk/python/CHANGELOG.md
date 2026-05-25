@@ -27,6 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unauthenticated requests. The normal `secure(...)` / cached-credentials paths
   already provide both; only ad-hoc clients that constructed `AIMClient` without
   registering keys are affected.
+- **`api_key`-only consumers can no longer poll the SDK verification route.**
+  Pre-1.22 SDKs polled `GET /api/v1/sdk-api/verifications/<id>` with `X-API-Key`
+  only; this endpoint is now signature-authed (defect #160 closure) and the
+  API-key fallback no longer satisfies it. Migration:
+    1. Register the consumer as an AIM agent (see `secure(...)` quickstart).
+       This generates an Ed25519 keypair that `_wait_for_approval` will use
+       automatically.
+    2. If the consumer must remain API-key-only (CI service account, etc.),
+       call `/api/v1/verifications/<id>` (the JWT-authed, org-scoped route)
+       instead of the SDK route. Note the JWT route requires a user-session
+       JWT, not an API key, so a dashboard auth flow is required.
+  CI consumers that previously held `api_key` AND polled via `verify_action`
+  with a non-`None` `_wait_for_approval` timeout will now raise
+  `VerificationError` on `pending` responses.
 
 ### Fixed
 - **Stale agent credentials no longer trigger silent re-registration** (#178). When the

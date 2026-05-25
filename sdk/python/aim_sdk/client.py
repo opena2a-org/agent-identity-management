@@ -861,27 +861,41 @@ class AIMClient:
         start_time = time.time()
         poll_interval = 2  # Start with 2 second polls
 
+        # Defect #160: this endpoint is signature-authed and agent-scoped.
+        # We Ed25519-sign the canonical request and send three headers; the
+        # backend rejects the request if any are missing, the timestamp is
+        # outside +/- a small skew window, the signature doesn't verify,
+        # or the verification event isn't owned by this agent.
+        #
+        # Canonical message (newline-separated, no trailing newline):
+        #   GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<unix_ts>
+        if not self.signing_key or not self.agent_id:
+            raise VerificationError(
+                "Cannot poll verification: agent signing key or agent_id missing. "
+                "AIM SDK 1.22.0+ requires Ed25519 signing for verification polling."
+            )
+
+        # Normalize both UUIDs to canonical lowercase before signing so that the
+        # SDK and backend (which uses Go uuid.UUID.String(), always lowercase)
+        # produce byte-identical canonical messages regardless of caller casing.
+        import uuid as _uuid
+        try:
+            vid_norm = str(_uuid.UUID(str(verification_id)))
+        except (ValueError, AttributeError):
+            vid_norm = str(verification_id).lower()
+        try:
+            agent_id_norm = str(_uuid.UUID(str(self.agent_id)))
+        except (ValueError, AttributeError):
+            agent_id_norm = str(self.agent_id).lower()
+
         while time.time() - start_time < timeout_seconds:
             try:
-                url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}"
+                url = f"{self.aim_url}/api/v1/sdk-api/verifications/{vid_norm}"
 
-                # Defect #160: this endpoint is signature-authed and agent-scoped.
-                # We Ed25519-sign the canonical request and send three headers; the
-                # backend rejects the request if any are missing, the timestamp is
-                # outside +/- a small skew window, the signature doesn't verify,
-                # or the verification event isn't owned by this agent.
-                #
-                # Canonical message (newline-separated, no trailing newline):
-                #   GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<unix_ts>
-                if not self.signing_key or not self.agent_id:
-                    raise VerificationError(
-                        "Cannot poll verification: agent signing key or agent_id missing. "
-                        "AIM SDK 1.22.0+ requires Ed25519 signing for verification polling."
-                    )
                 ts = str(int(time.time()))
                 canonical = (
-                    f"GET\n/api/v1/sdk-api/verifications/{verification_id}\n"
-                    f"{self.agent_id}\n{ts}"
+                    f"GET\n/api/v1/sdk-api/verifications/{vid_norm}\n"
+                    f"{agent_id_norm}\n{ts}"
                 )
                 signature_b64 = base64.b64encode(
                     self.signing_key.sign(canonical.encode('utf-8')).signature
@@ -890,7 +904,7 @@ class AIMClient:
                 headers = {
                     'Content-Type': 'application/json',
                     'User-Agent': f'AIM-Python-SDK/{__version__}',
-                    'X-AIM-Agent-ID': str(self.agent_id),
+                    'X-AIM-Agent-ID': agent_id_norm,
                     'X-AIM-Timestamp': ts,
                     'X-AIM-Signature': signature_b64,
                 }

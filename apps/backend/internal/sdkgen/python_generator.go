@@ -536,16 +536,28 @@ class AIMClient:
                 "AIM SDK 1.22.0+ requires Ed25519 signing for verification polling."
             )
 
+        # Normalize UUIDs to lowercase canonical form so SDK and backend
+        # produce identical canonical bytes regardless of caller casing.
+        import uuid as _uuid
+        try:
+            vid_norm = str(_uuid.UUID(str(verification_id)))
+        except (ValueError, AttributeError):
+            vid_norm = str(verification_id).lower()
+        try:
+            agent_id_norm = str(_uuid.UUID(str(self.agent_id)))
+        except (ValueError, AttributeError):
+            agent_id_norm = str(self.agent_id).lower()
+
         start_time = time.time()
         poll_interval = 2
-        url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}"
+        url = f"{self.aim_url}/api/v1/sdk-api/verifications/{vid_norm}"
 
         while time.time() - start_time < timeout_seconds:
             try:
                 ts = str(int(time.time()))
                 canonical = (
-                    f"GET\n/api/v1/sdk-api/verifications/{verification_id}\n"
-                    f"{self.agent_id}\n{ts}"
+                    f"GET\n/api/v1/sdk-api/verifications/{vid_norm}\n"
+                    f"{agent_id_norm}\n{ts}"
                 )
                 signature_b64 = base64.b64encode(
                     self.signing_key.sign(canonical.encode('utf-8')).signature
@@ -555,7 +567,7 @@ class AIMClient:
                     method="GET",
                     url=url,
                     headers={
-                        'X-AIM-Agent-ID': str(self.agent_id),
+                        'X-AIM-Agent-ID': agent_id_norm,
                         'X-AIM-Timestamp': ts,
                         'X-AIM-Signature': signature_b64,
                     },
