@@ -756,15 +756,26 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 // @Tags sdk-api
 // @Accept json
 // @Produce json
-// @Param agent_id path string true "Agent ID"
+// @Param id path string true "Agent ID"
 // @Param request body map[string]interface{} true "Connection data"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /api/v1/sdk-api/agents/{agent_id}/mcp-connections [post]
+// @Router /api/v1/sdk-api/agents/{id}/mcp-connections [post]
 func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
-	// Get agent ID from URL path (already authenticated by SDK middleware)
-	agentID, err := uuid.Parse(c.Params("agent_id"))
+	// Get agent ID from URL path (already authenticated by SDK middleware).
+	//
+	// ROUTE-BINDING FIX: the production route in main.go binds this handler
+	// at `/api/v1/sdk-api/agents/:id/mcp-connections`. Fiber v3 keys path
+	// params by the literal name after `:` — `c.Params("agent_id")` returns
+	// "" when the route uses `:id`, so every prod call returned 400
+	// "invalid UUID length: 0" before the security checks below ever ran.
+	// The sibling handler RecordMCPUsageReport already reads `c.Params("id")`
+	// and is wired correctly. Using `"id"` here aligns this handler with the
+	// production route + the sibling handler. Tests use the same route
+	// shape so the param key change is the entire fix.
+	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
@@ -802,21 +813,25 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY (defect #41): a malformed body-supplied mcpServerId
+	// returns the same 404 {"error":"not found"} as a well-formed
+	// cross-org or nonexistent mcpServerId. Returning a distinct 400
+	// here would be a status-code oracle: an attacker holding a
+	// legitimate same-org SDK token could distinguish "valid-format-
+	// but-cross-org UUID" from "garbage UUID" via response shape,
+	// narrowing UUID enumeration to well-formed-only space. The
+	// security boundary is the LoadOwned call below; this branch
+	// collapses to the same response surface as that helper.
 	mcpServerID, err := uuid.Parse(req.MCPServerID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
-		})
+		respondResourceNotFound(c)
+		return nil
 	}
 
 	// SECURITY (defect #19): verify the agent in the URL belongs to the
 	// caller's organization before recording the MCP connection. Without
 	// this check, an SDK token for org A can record fake MCP connections
-	// for any agent in any org by guessing UUIDs. Placed AFTER the body
-	// validation so that malformed-input tests retain their 400-shape
-	// contract; the security boundary is the service call below, not the
-	// JSON parse.
+	// for any agent in any org by guessing UUIDs.
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
@@ -945,19 +960,25 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 		})
 	}
 
-	// SECURITY (defect #19b, body-class #2): pre-validation pass over
-	// every parseable mcpServerId in the body. Any cross-org UUID
-	// anywhere in the batch aborts the entire request with 404 BEFORE
-	// any service call — otherwise an attacker could plant a
+	// SECURITY (defect #19b + #41, body-class #2): pre-validation pass
+	// over every mcpServerId in the body. Any malformed or cross-org
+	// UUID anywhere in the batch aborts the entire request with 404
+	// BEFORE any service call.
+	//
+	// (#19b) Without the cross-org check, an attacker could plant a
 	// fictitious usage report against a victim org's MCP server,
-	// poisoning their analytics + invocation counters. Malformed UUIDs
-	// preserve the existing silent-skip behavior in the main loop
-	// (the malformed-vs-cross-org reporting oracle is a separate
-	// follow-up); only well-formed cross-org UUIDs are blocking.
+	// poisoning their analytics + invocation counters.
+	//
+	// (#41) Malformed UUIDs collapse to the same 404 as cross-org so
+	// the response shape does not betray "valid-format-but-cross-org"
+	// vs "garbage UUID". Treating malformed as silent-skip while
+	// cross-org returns 404 was a status-code oracle that narrowed
+	// UUID enumeration to well-formed-only space.
 	for serverIDStr := range req.MCPServers {
 		mcpServerID, parseErr := uuid.Parse(serverIDStr)
 		if parseErr != nil {
-			continue
+			respondResourceNotFound(c)
+			return nil
 		}
 		if LoadOwned(c, h.mcpServerRepo.GetByID, mcpServerID, orgID, mcpServerOrgID) == nil {
 			return nil

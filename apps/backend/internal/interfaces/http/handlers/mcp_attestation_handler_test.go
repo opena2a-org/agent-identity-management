@@ -433,7 +433,7 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidJSON(t *testing.T) {
 func TestMCPAttestationHandler_RecordMCPConnection_InvalidAgentID(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+	app.Post("/agents/:id/mcp-connections", handler.RecordMCPConnection)
 
 	body := `{"mcpServerId":"` + uuid.New().String() + `","toolName":"test"}`
 	req := httptest.NewRequest("POST", "/agents/not-a-uuid/mcp-connections", strings.NewReader(body))
@@ -449,7 +449,7 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidAgentID(t *testing.T) 
 func TestMCPAttestationHandler_RecordMCPConnection_MissingMCPServerID(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+	app.Post("/agents/:id/mcp-connections", handler.RecordMCPConnection)
 
 	body := `{"toolName":"test"}`
 	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
@@ -465,7 +465,7 @@ func TestMCPAttestationHandler_RecordMCPConnection_MissingMCPServerID(t *testing
 func TestMCPAttestationHandler_RecordMCPConnection_MissingToolName(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+	app.Post("/agents/:id/mcp-connections", handler.RecordMCPConnection)
 
 	body := `{"mcpServerId":"` + uuid.New().String() + `"}`
 	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
@@ -478,10 +478,21 @@ func TestMCPAttestationHandler_RecordMCPConnection_MissingToolName(t *testing.T)
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
-func TestMCPAttestationHandler_RecordMCPConnection_InvalidMCPServerIDFormat(t *testing.T) {
+// SECURITY (defect #41): malformed body mcpServerId returns the same
+// 404 {"error":"not found"} as a well-formed cross-org or nonexistent
+// mcpServerId. A distinct 400 here would be a status-code oracle: an
+// attacker holding a legitimate same-org SDK token could distinguish
+// "valid-format-but-cross-org UUID" from "garbage UUID" via response
+// shape, narrowing UUID enumeration to well-formed-only space.
+//
+// Pairs with TestMCPAttestationHandler_RecordMCPConnection_CrossOrgMCPServerID_Returns404
+// to pin both branches of the status-oracle collapse. The two tests
+// MUST return byte-identical 404 bodies; assertions below check the
+// status code and the body content explicitly.
+func TestMCPAttestationHandler_RecordMCPConnection_MalformedMCPServerID_Returns404(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Post("/agents/:agent_id/mcp-connections", handler.RecordMCPConnection)
+	app.Post("/agents/:id/mcp-connections", handler.RecordMCPConnection)
 
 	body := `{"mcpServerId":"not-a-uuid","toolName":"test"}`
 	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/mcp-connections", strings.NewReader(body))
@@ -491,7 +502,16 @@ func TestMCPAttestationHandler_RecordMCPConnection_InvalidMCPServerIDFormat(t *t
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"malformed body mcpServerId must return 404 to match cross-org response (defect #41 status-oracle)")
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, "Invalid MCP server ID",
+		"response must not echo the legacy 400 'Invalid MCP server ID' string (a parse-error signal would re-open the oracle)")
+	assert.NotContains(t, bodyStr, "not-a-uuid",
+		"response must not echo the attacker-supplied malformed string back")
+	assert.Contains(t, bodyStr, `"error":"not found"`,
+		"response body must match the cross-org 404 body produced by respondResourceNotFound")
 }
 
 // SECURITY (defect #19, body-class #2): RecordMCPConnection accepts a
@@ -524,7 +544,7 @@ func TestMCPAttestationHandler_RecordMCPConnection_CrossOrgMCPServerID_Returns40
 	}
 
 	app := fiber.New()
-	app.Post("/agents/:agent_id/mcp-connections", func(c fiber.Ctx) error {
+	app.Post("/agents/:id/mcp-connections", func(c fiber.Ctx) error {
 		c.Locals("organization_id", callerOrgID)
 		return handler.RecordMCPConnection(c)
 	})
@@ -639,6 +659,70 @@ func TestMCPAttestationHandler_RecordMCPUsageReport_CrossOrgMCPServerID_Returns4
 	bodyStr := string(bodyBytes)
 	assert.NotContains(t, bodyStr, crossOrgMCP.String(), "response must not echo the supplied cross-org mcpServerId")
 	assert.NotContains(t, bodyStr, victimOrgID.String(), "response must not echo the cross-org organization UUID")
+}
+
+// SECURITY (defect #41, batch variant): a malformed UUID anywhere in
+// the RecordMCPUsageReport batch map must abort the whole request with
+// the same 404 {"error":"not found"} as a cross-org entry. The
+// pre-fix silent-skip on parseErr produced a 200 OK with serversReported
+// = len(req.MCPServers) (the raw input count) — observably different
+// from the cross-org 404, which let an attacker probe "garbage UUID"
+// vs "well-formed cross-org UUID" via the response code AND via the
+// serversReported counter against a baseline.
+//
+// Captured-flag: attestationService is nil. Any bypass that reached
+// the service main loop would panic / 500 rather than surface the
+// asserted 404. The fix collapses parseErr to respondResourceNotFound
+// in the pre-validation pass, byte-identical to LoadOwned's 404.
+func TestMCPAttestationHandler_RecordMCPUsageReport_MalformedBatchEntry_Returns404(t *testing.T) {
+	callerOrgID := uuid.New()
+	agentID := uuid.New()
+	sameOrgMCP := uuid.New()
+
+	handler := &MCPAttestationHandler{
+		agentRepo: &MockAgentRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.Agent, error) {
+				return &domain.Agent{ID: agentID, OrganizationID: callerOrgID}, nil
+			},
+		},
+		mcpServerRepo: &MockMCPServerRepositoryerImpl{
+			GetByIDFunc: func(id uuid.UUID) (*domain.MCPServer, error) {
+				return &domain.MCPServer{ID: id, OrganizationID: callerOrgID}, nil
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Post("/agents/:id/mcp-usage-report", func(c fiber.Ctx) error {
+		c.Locals("organization_id", callerOrgID)
+		return handler.RecordMCPUsageReport(c)
+	})
+
+	// Batch with one same-org UUID and one malformed string. Pre-fix:
+	// the malformed entry would silently skip in both pre-validation
+	// and the main loop, returning 200 OK with serversReported=2. The
+	// fix aborts on the first malformed UUID with 404 — matching the
+	// cross-org abort exactly.
+	body := `{"agentId":"` + agentID.String() + `","mcpServers":{` +
+		`"` + sameOrgMCP.String() + `":{"toolUsage":{},"capabilitiesAttested":[]},` +
+		`"not-a-uuid":{"toolUsage":{},"capabilitiesAttested":[]}` +
+		`},"reportedAt":"2024-01-01T00:00:00Z"}`
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/mcp-usage-report", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"malformed UUID in batch map must abort the whole batch with 404 to match cross-org response (defect #41)")
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	assert.NotContains(t, bodyStr, "not-a-uuid",
+		"response must not echo the attacker-supplied malformed string back")
+	assert.NotContains(t, bodyStr, "serversReported",
+		"response must not include the 200-success serversReported counter (would re-open the oracle even at the same status code)")
+	assert.Contains(t, bodyStr, `"error":"not found"`,
+		"response body must match the cross-org 404 body produced by respondResourceNotFound")
 }
 
 // ===========================
