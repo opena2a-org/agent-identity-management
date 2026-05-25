@@ -523,16 +523,50 @@ class AIMClient:
             raise VerificationError(f"Verification request failed: {e}")
 
     def _wait_for_approval(self, verification_id: str, timeout_seconds: int) -> Dict:
-        """Poll AIM server for verification approval."""
+        """Poll AIM server for verification approval.
+
+        Defect #160: the SDK GET route is Ed25519-signed and agent-scoped. We
+        send X-AIM-Agent-ID, X-AIM-Timestamp, X-AIM-Signature on each poll.
+        Canonical signed message:
+            GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<unix_ts>
+        """
+        if not self.signing_key or not self.agent_id:
+            raise VerificationError(
+                "Cannot poll verification: agent signing key or agent_id missing. "
+                "AIM SDK 1.22.0+ requires Ed25519 signing for verification polling."
+            )
+
         start_time = time.time()
         poll_interval = 2
+        url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}"
 
         while time.time() - start_time < timeout_seconds:
             try:
-                result = self._make_request(
-                    method="GET",
-                    endpoint=f"/api/v1/sdk-api/verifications/{verification_id}"
+                ts = str(int(time.time()))
+                canonical = (
+                    f"GET\n/api/v1/sdk-api/verifications/{verification_id}\n"
+                    f"{self.agent_id}\n{ts}"
                 )
+                signature_b64 = base64.b64encode(
+                    self.signing_key.sign(canonical.encode('utf-8')).signature
+                ).decode('utf-8')
+
+                response = self.session.request(
+                    method="GET",
+                    url=url,
+                    headers={
+                        'X-AIM-Agent-ID': str(self.agent_id),
+                        'X-AIM-Timestamp': ts,
+                        'X-AIM-Signature': signature_b64,
+                    },
+                    timeout=self.timeout,
+                )
+                if response.status_code == 401:
+                    raise AuthenticationError("Authentication failed - invalid agent credentials")
+                if response.status_code == 404:
+                    raise VerificationError("Verification not found or not owned by this agent")
+                response.raise_for_status()
+                result = response.json()
 
                 status = result.get("status")
 

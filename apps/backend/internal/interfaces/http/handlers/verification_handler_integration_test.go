@@ -3,10 +3,14 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +21,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testJWTOrgID is the organization_id injected by setupVerificationTestApp on
+// the JWT verifications route. Tests asserting same-org access must use this
+// value for their mock event.OrganizationID.
+var testJWTOrgID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
 // ===========================
 // VerificationHandler Integration Tests
 // ===========================
@@ -24,11 +33,17 @@ import (
 func setupVerificationTestApp(handler *VerificationHandler) *fiber.App {
 	app := fiber.New()
 
-	// Public routes
-	app.Get("/api/v1/verifications/:id", handler.GetVerification)
-	app.Post("/api/v1/verifications/:id/result", handler.SubmitVerificationResult)
+	// JWT verifications routes: inject organization_id to mimic AuthMiddleware.
+	jwtGroup := app.Group("/api/v1/verifications")
+	jwtGroup.Use(func(c fiber.Ctx) error {
+		c.Locals("organization_id", testJWTOrgID)
+		return c.Next()
+	})
+	jwtGroup.Get("/:id", handler.GetVerification)
+	jwtGroup.Post("/:id/result", handler.SubmitVerificationResult)
 
-	// SDK API routes
+	// SDK API routes (signature-authed)
+	app.Get("/api/v1/sdk-api/verifications/:id", handler.GetVerificationSDK)
 	app.Post("/api/v1/sdk-api/verifications/:id/execution-status", handler.UpdateExecutionStatus)
 
 	// Admin routes - require organization context
@@ -55,7 +70,7 @@ func setupVerificationTestApp(handler *VerificationHandler) *fiber.App {
 func TestVerificationHandler_GetVerification_Success(t *testing.T) {
 	// Arrange
 	verificationID := uuid.New()
-	orgID := uuid.New()
+	orgID := testJWTOrgID // match injected JWT context (defect #160 org-scope)
 	agentID := uuid.New()
 	now := time.Now()
 	verifiedResult := domain.VerificationResultVerified
@@ -165,7 +180,7 @@ func TestVerificationHandler_GetVerification_InvalidIDWithMocks(t *testing.T) {
 func TestVerificationHandler_GetVerification_Denied(t *testing.T) {
 	// Arrange
 	verificationID := uuid.New()
-	orgID := uuid.New()
+	orgID := testJWTOrgID // match injected JWT context (defect #160 org-scope)
 	now := time.Now()
 	deniedResult := domain.VerificationResultDenied
 	errorReason := "Insufficient trust score"
@@ -209,6 +224,284 @@ func TestVerificationHandler_GetVerification_Denied(t *testing.T) {
 
 	assert.Equal(t, "denied", response.Status)
 	assert.Equal(t, "Insufficient trust score", response.DenialReason)
+}
+
+// ===========================
+// Defect #160 — GetVerification (JWT) org-scope guard
+// ===========================
+
+func TestVerificationHandler_GetVerification_CrossOrg_404(t *testing.T) {
+	// Event belongs to a DIFFERENT org than the JWT caller's; handler must
+	// return 404, not the event body — no existence oracle.
+	verificationID := uuid.New()
+	foreignOrgID := uuid.New()
+	require.NotEqual(t, testJWTOrgID, foreignOrgID)
+	approved := domain.VerificationResultVerified
+
+	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
+		GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+			return &domain.VerificationEvent{
+				ID:             verificationID,
+				OrganizationID: foreignOrgID,
+				Result:         &approved,
+				CreatedAt:      time.Now(),
+			}, nil
+		},
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		&MockAgentServiceForVerificationImpl{},
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		mockVerifEventService,
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/verifications/%s", verificationID.String()), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	// Body must not leak any field that distinguishes "cross-org" from "missing"
+	assert.NotContains(t, string(body), foreignOrgID.String())
+	assert.NotContains(t, string(body), verificationID.String())
+}
+
+// ===========================
+// Defect #160 — GetVerificationSDK (signature-authed, agent-scoped)
+// ===========================
+
+// sdkSignGET produces the canonical signed-message bytes for the SDK GET route.
+// Must match the backend canonical form:
+//
+//	GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<timestamp>
+func sdkSignGET(t *testing.T, priv ed25519.PrivateKey, verificationID, agentID uuid.UUID, ts int64) string {
+	t.Helper()
+	msg := fmt.Sprintf("GET\n/api/v1/sdk-api/verifications/%s\n%s\n%d",
+		verificationID.String(), agentID.String(), ts)
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(priv, []byte(msg)))
+}
+
+func TestVerificationHandler_GetVerificationSDK_MissingHeaders_401(t *testing.T) {
+	verificationID := uuid.New()
+	handler := NewVerificationHandlerWithInterfaces(
+		&MockAgentServiceForVerificationImpl{},
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		&MockVerificationEventServiceForVerificationImpl{},
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVerificationHandler_GetVerificationSDK_BadTimestamp_401(t *testing.T) {
+	verificationID := uuid.New()
+	agentID := uuid.New()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	pubB64 := base64.StdEncoding.EncodeToString(pub)
+
+	mockAgent := &MockAgentServiceForVerificationImpl{}
+	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgent,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		&MockVerificationEventServiceForVerificationImpl{},
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	stale := time.Now().Add(-30 * time.Minute).Unix() // way past the 5-min window
+	sig := sdkSignGET(t, priv, verificationID, agentID, stale)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	req.Header.Set("X-AIM-Agent-ID", agentID.String())
+	req.Header.Set("X-AIM-Timestamp", strconv.FormatInt(stale, 10))
+	req.Header.Set("X-AIM-Signature", sig)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVerificationHandler_GetVerificationSDK_InvalidSignature_401(t *testing.T) {
+	verificationID := uuid.New()
+	agentID := uuid.New()
+	pub, _, err := ed25519.GenerateKey(rand.Reader) // registered key
+	require.NoError(t, err)
+	_, wrongPriv, err := ed25519.GenerateKey(rand.Reader) // signs with a DIFFERENT key
+	require.NoError(t, err)
+	pubB64 := base64.StdEncoding.EncodeToString(pub)
+
+	mockAgent := &MockAgentServiceForVerificationImpl{}
+	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgent,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		&MockVerificationEventServiceForVerificationImpl{},
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	ts := time.Now().Unix()
+	wrongSig := sdkSignGET(t, wrongPriv, verificationID, agentID, ts)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	req.Header.Set("X-AIM-Agent-ID", agentID.String())
+	req.Header.Set("X-AIM-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-AIM-Signature", wrongSig)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVerificationHandler_GetVerificationSDK_UnknownAgent_401(t *testing.T) {
+	verificationID := uuid.New()
+	agentID := uuid.New()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	mockAgent := &MockAgentServiceForVerificationImpl{}
+	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		return nil, fmt.Errorf("not found")
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgent,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		&MockVerificationEventServiceForVerificationImpl{},
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	ts := time.Now().Unix()
+	sig := sdkSignGET(t, priv, verificationID, agentID, ts)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	req.Header.Set("X-AIM-Agent-ID", agentID.String())
+	req.Header.Set("X-AIM-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-AIM-Signature", sig)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVerificationHandler_GetVerificationSDK_CrossAgent_404(t *testing.T) {
+	// Signature is valid for callerAgent, but the verification event belongs
+	// to a different agent. Handler must return 404 (not 403) to avoid an
+	// existence oracle.
+	verificationID := uuid.New()
+	callerAgentID := uuid.New()
+	ownerAgentID := uuid.New()
+	require.NotEqual(t, callerAgentID, ownerAgentID)
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	pubB64 := base64.StdEncoding.EncodeToString(pub)
+
+	mockAgent := &MockAgentServiceForVerificationImpl{}
+	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+	}
+	approved := domain.VerificationResultVerified
+	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
+		GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+			return &domain.VerificationEvent{
+				ID:             verificationID,
+				OrganizationID: uuid.New(),
+				AgentID:        &ownerAgentID,
+				Result:         &approved,
+				CreatedAt:      time.Now(),
+			}, nil
+		},
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgent,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		mockVerifEventService,
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	ts := time.Now().Unix()
+	sig := sdkSignGET(t, priv, verificationID, callerAgentID, ts)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	req.Header.Set("X-AIM-Agent-ID", callerAgentID.String())
+	req.Header.Set("X-AIM-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-AIM-Signature", sig)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.NotContains(t, string(body), ownerAgentID.String())
+	assert.NotContains(t, string(body), verificationID.String())
+}
+
+func TestVerificationHandler_GetVerificationSDK_Valid_200(t *testing.T) {
+	verificationID := uuid.New()
+	callerAgentID := uuid.New()
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	pubB64 := base64.StdEncoding.EncodeToString(pub)
+
+	mockAgent := &MockAgentServiceForVerificationImpl{}
+	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+	}
+	approved := domain.VerificationResultVerified
+	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
+		GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+			return &domain.VerificationEvent{
+				ID:             verificationID,
+				OrganizationID: uuid.New(),
+				AgentID:        &callerAgentID, // caller owns this event
+				Result:         &approved,
+				TrustScore:     0.91,
+				CreatedAt:      time.Now(),
+			}, nil
+		},
+	}
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgent,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		mockVerifEventService,
+		&MockOrganizationRepositoryerImpl{},
+	)
+	app := setupVerificationTestApp(handler)
+
+	ts := time.Now().Unix()
+	sig := sdkSignGET(t, priv, verificationID, callerAgentID, ts)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/sdk-api/verifications/%s", verificationID.String()), nil)
+	req.Header.Set("X-AIM-Agent-ID", callerAgentID.String())
+	req.Header.Set("X-AIM-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-AIM-Signature", sig)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var response VerificationResponse
+	body, _ := io.ReadAll(resp.Body)
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, verificationID.String(), response.ID)
+	assert.Equal(t, "approved", response.Status)
+	assert.Equal(t, 0.91, response.TrustScore)
 }
 
 // ===========================

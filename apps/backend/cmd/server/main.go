@@ -306,7 +306,9 @@ func main() {
 	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
 	// These endpoints verify Ed25519 signatures instead of requiring API keys
 	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
-	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerification)
+	// Defect #160: SDK GET is now signature-authed (Ed25519 headers) and
+	// agent-scoped inside the handler. JWT GET continues at /api/v1/verifications/:id.
+	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerificationSDK)
 	app.Post("/api/v1/sdk-api/verifications/:id/result", middleware.RateLimitMiddleware(), h.Verification.SubmitVerificationResult)
 	app.Post("/api/v1/sdk-api/verifications/:id/execution-status", middleware.RateLimitMiddleware(), h.Verification.UpdateExecutionStatus)
 

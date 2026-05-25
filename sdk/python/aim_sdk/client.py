@@ -863,15 +863,40 @@ class AIMClient:
 
         while time.time() - start_time < timeout_seconds:
             try:
-                # Use direct HTTP call to avoid signature issues
                 url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}"
-                
-                # Prepare headers - use API key if available, otherwise OAuth
+
+                # Defect #160: this endpoint is signature-authed and agent-scoped.
+                # We Ed25519-sign the canonical request and send three headers; the
+                # backend rejects the request if any are missing, the timestamp is
+                # outside +/- a small skew window, the signature doesn't verify,
+                # or the verification event isn't owned by this agent.
+                #
+                # Canonical message (newline-separated, no trailing newline):
+                #   GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<unix_ts>
+                if not self.signing_key or not self.agent_id:
+                    raise VerificationError(
+                        "Cannot poll verification: agent signing key or agent_id missing. "
+                        "AIM SDK 1.22.0+ requires Ed25519 signing for verification polling."
+                    )
+                ts = str(int(time.time()))
+                canonical = (
+                    f"GET\n/api/v1/sdk-api/verifications/{verification_id}\n"
+                    f"{self.agent_id}\n{ts}"
+                )
+                signature_b64 = base64.b64encode(
+                    self.signing_key.sign(canonical.encode('utf-8')).signature
+                ).decode('utf-8')
+
                 headers = {
                     'Content-Type': 'application/json',
-                    'User-Agent': f'AIM-Python-SDK/1.0.0'
+                    'User-Agent': f'AIM-Python-SDK/{__version__}',
+                    'X-AIM-Agent-ID': str(self.agent_id),
+                    'X-AIM-Timestamp': ts,
+                    'X-AIM-Signature': signature_b64,
                 }
-                
+
+                # SDK token / api key / oauth tokens are accepted but no longer
+                # gate this endpoint; kept for telemetry continuity.
                 if self.api_key:
                     headers['X-API-Key'] = self.api_key
                 elif self.oauth_token_manager:
@@ -880,12 +905,11 @@ class AIMClient:
                         if access_token:
                             headers['Authorization'] = f'Bearer {access_token}'
                     except Exception:
-                        pass  # Continue without OAuth if it fails
-                
-                # Add SDK token header if available
+                        pass
+
                 if self.sdk_token_id:
                     headers['X-SDK-Token'] = self.sdk_token_id
-                
+
                 response = self.session.request(
                     method="GET",
                     url=url,

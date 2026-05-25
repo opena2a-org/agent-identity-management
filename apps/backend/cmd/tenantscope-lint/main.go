@@ -92,7 +92,6 @@ var allowlist = map[string]string{
 	"PublicMCPHandler.VerifyMCPAction":                      "audit-baseline: needs review",
 	"SDKTokenHandler.RevokeToken": "service-layer scoping: SDKTokenService.RevokeToken collapses both not-found and cross-user mismatch into ErrSDKTokenNotFound; the handler maps the sentinel to a fixed 404. SDK tokens are user-scoped (not org-scoped), so the gate lives at the service layer.",
 	"TagHandler.UpdateTag": "audit-baseline: needs review (service-layer scoping exists but has existence side channel via error string; A3d-ii follow-up — see todo/2026-05-21-a3d-ii-tag-mcp-scoping.md)",
-	"VerificationHandler.GetVerification":                   "DEFECT #23 deferred: handler mounted on both public /api/v1/verifications/:id (no auth) and SDK-token /api/v1/sdk-api/verifications/:id (audit-cited); needs route split before tenant-scoping can apply.",
 	"VerificationHandler.SubmitVerificationResult":          "audit-baseline: needs review",
 	"VerificationHandler.UpdateExecutionStatus":             "audit-baseline: needs review",
 

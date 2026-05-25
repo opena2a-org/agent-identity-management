@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-05-25
+
+### Security
+
+- **Verification polling now Ed25519-signed and agent-scoped** (#160). The SDK route
+  `GET /api/v1/sdk-api/verifications/<id>` was unauthenticated and returned the full
+  verification event to any holder of the UUID, regardless of organization. The SDK
+  now signs each poll with three required headers: `X-AIM-Agent-ID`,
+  `X-AIM-Timestamp`, `X-AIM-Signature`. The backend rejects requests that lack the
+  signature, fall outside a +/-5-minute clock-skew window, or reference a
+  verification owned by a different agent (404, no existence oracle).
+
+### Breaking
+
+- **`_wait_for_approval` requires `self.signing_key` and `self.agent_id`.** Agents
+  created without an Ed25519 keypair can no longer poll for verification approval;
+  the SDK raises `VerificationError` with recovery guidance instead of issuing
+  unauthenticated requests. The normal `secure(...)` / cached-credentials paths
+  already provide both; only ad-hoc clients that constructed `AIMClient` without
+  registering keys are affected.
+
 ### Fixed
 - **Stale agent credentials no longer trigger silent re-registration** (#178). When the
   cached `~/.aim/agents/<name>.json` references an agent that no longer exists in the
