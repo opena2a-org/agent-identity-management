@@ -235,6 +235,134 @@ class TestVerifyAction:
                 resource="users_table"
             )
 
+    @responses.activate
+    def test_verify_action_poll_sends_signed_headers(self, aim_client, test_keys):
+        """Defect #160: the verification poll must Ed25519-sign each GET.
+
+        Asserts the three X-AIM-* headers are present, the timestamp is fresh,
+        and the signature verifies against the canonical GET message using the
+        agent's registered public key.
+        """
+        import time as _time
+        from nacl.signing import VerifyKey
+        from nacl.encoding import Base64Encoder
+
+        responses.add(
+            responses.POST,
+            "https://aim.example.com/api/v1/sdk-api/verifications",
+            json={"id": "verification-123", "status": "pending"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123",
+            json={
+                "id": "verification-123",
+                "status": "approved",
+                "approved_by": "system",
+            },
+            status=200,
+        )
+
+        result = aim_client.verify_action(
+            action_type="send_email",
+            resource="user@example.com",
+            timeout_seconds=10,
+        )
+        assert result["verified"] is True
+
+        get_calls = [c for c in responses.calls if c.request.method == "GET"]
+        assert get_calls, "expected at least one GET poll"
+        poll = get_calls[0]
+        assert "X-AIM-Agent-ID" in poll.request.headers
+        assert "X-AIM-Timestamp" in poll.request.headers
+        assert "X-AIM-Signature" in poll.request.headers
+
+        agent_id_header = poll.request.headers["X-AIM-Agent-ID"]
+        ts_header = poll.request.headers["X-AIM-Timestamp"]
+        sig_header = poll.request.headers["X-AIM-Signature"]
+
+        assert agent_id_header == aim_client.agent_id
+        # Timestamp must be fresh: within +/- 5 minutes of now.
+        assert abs(int(ts_header) - int(_time.time())) <= 300
+
+        canonical = (
+            f"GET\n/api/v1/sdk-api/verifications/verification-123\n"
+            f"{agent_id_header}\n{ts_header}"
+        )
+        verify_key = VerifyKey(test_keys['signing_key'].verify_key.encode())
+        # Will raise nacl.exceptions.BadSignatureError on mismatch.
+        verify_key.verify(canonical.encode("utf-8"), base64.b64decode(sig_header))
+
+    def test_verify_action_poll_fails_without_signing_key(self, aim_client):
+        """Defect #160: clients without a signing_key cannot poll.
+
+        Calls _wait_for_approval directly so we bypass the POST-step's existing
+        Ed25519 requirement and isolate the new poll-step requirement.
+        """
+        aim_client.signing_key = None
+        with pytest.raises(VerificationError, match="signing key"):
+            aim_client._wait_for_approval("verification-123", timeout_seconds=5)
+
+    @responses.activate
+    def test_verify_action_poll_normalizes_uppercase_uuid(self, aim_client, test_keys):
+        """Defect #160 (UUID-case drift): the SDK must canonicalize UUIDs to
+        lowercase before signing so the canonical bytes match the backend's
+        (Go uuid.String() always lowercase). If the caller's agent_id or the
+        server-returned verification_id is uppercase, the request must still
+        verify server-side.
+        """
+        import time as _time
+        from nacl.signing import VerifyKey
+
+        # Force uppercase on the client's stored agent_id.
+        upper_agent_id = aim_client.agent_id.upper()
+        aim_client.agent_id = upper_agent_id
+
+        # Backend returns the verification_id in uppercase too.
+        upper_vid = "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA"
+
+        # The SDK should rewrite the URL to lowercase; register the lowercase form.
+        lower_vid = upper_vid.lower()
+        responses.add(
+            responses.POST,
+            "https://aim.example.com/api/v1/sdk-api/verifications",
+            json={"id": upper_vid, "status": "pending"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"https://aim.example.com/api/v1/sdk-api/verifications/{lower_vid}",
+            json={"id": upper_vid, "status": "approved", "approved_by": "system"},
+            status=200,
+        )
+
+        result = aim_client.verify_action(
+            action_type="send_email",
+            resource="user@example.com",
+            timeout_seconds=10,
+        )
+        assert result["verified"] is True
+
+        get_calls = [c for c in responses.calls if c.request.method == "GET"]
+        assert get_calls, "expected GET poll"
+        poll = get_calls[0]
+        # URL must be lowercased.
+        assert lower_vid in poll.request.url
+        assert upper_vid not in poll.request.url
+        # Header must be lowercased.
+        assert poll.request.headers["X-AIM-Agent-ID"] == upper_agent_id.lower()
+
+        ts_header = poll.request.headers["X-AIM-Timestamp"]
+        sig_header = poll.request.headers["X-AIM-Signature"]
+        # Signature must verify against the LOWERCASE canonical (what backend builds).
+        canonical = (
+            f"GET\n/api/v1/sdk-api/verifications/{lower_vid}\n"
+            f"{upper_agent_id.lower()}\n{ts_header}"
+        )
+        verify_key = VerifyKey(test_keys['signing_key'].verify_key.encode())
+        verify_key.verify(canonical.encode("utf-8"), base64.b64decode(sig_header))
+
 
 class TestLogActionResult:
     """Test action result logging"""

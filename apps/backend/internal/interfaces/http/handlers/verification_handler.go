@@ -895,81 +895,211 @@ func (h *VerificationHandler) determineVerificationStatus(
 	return "approved", ""
 }
 
-// GetVerification retrieves verification status by ID
+// GetVerification retrieves verification status by ID (JWT route, org-scoped).
 // @Summary Get verification status
-// @Description Retrieve the status of a verification request by ID
+// @Description Retrieve the status of a verification request by ID. Caller's org (from JWT)
+// must match the event's organization; cross-org reads return 404 to avoid an existence oracle.
 // @Tags verifications
 // @Produce json
 // @Param id path string true "Verification ID (UUID)"
 // @Success 200 {object} VerificationResponse "Verification found"
 // @Failure 400 {object} ErrorResponse "Invalid verification ID"
-// @Failure 404 {object} ErrorResponse "Verification not found"
+// @Failure 401 {object} ErrorResponse "Missing organization context"
+// @Failure 404 {object} ErrorResponse "Verification not found or not visible to caller"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/verifications/{id} [get]
 func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
-	verificationID := c.Params("id")
-	if verificationID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verificationId is required",
+	vid, ok := parseVerificationIDParam(c)
+	if !ok {
+		return nil
+	}
+
+	callerOrgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "missing organization context",
 		})
 	}
 
-	// Parse UUID
-	vid, err := uuid.Parse(verificationID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verificationId format",
-		})
-	}
-
-	// NOTE (defect #23, deferred from this PR): tenant-scoping not applied
-	// here because GetVerification is mounted on BOTH a public route
-	// (/api/v1/verifications/:id, no auth middleware) and an SDK-token route
-	// (/api/v1/sdk-api/verifications/:id, audit-cited). Closing the SDK-route
-	// surface needs a route split (separate handler method) so the public
-	// route is not broken. Tracked as follow-up; for now this handler
-	// remains on the audit-baseline allowlist in cmd/tenantscope-lint.
-
-	// Query verification event from database
 	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
-	if err != nil {
+	if err != nil || event == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Verification not found or expired",
 		})
 	}
 
-	// Get organization to determine enforcement mode
-	enforcementMode := "monitoring" // Default to safe mode
-	orgRepoForEvent := h.getOrgRepo()
-	if orgRepoForEvent != nil {
-		org, err := orgRepoForEvent.GetByID(event.OrganizationID)
-		if err == nil && org != nil {
+	// Defect #23: cross-org access returns 404, not 403, so the response does not
+	// distinguish "exists but not yours" from "does not exist".
+	if event.OrganizationID != callerOrgID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or expired",
+		})
+	}
+
+	return h.writeVerificationResponse(c, event)
+}
+
+// GetVerificationSDK retrieves verification status via Ed25519 signature auth (SDK route,
+// agent-scoped). Caller must own the event (event.AgentID == header agent ID).
+//
+// Required headers:
+//   - X-AIM-Agent-ID: UUID of the calling agent (canonical lowercase form)
+//   - X-AIM-Timestamp: Unix seconds (must be within -60s..+300s of server clock)
+//   - X-AIM-Signature: base64 Ed25519 signature over the canonical message
+//
+// Canonical signed message (newline-separated, no trailing newline):
+//
+//	GET\n/api/v1/sdk-api/verifications/<id>\n<agent_id>\n<timestamp>
+//
+// SDK 1.22.0+ produces these headers; older clients receive 401.
+//
+// Replay window: the 5-minute past-skew permits the same captured signature to
+// be replayed against the same verification ID by the same agent until ts+300s.
+// This is intentional for now: the endpoint is an idempotent read of a single
+// agent's own verification event, and the fire-and-forget expiration update is
+// idempotent. Tightening to a single-use nonce/JTI cache is tracked as a
+// follow-up; see the post-#160 TODO. Sigs cannot be cross-replayed: the
+// canonical message includes the verification ID and the agent ID, both of
+// which are verified server-side against the requested path and the agent's
+// registered public key.
+//
+// @Summary Get verification status (SDK)
+// @Tags verifications
+// @Produce json
+// @Param id path string true "Verification ID (UUID)"
+// @Param X-AIM-Agent-ID header string true "Caller agent UUID"
+// @Param X-AIM-Timestamp header string true "Unix seconds"
+// @Param X-AIM-Signature header string true "Base64 Ed25519 signature"
+// @Success 200 {object} VerificationResponse "Verification found"
+// @Failure 400 {object} ErrorResponse "Invalid verification ID"
+// @Failure 401 {object} ErrorResponse "Signature missing or invalid"
+// @Failure 404 {object} ErrorResponse "Verification not found or not owned by caller"
+// @Router /api/v1/sdk-api/verifications/{id} [get]
+func (h *VerificationHandler) GetVerificationSDK(c fiber.Ctx) error {
+	vid, ok := parseVerificationIDParam(c)
+	if !ok {
+		return nil
+	}
+
+	agentIDStr := c.Get("X-AIM-Agent-ID")
+	tsStr := c.Get("X-AIM-Timestamp")
+	sigStr := c.Get("X-AIM-Signature")
+	if agentIDStr == "" || tsStr == "" || sigStr == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "missing X-AIM-Agent-ID, X-AIM-Timestamp, or X-AIM-Signature; SDK 1.22.0+ required",
+		})
+	}
+	agentID, err := uuid.Parse(agentIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "invalid X-AIM-Agent-ID",
+		})
+	}
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "invalid X-AIM-Timestamp",
+		})
+	}
+	skew := time.Now().Unix() - ts
+	if skew < -60 || skew > 300 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "X-AIM-Timestamp outside acceptable window",
+		})
+	}
+
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
+	if err != nil || agent == nil || agent.PublicKey == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unknown agent or no registered public key",
+		})
+	}
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "registered public key is malformed",
+		})
+	}
+	sigBytes, err := base64.StdEncoding.DecodeString(sigStr)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "invalid signature encoding",
+		})
+	}
+
+	canonical := fmt.Sprintf("GET\n/api/v1/sdk-api/verifications/%s\n%s\n%d",
+		vid.String(), agentID.String(), ts)
+	if !ed25519.Verify(ed25519.PublicKey(pubKeyBytes), []byte(canonical), sigBytes) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "signature verification failed",
+		})
+	}
+
+	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
+	if err != nil || event == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or expired",
+		})
+	}
+
+	// Defect #23: caller must own the event. 404 (not 403) so the response does
+	// not distinguish "exists but not yours" from "does not exist".
+	if event.AgentID == nil || *event.AgentID != agentID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Verification not found or expired",
+		})
+	}
+
+	return h.writeVerificationResponse(c, event)
+}
+
+// parseVerificationIDParam parses :id; on failure, writes a 400 and returns ok=false
+// so the caller can `return nil` immediately.
+func parseVerificationIDParam(c fiber.Ctx) (uuid.UUID, bool) {
+	idStr := c.Params("id")
+	if idStr == "" {
+		_ = c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "verificationId is required",
+		})
+		return uuid.Nil, false
+	}
+	vid, err := uuid.Parse(idStr)
+	if err != nil {
+		_ = c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid verificationId format",
+		})
+		return uuid.Nil, false
+	}
+	return vid, true
+}
+
+// writeVerificationResponse builds and writes the VerificationResponse for an event.
+// Shared by GetVerification (JWT) and GetVerificationSDK. Includes the auto-expire
+// fire-and-forget update.
+func (h *VerificationHandler) writeVerificationResponse(c fiber.Ctx, event *domain.VerificationEvent) error {
+	enforcementMode := "monitoring"
+	if orgRepoForEvent := h.getOrgRepo(); orgRepoForEvent != nil {
+		if org, err := orgRepoForEvent.GetByID(event.OrganizationID); err == nil && org != nil {
 			enforcementMode = string(org.EnforcementMode)
 		}
 	}
 
-	// Build response
 	response := VerificationResponse{
 		ID:              event.ID.String(),
 		TrustScore:      event.TrustScore,
 		EnforcementMode: enforcementMode,
 	}
 
-	// Calculate expiration time based on result type
 	var expiresAt time.Time
 	if event.Result != nil && *event.Result == domain.VerificationResultVerified {
-		// Approved verifications expire in 24 hours
 		expiresAt = event.CreatedAt.Add(24 * time.Hour)
 	} else {
-		// Pending verifications expire in 1 hour
 		expiresAt = event.CreatedAt.Add(1 * time.Hour)
 	}
 
-	// ✅ AUTOMATIC EXPIRATION CHECK: If current time is past expiration, mark as expired
 	isExpired := time.Now().After(expiresAt)
 	verifSvc := h.getVerificationEventService()
 	if isExpired && event.Result != nil && *event.Result != domain.VerificationResultExpired && *event.Result != domain.VerificationResultDenied {
-		// Update database to mark as expired (fire and forget - don't block response)
 		go func() {
 			expiredResult := domain.VerificationResultExpired
 			reason := "Access expired automatically after time limit"
@@ -987,9 +1117,7 @@ func (h *VerificationHandler) GetVerification(c fiber.Ctx) error {
 		}()
 	}
 
-	// Map event status and result to verification status
 	if isExpired {
-		// If expired, always return expired status regardless of DB state
 		response.Status = "expired"
 		response.ExpiresAt = expiresAt
 	} else if event.Result != nil {
