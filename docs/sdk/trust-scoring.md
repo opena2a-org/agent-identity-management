@@ -635,7 +635,8 @@ def improve_trust_score():
     # Factor 7: Drift Detection
     if breakdown['factors']['drift_detection'] < 1.0:
         print("❌ Behavioral drift detected")
-        print("   → Review drift events in dashboard")
+        print("   → Check the Drift Score card on the agent detail page (Trust tab)")
+        print("   → Real-time per-event telemetry is on the agent.drift_score OTel gauge (Grafana)")
         print("   → Acknowledge expected changes")
 
     # Factor 8: User Feedback
