@@ -101,7 +101,7 @@ cleanup() {
         kill "$BACKEND_PID" 2>/dev/null || true
         wait "$BACKEND_PID" 2>/dev/null || true
     fi
-    rm -f "$BACKEND_BIN"
+    rm -f "$BACKEND_BIN" "${BACKEND_BIN}.bootstrap"
     if [ "${KEEP_STACKS:-0}" != "1" ]; then
         docker compose down --remove-orphans >/dev/null 2>&1 || true
         docker rm -f "$SMOKE_PG_CONTAINER" >/dev/null 2>&1 || true
@@ -163,6 +163,7 @@ echo "==> [4/8] Build + run backend"
 (
     cd "$BACKEND_DIR"
     go build -o "$BACKEND_BIN" ./cmd/server
+    go build -o "${BACKEND_BIN}.bootstrap" ./cmd/bootstrap
 )
 
 # Run backend from $BACKEND_DIR — runMigrations() reads from the relative
@@ -213,6 +214,31 @@ if [ $attempt -ge 60 ]; then
     exit 3
 fi
 
+# 4b. Seed default admin via bootstrap binary.
+#
+# PR #141 (2cc5490, 2026-05-20) rewrote migration 013 to remove the hardcoded
+# admin INSERT (CWE-798 fix; AIM Cloud's Azure Postgres does not allow-list
+# pgcrypto, so SQL-side bcrypt is unavailable). The admin row is now seeded
+# by aim-bootstrap --default after migrations run. Without this step the
+# users table has no admin row and step 6 login returns 401.
+#
+# Idempotent: re-runs against an already-bootstrapped DB exit 0 with a "skip"
+# message. Pass --admin-password so the login in step 6 matches ADMIN_PASSWORD.
+echo
+echo "==> [4b/8] Seed default admin via bootstrap"
+(
+    cd "$BACKEND_DIR"
+    env \
+        DATABASE_URL="postgres://postgres:${SMOKE_PG_PASSWORD}@localhost:${SMOKE_POSTGRES_PORT}/${SMOKE_PG_DB}?sslmode=disable" \
+        "${BACKEND_BIN}.bootstrap" \
+            --default \
+            --admin-email="$ADMIN_EMAIL" \
+            --admin-password="$ADMIN_PASSWORD" \
+            --yes \
+            >>"$BACKEND_LOG" 2>&1
+) || { echo "FAIL: bootstrap --default did not seed admin"; tail -40 "$BACKEND_LOG"; exit 4; }
+echo "    admin seeded"
+
 # 5. Reset force_password_change.
 echo
 echo "==> [5/8] Reset admin force_password_change"
@@ -260,6 +286,7 @@ docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
         drift_score     DOUBLE PRECISION NOT NULL DEFAULT 0,
         active_alerts   INTEGER NOT NULL DEFAULT 0,
         atc_trust_level INTEGER NOT NULL DEFAULT 0,
+        atx_trust_level INTEGER,
         scan_verdict    TEXT NOT NULL DEFAULT 'UNKNOWN'
      );" >/dev/null
 docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
