@@ -647,13 +647,13 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 // @Tags agents
 // @Accept json
 // @Produce json
-// @Param agent_id path string true "Agent ID"
+// @Param id path string true "Agent ID"
 // @Param request body RevokeAllAttestationsRequest true "Revocation reason"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /api/v1/agents/{agent_id}/attestations/revoke-all [post]
+// @Router /api/v1/agents/{id}/attestations/revoke-all [post]
 func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error {
 	// Get authenticated user ID from JWT middleware
 	userID, ok := c.Locals("user_id").(uuid.UUID)
@@ -671,8 +671,17 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 		})
 	}
 
-	// Parse agent ID from URL
-	agentID, err := uuid.Parse(c.Params("agent_id"))
+	// Parse agent ID from URL.
+	//
+	// ROUTE-BINDING FIX (#237): the production route in main.go binds this
+	// handler at `/api/v1/agents/:id/attestations/revoke-all`. Fiber v3 keys
+	// path params by the literal name after `:` — `c.Params("agent_id")`
+	// returns "" when the route uses `:id`, so every prod call returned 400
+	// "invalid UUID length: 0" before the LoadOwned cross-org gate below ever
+	// ran. The sibling handler RecordMCPConnection had the identical bug,
+	// fixed in PR #238. Using `"id"` here aligns this handler with the
+	// production route. Tests mount at `:id` to match.
+	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",

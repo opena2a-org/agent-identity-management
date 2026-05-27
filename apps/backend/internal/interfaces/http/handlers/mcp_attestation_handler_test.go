@@ -333,7 +333,9 @@ func TestMCPAttestationHandler_RevokeAttestation_MissingReason(t *testing.T) {
 func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidAgentID(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Delete("/agents/:agent_id/attestations", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
+	// Route binds `:id` to match production main.go (#237). Fiber v3 keys
+	// params by the literal name after `:`; a mismatch silently returns "".
+	app.Delete("/agents/:id/attestations", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
 
 	req := httptest.NewRequest("DELETE", "/agents/not-a-uuid/attestations", nil)
 
@@ -347,7 +349,7 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidAgentID(t *te
 func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoUserContext(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Delete("/agents/:agent_id/attestations/revoke-all", handler.RevokeAllAttestationsByAgent)
+	app.Delete("/agents/:id/attestations/revoke-all", handler.RevokeAllAttestationsByAgent)
 
 	body := `{"reason":"test reason"}`
 	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
@@ -363,7 +365,7 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoUserContext(t *tes
 func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoOrgContext(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Delete("/agents/:agent_id/attestations/revoke-all", func(c fiber.Ctx) error {
+	app.Delete("/agents/:id/attestations/revoke-all", func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())
 		// No organization_id set
 		return handler.RevokeAllAttestationsByAgent(c)
@@ -383,7 +385,7 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_NoOrgContext(t *test
 func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidJSON(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Delete("/agents/:agent_id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
+	app.Delete("/agents/:id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
 
 	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -398,7 +400,7 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_InvalidJSON(t *testi
 func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_MissingReason(t *testing.T) {
 	handler := &MCPAttestationHandler{}
 	app := fiber.New()
-	app.Delete("/agents/:agent_id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
+	app.Delete("/agents/:id/attestations/revoke-all", withMCPAttestationContext(handler.RevokeAllAttestationsByAgent))
 
 	body := `{}`
 	req := httptest.NewRequest("DELETE", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
@@ -409,6 +411,38 @@ func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_MissingReason(t *tes
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+// Regression test for #237: RevokeAllAttestationsByAgent must read the URL
+// agent ID via c.Params("id") to match the production route binding in
+// main.go (`agents.Post("/:id/attestations/revoke-all", ...)`). Fiber v3
+// keys path params by the literal name after `:`; a mismatch silently
+// returns "", and uuid.Parse("") fails with "invalid UUID length: 0",
+// short-circuiting every prod call to 400 before auth or LoadOwned run.
+// This test mounts at `:id` with a valid UUID and asserts the handler
+// progresses past the parse stage to the JWT user-context check. If a
+// future change reverts the param key back to "agent_id" or any other
+// non-matching string, this test fails.
+func TestMCPAttestationHandler_RevokeAllAttestationsByAgent_RouteBindingParamKey(t *testing.T) {
+	handler := &MCPAttestationHandler{}
+	app := fiber.New()
+	app.Post("/agents/:id/attestations/revoke-all", handler.RevokeAllAttestationsByAgent)
+
+	body := `{"reason":"x"}`
+	req := httptest.NewRequest("POST", "/agents/"+uuid.New().String()+"/attestations/revoke-all", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// With a wrong param key, the handler would return 400 with body
+	// {"error":"Invalid agent ID","message":"invalid UUID length: 0"}.
+	// With the correct param key the parse succeeds and the JWT
+	// user-context check returns 401.
+	assert.NotEqual(t, fiber.StatusBadRequest, resp.StatusCode,
+		"#237 regression: handler read wrong param key (UUID didn't make it past parse). Check c.Params(...) matches the :id binding in main.go")
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
 // ===========================
@@ -887,7 +921,7 @@ func TestMCPAttestationHandler_CrossOrgReturns404(t *testing.T) {
 			name:   "RevokeAllAttestationsByAgent_CrossOrgAgent",
 			method: "POST",
 			mount: func(app *fiber.App) {
-				app.Post("/agents/:agent_id/attestations/revoke-all", func(c fiber.Ctx) error {
+				app.Post("/agents/:id/attestations/revoke-all", func(c fiber.Ctx) error {
 					setLocals(c)
 					return handler.RevokeAllAttestationsByAgent(c)
 				})
