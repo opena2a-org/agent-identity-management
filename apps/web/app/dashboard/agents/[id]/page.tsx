@@ -42,6 +42,7 @@ import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
 import { APIKeysTab } from "@/components/agent/api-keys-tab";
 import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
+import { DriftScoreCard } from "@/components/agent/drift-score-card";
 import { AgentTagsTab } from "@/components/agent/tags-tab";
 import {
   AlertDialog,
@@ -1062,7 +1063,8 @@ export default function AgentDetailsPage({
           </Card>
         </TabsContent>
 
-        <TabsContent value="trust">
+        <TabsContent value="trust" className="space-y-4">
+          <DriftScoreCard agentId={agent.id} />
           <TrustScoreBreakdown
             agentId={agent.id}
             userRole={userRole}
