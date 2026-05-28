@@ -243,10 +243,14 @@ jobs:
           # Bootstrap config validator rejects known-dev values and requires
           # ≥32 chars. Fresh per-run hex strings satisfy both. These never
           # leave the runner.
+          # Bootstrap also enforces password complexity (upper + lower + digit
+          # + special). The base64 alphabet stripped of /+= can't hit "special",
+          # so the ADMIN_PW is a random base64 stem with a fixed suffix that
+          # pins all four required character classes.
           {
             echo "JWT_SECRET=$(openssl rand -hex 32)"
             echo "KEYVAULT_MASTER_KEY=$(openssl rand -hex 32)"
-            ADMIN_PW=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+            ADMIN_PW="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)Aa1!"
             echo "DEFAULT_ADMIN_PASSWORD=${ADMIN_PW}"
             echo "AIM_TEST_ADMIN_PASSWORD=${ADMIN_PW}"
           } >> "$GITHUB_ENV"
