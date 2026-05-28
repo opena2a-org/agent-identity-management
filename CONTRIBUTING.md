@@ -145,6 +145,33 @@ docs(readme): update installation instructions
 test(agents): add integration tests for agent registration
 ```
 
+## Tag conventions
+
+This repository ships multiple independently versioned artifacts (the platform itself and three language SDKs). Tags use per-package prefixes so each artifact has its own release timeline and so the release workflow can filter cleanly.
+
+| Artifact | Tag prefix | Example | Source of truth for version |
+|---|---|---|---|
+| Platform (backend + frontend release artifacts) | `platform-v` | `platform-v1.0.0` | release commit |
+| Python SDK | `sdk-py-v` | `sdk-py-v1.23.0` | `sdk/python/VERSION` |
+| TypeScript SDK | `sdk-ts-v` | `sdk-ts-v1.0.0` | `sdk/typescript/package.json` |
+| Java SDK | `sdk-java-v` | `sdk-java-v1.0.0` | `sdk/java/VERSION` and `sdk/java/pom.xml` |
+
+**Bare `v<X.Y.Z>` tags are retired for new releases.** Historical bare tags from `v0.2.0` through `v1.23.0` remain in the tag history as immutable artifacts — they were de-facto Python SDK releases despite the ambiguous naming, and removing them would break external references. Do not create new bare-`v*` tags.
+
+**Cutting a release:**
+
+```bash
+# Platform (example: cutting 1.0.0)
+git tag -a platform-v1.0.0 -m "Platform v1.0.0"
+git push origin platform-v1.0.0
+
+# Python SDK (example: cutting 1.23.0)
+git tag -a sdk-py-v1.23.0 -m "Python SDK v1.23.0"
+git push origin sdk-py-v1.23.0
+```
+
+The `.github/workflows/release.yml` workflow currently filters on `platform-v*` and generates SBOMs on each platform tag push. Per-SDK publishing workflows (PyPI, npm, Maven Central) will be added under their own tag prefixes in follow-up work; until those land, SDK tags only mark the release point in git history.
+
 ## 🔄 Pull Request Process
 
 1. **Create a Branch**
