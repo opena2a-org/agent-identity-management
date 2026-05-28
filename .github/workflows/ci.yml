@@ -218,7 +218,14 @@ jobs:
       POSTGRES_PASSWORD: aim
       POSTGRES_DB: aim_test
       POSTGRES_SSL_MODE: disable
-      ENVIRONMENT: ci
+      # ENVIRONMENT=test (NOT "ci") so rate_limit.go:62 honors the 10x bump
+      # — StrictRateLimitMiddleware caps /login/local at 10 req/min in any
+      # un-recognized environment, and the e2e suite needs more than that
+      # even with worker-scoped auth + retries. The "test" string is also
+      # safe against the other ENVIRONMENT checks (security_headers and
+      # cookie Secure-flag only branch on "production"; detection_service
+      # only on "development"/"dev").
+      ENVIRONMENT: test
       NEXT_PUBLIC_API_URL: http://localhost:8080
       AIM_TEST_ADMIN_EMAIL: admin@opena2a.org
     steps:
