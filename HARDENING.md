@@ -2,7 +2,7 @@
 
 AIM is pre-1.0 software in active hardening. This page tracks the work that needs to land before we recommend production deployment.
 
-**Last updated:** 2026-05-28. Most enforcement streams are now closed in code; the remaining 1.0 blocker is a CI-integrated Playwright empty-state suite. AIM is open source under Apache-2.0, so community review of the codebase is welcome before and after 1.0 per [SECURITY.md](SECURITY.md); a paid third-party engagement is a worthwhile post-1.0 investment for regulated deployments but is not a binding 1.0 gate.
+**Last updated:** 2026-05-28. Every enforcement stream and gate criterion is now closed in code, including the CI-integrated Playwright empty-state suite (PR #247 + #248). AIM is open source under Apache-2.0, so community review of the codebase is welcome before and after 1.0 per [SECURITY.md](SECURITY.md); a paid third-party engagement is a worthwhile post-1.0 investment for regulated deployments but is not a binding 1.0 gate.
 
 ## Current status
 
@@ -38,7 +38,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Dashboard rendering on empty state
 
-**Status: in progress.** Empty-state messages are implemented on the agent and MCP server detail pages in code. The 1.0 gate requires a Playwright suite that exercises every tab on a freshly-created resource, plus CI integration that runs the suite on every PR. The UI work is done; the test coverage and CI wiring are not.
+**Status: done.** Empty-state messages are implemented on the agent and MCP server detail pages in code, and the corresponding Playwright suite (`apps/web/tests/e2e/empty-state-agent.spec.ts` and `apps/web/tests/e2e/empty-state-mcp.spec.ts`) exercises every tab on a freshly-registered resource against a real backend in CI on every PR (the `e2e-empty-state` job in `.github/workflows/ci.yml`). Four panels — api-keys, activity, and trust on the agent detail page, and audit trail on the MCP detail page — are reclassified N/A-by-design for empty-state copy because backend auto-population on resource creation (default API key, audit event for the registration itself, default trust score, Activity Timeline summary) makes the empty branch unreachable through the fixture path; those four are still exercised for "panel renders without crash." Evidence: PR #247 introduced the suite; PR #248 closed the CI job over several iterations against the real backend.
 
 ### Post-quantum cryptography surfacing
 
@@ -72,15 +72,15 @@ We particularly welcome reports on:
 
 ## Roadmap to 1.0
 
-The 1.0 milestone is defined by the gate criteria below. Status as of 2026-05-27:
+The 1.0 milestone is defined by the gate criteria below. Status as of 2026-05-28:
 
 - [x] A contract test asserting that no API endpoint returns null for an array field
 - [x] A regression test suite for the capability approval workflow under both monitoring and strict modes
 - [x] No hardcoded secrets in the codebase, no default fallbacks for secret-shaped environment variables
 - [x] Tenant scoping enforced on every authenticated handler with cross-tenant negative tests (risk floor met via per-handler enforcement plus CI lint; architectural target of middleware-level enforcement remains a stretch goal)
-- [ ] A passing end-to-end Playwright suite covering empty-state rendering on every dashboard panel, integrated into CI
+- [x] A passing end-to-end Playwright suite covering empty-state rendering on every dashboard panel, integrated into CI
 
-We will update this page as items close. We will not move to 1.0 until the remaining gate criterion above is met. A paid third-party security review was previously listed as a 1.0 criterion; it has been rescoped to a post-1.0 investment because AIM is open source and the codebase is publicly auditable today (see the "Third-party security review" stream above for the full decision).
+We will update this page as items close. As of 2026-05-28, every gate criterion above is met (the empty-state suite landed in PR #247 and was unblocked into a passing CI job by PR #248). A paid third-party security review was previously listed as a 1.0 criterion; it has been rescoped to a post-1.0 investment because AIM is open source and the codebase is publicly auditable today (see the "Third-party security review" stream above for the full decision).
 
 ## Acknowledgements
 
