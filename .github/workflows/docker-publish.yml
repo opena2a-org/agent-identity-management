@@ -3,7 +3,11 @@ name: Docker Publish
 on:
   push:
     tags:
-      - 'v*'
+      # Platform release tag convention — see CONTRIBUTING.md "Tag conventions".
+      # SDK tags (sdk-py-v*, sdk-ts-v*, sdk-java-v*) deliberately do not
+      # trigger this workflow; SDK publish workflows are separate per-package
+      # files (follow-up work).
+      - 'platform-v*'
     branches:
       - main
     paths:
@@ -57,9 +61,9 @@ jobs:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-server
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+),group=1
             type=edge,branch=main
 
       - name: Extract metadata (Docker Hub)
@@ -69,9 +73,9 @@ jobs:
           images: opena2a/aim-server
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+),group=1
             type=edge,branch=main
 
       - name: Build and push image
@@ -148,9 +152,9 @@ jobs:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-dashboard
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+),group=1
             type=edge,branch=main
 
       - name: Extract metadata (Docker Hub)
@@ -160,9 +164,9 @@ jobs:
           images: opena2a/aim-dashboard
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+\.\d+),group=1
+            type=match,pattern=platform-v(\d+),group=1
             type=edge,branch=main
 
       - name: Build and push image
