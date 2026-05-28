@@ -16,13 +16,13 @@ Each stream lists its current status. Specific defect details are kept private u
 
 ### Tenant scoping
 
-**Status: in progress.** Every authenticated handler that touches a resource by id verifies the resource belongs to the caller's organization. Today this is enforced per-handler via a `LoadOwned` helper, with a CI lint (`scripts/lint-tenant-scoping.sh`) that fails the build on any handler missing the guard. The target state remains enforcement at a middleware boundary so the check cannot be bypassed by a future handler that forgets the lint pattern. The risk floor is mitigated by the lint; the architectural target is not yet reached.
+**Status: in progress.** Every authenticated handler that touches a resource by id verifies the resource belongs to the caller's organization. Today this is enforced per-handler via a `LoadOwned` helper, with a CI lint (`scripts/lint-tenant-scoping.sh`) that fails the build on any handler reading a tenant-scoped URL parameter without invoking a registered tenant-scoping helper (`LoadOwned`, `LoadOwnedViaAgent`). Route-binding consistency (so the handler reads the parameter the route actually binds) is exercised by integration cross-tenant test suites rather than by the lint. The target state remains enforcement at a middleware boundary so the check cannot be bypassed by a future handler that forgets the lint pattern. The risk floor is mitigated by the lint plus the integration tests; the architectural target is not yet reached.
 
 Coverage in main today: organization-scoped handlers for agents, MCP servers, capability requests, policies, A2A consents, attestations, and admin endpoints; cross-tenant negative tests across ~11 handler suites.
 
 ### Bootstrap secrets and configuration
 
-**Status: done.** Default fallback values have been removed from secret-shaped environment variables. The configuration validator (`apps/backend/internal/config/config.go`) fails fast on missing `JWT_SECRET` and `KEYVAULT_MASTER_KEY`, enforces a 32-character minimum, and rejects known-dev secrets in every environment via a hash-only blocklist. `docker-compose.yml` uses the `${VAR:?...}` fail-fast pattern for required secrets, enforced by `scripts/lint-no-secret-fallbacks.sh`. First-boot bootstrap (`cmd/bootstrap/`) generates a random admin password and prints it once to the operator.
+**Status: done.** Default fallback values have been removed from secret-shaped environment variables. The configuration validator (`apps/backend/internal/config/config.go`) fails fast on missing `JWT_SECRET` and `KEYVAULT_MASTER_KEY`, enforces a 32-character minimum, and rejects known-dev secrets in every environment via a hash-only blocklist. `docker-compose.yml` uses the `${VAR:?...}` fail-fast pattern for required secrets, enforced by `scripts/lint-no-secret-fallbacks.sh`. First-boot bootstrap (`apps/backend/cmd/bootstrap/`) generates a random admin password and prints it once to the operator.
 
 ### API response contracts
 
@@ -30,7 +30,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Data model invariants
 
-**Status: done.** Each known denormalized pair (parent cache column plus richer detail table) is now kept in sync by a Postgres trigger rather than application code. Triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, and A2A consent organization scoping. Tests assert the trigger behavior under insert, update, and delete.
+**Status: done.** Each known data-model invariant — parent cache columns plus richer detail tables, and row-internal couplings where two columns on the same row must move together — is now enforced at the database layer rather than by application code. Six invariant-preserving triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, A2A consent organization scoping, and agent status → `verified_at` timestamp. Tests assert the trigger behavior under insert, update, and delete.
 
 ### Capability lifecycle
 
