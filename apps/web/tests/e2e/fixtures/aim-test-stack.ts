@@ -1,4 +1,4 @@
-import { test as base, type APIRequestContext, type Page } from '@playwright/test';
+import { test as base, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 const ADMIN_EMAIL = process.env.AIM_TEST_ADMIN_EMAIL ?? 'admin@opena2a.org';
@@ -6,15 +6,19 @@ const ADMIN_PASSWORD = process.env.AIM_TEST_ADMIN_PASSWORD ?? process.env.DEFAUL
 
 type Resource = { id: string; name: string };
 
-type Fixtures = {
+type WorkerFixtures = {
+  // Worker-scoped: one admin login per worker. The backend rate-limits the
+  // /api/v1/auth/login/local handler; logging in per-test (test-scoped) trips
+  // the limiter once a worker runs more than a handful of tests in a window.
   adminAuth: { accessToken: string; refreshToken: string };
+};
+
+type TestFixtures = {
   registerAgent: (overrides?: { displayName?: string }) => Promise<Resource>;
   registerMcpServer: (overrides?: { url?: string }) => Promise<Resource>;
   authedPage: Page;
 };
 
-// freshSuffix is unique per test invocation so parallel workers never collide
-// on the (organizationId, name) unique constraint on agents / mcp_servers.
 function freshSuffix(): string {
   return randomUUID().replace(/-/g, '').slice(0, 12);
 }
@@ -35,14 +39,24 @@ async function login(request: APIRequestContext): Promise<{ accessToken: string;
   return { accessToken: body.accessToken, refreshToken: body.refreshToken };
 }
 
-export const test = base.extend<Fixtures>({
-  adminAuth: async ({ request }, use) => {
-    const tokens = await login(request);
-    await use(tokens);
-  },
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  adminAuth: [
+    async ({}, use) => {
+      // Worker-scoped fixtures can't depend on test-scoped ones (like
+      // `request`), so the login uses a freshly-built APIRequestContext.
+      const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+      const ctx = await playwrightRequest.newContext({ baseURL });
+      try {
+        const tokens = await login(ctx);
+        await use(tokens);
+      } finally {
+        await ctx.dispose();
+      }
+    },
+    { scope: 'worker' },
+  ],
 
   registerAgent: async ({ request, adminAuth }, use) => {
-    const created: string[] = [];
     const register = async (overrides?: { displayName?: string }): Promise<Resource> => {
       const name = `e2e-agent-${freshSuffix()}`;
       const res = await request.post('/api/v1/agents/', {
@@ -58,14 +72,12 @@ export const test = base.extend<Fixtures>({
         throw new Error(`create agent failed: ${res.status()} ${await res.text()}`);
       }
       const body = await res.json();
-      created.push(body.id);
       return { id: body.id, name };
     };
     await use(register);
   },
 
   registerMcpServer: async ({ request, adminAuth }, use) => {
-    const created: string[] = [];
     const register = async (overrides?: { url?: string }): Promise<Resource> => {
       const name = `e2e-mcp-${freshSuffix()}`;
       const res = await request.post('/api/v1/mcp-servers/', {
@@ -80,7 +92,6 @@ export const test = base.extend<Fixtures>({
         throw new Error(`create mcp-server failed: ${res.status()} ${await res.text()}`);
       }
       const body = await res.json();
-      created.push(body.id);
       return { id: body.id, name };
     };
     await use(register);
@@ -90,12 +101,10 @@ export const test = base.extend<Fixtures>({
   // dashboard route on `access_token` in cookies) AND localStorage.auth_token
   // (for the client-side useAuth() hook which calls api.getToken()).
   //
-  // Why both: Playwright's `request` fixture lives in its own APIRequestContext
-  // with a separate cookie jar from the browser's BrowserContext, so cookies
-  // set by /api/v1/auth/login/local during `adminAuth` do NOT propagate to
-  // `page`. We have to write the access_token cookie onto page.context()
-  // explicitly. middleware.ts redirects to /auth/login on every request that
-  // lacks the cookie.
+  // Playwright's `request` fixture lives in its own APIRequestContext with a
+  // separate cookie jar from the browser's BrowserContext, so cookies set by
+  // /api/v1/auth/login/local do NOT propagate to `page`. We write them onto
+  // page.context() explicitly.
   authedPage: async ({ page, adminAuth }, use) => {
     await page.context().addCookies([
       {
