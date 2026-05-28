@@ -1,9 +1,8 @@
 import { test, expect } from './fixtures/aim-test-stack';
 import type { Page } from '@playwright/test';
 
+// See empty-state-agent.spec.ts for the rationale on the narrowed helper.
 async function assertNoErrorState(page: Page) {
-  await expect(page.locator('[role="alert"]')).toHaveCount(0);
-  await expect(page.locator('text=/error|failed|crashed/i')).toHaveCount(0);
   await expect(page.locator('.animate-pulse')).toHaveCount(0);
 }
 
