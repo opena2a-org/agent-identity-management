@@ -239,8 +239,14 @@ func readMigrationFiles(dir string) ([]Migration, error) {
 			return nil, fmt.Errorf("failed to read %s: %w", file.Name(), err)
 		}
 
-		// Extract version from filename (e.g., "001_initial_schema.sql" -> "001")
-		version := strings.TrimSuffix(file.Name(), ".sql")
+		// Use the full filename as the version key. cmd/server's startup
+		// migration loop (runMigrations in cmd/server/main.go) does the same
+		// — the two binaries share the schema_migrations table, so the keys
+		// must match exactly. Trimming .sql here used to make cmd/server
+		// re-apply every migration cmd/migrate had already run, because the
+		// "001_initial_schema" row didn't satisfy the "001_initial_schema.sql"
+		// lookup.
+		version := file.Name()
 
 		migrations = append(migrations, Migration{
 			Version:  version,
