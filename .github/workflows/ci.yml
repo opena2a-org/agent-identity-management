@@ -183,3 +183,126 @@ jobs:
       - name: Build
         working-directory: apps/web
         run: npm run build
+
+  # End-to-end Playwright suite covering empty-state rendering on every
+  # dashboard panel of the agent and MCP server detail pages — the binding
+  # ☐ in HARDENING.md#roadmap-to-1-0. Boots a real Postgres + Go backend
+  # so every test exercises a freshly-created resource through the
+  # actual API contract; no mocked routes, no pre-seeded fixtures.
+  e2e-empty-state:
+    name: E2E empty-state (Playwright)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aim
+          POSTGRES_PASSWORD: aim
+          POSTGRES_DB: aim_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aim -d aim_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      # cmd/migrate + cmd/bootstrap consume DATABASE_URL directly.
+      DATABASE_URL: postgres://aim:aim@localhost:5432/aim_test?sslmode=disable
+      # cmd/server consumes discrete POSTGRES_* vars (see internal/config/config.go).
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: aim
+      POSTGRES_PASSWORD: aim
+      POSTGRES_DB: aim_test
+      POSTGRES_SSL_MODE: disable
+      ENVIRONMENT: ci
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      AIM_TEST_ADMIN_EMAIL: admin@opena2a.org
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: apps/backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate ephemeral CI secrets
+        run: |
+          # Bootstrap config validator rejects known-dev values and requires
+          # ≥32 chars. Fresh per-run hex strings satisfy both. These never
+          # leave the runner.
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "KEYVAULT_MASTER_KEY=$(openssl rand -hex 32)"
+            ADMIN_PW=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+            echo "DEFAULT_ADMIN_PASSWORD=${ADMIN_PW}"
+            echo "AIM_TEST_ADMIN_PASSWORD=${ADMIN_PW}"
+          } >> "$GITHUB_ENV"
+
+      - name: Build backend binaries
+        working-directory: apps/backend
+        run: |
+          go build -o /tmp/aim-server ./cmd/server
+          go build -o /tmp/aim-migrate ./cmd/migrate
+          go build -o /tmp/aim-bootstrap ./cmd/bootstrap
+
+      - name: Run migrations
+        run: /tmp/aim-migrate
+
+      - name: Seed canonical admin
+        run: /tmp/aim-bootstrap --default
+
+      - name: Start backend
+        run: |
+          /tmp/aim-server > /tmp/aim-server.log 2>&1 &
+          echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for backend /health/ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1; then
+              echo "✓ backend ready (after ${i}s)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "✗ backend did not become ready within 60s"
+          echo "=== backend log ==="
+          cat /tmp/aim-server.log || true
+          exit 1
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright empty-state suite
+        working-directory: apps/web
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: /tmp/aim-server.log
+          retention-days: 14
