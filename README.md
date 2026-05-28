@@ -1,6 +1,6 @@
 # Agent Identity Management (AIM)
 
-[![Status: beta](https://img.shields.io/badge/status-beta-yellow)](./STATUS.md)
+[![Status: stable](https://img.shields.io/badge/status-stable-brightgreen)](./STATUS.md)
 
 > **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
 
@@ -13,7 +13,7 @@ Cryptographic identity, capability authorization, and audit trails for AI agents
 
 [Website](https://opena2a.org) · [Demos](https://opena2a.org/demos) · [Discord](https://discord.gg/uRZa3KXgEn)
 
-> **Pre-1.0.** AIM is suitable today for evaluation, development, and internal testing. Production deployment with untrusted tenants or sensitive data is not yet recommended. Active hardening work is tracked in [HARDENING.md](HARDENING.md).
+> **AIM 1.0.** Every gate criterion in [HARDENING.md](HARDENING.md)'s "Roadmap to 1.0" is met as of 2026-05-28. Semver is honored from this release forward; security patches are triaged within 24 hours per [SECURITY.md](SECURITY.md). A paid third-party security review is appropriate when a regulated customer requires formal attestation but is not a binding gate (AIM is open source under Apache-2.0 and the codebase is publicly auditable).
 
 ## Quick start
 
