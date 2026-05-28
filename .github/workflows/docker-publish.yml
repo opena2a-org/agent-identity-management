@@ -3,7 +3,13 @@ name: Docker Publish
 on:
   push:
     tags:
-      - 'v*'
+      # Per CONTRIBUTING.md "Tag conventions" (PR #249). Bare `v*` tags
+      # are retired for new releases — they matched the legacy Python SDK
+      # path but never matched `platform-v*` which is the actual platform
+      # release tag prefix today. SDK tags (`sdk-py-v*`, `sdk-ts-v*`,
+      # `sdk-java-v*`) don't ship the platform images; their publish
+      # workflows live in release.yml.
+      - 'platform-v*'
     branches:
       - main
     paths:
