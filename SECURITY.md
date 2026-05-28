@@ -1,6 +1,6 @@
 # Security Policy
 
-> **Pre-1.0 status.** AIM is in active hardening. The capabilities described in this document reflect target behavior. Several streams of work are open before we recommend production deployment, and we track them publicly in [HARDENING.md](HARDENING.md). Use AIM today for evaluation, development, and internal testing. Do not deploy it to environments handling untrusted tenants or sensitive data until the items in HARDENING.md are closed.
+> **AIM 1.0.** Every Roadmap-to-1.0 gate criterion in [HARDENING.md](HARDENING.md) is met as of 2026-05-28. The capabilities described in this document reflect shipped behavior; items still tracked as "Partial" or "Roadmap" in the Enterprise Compliance section below are flagged inline so consumers can plan around the actual enforcement boundary. Semver is honored from 1.0 forward, and security patches are triaged within 24 hours per the reporting flow below.
 
 ## Reporting Security Vulnerabilities
 
@@ -129,7 +129,7 @@ We conduct regular security assessments:
 
 ## Enterprise Compliance
 
-AIM is pre-1.0 (see the disclosure at the top of this file). This section maps each compliance claim to the code that backs it today, and flags claims that are partial or aspirational so consumers can plan around the actual enforcement boundary. Items marked **Partial** or **Roadmap** are tracked openly in [HARDENING.md](HARDENING.md).
+AIM ships at 1.0 with the gate criteria above closed. This section maps each compliance claim to the code that backs it today, and flags claims that are partial or aspirational so consumers can plan around the actual enforcement boundary. Items marked **Partial** or **Roadmap** are tracked openly in [HARDENING.md](HARDENING.md) and continue post-1.0.
 
 ### SOC 2 Type II Alignment
 

@@ -1,14 +1,14 @@
 # Hardening
 
-AIM is pre-1.0 software in active hardening. This page tracks the work that needs to land before we recommend production deployment.
+AIM 1.0 ships with every Roadmap-to-1.0 gate criterion met (see below). This page tracks the work that landed to get here, and continues to track the next horizon of hardening work after 1.0.
 
 **Last updated:** 2026-05-28. Every enforcement stream and gate criterion is now closed in code, including the CI-integrated Playwright empty-state suite (PR #247 + #248). AIM is open source under Apache-2.0, so community review of the codebase is welcome before and after 1.0 per [SECURITY.md](SECURITY.md); a paid third-party engagement is a worthwhile post-1.0 investment for regulated deployments but is not a binding 1.0 gate.
 
 ## Current status
 
-**Pre-production.** AIM's architecture, threat model, and core enforcement primitives (capability authorization, trust scoring, monitoring/strict modes, cryptographic identity, audit logging) are in place. The integration layer between the SDK, the backend services, and the dashboard has been audited and the contract enforcement gaps are largely closed.
+**Stable (1.0).** AIM's architecture, threat model, and core enforcement primitives (capability authorization, trust scoring, monitoring/strict modes, cryptographic identity, audit logging) are in place and the integration layer between the SDK, the backend services, and the dashboard has been audited with contract-enforcement gaps closed.
 
-We are documenting this openly because pretending a pre-1.0 system is production-ready is more harmful than saying it is not. AIM is suitable today for evaluation, development, internal testing, and demonstration. It is not suitable for production deployments handling untrusted tenants or sensitive data — see the **Roadmap to 1.0** section below for the specific remaining blockers.
+We documented the road to 1.0 openly because pretending an unfinished system is production-ready is more harmful than saying it is not. With every gate criterion below now closed, AIM is suitable for production deployments — including environments with untrusted tenants or sensitive data — within the deployment posture documented in [SECURITY.md](SECURITY.md). New hardening work (middleware-level tenant scoping, the partial / aspirational items in SECURITY.md compliance section, etc.) continues post-1.0 and is tracked openly in this page.
 
 ## What we are working on
 
