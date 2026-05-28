@@ -3,12 +3,11 @@ name: Release
 on:
   push:
     tags:
-      # Platform tag — runs the SBOM job for the whole AIM platform.
-      - "platform-v*"
-      # Per-package tag for the Python SDK — runs the publish-python job.
-      # Convention from PR #249. Other SDK tag patterns (npm aim-sdk-ts,
-      # Java) will be added when their publish wiring lands.
-      - "aim-sdk-v*"
+      # Per-artifact tag prefixes per CONTRIBUTING.md "Tag conventions"
+      # (introduced in PR #249). Each prefix gates a different job below.
+      - "platform-v*"   # SBOM job (backend + frontend)
+      - "sdk-py-v*"     # PyPI publish for aim-sdk (Python)
+      - "sdk-ts-v*"     # npm publish for @opena2a/aim-sdk (TypeScript)
 
 permissions:
   contents: write
@@ -64,7 +63,7 @@ jobs:
   # fails cleanly with "OIDC token verification failed".
   publish-python:
     name: Publish aim-sdk to PyPI
-    if: startsWith(github.ref, 'refs/tags/aim-sdk-v')
+    if: startsWith(github.ref, 'refs/tags/sdk-py-v')
     runs-on: ubuntu-latest
     permissions:
       # id-token: write is the OIDC trust handshake the registry verifies.
@@ -83,8 +82,8 @@ jobs:
 
       - name: Verify tag matches VERSION
         run: |
-          # The tag is aim-sdk-v<X.Y.Z>; the VERSION file is <X.Y.Z>.
-          TAG_VERSION="${GITHUB_REF_NAME#aim-sdk-v}"
+          # The tag is sdk-py-v<X.Y.Z>; the VERSION file is <X.Y.Z>.
+          TAG_VERSION="${GITHUB_REF_NAME#sdk-py-v}"
           FILE_VERSION="$(cat VERSION)"
           if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
             echo "✗ Tag version ($TAG_VERSION) does not match VERSION file ($FILE_VERSION)"
@@ -138,4 +137,111 @@ jobs:
             sleep 5
           done
           echo "✗ aim-sdk ${VERSION} not visible on PyPI after publish — investigate"
+          exit 1
+
+  # Publishes the TypeScript @opena2a/aim-sdk to npm on an
+  # `sdk-ts-v<version>` tag push, using npm Trusted Publishing (OIDC).
+  # No long-lived token in the workflow or in repo secrets — the OIDC
+  # token issued to this job is exchanged at the registry.
+  #
+  # First publish under this job requires npm Trusted Publishing to be
+  # configured for @opena2a/aim-sdk on npmjs.com (Package settings →
+  # Publishing access → Trusted Publisher → GitHub Actions; owner=
+  # opena2a-org, repo=agent-identity-management, workflow=release.yml,
+  # environment=blank). The package name is unclaimed on npm as of this
+  # PR; the org admin needs to reserve it as part of the TP config flow.
+  publish-npm:
+    name: Publish @opena2a/aim-sdk to npm
+    if: startsWith(github.ref, 'refs/tags/sdk-ts-v')
+    runs-on: ubuntu-latest
+    permissions:
+      # id-token: write is the OIDC trust handshake. contents: read is
+      # enough — no commits or releases written from here.
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 is the minimum that ships an npm new enough to do the
+      # OIDC handshake against npmjs.com per the org TP rollout (global
+      # CLAUDE.md "Node 24 minimum for setup-node@v4"). Older Node + npm
+      # will fall back to token auth and fail.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Verify tag matches package.json version
+        run: |
+          # Tag is sdk-ts-v<X.Y.Z>; package.json "version" is <X.Y.Z>.
+          TAG_VERSION="${GITHUB_REF_NAME#sdk-ts-v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "✗ Tag version ($TAG_VERSION) does not match package.json ($PKG_VERSION)"
+            echo "  Either the tag was pushed without bumping package.json, or"
+            echo "  package.json was bumped but the tag uses a different value."
+            exit 1
+          fi
+          echo "✓ Tag and package.json agree on ${TAG_VERSION}"
+
+      - name: Skip if version already on npm
+        id: idempotence
+        run: |
+          # Per-publish idempotence: a re-tag must not error the job just
+          # because the version exists. `npm publish` on a duplicate version
+          # errors loudly; this short-circuits cleanly instead.
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@opena2a/aim-sdk@${VERSION}" version > /dev/null 2>&1; then
+            echo "ℹ️  @opena2a/aim-sdk@${VERSION} is already on npm — skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "✓ @opena2a/aim-sdk@${VERSION} not yet on npm; will publish."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.idempotence.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build
+        if: steps.idempotence.outputs.skip != 'true'
+        # tsup build (per package.json scripts.build). prepublishOnly also
+        # runs build but explicit here for fail-fast on build errors.
+        run: npm run build
+
+      - name: Publish to npm with provenance
+        if: steps.idempotence.outputs.skip != 'true'
+        # --provenance is technically redundant under Trusted Publishing
+        # (it's implicit) but kept explicit per global CLAUDE.md.
+        # --access public is required for scoped packages on a public
+        # registry the first time they publish.
+        run: npm publish --provenance --access public
+
+      - name: Verify publish
+        if: steps.idempotence.outputs.skip != 'true'
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          # Brief retry — registry indexing can lag a few seconds.
+          for i in 1 2 3 4 5; do
+            if npm view "@opena2a/aim-sdk@${VERSION}" version > /dev/null 2>&1; then
+              echo "✓ @opena2a/aim-sdk@${VERSION} is live on npm"
+              # Provenance check: dist.attestations must be non-empty
+              # under Trusted Publishing. Empty means the publish went
+              # through without OIDC (unexpected) — flag it.
+              ATTEST=$(npm view "@opena2a/aim-sdk@${VERSION}" dist.attestations --json 2>/dev/null || echo "")
+              if [ -z "$ATTEST" ] || [ "$ATTEST" = "null" ]; then
+                echo "⚠  Published but dist.attestations is empty — provenance NOT attached."
+                exit 1
+              fi
+              echo "✓ SLSA provenance attached"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "✗ @opena2a/aim-sdk@${VERSION} not visible on npm after publish — investigate"
           exit 1
