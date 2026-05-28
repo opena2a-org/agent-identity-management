@@ -2,7 +2,7 @@
 
 AIM is pre-1.0 software in active hardening. This page tracks the work that needs to land before we recommend production deployment.
 
-**Last updated:** 2026-05-27. Most enforcement streams are now closed in code; the remaining 1.0 blockers are a CI-integrated Playwright empty-state suite and a clean third-party security review.
+**Last updated:** 2026-05-28. Most enforcement streams are now closed in code; the remaining 1.0 blocker is a CI-integrated Playwright empty-state suite. AIM is open source under Apache-2.0, so community review of the codebase is welcome before and after 1.0 per [SECURITY.md](SECURITY.md); a paid third-party engagement is a worthwhile post-1.0 investment for regulated deployments but is not a binding 1.0 gate.
 
 ## Current status
 
@@ -46,7 +46,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Third-party security review
 
-**Status: open.** A clean third-party security review is a binding 1.0 gate criterion. As of 2026-05-27, no external review has been contracted or scheduled. This is the single largest remaining blocker for the 1.0 cut.
+**Status: rescoped — post-1.0.** AIM is open source under Apache-2.0. The codebase, threat model, and architectural decisions are publicly auditable, and the community is welcome to review and report findings per [SECURITY.md](SECURITY.md). A paid third-party engagement is a worthwhile post-1.0 investment when the deployment surface includes regulated tenants, but it is not a binding 1.0 gate criterion. Decision recorded 2026-05-28.
 
 ## Our process
 
@@ -79,9 +79,8 @@ The 1.0 milestone is defined by the gate criteria below. Status as of 2026-05-27
 - [x] No hardcoded secrets in the codebase, no default fallbacks for secret-shaped environment variables
 - [x] Tenant scoping enforced on every authenticated handler with cross-tenant negative tests (risk floor met via per-handler enforcement plus CI lint; architectural target of middleware-level enforcement remains a stretch goal)
 - [ ] A passing end-to-end Playwright suite covering empty-state rendering on every dashboard panel, integrated into CI
-- [ ] A clean third-party security review
 
-We will update this page as items close. We will not move to 1.0 until the two remaining gate criteria above are met.
+We will update this page as items close. We will not move to 1.0 until the remaining gate criterion above is met. A paid third-party security review was previously listed as a 1.0 criterion; it has been rescoped to a post-1.0 investment because AIM is open source and the codebase is publicly auditable today (see the "Third-party security review" stream above for the full decision).
 
 ## Acknowledgements
 
