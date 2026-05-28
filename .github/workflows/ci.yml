@@ -258,13 +258,20 @@ jobs:
           go build -o /tmp/aim-migrate ./cmd/migrate
           go build -o /tmp/aim-bootstrap ./cmd/bootstrap
 
+      # cmd/migrate (and cmd/server's startup migration loop) read the
+      # migrations/ directory via a relative path, so the working directory
+      # must be apps/backend where that directory lives. bootstrap doesn't
+      # touch the filesystem but is run from the same cwd for parity.
       - name: Run migrations
+        working-directory: apps/backend
         run: /tmp/aim-migrate
 
       - name: Seed canonical admin
+        working-directory: apps/backend
         run: /tmp/aim-bootstrap --default
 
       - name: Start backend
+        working-directory: apps/backend
         run: |
           /tmp/aim-server > /tmp/aim-server.log 2>&1 &
           echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
