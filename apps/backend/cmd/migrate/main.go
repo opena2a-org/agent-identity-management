@@ -71,10 +71,21 @@ func main() {
 
 	if isFresh {
 		fmt.Printf("%s🆕 Fresh database detected%s\n", colorGreen, colorReset)
-		fmt.Printf("   Using consolidated V1 schema for fast deployment\n\n")
-		
-		if err := applyConsolidatedSchema(ctx, db); err != nil {
-			log.Fatalf("❌ Failed to apply consolidated schema: %v", err)
+
+		// Prefer the consolidated V1 schema when shipped (fast path for prod
+		// deployments). Repos that don't ship the consolidated file fall
+		// through to the numbered incremental migrations so the tool still
+		// works on a clean database — the dev / CI case.
+		if _, err := os.Stat("migrations/V1__consolidated_schema.sql"); err == nil {
+			fmt.Printf("   Using consolidated V1 schema for fast deployment\n\n")
+			if err := applyConsolidatedSchema(ctx, db); err != nil {
+				log.Fatalf("❌ Failed to apply consolidated schema: %v", err)
+			}
+		} else {
+			fmt.Printf("   No V1 consolidated schema present; applying incremental migrations\n\n")
+			if err := applyIncrementalMigrations(ctx, db); err != nil {
+				log.Fatalf("❌ Failed to apply incremental migrations: %v", err)
+			}
 		}
 	} else {
 		fmt.Printf("%s📦 Existing database detected%s\n", colorYellow, colorReset)
@@ -228,8 +239,14 @@ func readMigrationFiles(dir string) ([]Migration, error) {
 			return nil, fmt.Errorf("failed to read %s: %w", file.Name(), err)
 		}
 
-		// Extract version from filename (e.g., "001_initial_schema.sql" -> "001")
-		version := strings.TrimSuffix(file.Name(), ".sql")
+		// Use the full filename as the version key. cmd/server's startup
+		// migration loop (runMigrations in cmd/server/main.go) does the same
+		// — the two binaries share the schema_migrations table, so the keys
+		// must match exactly. Trimming .sql here used to make cmd/server
+		// re-apply every migration cmd/migrate had already run, because the
+		// "001_initial_schema" row didn't satisfy the "001_initial_schema.sql"
+		// lookup.
+		version := file.Name()
 
 		migrations = append(migrations, Migration{
 			Version:  version,

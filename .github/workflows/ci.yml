@@ -218,7 +218,14 @@ jobs:
       POSTGRES_PASSWORD: aim
       POSTGRES_DB: aim_test
       POSTGRES_SSL_MODE: disable
-      ENVIRONMENT: ci
+      # ENVIRONMENT=test (NOT "ci") so rate_limit.go:62 honors the 10x bump
+      # — StrictRateLimitMiddleware caps /login/local at 10 req/min in any
+      # un-recognized environment, and the e2e suite needs more than that
+      # even with worker-scoped auth + retries. The "test" string is also
+      # safe against the other ENVIRONMENT checks (security_headers and
+      # cookie Secure-flag only branch on "production"; detection_service
+      # only on "development"/"dev").
+      ENVIRONMENT: test
       NEXT_PUBLIC_API_URL: http://localhost:8080
       AIM_TEST_ADMIN_EMAIL: admin@opena2a.org
     steps:
@@ -240,13 +247,21 @@ jobs:
 
       - name: Generate ephemeral CI secrets
         run: |
-          # Bootstrap config validator rejects known-dev values and requires
-          # ≥32 chars. Fresh per-run hex strings satisfy both. These never
-          # leave the runner.
+          # JWT_SECRET is consumed as raw string, ≥32 chars, not a known-dev
+          # value (config.go:212-222). A 64-char hex string is fine.
+          #
+          # KEYVAULT_MASTER_KEY is base64-decoded by keyvault.go:28 and the
+          # decoded bytes must be exactly 32 (AES-256). The matching openssl
+          # incantation — quoted verbatim in config.go:225 — is rand -base64 32.
+          # `rand -hex 32` would decode as base64 to 48 bytes and fail.
+          #
+          # DEFAULT_ADMIN_PASSWORD must satisfy bootstrap's 4-class complexity
+          # rule (password.go:24); the base64 stem stripped of /+= covers
+          # upper+lower+digit and the fixed Aa1! suffix pins the special class.
           {
             echo "JWT_SECRET=$(openssl rand -hex 32)"
-            echo "KEYVAULT_MASTER_KEY=$(openssl rand -hex 32)"
-            ADMIN_PW=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+            echo "KEYVAULT_MASTER_KEY=$(openssl rand -base64 32)"
+            ADMIN_PW="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)Aa1!"
             echo "DEFAULT_ADMIN_PASSWORD=${ADMIN_PW}"
             echo "AIM_TEST_ADMIN_PASSWORD=${ADMIN_PW}"
           } >> "$GITHUB_ENV"
@@ -258,13 +273,20 @@ jobs:
           go build -o /tmp/aim-migrate ./cmd/migrate
           go build -o /tmp/aim-bootstrap ./cmd/bootstrap
 
+      # cmd/migrate (and cmd/server's startup migration loop) read the
+      # migrations/ directory via a relative path, so the working directory
+      # must be apps/backend where that directory lives. bootstrap doesn't
+      # touch the filesystem but is run from the same cwd for parity.
       - name: Run migrations
+        working-directory: apps/backend
         run: /tmp/aim-migrate
 
       - name: Seed canonical admin
+        working-directory: apps/backend
         run: /tmp/aim-bootstrap --default
 
       - name: Start backend
+        working-directory: apps/backend
         run: |
           /tmp/aim-server > /tmp/aim-server.log 2>&1 &
           echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
