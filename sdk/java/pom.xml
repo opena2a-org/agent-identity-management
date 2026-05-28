@@ -202,12 +202,30 @@
         </plugins>
     </build>
 
+    <!--
+        Distribution to the modern Maven Central portal (central.sonatype.com).
+        The server id "central" must match the <servers><server><id> entry in
+        the GitHub-runner settings.xml (configured by actions/setup-java@v4
+        via the `server-id` input).
+    -->
+    <distributionManagement>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://central.sonatype.com/api/v1/publisher</url>
+        </repository>
+    </distributionManagement>
+
     <profiles>
         <!-- Profile for publishing to Maven Central -->
         <profile>
             <id>release</id>
             <build>
                 <plugins>
+                    <!-- GPG-sign every artifact in the release. The runner's
+                         settings.xml provides the passphrase via the
+                         MAVEN_GPG_PASSPHRASE environment variable, populated
+                         by setup-java@v4's gpg-passphrase input. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
@@ -221,6 +239,22 @@
                                 </goals>
                             </execution>
                         </executions>
+                    </plugin>
+                    <!-- Modern Maven Central uploader. Replaces the
+                         deprecated nexus-staging-maven-plugin (which targeted
+                         the legacy oss.sonatype.org host). Talks directly to
+                         central.sonatype.com's portal API and auto-releases
+                         the staged bundle when autoPublish=true. -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.5.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>
