@@ -86,10 +86,37 @@ export const test = base.extend<Fixtures>({
     await use(register);
   },
 
-  // authedPage seeds localStorage.auth_token (read by useAuth() via api.getToken())
-  // before any navigation, so dashboard routes render without redirecting to /login.
-  // Cookies set by /auth/login/local are already on the context via APIRequestContext.
+  // authedPage seeds BOTH the cookie (for middleware.ts:34 which gates every
+  // dashboard route on `access_token` in cookies) AND localStorage.auth_token
+  // (for the client-side useAuth() hook which calls api.getToken()).
+  //
+  // Why both: Playwright's `request` fixture lives in its own APIRequestContext
+  // with a separate cookie jar from the browser's BrowserContext, so cookies
+  // set by /api/v1/auth/login/local during `adminAuth` do NOT propagate to
+  // `page`. We have to write the access_token cookie onto page.context()
+  // explicitly. middleware.ts redirects to /auth/login on every request that
+  // lacks the cookie.
   authedPage: async ({ page, adminAuth }, use) => {
+    await page.context().addCookies([
+      {
+        name: 'access_token',
+        value: adminAuth.accessToken,
+        domain: 'localhost',
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      },
+      {
+        name: 'refresh_token',
+        value: adminAuth.refreshToken,
+        domain: 'localhost',
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      },
+    ]);
     await page.addInitScript((token) => {
       try { window.localStorage.setItem('auth_token', token); } catch {}
     }, adminAuth.accessToken);
