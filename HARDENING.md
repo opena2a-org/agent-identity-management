@@ -30,7 +30,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Data model invariants
 
-**Status: done.** Each known data-model invariant — parent cache columns plus richer detail tables, and row-internal couplings where two columns on the same row must move together — is now enforced at the database layer rather than by application code. Six invariant-preserving triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, A2A consent organization scoping, and agent status → `verified_at` timestamp. Tests assert the trigger behavior under insert, update, and delete.
+**Status: done.** Each known data-model invariant — parent cache columns plus richer detail tables, and row-internal couplings where two columns on the same row must move together — is now enforced at the database layer rather than by application code. Six invariant-preserving triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, A2A peer trust aggregates, and agent status → `verified_at` timestamp. The A2A consent cross-tenant invariant is enforced by a complementary `NOT NULL` constraint on `a2a_consent_records.organization_id` (migration 097, backfilled from the grantor agent). Tests assert the trigger and constraint behavior under insert, update, and delete.
 
 ### Capability lifecycle
 
