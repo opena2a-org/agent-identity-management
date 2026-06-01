@@ -128,14 +128,15 @@ jobs:
         if: steps.idempotence.outputs.skip != 'true'
         run: |
           VERSION="$(cat VERSION)"
-          # Brief retry — registry indexing can lag a few seconds after upload.
-          for i in 1 2 3 4 5; do
+          # Retry — PyPI CDN propagation routinely lags 30–120s after upload, so a
+          # 25s window produced false-red runs on successful publishes. ~2 minutes.
+          for i in $(seq 1 12); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/aim-sdk/${VERSION}/json")
             if [ "$STATUS" = "200" ]; then
               echo "✓ aim-sdk ${VERSION} is live on PyPI"
               exit 0
             fi
-            sleep 5
+            sleep 10
           done
           echo "✗ aim-sdk ${VERSION} not visible on PyPI after publish — investigate"
           exit 1
@@ -227,8 +228,9 @@ jobs:
         if: steps.idempotence.outputs.skip != 'true'
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          # Brief retry — registry indexing can lag a few seconds.
-          for i in 1 2 3 4 5; do
+          # Retry — npm registry propagation can lag 30–120s after upload, so a 25s
+          # window produced false-red runs on successful publishes. ~2 minutes.
+          for i in $(seq 1 12); do
             if npm view "@opena2a/aim-sdk@${VERSION}" version > /dev/null 2>&1; then
               echo "✓ @opena2a/aim-sdk@${VERSION} is live on npm"
               # Provenance check: dist.attestations must be non-empty
@@ -242,7 +244,7 @@ jobs:
               echo "✓ SLSA provenance attached"
               exit 0
             fi
-            sleep 5
+            sleep 10
           done
           echo "✗ @opena2a/aim-sdk@${VERSION} not visible on npm after publish — investigate"
           exit 1
