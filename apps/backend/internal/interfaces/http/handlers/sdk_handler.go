@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,11 @@ type SDKCredentials struct {
 	RefreshToken  string `json:"refreshToken"`
 	SDKTokenID    string `json:"sdkTokenId"`          // For usage tracking via X-SDK-Token header
 	UserID        string `json:"userId"`
+	// The user's email is emitted under BOTH keys for cross-SDK compatibility:
+	// the Python SDK reads "userEmail" (aim_sdk/cli.py) — emitting only "email"
+	// was why `aim-sdk status` showed `User: Unknown` — while the Java SDK's
+	// CredentialManager reads "email". Populate both from the same value.
+	UserEmail     string `json:"userEmail"`
 	Email         string `json:"email"`
 }
 
@@ -156,11 +162,17 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// No logging to prevent information leakage
 	_ = h.sdkTokenRepo.Create(sdkToken)
 
-	// Get AIM URL from environment or use request base URL
+	// Get AIM URL from environment or use request base URL.
+	// normalizeAIMURL forces https for any public host so the embedded URL can
+	// never be http:// — behind a TLS-terminating ingress (Azure Container Apps,
+	// Vercel edge) c.BaseURL() reports plain http, and a downloaded SDK that
+	// POSTs its refresh token to http first gets a 301→https that drops the POST
+	// body, yielding a 401 "No authentication token provided" on registration.
 	aimURL := os.Getenv("AIM_PUBLIC_URL")
 	if aimURL == "" {
 		aimURL = c.BaseURL()
 	}
+	aimURL = normalizeAIMURL(aimURL)
 
 	// Create credentials object with schema version and type
 	// These fields help the SDK distinguish between SDK credentials and agent credentials
@@ -171,7 +183,8 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		RefreshToken:  refreshToken,
 		SDKTokenID:    tokenID,    // Include SDK token ID for usage tracking
 		UserID:        userID.String(),
-		Email:         email,
+		UserEmail:     email, // read by the Python SDK
+		Email:         email, // read by the Java SDK
 	}
 
 	// Generate SDK zip with embedded credentials
@@ -189,6 +202,54 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	c.Set("Content-Length", fmt.Sprintf("%d", len(zipData)))
 
 	return c.Send(zipData)
+}
+
+// normalizeAIMURL guarantees the URL embedded in a downloaded SDK uses https for
+// any public (non-loopback) host. It is applied to both AIM_PUBLIC_URL and the
+// request-derived c.BaseURL() so a missing OR misconfigured env var can never
+// embed an http:// endpoint.
+//
+// Why this matters: behind a TLS-terminating ingress (Azure Container Apps,
+// Vercel edge) the backend observes plain HTTP, so fiber's c.BaseURL() returns
+// http://api.aim.opena2a.org. The SDK's first authenticated call is a POST to
+// /api/v1/auth/refresh; the edge 301-redirects http→https and both Go's net/http
+// and Python's requests drop the POST body on a 301, so the refresh token never
+// reaches the server and registration fails with 401 "No authentication token
+// provided" (every OS, not just Windows).
+//
+// Loopback hosts keep their original scheme so local development over http://
+// localhost still works (there is no TLS terminator in front of them).
+//
+// Trade-off: a non-loopback private/LAN host (e.g. http://10.0.0.5, an internal
+// self-hosted deployment without TLS) is also coerced to https. This is a
+// deliberate security-first choice — credential-bearing SDK traffic should not
+// travel over plain http even on a LAN. Such a deployment must front AIM with a
+// TLS terminator. The coercion applies to AIM_PUBLIC_URL too, so a misconfigured
+// http value cannot reintroduce the original bug.
+func normalizeAIMURL(rawURL string) string {
+	trimmed := strings.TrimRight(rawURL, "/")
+	if trimmed == "" {
+		return trimmed
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" {
+		// Unparseable / scheme-less value: return as-is rather than guessing.
+		return trimmed
+	}
+	if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+		u.Scheme = "https"
+	}
+	return strings.TrimRight(u.String(), "/")
+}
+
+// isLoopbackHost reports whether host is a local-development address whose http
+// scheme should be preserved by normalizeAIMURL.
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "0.0.0.0", "::1":
+		return true
+	}
+	return strings.HasSuffix(strings.ToLower(host), ".localhost")
 }
 
 // createSDKZip creates a zip file with SDK and embedded credentials
