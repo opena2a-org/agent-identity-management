@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-06-01
+
+First PyPI release since 1.21.0 (1.22.0 was prepared but never published), so
+this release also carries the 1.22.0 changes listed below.
+
 ### Fixed
 
 - **`register_agent` no longer doubles the error prefix.** When the backend
@@ -15,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the inner helper had already raised. `AIMError` subclasses are now re-raised
   unwrapped; generic exceptions are still wrapped exactly once. Regression tests
   added in `tests/test_register_agent.py`.
+- **`aim-sdk login` callback pages now render UTF-8 correctly.** The local OAuth
+  callback responses sent `Content-Type: text/html` with no charset, so browsers
+  decoded the page as Latin-1 and the `✅` showed up as `âœ…`. Both the success
+  and error responses now send `text/html; charset=utf-8`.
 
 ## [1.22.0] - 2026-05-25
 
