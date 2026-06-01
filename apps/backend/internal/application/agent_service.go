@@ -258,11 +258,23 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	if err := s.agentRepo.Create(agent); err != nil {
-		// Detect PostgreSQL unique constraint violation to avoid leaking database internals
-		if strings.Contains(err.Error(), "duplicate key value") || strings.Contains(err.Error(), "unique constraint") {
+		// Map known database constraint violations to safe, user-facing messages.
+		// Raw PostgreSQL driver errors (the `pq:` prefix, table/constraint names like
+		// `agents_organization_id_fkey`) must never reach the API response — surfacing
+		// them leaks the schema and is an information-disclosure bug.
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
 			return nil, fmt.Errorf("an agent with this name already exists")
+		case strings.Contains(msg, "foreign key constraint"):
+			return nil, fmt.Errorf("invalid organization or user for this registration")
+		case strings.Contains(msg, "pq:"):
+			// Any other PostgreSQL driver error: log the detail server-side, return generic.
+			fmt.Printf("agent creation failed (database error): %v\n", err)
+			return nil, fmt.Errorf("failed to create agent")
+		default:
+			return nil, fmt.Errorf("failed to create agent: %w", err)
 		}
-		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
 	// Calculate initial trust score

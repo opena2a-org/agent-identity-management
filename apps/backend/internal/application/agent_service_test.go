@@ -1492,6 +1492,62 @@ func TestAgentService_CreateAgent_Success(t *testing.T) {
 	mockAgentRepo.AssertExpectations(t)
 }
 
+// TestAgentService_CreateAgent_SanitizesDBErrors locks in that raw PostgreSQL
+// driver errors (the `pq:` prefix, table/constraint names) never escape the
+// service layer — a foreign-key violation (e.g. a bad organization_id) had been
+// leaking `pq: ... violates foreign key constraint "agents_organization_id_fkey"`
+// straight to the API response (information disclosure).
+func TestAgentService_CreateAgent_SanitizesDBErrors(t *testing.T) {
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, _ := crypto.NewKeyVault(masterKey)
+
+	tests := []struct {
+		name    string
+		repoErr error
+		wantMsg string
+	}{
+		{
+			name:    "foreign key violation is sanitized",
+			repoErr: errors.New(`pq: insert or update on table "agents" violates foreign key constraint "agents_organization_id_fkey"`),
+			wantMsg: "invalid organization or user for this registration",
+		},
+		{
+			name:    "duplicate key maps to friendly message",
+			repoErr: errors.New(`pq: duplicate key value violates unique constraint "agents_name_key"`),
+			wantMsg: "an agent with this name already exists",
+		},
+		{
+			name:    "other pq error is generic",
+			repoErr: errors.New(`pq: null value in column "name" violates not-null constraint`),
+			wantMsg: "failed to create agent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockAgentRepo := new(MockAgentRepository)
+			service := &AgentService{agentRepo: mockAgentRepo, keyVault: keyVault}
+			mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(tt.repoErr)
+
+			req := &CreateAgentRequest{
+				Name:        "test-agent",
+				DisplayName: "Test Agent",
+				AgentType:   domain.AgentTypeAI,
+				Version:     "1.0.0",
+			}
+			agent, err := service.CreateAgent(context.Background(), req, uuid.New(), uuid.New(), nil, nil, "")
+
+			assert.Nil(t, agent)
+			assert.Error(t, err)
+			assert.Equal(t, tt.wantMsg, err.Error())
+			// Never leak PostgreSQL driver internals to the caller.
+			assert.NotContains(t, err.Error(), "pq:")
+			assert.NotContains(t, err.Error(), "fkey")
+			assert.NotContains(t, err.Error(), "constraint")
+		})
+	}
+}
+
 func TestAgentService_CreateAgent_WithPublicKey(t *testing.T) {
 	mockAgentRepo := new(MockAgentRepository)
 	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
