@@ -236,6 +236,24 @@ def _warn_deprecated_capability_format(capability: str):
         )
 
 
+def _func_accepts_param(func: Callable, name: str) -> bool:
+    """True if `func` declares a parameter `name` or accepts arbitrary **kwargs."""
+    import inspect
+    try:
+        sig = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    for p in sig.parameters.values():
+        if p.kind is inspect.Parameter.VAR_KEYWORD:
+            return True
+        if p.name == name and p.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            return True
+    return False
+
+
 class AIMClient:
     """
     AIM SDK Client for automatic identity verification.
@@ -2425,7 +2443,8 @@ class AIMClient:
         timeout_seconds: int = 300,
         jit_access: bool = False,
         risk_level: str = None,
-        auto_register: bool = True
+        auto_register: bool = True,
+        grant: Optional[str] = None
     ):
         """
         Decorator for automatic capability verification and action tracking.
@@ -2447,6 +2466,18 @@ class AIMClient:
             risk_level: Risk level ("low", "medium", "high", "critical"). If not provided,
                        auto-detects based on capability name.
             auto_register: If True (default), automatically registers capability on first use
+            grant: Optional AAP grant reference (e.g. "grant://orders-db"). When set, a
+                   GrantSession bound to the Secretless broker is made available to the
+                   wrapped function — injected as a ``grant`` keyword argument if the
+                   function declares one, and always via ``aim_sdk.current_grant()``. The
+                   agent references the grant; the broker resolves it and returns only the
+                   operation result. No credential or backend identifier enters the agent
+                   process (Agent Authorization Protocol §4).
+
+        Example - AAP grant (no secret ever reaches the agent):
+            @agent.perform_action(capability="orders:read", grant="grant://orders-db")
+            def recent_orders(customer_id, grant):
+                return grant.request("GET", "/orders", query={"customer": customer_id})
 
         Example - Simple usage (uses function name as capability):
             @agent.perform_action()  # auto-detects risk level
@@ -2518,9 +2549,26 @@ class AIMClient:
 
                 verification_id = verification_result["verification_id"]
 
+                # AAP: when a grant reference is set, bind a GrantSession to the broker and
+                # make it available to the function. The agent references the grant; the
+                # broker resolves it and returns only the operation result. No credential or
+                # backend identifier ever enters this process.
+                call_kwargs = kwargs
+                grant_token = None
+                if grant is not None:
+                    from .grant_client import GrantSession, BrokerClient, _current_grant
+                    broker = getattr(self, "_grant_broker", None) or BrokerClient()
+                    atx = getattr(self, "atx", None) or {}
+                    session = GrantSession(
+                        broker=broker, grant=grant, agent_id=self.agent_id, atx=atx
+                    )
+                    grant_token = _current_grant.set(session)
+                    if _func_accepts_param(func, "grant") and "grant" not in kwargs:
+                        call_kwargs = {**kwargs, "grant": session}
+
                 # Execute the function
                 try:
-                    result = func(*args, **kwargs)
+                    result = func(*args, **call_kwargs)
 
                     # Log success
                     self.log_capability_result(
@@ -2539,6 +2587,10 @@ class AIMClient:
                         error_message=str(e)
                     )
                     raise
+                finally:
+                    if grant_token is not None:
+                        from .grant_client import _current_grant
+                        _current_grant.reset(grant_token)
 
             return wrapper
         return decorator
