@@ -77,6 +77,13 @@ secure = register_agent
 
 from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError, ConfigurationError, StaleCredentialsError
 from .secrets import SecretsClient, SecretsError
+from .grant_client import (
+    BrokerClient,
+    GrantSession,
+    BrokerGrantError,
+    GrantDeniedError,
+    current_grant,
+)
 from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
 from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
 from .protocol_detection import ProtocolDetector, auto_detect_protocol
@@ -164,6 +171,12 @@ __all__ = [
     "ActionDeniedError",
     "ConfigurationError",
     "StaleCredentialsError",
+    # AAP grant client
+    "BrokerClient",
+    "GrantSession",
+    "BrokerGrantError",
+    "GrantDeniedError",
+    "current_grant",
     "MCPDetector",
     "auto_detect_mcps",
     "CapabilityDetector",
