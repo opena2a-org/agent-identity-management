@@ -150,8 +150,18 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		DocumentationURL: req.DocumentationURL,
 	}, orgID, userID, nil, nil, userEmail)
 	if err != nil {
+		// The service already maps DB constraint violations to safe messages, so
+		// surface err.Error() directly — do NOT re-prefix with "Failed to create
+		// agent:" (the service message is already "failed to create agent: ..."),
+		// which produced a doubled prefix. Mirror the authenticated handler: 409 for
+		// a duplicate name, 500 otherwise.
+		if err.Error() == "an agent with this name already exists" {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create agent: %v", err),
+			"error": err.Error(),
 		})
 	}
 
