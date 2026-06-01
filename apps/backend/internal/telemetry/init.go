@@ -72,7 +72,7 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		}
 	}
 	if cfg.ServiceVersion == "" {
-		cfg.ServiceVersion = "0.x"
+		cfg.ServiceVersion = "1.0.0"
 	}
 
 	res, err := resource.New(ctx,
