@@ -21,6 +21,7 @@ import re
 import warnings
 
 from .exceptions import (
+    AIMError,
     AuthenticationError,
     VerificationError,
     ActionDeniedError,
@@ -3886,6 +3887,12 @@ def register_agent(
 
     except requests.RequestException as e:
         raise ConfigurationError(f"Failed to connect to AIM server: {e}")
+    except AIMError:
+        # The inner helpers (_register_via_oauth / _register_via_api_key) already
+        # raise typed, well-messaged errors (e.g. "Registration failed: <reason>").
+        # Re-raise as-is — re-wrapping them here produced the doubled
+        # "Registration failed: Registration failed: ..." prefix.
+        raise
     except Exception as e:
         raise ConfigurationError(f"Registration failed: {e}")
 

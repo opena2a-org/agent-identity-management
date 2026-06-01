@@ -230,5 +230,57 @@ class TestRegisterAgent:
                     mock_oauth.assert_called_once()
 
 
+class TestRegisterAgentErrorPrefix:
+    """Regression: register_agent must not double the 'Registration failed:'
+    prefix. The inner helpers (_register_via_api_key / _register_via_oauth)
+    already raise ConfigurationError('Registration failed: <reason>'); the outer
+    handler must re-raise AIMError subclasses unwrapped rather than wrapping them
+    a second time. Surfaced 2026-06-01 against aim.opena2a.org."""
+
+    def test_api_key_error_prefix_not_doubled(self):
+        inner = ConfigurationError("Registration failed: backend boom")
+        with patch('aim_sdk.client.load_sdk_credentials', return_value=None):
+            with patch('aim_sdk.client._register_via_api_key', side_effect=inner):
+                with pytest.raises(ConfigurationError) as exc_info:
+                    register_agent(
+                        "test-agent",
+                        aim_url="https://aim.example.com",
+                        api_key="aim_abc123",
+                    )
+        msg = str(exc_info.value)
+        assert msg.count("Registration failed:") == 1, f"doubled prefix: {msg!r}"
+        assert "backend boom" in msg
+
+    def test_oauth_error_prefix_not_doubled(self):
+        sdk_creds = {
+            "aim_url": "https://aim.example.com",
+            "refresh_token": "mock_refresh_token",
+            "sdk_token_id": "mock_sdk_token",
+        }
+        inner = ConfigurationError("Registration failed: oauth boom")
+        with patch('aim_sdk.client.load_sdk_credentials', return_value=sdk_creds):
+            with patch('aim_sdk.client._register_via_oauth', side_effect=inner):
+                with pytest.raises(ConfigurationError) as exc_info:
+                    register_agent("test-agent")
+        msg = str(exc_info.value)
+        assert msg.count("Registration failed:") == 1, f"doubled prefix: {msg!r}"
+        assert "oauth boom" in msg
+
+    def test_generic_error_still_wrapped_once(self):
+        """A non-AIMError (e.g. a bug in a helper) is still wrapped exactly once
+        so consumers always get a typed ConfigurationError."""
+        with patch('aim_sdk.client.load_sdk_credentials', return_value=None):
+            with patch('aim_sdk.client._register_via_api_key',
+                       side_effect=ValueError("unexpected boom")):
+                with pytest.raises(ConfigurationError) as exc_info:
+                    register_agent(
+                        "test-agent",
+                        aim_url="https://aim.example.com",
+                        api_key="aim_abc123",
+                    )
+        msg = str(exc_info.value)
+        assert msg == "Registration failed: unexpected boom", repr(msg)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
