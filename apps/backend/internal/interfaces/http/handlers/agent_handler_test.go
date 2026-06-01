@@ -1071,7 +1071,10 @@ func TestGetAIMBaseURL_DifferentHosts(t *testing.T) {
 	}{
 		{"localhost", "localhost", "", "http://localhost"},
 		{"localhost with port", "localhost:3000", "", "http://localhost"}, // port stripped by Hostname()
-		{"domain", "api.aim.example.com", "", "http://api.aim.example.com"},
+		// Public hosts are coerced to https by normalizeAIMURL even when the
+		// request arrives over http (TLS-terminating ingress doesn't forward the
+		// scheme), so the embedded URL never 301s and strips the refresh POST body.
+		{"domain", "api.aim.example.com", "", "https://api.aim.example.com"},
 		{"domain https", "api.aim.example.com", "https", "https://api.aim.example.com"},
 	}
 

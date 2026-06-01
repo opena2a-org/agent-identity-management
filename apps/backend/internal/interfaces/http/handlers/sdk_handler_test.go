@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -312,4 +313,84 @@ func TestSDKCredentials_Struct(t *testing.T) {
 	assert.Equal(t, "test-token", creds.RefreshToken)
 	assert.Equal(t, "token-123", creds.SDKTokenID)
 	assert.Equal(t, "test@example.com", creds.Email)
+}
+
+// ===========================
+// SDK download bug regressions (http-scheme + userEmail)
+// ===========================
+
+// TestNormalizeAIMURL locks in that the URL embedded in a downloaded SDK is
+// always https for a public host (so the refresh-token POST is never 301'd and
+// stripped behind a TLS-terminating ingress), while loopback hosts keep http for
+// local development.
+func TestNormalizeAIMURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"public http coerced to https", "http://api.aim.opena2a.org", "https://api.aim.opena2a.org"},
+		{"public http with path coerced", "http://api.aim.opena2a.org/", "https://api.aim.opena2a.org"},
+		{"https left untouched", "https://api.aim.opena2a.org", "https://api.aim.opena2a.org"},
+		{"misconfigured AIM_PUBLIC_URL http coerced", "http://aim.opena2a.org", "https://aim.opena2a.org"},
+		// Uppercase scheme: url.Parse lowercases the scheme, so this still coerces.
+		{"uppercase scheme coerced", "HTTP://api.aim.opena2a.org", "https://api.aim.opena2a.org"},
+		// Loopback hosts keep http for local development.
+		{"localhost http preserved", "http://localhost:8080", "http://localhost:8080"},
+		{"127.0.0.1 http preserved", "http://127.0.0.1:8080", "http://127.0.0.1:8080"},
+		{"0.0.0.0 http preserved", "http://0.0.0.0:8080", "http://0.0.0.0:8080"},
+		{".localhost http preserved", "http://aim.localhost", "http://aim.localhost"},
+		{"ipv6 loopback http preserved", "http://[::1]:8080", "http://[::1]:8080"},
+		// Loopback-looking-but-public hosts must NOT be treated as loopback.
+		{"localhost.evil.com is public", "http://localhost.evil.com", "https://localhost.evil.com"},
+		{"notlocalhost is public", "http://notlocalhost", "https://notlocalhost"},
+		{"127.0.0.1.evil.com is public", "http://127.0.0.1.evil.com", "https://127.0.0.1.evil.com"},
+		// Userinfo in the authority is preserved; scheme still coerced.
+		{"userinfo preserved on coercion", "http://user@evil.com", "https://user@evil.com"},
+		// DELIBERATE trade-off (security-first): a non-loopback private/LAN host
+		// served over plain http is coerced to https. A self-hosted http-only LAN
+		// deployment must front AIM with TLS. Documented in normalizeAIMURL.
+		{"rfc1918 lan http coerced", "http://10.0.0.5:8080", "https://10.0.0.5:8080"},
+		{"trailing slash trimmed", "https://api.aim.opena2a.org/", "https://api.aim.opena2a.org"},
+		{"empty stays empty", "", ""},
+		{"scheme-less value returned as-is", "api.aim.opena2a.org", "api.aim.opena2a.org"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizeAIMURL(tt.in))
+		})
+	}
+}
+
+// TestSDKCredentials_JSONUsesUserEmail locks in that the credentials file
+// embedded in the download carries the email under "userEmail" (read by the
+// Python SDK, aim_sdk/cli.py — emitting only "email" produced `User: Unknown`)
+// AND under "email" (read by the Java SDK CredentialManager). Both keys must be
+// present and equal so neither SDK regresses.
+func TestSDKCredentials_JSONUsesUserEmail(t *testing.T) {
+	creds := SDKCredentials{
+		SchemaVersion: "1.0",
+		Type:          "sdk_oauth",
+		AIMUrl:        "https://api.aim.opena2a.org",
+		RefreshToken:  "test-token",
+		SDKTokenID:    "token-123",
+		UserID:        uuid.New().String(),
+		UserEmail:     "test@example.com",
+		Email:         "test@example.com",
+	}
+
+	data, err := json.Marshal(creds)
+	require.NoError(t, err)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &raw))
+
+	gotUserEmail, ok := raw["userEmail"]
+	require.True(t, ok, "credentials JSON must carry userEmail (read by the Python SDK)")
+	assert.Equal(t, "test@example.com", gotUserEmail)
+
+	gotEmail, ok := raw["email"]
+	require.True(t, ok, "credentials JSON must still carry email (read by the Java SDK)")
+	assert.Equal(t, "test@example.com", gotEmail)
 }

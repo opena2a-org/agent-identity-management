@@ -999,7 +999,10 @@ func getAIMBaseURL(c fiber.Ctx) string {
 	// Get host
 	host := c.Hostname()
 
-	return fmt.Sprintf("%s://%s", protocol, host)
+	// normalizeAIMURL forces https for any public host so embedded agent
+	// credentials can never point the SDK at an http:// endpoint that 301s and
+	// strips the refresh-token POST body behind a TLS-terminating ingress.
+	return normalizeAIMURL(fmt.Sprintf("%s://%s", protocol, host))
 }
 
 // ========================================

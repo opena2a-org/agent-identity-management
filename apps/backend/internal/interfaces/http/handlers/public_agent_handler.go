@@ -173,7 +173,10 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		DisplayName: agent.DisplayName,
 		PublicKey:   publicKey,
 		PrivateKey:  privateKey, // CRITICAL: Only returned ONCE
-		AIMURL:      c.BaseURL(),
+		// normalizeAIMURL forces https for any public host (see sdk_handler.go):
+		// behind a TLS-terminating ingress c.BaseURL() reports http, and an agent
+		// that POSTs to http first gets a 301 that drops the request body.
+		AIMURL:      normalizeAIMURL(c.BaseURL()),
 		Status:      string(agent.Status),
 		TrustScore:  trustScore,
 		Message:     h.buildRegistrationMessage(agent.Status),
