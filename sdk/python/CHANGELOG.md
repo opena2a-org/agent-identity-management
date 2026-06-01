@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`register_agent` no longer doubles the error prefix.** When the backend
+  rejected a registration, the message read `Registration failed: Registration
+  failed: <reason>` because the outer handler re-wrapped a `ConfigurationError`
+  the inner helper had already raised. `AIMError` subclasses are now re-raised
+  unwrapped; generic exceptions are still wrapped exactly once. Regression tests
+  added in `tests/test_register_agent.py`.
+
 ## [1.22.0] - 2026-05-25
 
 ### Security
