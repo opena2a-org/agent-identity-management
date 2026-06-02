@@ -40,6 +40,14 @@ The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
 Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
 
+## See it work
+
+Same agent code, run twice. The injection lands on both. On the AIM-protected run, the outbound exfil is denied at the tool-call boundary because `http:post` is outside the agent's declared capability grant.
+
+![AIM A/B: same code, AIM denies the outbound exfil on the protected agent](docs/images/aim-ab-demo.gif)
+
+This is the [RAGBot-AIM A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent) from [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent), the intentionally vulnerable agent platform. Break an agent there, then watch AIM stop the same attack — no server, no API key, no network; identity, capability policy, and audit log live on disk.
+
 ## Three deployment modes
 
 | Mode | When | Includes |
