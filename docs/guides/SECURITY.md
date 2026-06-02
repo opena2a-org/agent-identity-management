@@ -115,30 +115,33 @@ def write_data():
 
 ## Priority 1 Security Features (Implemented)
 
-### 1. **Encrypted Credential Storage**
+### 1. **Credential Storage**
 
-**Problem**: Plaintext credentials can be stolen from file system
-**Solution**: AES-128 encryption with system keyring
+SDK credentials are stored as JSON at `~/.aim/sdk_credentials.json` (agent
+credentials at `~/.aim/credentials.json`), readable only by the owner (`0600`).
+This file is the single source of truth — there is **no** encrypted shadow file.
+An earlier `~/.aim/credentials.encrypted` scheme was removed; the SDK migrates
+away from any leftover encrypted file.
 
 ```python
-# Automatic encryption when cryptography + keyring installed
 from aim_sdk import register_agent
 
-# Credentials stored encrypted in ~/.aim/credentials.encrypted
-# Encryption key stored in system keyring (macOS Keychain, Windows Credential Manager)
+# Credentials written to ~/.aim/sdk_credentials.json with 0600 permissions.
 agent = register_agent(name="my-agent")
 ```
 
-**Security Benefits**:
-- ✅ Credentials encrypted at rest with Fernet (AES-128 CBC)
-- ✅ Encryption key stored in OS-level secure storage
-- ✅ Restrictive file permissions (0o600)
-- ✅ Falls back to plaintext with warning if dependencies unavailable
+**Protections**:
+- File permissions `0600` (owner read/write only)
+- Short-lived access token; the refresh token is **revocable server-side**
+  (dashboard → SDK tokens) and stored server-side only as a SHA-256 hash
+- Full revocation and audit trail per token
 
-**Install dependencies** (optional, recommended):
-```bash
-pip install cryptography keyring
-```
+> **Not encrypted at rest.** Credentials are plaintext on disk, protected by file
+> permissions. On a single-user machine an encryption key would have lived in the
+> same OS keyring beside the file, adding little protection against a process
+> running as the user. Whether to re-introduce encryption-at-rest is tracked in
+> [#271](https://github.com/opena2a-org/agent-identity-management/issues/271).
+> If `~/.aim/` may be backed up or synced, exclude it.
 
 ### 2. **Token Expiry Reduction: 365 Days → 90 Days**
 
@@ -284,7 +287,7 @@ CREATE TABLE sdk_tokens (
 
 | Feature | Before | After | Improvement |
 |---------|--------|-------|-------------|
-| **Credential Storage** | Plaintext | Encrypted (AES-128) | ✅ 100% improvement |
+| **Credential Storage** | Plaintext, default perms | Plaintext, owner-only (`0600`), server-side revocation | ✅ Restricted perms + revocation |
 | **Token Expiry** | 365 days | 90 days | ✅ 75% reduction |
 | **Token Storage** | N/A | SHA-256 hash only | ✅ New protection |
 | **Token Rotation** | No | Yes (every refresh) | ✅ New protection |
@@ -309,19 +312,16 @@ echo ".aim/" >> .gitignore
 echo "*.json" >> .gitignore
 ```
 
-### 2. **Use Encrypted Storage**
+### 2. **Protect the Credential File**
 
-✅ **Install security dependencies**:
+Credentials are stored plaintext at `~/.aim/sdk_credentials.json`, so the file
+permissions are the protection. Verify they are owner-only:
 ```bash
-pip install cryptography keyring
+ls -l ~/.aim/sdk_credentials.json
+# -rw-------  ← 0600, owner read/write only. Good.
 ```
-
-Credentials will be automatically encrypted. Verify:
-```bash
-# Should see .encrypted file, not .json
-ls ~/.aim/
-# credentials.encrypted ← Good!
-```
+If a credential is ever exposed, revoke it server-side (dashboard → SDK tokens)
+and re-authenticate with `aim-sdk login`.
 
 ### 3. **Rotate Tokens Regularly**
 
@@ -372,9 +372,9 @@ aim-cli download --env prod
 ### 7. **Set Restrictive File Permissions**
 
 ```bash
-# Ensure credentials are only readable by owner
+# Ensure credentials are only readable by owner (the SDK already sets 0600)
+chmod 600 ~/.aim/sdk_credentials.json
 chmod 600 ~/.aim/credentials.json
-chmod 600 ~/.aim/credentials.encrypted
 ```
 
 ## Security Incident Response
