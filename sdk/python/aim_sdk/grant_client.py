@@ -8,6 +8,10 @@ result. No credential value and no backend identifier ever enters the agent proc
 
 This module is intentionally thin: the broker (in Secretless AI) does all the work. See
 the Agent Authorization Protocol spec (opena2a-standards/agent-authorization-protocol).
+
+PROVISIONAL / EXPERIMENTAL. AAP is at spec v0.1. This client and the broker `/grant`
+wire format it depends on may change in a future minor release without a major version
+bump. Pin an exact aim-sdk version if you depend on it.
 """
 
 from __future__ import annotations

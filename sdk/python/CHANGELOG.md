@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-06-01
+
+### Added (provisional)
+
+- **AAP grant surface — experimental.** `@perform_action(grant="grant://...")`,
+  plus `BrokerClient`, `GrantSession`, `current_grant`, `BrokerGrantError`, and
+  `GrantDeniedError` (#266). An agent references a grant; the Secretless broker
+  verifies the ATX, authorizes, resolves a scoped credential, performs the
+  operation in an ephemeral worker, and returns only the result — no credential
+  value or backend identifier ever enters the agent process. **Provisional:** the
+  Agent Authorization Protocol is at spec v0.1, so this surface and the broker
+  wire format it depends on may change in a future minor release without a major
+  bump. Opt-in only: omitting `grant` leaves all existing behavior unchanged.
+
+### Changed
+
+- **Richer `aim-sdk login` output and install-first README quickstart** (#270).
+- **OAuth login callback pages redesigned to match the AIM dashboard.** The
+  browser "Login successful" / "Login failed" pages now use the OpenA2A logo,
+  the dashboard's blue-600-on-white design language, and inline SVG status icons
+  (replacing the previous purple-gradient card and emoji). Fully self-contained
+  (logo inlined as a data URI; the Inter webfont degrades to the system stack
+  offline).
+- **`aim-sdk` terminal output is now emoji-free** and reads as clean professional
+  prose (`login`, `logout`, `status`); exit codes carry the success/failure signal.
+- **`aim-sdk version` output unified** with the new flag: both print `aim-sdk X.Y.Z`.
+
+### Fixed
+
+- **`tests/` no longer ships inside the wheel.** `setup.py` now passes
+  `find_packages(exclude=["tests", "tests.*"])`, so the published distribution
+  contains only the `aim_sdk` package.
+
+- **`aim-sdk --version` / `aim-sdk -V`** now print the SDK version at the top
+  level, complementing the existing `aim-sdk version` subcommand.
+
 ## [1.22.1] - 2026-06-01
 
 First PyPI release since 1.21.0 (1.22.0 was prepared but never published), so

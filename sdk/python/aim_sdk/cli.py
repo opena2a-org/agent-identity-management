@@ -91,6 +91,69 @@ def generate_pkce_pair():
     return code_verifier, code_challenge
 
 
+# --- OAuth callback page (matches the AIM dashboard design language) ---------
+# Blue-600 primary (#2563eb), white card on gray-50, Inter, gray-900/gray-600 text,
+# the real OpenA2A logo, lucide-style inline SVG status icons. No emoji, no purple
+# gradient (org UI standards). Fully self-contained: the logo is an inlined data URI
+# and the Inter webfont falls back to the system stack offline.
+
+from ._branding import LOGO_DATA_URI
+
+_LOGO = f'<img src="{LOGO_DATA_URI}" alt="OpenA2A" width="56" height="56">'
+
+_ICON_CHECK = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round" width="28" height="28">'
+    '<path d="M20 6 9 17l-5-5"/></svg>'
+)
+
+_ICON_ALERT = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round" width="28" height="28">'
+    '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>'
+)
+
+_CALLBACK_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIM SDK - {title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {{ --blue: #2563eb; --ink: #111827; --muted: #4b5563; --border: #e5e7eb; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+          background: #f9fafb; color: var(--ink); padding: 24px; }}
+  .card {{ width: 100%; max-width: 420px; background: #fff; border: 1px solid var(--border);
+           border-radius: 16px; box-shadow: 0 10px 30px rgba(17,24,39,0.08); padding: 40px 36px;
+           text-align: center; }}
+  .brand {{ display: flex; align-items: center; justify-content: center; margin-bottom: 28px; }}
+  .brand img {{ display: block; }}
+  .status {{ width: 56px; height: 56px; border-radius: 999px; display: inline-flex;
+             align-items: center; justify-content: center; margin-bottom: 18px;
+             background: {accent_soft}; border: 1px solid {accent_border}; color: {accent}; }}
+  h1 {{ font-size: 20px; font-weight: 600; margin: 0 0 8px; color: var(--ink); }}
+  p {{ font-size: 14px; line-height: 1.55; color: var(--muted); margin: 6px 0; }}
+  .hint {{ font-size: 13px; color: #6b7280; margin-top: 18px; }}
+  code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+          background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; color: var(--ink); }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">{logo}</div>
+    <div class="status">{icon}</div>
+    <h1>{heading}</h1>
+    <p>{message}</p>
+    <p class="hint">{hint}</p>
+  </div>
+</body>
+</html>"""
+
+
 class PKCECallbackHandler(BaseHTTPRequestHandler):
     """
     HTTP handler for OAuth PKCE callback.
@@ -140,69 +203,37 @@ class PKCECallbackHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _send_success_page(self):
-        """Send success HTML page."""
-        html = """<!DOCTYPE html>
-<html>
-<head>
-    <title>AIM SDK - Login Successful</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-               display: flex; justify-content: center; align-items: center; height: 100vh;
-               margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .card { background: white; padding: 40px 60px; border-radius: 16px; text-align: center;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        h1 { color: #22c55e; margin-bottom: 10px; }
-        p { color: #666; margin: 10px 0; }
-        .check { font-size: 64px; margin-bottom: 20px; }
-        code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="check">✅</div>
-        <h1>Login Successful!</h1>
-        <p>You can close this tab and return to your terminal.</p>
-        <p style="margin-top: 20px; color: #888; font-size: 14px;">
-            Credentials saved. Run <code>aim-sdk status</code> to verify.
-        </p>
-    </div>
-</body>
-</html>"""
+        """Send success HTML page (matches the AIM dashboard design language)."""
+        html = _CALLBACK_PAGE.format(
+            title="Login successful",
+            logo=_LOGO,
+            accent="#10b981",
+            accent_soft="#ecfdf5",
+            accent_border="#a7f3d0",
+            icon=_ICON_CHECK,
+            heading="Login successful",
+            message="You can close this tab and return to your terminal.",
+            hint="Credentials saved. Run <code>aim-sdk status</code> to verify.",
+        )
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
         self.wfile.write(html.encode())
 
     def _send_error_page(self, error: str):
-        """Send error HTML page."""
-        safe_error = error.replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
-        html = f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>AIM SDK - Login Failed</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-               display: flex; justify-content: center; align-items: center; height: 100vh;
-               margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }}
-        .card {{ background: white; padding: 40px 60px; border-radius: 16px; text-align: center;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3); }}
-        h1 {{ color: #ef4444; margin-bottom: 10px; }}
-        p {{ color: #666; margin: 10px 0; }}
-        .icon {{ font-size: 64px; margin-bottom: 20px; }}
-        code {{ background: #f3f4f6; padding: 2px 8px; border-radius: 4px; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="icon">❌</div>
-        <h1>Login Failed</h1>
-        <p>{safe_error}</p>
-        <p style="margin-top: 20px; color: #888; font-size: 14px;">
-            Please try again with <code>aim-sdk login</code>
-        </p>
-    </div>
-</body>
-</html>"""
+        """Send error HTML page (matches the AIM dashboard design language)."""
+        safe_error = error.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+        html = _CALLBACK_PAGE.format(
+            title="Login failed",
+            logo=_LOGO,
+            accent="#dc2626",
+            accent_soft="#fef2f2",
+            accent_border="#fecaca",
+            icon=_ICON_ALERT,
+            heading="Login failed",
+            message=safe_error,
+            hint="Please try again with <code>aim-sdk login</code>",
+        )
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
@@ -320,11 +351,11 @@ def login(args):
         server.server_close()
 
     if PKCECallbackHandler.error:
-        print(f"\n❌ Authentication failed: {PKCECallbackHandler.error}")
+        print(f"\nAuthentication failed: {PKCECallbackHandler.error}")
         return 1
 
     if not PKCECallbackHandler.authorization_code:
-        print("\n❌ Authentication failed: No authorization code received")
+        print("\nAuthentication failed: No authorization code received")
         return 1
 
     # Exchange authorization code for tokens
@@ -337,7 +368,7 @@ def login(args):
     )
 
     if 'error' in token_response:
-        print(f"\n❌ Token exchange failed: {token_response['error']}")
+        print(f"\nToken exchange failed: {token_response['error']}")
         return 1
 
     # Save credentials
@@ -352,7 +383,7 @@ def login(args):
 
     if save_sdk_credentials(credentials):
         print()
-        print("✅ Successfully authenticated!")
+        print("Successfully authenticated.")
         print()
         print(f"   User: {credentials.get('userEmail', 'Unknown')}")
         print(f"   Server: {aim_url}")
@@ -379,7 +410,7 @@ def login(args):
         print()
         return 0
     else:
-        print("❌ Failed to save credentials")
+        print("Failed to save credentials.")
         return 1
 
 
@@ -402,7 +433,7 @@ def logout(args):
     creds_file = Path(AIM_DIR) / "sdk_credentials.json"
     if creds_file.exists():
         creds_file.unlink()
-        print("✅ Credentials cleared")
+        print("Credentials cleared.")
     else:
         print("No credentials to clear")
 
@@ -418,7 +449,7 @@ def status(args):
 
     creds = load_sdk_credentials()
     if not creds:
-        print("❌ Not authenticated")
+        print("Not authenticated.")
         print()
         print("Run 'aim-sdk login' to authenticate")
         return 1
@@ -451,18 +482,18 @@ def status(args):
                 if exp:
                     import time
                     if exp > time.time():
-                        print("✅ Token is valid")
+                        print("Token is valid.")
                     else:
-                        print("⚠️  Token may be expired - will refresh on next SDK use")
+                        print("Token may be expired; it will refresh on next SDK use.")
         except Exception:
-            print("⚠️  Could not verify token status")
+            print("Could not verify token status.")
 
     return 0
 
 
 def version_cmd(args):
     """Show SDK version."""
-    print(f"AIM SDK version {__version__}")
+    print(f"aim-sdk {__version__}")
     return 0
 
 
@@ -471,6 +502,12 @@ def main():
     parser = argparse.ArgumentParser(
         prog='aim-sdk',
         description='AIM SDK - Agent Identity Management CLI',
+    )
+    parser.add_argument(
+        '--version', '-V',
+        action='version',
+        version=f'aim-sdk {__version__}',
+        help='Show SDK version and exit',
     )
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
