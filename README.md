@@ -17,7 +17,14 @@ Cryptographic identity, capability authorization, and audit trails for AI agents
 
 ## Quick start
 
-Integrate AIM into your agent:
+Install the SDK and authenticate:
+
+```bash
+pip install aim-sdk
+aim-sdk login                    # OAuth to aim.opena2a.org, or --url for self-hosted
+```
+
+Then protect any function with a capability grant:
 
 ```python
 from aim_sdk import secure
@@ -31,12 +38,7 @@ def get_customer(customer_id):
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
 
-```bash
-pip install aim-sdk
-aim-sdk login                    # OAuth to aim.opena2a.org, or --url for self-hosted
-```
-
-The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
+New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
 Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
 
