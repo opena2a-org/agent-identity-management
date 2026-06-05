@@ -121,6 +121,15 @@ type MCPAttestationService struct {
 	capabilityRepo   *repository.MCPServerCapabilityRepository
 	alertRepo        *repository.AlertRepository
 	cryptoService    *infracrypto.ED25519Service
+	manifestService  *MCPManifestService
+}
+
+// SetManifestService wires the manifest/drift service in after construction. It is optional: when
+// unset, attestations are recorded exactly as before with no manifest side effects. Kept as a setter
+// (rather than a constructor parameter) so the two existing constructors and their callers/tests are
+// unaffected and the consensus-gated drift hook stays a best-effort side effect.
+func (s *MCPAttestationService) SetManifestService(m *MCPManifestService) {
+	s.manifestService = m
 }
 
 func NewMCPAttestationService(
@@ -530,6 +539,26 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	// 8. Update or create agent-MCP connection
 	if err := s.updateAgentMCPConnection(ctx, agentID, mcpServerID, now); err != nil {
 		return nil, fmt.Errorf("failed to update agent-MCP connection: %w", err)
+	}
+
+	// 9. Recompute the manifest baseline from the tool names this attestation observed and record drift
+	// if it diverges from the trusted baseline. Divergence is only treated as server drift once the
+	// server has reached multi-agent consensus, so a single rogue or misconfigured agent cannot poison
+	// the baseline. consensusMet is read after the confidence-score update above so it reflects this
+	// attestation. Best-effort: a drift-tracking failure must not fail the attestation.
+	if s.manifestService != nil && len(req.Attestation.CapabilitiesFound) > 0 {
+		consensusMet := false
+		if status, err := s.GetConsensusStatus(ctx, mcpServerID); err != nil {
+			fmt.Printf("⚠️  Failed to read consensus status for manifest drift on %s: %v\n", mcpServerID, err)
+		} else {
+			consensusMet = status.ConsensusReached
+		}
+		if drift, err := s.manifestService.RecomputeFromAttestation(ctx, mcpServerID, req.Attestation.CapabilitiesFound, consensusMet); err != nil {
+			fmt.Printf("⚠️  Failed to recompute MCP manifest from attestation for %s: %v\n", mcpServerID, err)
+		} else if drift != nil {
+			fmt.Printf("⚠️  MCP manifest drift detected from attestation for %s (severity=%s, +%d/-%d tools)\n",
+				mcpServerID, drift.Severity, len(drift.AddedTools), len(drift.RemovedTools))
+		}
 	}
 
 	return &AttestMCPResponse{
