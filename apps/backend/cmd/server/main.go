@@ -465,6 +465,7 @@ type Repositories struct {
 	Alert              *repository.AlertRepository
 	MCPServer          *repository.MCPServerRepository
 	MCPCapability      *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
+	MCPManifest        *repository.MCPManifestRepository         // ✅ For MCP manifest baseline + drift detection
 	MCPAttestation     *repository.MCPAttestationRepository      // ✅ For agent attestation of MCPs
 	AgentMCPConnection *repository.AgentMCPConnectionRepository  // ✅ For agent-MCP connections
 	Security           *repository.SecurityRepository
@@ -518,6 +519,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		Alert:              repository.NewAlertRepository(db),
 		MCPServer:          repository.NewMCPServerRepository(db),
 		MCPCapability:      repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
+		MCPManifest:        repository.NewMCPManifestRepository(db),         // ✅ For MCP manifest baseline + drift detection
 		MCPAttestation:     repository.NewMCPAttestationRepository(db),      // ✅ For agent attestation of MCPs
 		AgentMCPConnection: repository.NewAgentMCPConnectionRepository(dbx), // ✅ For agent-MCP connections
 		Security:           repository.NewSecurityRepository(db),
@@ -732,6 +734,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPCapability, // ✅ For syncing capabilities from attestations
 		repos.Alert,         // ✅ For low-trust attestation alerts
 	)
+
+	// ✅ Initialize MCP manifest/drift service and wire it into both the capability and attestation
+	// services. It maintains a per-server tool-manifest baseline and records drift when a trusted
+	// server's surface changes: every /.well-known capability fetch updates the baseline, and
+	// agent-attested tool sets move it only once multi-agent consensus is reached (baseline-poisoning
+	// guard). Injected via setters so the existing service constructors stay unchanged.
+	mcpManifestService := application.NewMCPManifestService(
+		repos.MCPCapability,
+		repos.MCPManifest,
+	)
+	mcpCapabilityService.SetManifestService(mcpManifestService)
+	mcpAttestationService.SetManifestService(mcpManifestService)
 
 	securityService := application.NewSecurityService(
 		repos.Security,

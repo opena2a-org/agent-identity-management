@@ -16,9 +16,10 @@ import (
 )
 
 type MCPCapabilityService struct {
-	capabilityRepo *repository.MCPServerCapabilityRepository
-	mcpRepo        *repository.MCPServerRepository
-	httpClient     *http.Client
+	capabilityRepo  *repository.MCPServerCapabilityRepository
+	mcpRepo         *repository.MCPServerRepository
+	httpClient      *http.Client
+	manifestService *MCPManifestService
 }
 
 // MCPCapabilitiesResponse represents the standard MCP protocol capabilities response
@@ -64,6 +65,14 @@ func NewMCPCapabilityService(
 			Timeout: 30 * time.Second, // 30 second timeout for capability discovery
 		},
 	}
+}
+
+// SetManifestService wires the manifest/drift service in after construction. It is optional: when
+// unset, capability detection still works and simply records no manifest baseline or drift. Kept as a
+// setter (rather than a constructor parameter) so existing callers and tests are unaffected and the
+// drift hook stays a best-effort side effect that can never fail a capability fetch.
+func (s *MCPCapabilityService) SetManifestService(m *MCPManifestService) {
+	s.manifestService = m
 }
 
 // DetectCapabilities detects and stores capabilities for an MCP server
@@ -189,18 +198,28 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		})
 	}
 
-	// Step 5: Store detected capabilities in database
-	for _, cap := range capabilities {
-		if err := s.capabilityRepo.Create(cap); err != nil {
-			// Log error but continue with other capabilities
-			fmt.Printf("⚠️  Failed to store capability %s: %v\n", cap.Name, err)
-			continue
-		}
-
-		fmt.Printf("✅ Detected %s capability: %s\n", cap.CapabilityType, cap.Name)
+	// Step 5: Reconcile stored capabilities to exactly this fetched set. This is a full replace (stale
+	// rows deactivated, present rows upserted with current schema), not a per-row insert — so a tool
+	// the server has since removed or reshaped is reflected, which is what lets manifest drift detect
+	// removals and schema changes rather than only additions.
+	if err := s.capabilityRepo.ReplaceActiveCapabilities(serverID, capabilities); err != nil {
+		return fmt.Errorf("failed to store detected capabilities: %w", err)
 	}
 
 	fmt.Printf("✅ Successfully detected %d real capabilities from MCP server %s\n", len(capabilities), server.Name)
+
+	// Recompute the manifest baseline from the server's freshly-stored /.well-known capabilities and
+	// record drift if the trusted tool surface changed. Best-effort: a drift-tracking failure must not
+	// fail capability detection, so the error is logged, not returned.
+	if s.manifestService != nil {
+		if drift, err := s.manifestService.RecomputeFromWellKnown(ctx, serverID); err != nil {
+			fmt.Printf("⚠️  Failed to recompute MCP manifest for %s: %v\n", server.Name, err)
+		} else if drift != nil {
+			fmt.Printf("⚠️  MCP manifest drift detected for %s (severity=%s, +%d/-%d/~%d tools)\n",
+				server.Name, drift.Severity, len(drift.AddedTools), len(drift.RemovedTools), len(drift.ChangedTools))
+		}
+	}
+
 	return nil
 }
 

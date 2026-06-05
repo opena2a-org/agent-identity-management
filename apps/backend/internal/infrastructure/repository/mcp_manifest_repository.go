@@ -39,7 +39,7 @@ func (r *MCPManifestRepository) GetCurrentBaseline(serverID uuid.UUID) (*domain.
 		return nil, nil, fmt.Errorf("failed to load current manifest baseline: %w", err)
 	}
 
-	var entries []domain.ManifestEntry
+	entries := make([]domain.ManifestEntry, 0)
 	if len(entriesJSON) > 0 {
 		if err := json.Unmarshal(entriesJSON, &entries); err != nil {
 			return nil, nil, fmt.Errorf("failed to decode baseline entries: %w", err)
@@ -102,6 +102,24 @@ func (r *MCPManifestRepository) InsertDrift(d *domain.MCPManifestDrift) error {
 	).Scan(&d.ID, &d.DetectedAt)
 }
 
+// HasUnacknowledgedDriftWithHash reports whether an unacknowledged drift row from the given source
+// already records new_hash for a server. Used to deduplicate attestation-observed divergence exactly:
+// the baseline never absorbs attestation drift, so without this check the same divergence would
+// re-insert on every subsequent attestation. An exact SQL existence test (not a bounded scan of recent
+// rows) so a repeat is suppressed no matter how many other drift rows have accumulated since.
+func (r *MCPManifestRepository) HasUnacknowledgedDriftWithHash(serverID uuid.UUID, source domain.ManifestSource, newHash string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(
+		`SELECT EXISTS (
+			SELECT 1 FROM mcp_manifest_drift
+			WHERE mcp_server_id = $1 AND source = $2 AND new_hash = $3 AND acknowledged = FALSE
+		)`, serverID, string(source), newHash).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check existing drift: %w", err)
+	}
+	return exists, nil
+}
+
 // GetRecentDrift returns the most recent drift records for a server, newest first.
 func (r *MCPManifestRepository) GetRecentDrift(serverID uuid.UUID, limit int) ([]*domain.MCPManifestDrift, error) {
 	rows, err := r.db.Query(
@@ -116,7 +134,7 @@ func (r *MCPManifestRepository) GetRecentDrift(serverID uuid.UUID, limit int) ([
 	}
 	defer rows.Close()
 
-	var out []*domain.MCPManifestDrift
+	out := make([]*domain.MCPManifestDrift, 0)
 	for rows.Next() {
 		var d domain.MCPManifestDrift
 		var added, removed, changed []byte

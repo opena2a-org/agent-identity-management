@@ -15,6 +15,26 @@ func sortedStrings(s []string) []string {
 	return s
 }
 
+// genericCapabilityCategories are the MCP capability-category tokens an attestation may report instead
+// of (or alongside) concrete tool names. They are not tool names and must not enter the tool manifest.
+// Kept in sync with MCPServerCapabilityRepository.UpsertFromAttestation, which skips the same tokens.
+var genericCapabilityCategories = map[string]struct{}{
+	"tools": {}, "resources": {}, "prompts": {},
+}
+
+// filterAttestedToolNames drops generic capability-category tokens from an attestation's reported names,
+// leaving only concrete tool names for manifest diffing.
+func filterAttestedToolNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if _, generic := genericCapabilityCategories[n]; generic {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // MCPManifestService maintains a per-server manifest baseline and records drift when a server's
 // tool surface changes after it was trusted. Two sources feed it:
 //
@@ -89,19 +109,39 @@ func (s *MCPManifestService) RecomputeFromWellKnown(ctx context.Context, serverI
 }
 
 // RecomputeFromAttestation compares the tool names an agent reported against the current baseline's
-// tool set. Divergence (a tool agents see that the server never declared, or vice versa) is only
-// treated as server drift when consensusMet is true; below consensus it is ignored to avoid
-// single-agent false positives. Resources and prompts are not attested, so non-tool baseline entries
-// are carried forward unchanged. Returns the drift record when one was created, otherwise nil.
+// tool set and records drift when they diverge. It deliberately NEVER mutates the baseline: the
+// /.well-known feed is the sole baseline author. This is the baseline-poisoning guard — the consensus
+// signal available here ("has this server ever reached multi-agent verification?") is a server-lifetime
+// latch, not per-manifest corroboration, so allowing it to advance the baseline would let a single
+// trusted in-org agent silently rebaseline a verified server to an arbitrary tool set. Instead,
+// consensus-confirmed divergence is recorded as a drift observation against the unchanged baseline;
+// the server's own next /.well-known capture is what legitimately moves the baseline.
+//
+// consensusMet still gates RECORDING (below consensus, a lone agent's divergence is ignored to avoid
+// false positives). Divergence is deduplicated against recent unacknowledged attestation drift so the
+// same discrepancy is not re-recorded on every subsequent attestation. Only tool-type entries are
+// attested (resources/prompts are not), so the diff is over tool names. Returns the drift record when
+// one was created, otherwise nil.
 func (s *MCPManifestService) RecomputeFromAttestation(ctx context.Context, serverID uuid.UUID, observedNames []string, consensusMet bool) (*domain.MCPManifestDrift, error) {
+	// Attestation payloads mix real tool names with the generic MCP capability-category tokens
+	// ("tools"/"resources"/"prompts"). The capability sync (UpsertFromAttestation) skips those tokens
+	// because they are not tool names; the manifest diff must skip them too, or every consensus-met
+	// attestation that lists a category would record spurious "added tool: tools" drift.
+	observedNames = filterAttestedToolNames(observedNames)
 	if len(observedNames) == 0 {
-		// Empty report is treated as missing data, never as "all tools removed".
+		// Empty report (or one carrying only category tokens) is treated as missing data, never as
+		// "all tools removed".
 		return nil, nil
 	}
 
 	baseline, prevEntries, err := s.manifestRepo.GetCurrentBaseline(serverID)
 	if err != nil {
 		return nil, err
+	}
+	if baseline == nil {
+		// No /.well-known baseline yet: there is nothing authoritative to diverge from, and attestation
+		// must not seed a baseline (well-known is the sole author). Nothing to record.
+		return nil, nil
 	}
 
 	observedEntries, _ := domain.BuildManifestFromNames(observedNames)
@@ -110,30 +150,16 @@ func (s *MCPManifestService) RecomputeFromAttestation(ctx context.Context, serve
 		observedSet[e.Name] = struct{}{}
 	}
 
-	if baseline == nil {
-		// Only a consensus-backed attestation may establish a baseline from observation alone.
-		if !consensusMet {
-			return nil, nil
-		}
-		hash, tools, res, prm := domain.HashManifestEntries(observedEntries)
-		return nil, s.manifestRepo.ReplaceBaseline(&domain.MCPManifestBaseline{
-			MCPServerID: serverID, ManifestHash: hash, ToolCount: tools,
-			ResourceCount: res, PromptCount: prm, CapturedFrom: domain.ManifestSourceAttestation,
-		}, observedEntries)
-	}
-
 	// Diff observed tool names against the baseline's tool names (only tool-type entries are attested).
-	baselineTools := make(map[string]domain.ManifestEntry)
-	var carried []domain.ManifestEntry // non-tool entries preserved across an attestation baseline move
+	baselineTools := make(map[string]struct{})
 	for _, e := range prevEntries {
 		if e.Type == domain.MCPCapabilityTypeTool {
-			baselineTools[e.Name] = e
-		} else {
-			carried = append(carried, e)
+			baselineTools[e.Name] = struct{}{}
 		}
 	}
 
-	var added, removed []string
+	added := make([]string, 0)
+	removed := make([]string, 0)
 	for name := range observedSet {
 		if _, ok := baselineTools[name]; !ok {
 			added = append(added, "tool:"+name)
@@ -148,26 +174,30 @@ func (s *MCPManifestService) RecomputeFromAttestation(ctx context.Context, serve
 		return nil, nil
 	}
 	if !consensusMet {
-		// Unconfirmed divergence from a single agent is not recorded as server drift.
+		// Unconfirmed divergence from a sub-threshold agent set is not recorded as server drift.
 		return nil, nil
 	}
 
-	// Consensus-confirmed: record drift and advance the baseline. Carry forward known tools' schema
-	// hashes so a later well-known capture can still detect a schema change on a surviving tool.
-	newEntries := append([]domain.ManifestEntry{}, carried...)
-	for name := range observedSet {
-		if prev, ok := baselineTools[name]; ok {
-			newEntries = append(newEntries, prev)
-		} else {
-			newEntries = append(newEntries, domain.ManifestEntry{Type: domain.MCPCapabilityTypeTool, Name: name})
-		}
+	// Hash of what the agents observed, used both as the drift's NewHash (the baseline's hash is the
+	// unchanged PrevHash) and as the dedup key.
+	observedHash, _, _, _ := domain.HashManifestEntries(observedEntries)
+
+	// Dedup: if this exact observed divergence is already recorded and unacknowledged, do not record it
+	// again. Without this, every attestation carrying the same divergence would add a duplicate row,
+	// because the baseline (correctly) never moves to absorb it. Exact existence check, so a repeat is
+	// suppressed regardless of how many other drift rows accumulated in between.
+	dup, err := s.manifestRepo.HasUnacknowledgedDriftWithHash(serverID, domain.ManifestSourceAttestation, observedHash)
+	if err != nil {
+		return nil, err
 	}
-	newHash, tools, res, prm := domain.HashManifestEntries(newEntries)
+	if dup {
+		return nil, nil
+	}
 
 	drift := &domain.MCPManifestDrift{
 		MCPServerID:  serverID,
 		PrevHash:     baseline.ManifestHash,
-		NewHash:      newHash,
+		NewHash:      observedHash,
 		AddedTools:   sortedStrings(added),
 		RemovedTools: sortedStrings(removed),
 		ChangedTools: []string{},
@@ -175,12 +205,6 @@ func (s *MCPManifestService) RecomputeFromAttestation(ctx context.Context, serve
 		Source:       domain.ManifestSourceAttestation,
 	}
 	if err := s.manifestRepo.InsertDrift(drift); err != nil {
-		return nil, err
-	}
-	if err := s.manifestRepo.ReplaceBaseline(&domain.MCPManifestBaseline{
-		MCPServerID: serverID, ManifestHash: newHash, ToolCount: tools,
-		ResourceCount: res, PromptCount: prm, CapturedFrom: domain.ManifestSourceAttestation,
-	}, newEntries); err != nil {
 		return nil, err
 	}
 	return drift, nil
