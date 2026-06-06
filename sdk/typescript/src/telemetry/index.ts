@@ -62,3 +62,16 @@ export type {
   IntentEvent,
   DetectionEvent,
 } from './joiner';
+
+export {
+  MATRIX_SNAPSHOT_VERSION,
+  TECHNIQUE_ID_RE,
+  KNOWN_TECHNIQUE_IDS,
+  INTERIM_ATTACK_CLASS_MAP,
+  isValidTechniqueId,
+  isTechniqueIdFormat,
+  mapAttackClass,
+  interimTechniqueFields,
+} from './technique-mapping';
+
+export type { InterimMappingEntry } from './technique-mapping';
