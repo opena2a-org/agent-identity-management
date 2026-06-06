@@ -65,4 +65,14 @@ describe('default sink defers the disk write', () => {
     vi.runAllTimers();
     expect(writeCorrelatedRecord).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards the configured dataDir to the writer (so it matches the relay)', () => {
+    const joiner = new CorrelationJoiner({ windowMs: 60_000, dataDir: '/custom/telemetry/dir' });
+    feedFullRecord(joiner);
+    vi.runAllTimers();
+    expect(writeCorrelatedRecord).toHaveBeenCalledTimes(1);
+    expect((writeCorrelatedRecord as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1]).toBe(
+      '/custom/telemetry/dir'
+    );
+  });
 });

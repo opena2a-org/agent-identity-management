@@ -35,6 +35,7 @@ import {
   CorrelatedRelay,
   correlationHeaders,
   mintCorrelationId,
+  openA2AHome,
   type EnforcementInput,
   type RelayConfig,
 } from '../telemetry';
@@ -84,6 +85,9 @@ export class AIMClient {
   // Stage-2 opt-in: upload anonymized indicators to the Registry.
   private readonly relayConfig: RelayConfig | null;
   private ownRelay: CorrelatedRelay | undefined;
+  // Single resolved telemetry dir shared by the auto-joiner sink and the relay,
+  // so the relay always reads exactly where the joiner writes.
+  private readonly telemetryDir: string;
 
   constructor(config: AIMClientConfig = {}) {
     this.config = {
@@ -102,6 +106,9 @@ export class AIMClient {
     this.enforcementSource = telemetry.enforcementSource ?? DEFAULT_ENFORCEMENT_SOURCE;
     this.suppliedJoiner = telemetry.joiner ?? null;
     this.relayConfig = telemetry.relay ?? null;
+    // Resolve once: a relay.dataDir override (else ~/.opena2a) is the single
+    // location both the auto-joiner sink and the relay use.
+    this.telemetryDir = this.relayConfig?.dataDir ?? openA2AHome();
 
     // Try to load credentials from environment
     this.credentials = loadCredentialsFromEnv();
@@ -408,7 +415,9 @@ export class AIMClient {
     this.ensureRelay();
     if (this.suppliedJoiner) return this.suppliedJoiner;
     if (!this.ownJoiner) {
-      this.ownJoiner = new CorrelationJoiner();
+      // Write to the same dir the relay reads, so an enabled relay actually
+      // finds the records this joiner produces.
+      this.ownJoiner = new CorrelationJoiner({ dataDir: this.telemetryDir });
       this.ownJoiner.start();
     }
     return this.ownJoiner;
@@ -422,7 +431,8 @@ export class AIMClient {
   private ensureRelay(): void {
     if (!this.telemetryEnabled || this.relayConfig?.enabled !== true) return;
     if (this.ownRelay) return;
-    this.ownRelay = new CorrelatedRelay(this.relayConfig);
+    // Pin the relay to the same resolved dir as the auto-joiner sink.
+    this.ownRelay = new CorrelatedRelay({ ...this.relayConfig, dataDir: this.telemetryDir });
     this.ownRelay.start();
   }
 
