@@ -222,5 +222,43 @@ export {
   type AuditLogOptions,
 } from './secrets';
 
+// Causal-denial telemetry (correlate why a blocked action happened; off the
+// enforcement critical path, best-effort)
+export {
+  CORRELATION_HEADER,
+  CORRELATION_BAGGAGE_KEY,
+  mintCorrelationId,
+  isCorrelationId,
+  correlationHeaders,
+  extractCorrelationId,
+  TELEMETRY_SCHEMA_VERSION,
+  buildCorrelatedRecord,
+  assertObservedInvariant,
+  toSharedIndicator,
+  defaultDataDir,
+  writeCorrelatedRecord,
+  readCorrelatedRecords,
+  CorrelationJoiner,
+  isHighConfidence,
+  isValidTechniqueId,
+  isTechniqueIdFormat,
+  mapAttackClass,
+  interimTechniqueFields,
+  MATRIX_SNAPSHOT_VERSION,
+  type CorrelatedRecord,
+  type SharedIndicator,
+  type EnforcementFact,
+  type IntentInference,
+  type DetectionInference,
+  type BuildCorrelatedRecordInput,
+  type SharedIndicatorContext,
+  type TechniqueSource,
+  type Completeness,
+  type JoinerOptions,
+  type EnforcementEvent,
+  type IntentEvent,
+  type DetectionEvent,
+} from './telemetry';
+
 // Version
 export const VERSION = '1.0.0';

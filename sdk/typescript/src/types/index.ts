@@ -2,6 +2,8 @@
  * AIM SDK Type Definitions
  */
 
+import type { CorrelationJoiner, IntentInput, DetectionInput } from '../telemetry';
+
 /**
  * Agent types supported by AIM
  */
@@ -75,6 +77,28 @@ export interface AIMClientConfig {
   debug?: boolean;
   /** Custom headers to include in requests */
   headers?: Record<string, string>;
+  /** Causal-denial telemetry (opt-in, best-effort, off the enforcement path). */
+  telemetry?: TelemetryConfig;
+}
+
+/**
+ * Causal-denial telemetry configuration.
+ *
+ * Opt-in and best-effort: when disabled (the default) no correlation ID is
+ * minted, no `x-opena2a-correlation-id` header is attached, and no record is
+ * written. A telemetry failure never affects an action verification's result.
+ */
+export interface TelemetryConfig {
+  /** Master switch. When false/absent, telemetry is fully inert. */
+  enabled?: boolean;
+  /**
+   * Supply a joiner to control its lifecycle and sink. When omitted, the client
+   * lazily creates one (writing to the local correlated-events log) and manages
+   * an unref'd flush timer that does not keep the process alive.
+   */
+  joiner?: CorrelationJoiner;
+  /** Stamped onto the enforcement fact's `source`. Default 'aim-pdp'. */
+  enforcementSource?: string;
 }
 
 /**
@@ -161,6 +185,18 @@ export interface VerifyActionOptions {
   context?: Record<string, unknown>;
   /** Risk level override */
   riskLevel?: RiskLevel;
+  /**
+   * Optional causal-denial telemetry inputs for this action. The future
+   * ARP/Guard runtime module populates these (classified intent + injection
+   * detection) so the joiner can assemble a full correlated record; until then
+   * callers may supply them directly. Ignored unless telemetry is enabled.
+   */
+  telemetry?: {
+    /** Classified intent inference from the NanoMind intent daemon. */
+    intent?: IntentInput;
+    /** Injection-cause inference from NanoMind-Guard. */
+    detection?: DetectionInput;
+  };
 }
 
 /**

@@ -30,9 +30,16 @@ import {
   type IsolationAttestationResult,
 } from '../isolation/index';
 import type { SecretsClient } from '../secrets';
+import {
+  CorrelationJoiner,
+  correlationHeaders,
+  mintCorrelationId,
+  type EnforcementInput,
+} from '../telemetry';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_ENFORCEMENT_SOURCE = 'aim-pdp';
 
 /**
  * AIM Client for agent identity verification
@@ -67,6 +74,12 @@ export class AIMClient {
   private agent: Agent | null = null;
   private _secrets: SecretsClient | null = null;
 
+  // Causal-denial telemetry — opt-in, best-effort, off the enforcement path.
+  private readonly telemetryEnabled: boolean;
+  private readonly enforcementSource: string;
+  private readonly suppliedJoiner: CorrelationJoiner | null;
+  private ownJoiner: CorrelationJoiner | undefined;
+
   constructor(config: AIMClientConfig = {}) {
     this.config = {
       baseUrl: config.baseUrl ?? process.env.AIM_BASE_URL ?? DEFAULT_BASE_URL,
@@ -76,7 +89,13 @@ export class AIMClient {
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       debug: config.debug ?? process.env.AIM_DEBUG === 'true',
       headers: config.headers ?? {},
+      telemetry: config.telemetry ?? {},
     };
+
+    const telemetry = this.config.telemetry;
+    this.telemetryEnabled = telemetry.enabled === true;
+    this.enforcementSource = telemetry.enforcementSource ?? DEFAULT_ENFORCEMENT_SOURCE;
+    this.suppliedJoiner = telemetry.joiner ?? null;
 
     // Try to load credentials from environment
     this.credentials = loadCredentialsFromEnv();
@@ -119,13 +138,17 @@ export class AIMClient {
     method: string,
     path: string,
     body?: unknown,
-    useApiKey = false
+    useApiKey = false,
+    extraHeaders?: Record<string, string>
   ): Promise<T> {
     const url = `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': 'AIM-SDK-TypeScript/1.0.0',
       ...this.config.headers,
+      // Best-effort, non-auth extras (e.g. the correlation ID). Listed before
+      // auth/signature headers below so they can never override them.
+      ...extraHeaders,
     };
 
     // Add authentication
@@ -304,7 +327,23 @@ export class AIMClient {
 
     this.log('Verifying action:', options.action);
 
-    const result = await this.request<VerificationResult>('POST', '/api/v1/verify', payload);
+    // Mint the correlation ID at the earliest ingestion point and propagate it
+    // best-effort. Minting/headers are skipped entirely when telemetry is off.
+    const correlationId = this.telemetryEnabled ? mintCorrelationId() : undefined;
+
+    const result = await this.request<VerificationResult>(
+      'POST',
+      '/api/v1/verify',
+      payload,
+      false,
+      correlationHeaders(correlationId)
+    );
+
+    // Record the enforcement outcome (allow OR deny) BEFORE the deny throw, so
+    // the causal-denial case is captured. Never affects the result below.
+    if (correlationId) {
+      this.recordVerificationTelemetry(correlationId, options, result);
+    }
 
     if (!result.actionAllowed) {
       throw new ActionDeniedError(
@@ -315,6 +354,67 @@ export class AIMClient {
     }
 
     return result;
+  }
+
+  /**
+   * Feed the enforcement outcome (and any supplied intent/detection) into the
+   * correlation joiner. Fully best-effort: a missing joiner, missing agent, or
+   * any thrown error is swallowed so action verification is never affected.
+   */
+  private recordVerificationTelemetry(
+    correlationId: string,
+    options: VerifyActionOptions,
+    result: VerificationResult
+  ): void {
+    try {
+      const joiner = this.getJoiner();
+      const agentId = this.credentials?.agentId;
+      if (!joiner || !agentId) return;
+
+      const enforcement: EnforcementInput = {
+        decision: result.actionAllowed ? 'allow' : 'deny',
+        outcome: result.actionAllowed ? 'ALLOW' : 'DENY',
+        deniedReason: result.actionAllowed ? undefined : result.denialReason,
+        capability: options.action,
+        resource: options.resource ?? '',
+        occurredAt: result.timestamp ?? new Date().toISOString(),
+        traceId: result.eventId ?? null,
+        source: this.enforcementSource,
+      };
+      joiner.ingestEnforcement({ correlationId, agentId, enforcement });
+
+      const tele = options.telemetry;
+      if (tele?.intent) joiner.ingestIntent({ correlationId, intent: tele.intent });
+      if (tele?.detection) joiner.ingestDetection({ correlationId, detection: tele.detection });
+    } catch (error) {
+      this.log('telemetry error (ignored):', error);
+    }
+  }
+
+  /**
+   * Resolve the joiner: a caller-supplied one wins; otherwise lazily create and
+   * start an internally managed joiner with an unref'd flush timer. Returns null
+   * when telemetry is disabled.
+   */
+  private getJoiner(): CorrelationJoiner | null {
+    if (!this.telemetryEnabled) return null;
+    if (this.suppliedJoiner) return this.suppliedJoiner;
+    if (!this.ownJoiner) {
+      this.ownJoiner = new CorrelationJoiner();
+      this.ownJoiner.start();
+    }
+    return this.ownJoiner;
+  }
+
+  /**
+   * Stop the internally managed telemetry joiner timer, if one was created.
+   * A caller-supplied joiner is left untouched (the caller owns its lifecycle).
+   */
+  closeTelemetry(): void {
+    if (this.ownJoiner) {
+      this.ownJoiner.stop();
+      this.ownJoiner = undefined;
+    }
   }
 
   /**
