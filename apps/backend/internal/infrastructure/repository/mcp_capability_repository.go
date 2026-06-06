@@ -614,3 +614,58 @@ func (r *MCPServerCapabilityRepository) UpsertFromAttestation(serverID uuid.UUID
 
 	return nil
 }
+
+// ReplaceActiveCapabilities reconciles a server's stored capabilities to exactly the freshly-fetched
+// set (e.g. from /.well-known) in a single transaction: every currently-active capability is first
+// deactivated, then each fetched capability is upserted as active with its current schema. The net
+// effect is that capabilities absent from the new set become is_active=false (a removal), capabilities
+// with a changed schema have capability_schema updated (a change), and new ones are inserted (an
+// addition). This is what lets manifest drift detect removals and schema reshapes — a plain per-row
+// INSERT (Create) leaves stale rows active forever, so removed/changed tools would be invisible.
+//
+// Soft-deactivation (not delete) preserves history and matches the mcp_servers.capabilities cache
+// trigger, which recomputes from is_active=true rows.
+func (r *MCPServerCapabilityRepository) ReplaceActiveCapabilities(serverID uuid.UUID, capabilities []*domain.MCPServerCapability) error {
+	now := time.Now().UTC()
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin capability reconcile tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Mark all current capabilities stale. Any still present in the fetched set is reactivated below;
+	//    whatever remains deactivated is a genuine removal.
+	if _, err := tx.Exec(
+		`UPDATE mcp_server_capabilities SET is_active = false, updated_at = $2
+		 WHERE mcp_server_id = $1 AND is_active = true`, serverID, now,
+	); err != nil {
+		return fmt.Errorf("failed to deactivate stale capabilities: %w", err)
+	}
+
+	// 2. Upsert each fetched capability as active, refreshing schema/description on conflict so a
+	//    reshaped tool's capability_schema (and thus its manifest schema hash) actually changes.
+	for _, c := range capabilities {
+		if c == nil {
+			continue
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO mcp_server_capabilities (
+				id, mcp_server_id, name, capability_type, description,
+				capability_schema, detected_at, last_verified_at, is_active, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
+			ON CONFLICT (mcp_server_id, name, capability_type) DO UPDATE SET
+				description = EXCLUDED.description,
+				capability_schema = EXCLUDED.capability_schema,
+				last_verified_at = EXCLUDED.last_verified_at,
+				is_active = true,
+				updated_at = EXCLUDED.updated_at`,
+			uuid.New(), serverID, c.Name, c.CapabilityType, c.Description,
+			c.CapabilitySchema, now, now, now, now,
+		); err != nil {
+			return fmt.Errorf("failed to upsert capability %s: %w", c.Name, err)
+		}
+	}
+
+	return tx.Commit()
+}

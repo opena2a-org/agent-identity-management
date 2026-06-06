@@ -77,6 +77,10 @@ secure = register_agent
 
 from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError, ConfigurationError, StaleCredentialsError
 from .secrets import SecretsClient, SecretsError
+# AAP grant client — PROVISIONAL (experimental). The Agent Authorization Protocol
+# is at spec v0.1; this surface (and the broker wire format it talks to) may change
+# in a future minor release without a major bump. Opt-in only: existing behavior is
+# unchanged unless you pass `grant=` to @perform_action.
 from .grant_client import (
     BrokerClient,
     GrantSession,
