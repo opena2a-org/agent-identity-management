@@ -24,7 +24,7 @@
  * and best-effort: a failure is swallowed and never affects verifyAction.
  */
 import { createHash, randomBytes } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync } from 'fs';
 import { hostname, userInfo, homedir } from 'os';
 import { join } from 'path';
 import {
@@ -115,6 +115,46 @@ export function openA2AHome(): string {
 }
 
 /**
+ * Read the persisted salt, or create a fresh owner-only one. The salt's
+ * confidentiality is what anonymizes the sensor token (host+user are
+ * low-entropy), so an EXISTING salt is reused only when it is a regular file,
+ * owned by us, with no group/other permission bits. A pre-created
+ * world-readable or wrong-owner salt is NOT trusted: it is overwritten with a
+ * fresh 0600 salt, closing the "attacker pre-creates a readable salt to
+ * de-anonymize the sensor token" vector. Permission checks apply on POSIX only
+ * (mode bits are not meaningful on Windows, where ACLs govern access).
+ */
+function loadOrCreateSalt(dataDir: string): string {
+  const saltPath = join(dataDir, 'gtin-sensor-salt');
+  const isPosix = typeof process.getuid === 'function';
+  if (existsSync(saltPath)) {
+    try {
+      const st = statSync(saltPath);
+      const ownerOnly = !isPosix || (st.mode & 0o077) === 0;
+      const sameOwner = !isPosix || st.uid === process.getuid!();
+      if (st.isFile() && ownerOnly && sameOwner) {
+        const existing = readFileSync(saltPath, 'utf-8').trim();
+        if (existing) return existing;
+      }
+      // Untrusted (loose perms, wrong owner, not a file, or empty) — replace it.
+    } catch {
+      // fall through to (re)create
+    }
+  }
+  const salt = randomBytes(32).toString('hex');
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(saltPath, salt, { mode: 0o600 });
+  // Tighten perms even if the file pre-existed with looser bits (writeFileSync
+  // does not chmod an existing file). Best-effort on platforms without chmod.
+  try {
+    chmodSync(saltPath, 0o600);
+  } catch {
+    /* best-effort */
+  }
+  return salt;
+}
+
+/**
  * Stable per-device sensor token: sha256(hostname + username + persisted salt).
  * Uses the SAME salt file as hackmyagent's GTIN module so one device maps to one
  * anonymous sensor identity across tools. Best-effort; falls back to an ephemeral
@@ -123,14 +163,7 @@ export function openA2AHome(): string {
 export function deriveSensorToken(dataDir: string = openA2AHome()): string {
   let salt: string;
   try {
-    const saltPath = join(dataDir, 'gtin-sensor-salt');
-    if (existsSync(saltPath)) {
-      salt = readFileSync(saltPath, 'utf-8').trim();
-    } else {
-      salt = randomBytes(32).toString('hex');
-      mkdirSync(dataDir, { recursive: true });
-      writeFileSync(saltPath, salt, { mode: 0o600 });
-    }
+    salt = loadOrCreateSalt(dataDir);
   } catch {
     // Cannot persist a salt — use an ephemeral one. Still anonymous; just not
     // stable across process restarts.
@@ -154,7 +187,12 @@ export function deriveSensorToken(dataDir: string = openA2AHome()): string {
 
 /** Detect the runtime environment for the shared indicator. */
 export function detectRuntimeEnv(): 'node' | 'python' | 'deno' {
-  if (typeof (globalThis as Record<string, unknown>).Deno !== 'undefined') return 'deno';
+  try {
+    if (typeof (globalThis as Record<string, unknown>).Deno !== 'undefined') return 'deno';
+  } catch {
+    // A hostile globalThis accessor (e.g. a throwing Proxy trap) must not abort
+    // the flush — default to node.
+  }
   return 'node';
 }
 
@@ -405,6 +443,13 @@ export class CorrelatedRelay {
     }
   }
 
+  // Cursor persistence assumes a SINGLE relay process per dataDir (the common
+  // case: one SDK instance per agent process). It is not file-locked: two
+  // processes sharing a dataDir can race and re-send overlapping batches. That
+  // only produces duplicate count-only indicators on the public endpoint —
+  // acceptable for best-effort anonymized telemetry — and never corrupts a
+  // record or leaks data. Locking is intentionally omitted to avoid a native
+  // dependency for a count-only relay.
   private cursorPath(): string {
     return join(this.dataDir, CURSOR_FILE);
   }

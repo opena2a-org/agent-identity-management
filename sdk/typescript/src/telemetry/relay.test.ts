@@ -8,7 +8,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CorrelatedRelay, SENTINEL_PACKAGE_NAME, RELAY_EVENT_TYPE } from './relay';
+import * as crypto from 'crypto';
+import { CorrelatedRelay, SENTINEL_PACKAGE_NAME, RELAY_EVENT_TYPE, deriveSensorToken } from './relay';
 import { writeCorrelatedRecord } from './local-writer';
 import { buildCorrelatedRecord, type CorrelatedRecord } from './correlated-record';
 
@@ -298,5 +299,42 @@ describe('CorrelatedRelay', () => {
       relay.start();
       relay.stop();
     }).not.toThrow();
+  });
+
+  describe('sensor-token salt hardening', () => {
+    const posix = typeof process.getuid === 'function';
+
+    it('reuses an existing owner-only salt (stable token)', () => {
+      const dir = freshDir();
+      const t1 = deriveSensorToken(dir);
+      const t2 = deriveSensorToken(dir);
+      expect(t1).toBe(t2);
+      expect(t1).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    (posix ? it : it.skip)('regenerates a pre-created world-readable salt as 0600', () => {
+      const dir = freshDir();
+      fs.mkdirSync(dir, { recursive: true });
+      const saltPath = path.join(dir, 'gtin-sensor-salt');
+      // Attacker pre-creates a known, world-readable salt.
+      fs.writeFileSync(saltPath, 'attacker-known-salt', { mode: 0o644 });
+      fs.chmodSync(saltPath, 0o644);
+      expect(fs.statSync(saltPath).mode & 0o077).not.toBe(0);
+
+      const token = deriveSensorToken(dir);
+
+      // The untrusted salt was replaced with a fresh owner-only one.
+      expect(fs.statSync(saltPath).mode & 0o077).toBe(0);
+      const newSalt = fs.readFileSync(saltPath, 'utf-8').trim();
+      expect(newSalt).not.toBe('attacker-known-salt');
+
+      // The token derives from the regenerated salt, NOT the attacker-known one,
+      // so a pre-created salt cannot be used to de-anonymize the sensor token.
+      const attackerToken = crypto
+        .createHash('sha256')
+        .update(`${os.hostname()}|${os.userInfo().username}|attacker-known-salt`)
+        .digest('hex');
+      expect(token).not.toBe(attackerToken);
+    });
   });
 });
