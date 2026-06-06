@@ -26,7 +26,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync } from 'fs';
 import { hostname, userInfo, homedir } from 'os';
-import { join } from 'path';
+import { join, isAbsolute, resolve } from 'path';
 import {
   toSharedIndicator,
   TELEMETRY_SCHEMA_VERSION,
@@ -109,9 +109,19 @@ export interface FlushResult {
   stoppedOnError: boolean;
 }
 
-/** Resolve the OpenA2A home dir (OPENA2A_HOME override, else ~/.opena2a). */
+/**
+ * Resolve the OpenA2A home dir. An operator may override it with OPENA2A_HOME,
+ * but only an ABSOLUTE path is honored, and it is canonicalized with resolve()
+ * so a value like `/a/../b` collapses to its real location (no unresolved `..`
+ * segments). A relative or empty value is ignored in favor of ~/.opena2a rather
+ * than creating files relative to the current working directory.
+ */
 export function openA2AHome(): string {
-  return process.env.OPENA2A_HOME || join(homedir(), '.opena2a');
+  const configured = process.env.OPENA2A_HOME;
+  if (configured && isAbsolute(configured)) {
+    return resolve(configured);
+  }
+  return join(homedir(), '.opena2a');
 }
 
 /**

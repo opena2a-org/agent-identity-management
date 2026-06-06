@@ -9,7 +9,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { CorrelatedRelay, SENTINEL_PACKAGE_NAME, RELAY_EVENT_TYPE, deriveSensorToken } from './relay';
+import {
+  CorrelatedRelay,
+  SENTINEL_PACKAGE_NAME,
+  RELAY_EVENT_TYPE,
+  deriveSensorToken,
+  openA2AHome,
+} from './relay';
 import { writeCorrelatedRecord } from './local-writer';
 import { buildCorrelatedRecord, type CorrelatedRecord } from './correlated-record';
 
@@ -299,6 +305,24 @@ describe('CorrelatedRelay', () => {
       relay.start();
       relay.stop();
     }).not.toThrow();
+  });
+
+  describe('openA2AHome resolution', () => {
+    const saved = process.env.OPENA2A_HOME;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.OPENA2A_HOME;
+      else process.env.OPENA2A_HOME = saved;
+    });
+
+    it('honors and canonicalizes an absolute OPENA2A_HOME', () => {
+      process.env.OPENA2A_HOME = '/tmp/opena2a-home/../opena2a-home2';
+      expect(openA2AHome()).toBe(path.resolve('/tmp/opena2a-home2'));
+    });
+
+    it('ignores a relative OPENA2A_HOME in favor of the home default', () => {
+      process.env.OPENA2A_HOME = 'relative/evil';
+      expect(openA2AHome()).toBe(path.join(os.homedir(), '.opena2a'));
+    });
   });
 
   describe('sensor-token salt hardening', () => {
