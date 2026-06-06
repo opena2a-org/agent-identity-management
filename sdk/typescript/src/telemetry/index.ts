@@ -40,6 +40,12 @@ export type {
   SharedIndicatorContext,
 } from './correlated-record';
 
+export type {
+  EnforcementInput,
+  IntentInput,
+  DetectionInput,
+} from './correlated-record';
+
 export {
   defaultDataDir,
   writeCorrelatedRecord,
@@ -47,3 +53,12 @@ export {
 } from './local-writer';
 
 export type { ReadOptions } from './local-writer';
+
+export { CorrelationJoiner, isHighConfidence } from './joiner';
+
+export type {
+  JoinerOptions,
+  EnforcementEvent,
+  IntentEvent,
+  DetectionEvent,
+} from './joiner';

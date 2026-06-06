@@ -238,6 +238,8 @@ export {
   defaultDataDir,
   writeCorrelatedRecord,
   readCorrelatedRecords,
+  CorrelationJoiner,
+  isHighConfidence,
   type CorrelatedRecord,
   type SharedIndicator,
   type EnforcementFact,
@@ -247,6 +249,10 @@ export {
   type SharedIndicatorContext,
   type TechniqueSource,
   type Completeness,
+  type JoinerOptions,
+  type EnforcementEvent,
+  type IntentEvent,
+  type DetectionEvent,
 } from './telemetry';
 
 // Version

@@ -119,9 +119,9 @@ export interface SharedIndicator {
 }
 
 /** Caller-supplied parts. `observed`/`attribution` are set by the builder. */
-type EnforcementInput = Omit<EnforcementFact, 'observed'>;
-type IntentInput = Omit<IntentInference, 'observed'>;
-type DetectionInput = Omit<DetectionInference, 'observed' | 'attribution'>;
+export type EnforcementInput = Omit<EnforcementFact, 'observed'>;
+export type IntentInput = Omit<IntentInference, 'observed'>;
+export type DetectionInput = Omit<DetectionInference, 'observed' | 'attribution'>;
 
 export interface BuildCorrelatedRecordInput {
   correlationId: string;
