@@ -26,6 +26,25 @@ import {
 import { writeCorrelatedRecord } from './local-writer';
 
 const DEFAULT_WINDOW_MS = 5000;
+// Hard cap on buffered correlation IDs. Without it, a flood of IDs arriving
+// faster than the flush interval clears them grows the Map unboundedly (memory
+// exhaustion). At the cap, the oldest buffer is evicted to admit the new one.
+const DEFAULT_MAX_BUFFERS = 10_000;
+
+/**
+ * Defer a synchronous disk write off the caller's stack. The default sink runs
+ * on the verifyAction path when a full record assembles inline; deferring keeps
+ * fs.appendFileSync latency off that path. Falls back to setTimeout where
+ * setImmediate is unavailable (non-Node runtimes).
+ */
+const deferWrite: (record: CorrelatedRecord) => void =
+  typeof setImmediate === 'function'
+    ? (record) => {
+        setImmediate(() => void writeCorrelatedRecord(record));
+      }
+    : (record) => {
+        setTimeout(() => void writeCorrelatedRecord(record), 0);
+      };
 
 export interface EnforcementEvent {
   correlationId: string;
@@ -46,10 +65,12 @@ export interface JoinerOptions {
   windowMs?: number;
   /** Clock source (ms). Default Date.now. Injected for deterministic tests. */
   now?: () => number;
-  /** Sink for assembled records. Default: append to the local log. */
+  /** Sink for assembled records. Default: append to the local log (deferred). */
   onRecord?: (record: CorrelatedRecord) => void;
   /** Stamped into assembly.joinerVersion. */
   joinerVersion?: string;
+  /** Max buffered correlation IDs before oldest-eviction. Default 10000. */
+  maxBuffers?: number;
 }
 
 interface Buffer {
@@ -69,17 +90,21 @@ export class CorrelationJoiner {
   private readonly now: () => number;
   private readonly onRecord: (record: CorrelatedRecord) => void;
   private readonly joinerVersion: string;
+  private readonly maxBuffers: number;
   private readonly buffers = new Map<string, Buffer>();
   private timer: ReturnType<typeof setInterval> | undefined;
 
   /** Count of part-sets dropped for never receiving an enforcement fact. */
   public droppedOrphans = 0;
+  /** Count of buffers evicted because the maxBuffers cap was reached. */
+  public droppedOverflow = 0;
 
   constructor(options: JoinerOptions = {}) {
     this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
     this.now = options.now ?? Date.now;
-    this.onRecord = options.onRecord ?? ((r) => void writeCorrelatedRecord(r));
+    this.onRecord = options.onRecord ?? deferWrite;
     this.joinerVersion = options.joinerVersion ?? TELEMETRY_SCHEMA_VERSION;
+    this.maxBuffers = options.maxBuffers && options.maxBuffers > 0 ? options.maxBuffers : DEFAULT_MAX_BUFFERS;
   }
 
   /** Number of correlation IDs currently buffered. */
@@ -140,6 +165,16 @@ export class CorrelationJoiner {
   private bufferFor(correlationId: string): Buffer {
     let buf = this.buffers.get(correlationId);
     if (!buf) {
+      // Enforce the hard cap before admitting a new ID. Map preserves insertion
+      // order and firstSeenMs is stamped at insertion, so the first entry is the
+      // oldest — evict it (oldest-eviction).
+      if (this.buffers.size >= this.maxBuffers) {
+        const oldest = this.buffers.keys().next().value;
+        if (oldest !== undefined) {
+          this.buffers.delete(oldest);
+          this.droppedOverflow++;
+        }
+      }
       buf = { firstSeenMs: this.now() };
       this.buffers.set(correlationId, buf);
     }
