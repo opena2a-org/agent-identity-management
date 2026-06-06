@@ -104,6 +104,83 @@ fastify.post('/api/data', {
 });
 ```
 
+## Causal-Denial Telemetry (opt-in)
+
+The SDK can correlate *why* a blocked agent action happened by joining three
+signals around one verified action: the authorization outcome (an observed
+fact), the classified intent, and the injection cause (both inferences). The
+full **correlated record** is authoritative and stays on the machine; only an
+anonymized **shared indicator** is ever uploaded.
+
+Telemetry is **off by default** and gated by two independent opt-ins:
+
+1. **Capture** (`telemetry.enabled`) — mints a correlation ID per `verifyAction`,
+   assembles records, and appends them to a local log at
+   `~/.opena2a/correlated-events.jsonl`. Nothing leaves the machine.
+2. **Share** (`telemetry.relay.enabled`) — a best-effort relay reduces local
+   records to anonymized indicators and uploads only `denied_injection_attempt`
+   events to the public, count-only Registry endpoint
+   (`POST /api/v1/telemetry/runtime`).
+
+   The shared indicator carries **no** payloads, paths, credentials,
+   resource/capability names, correlation ID, agent ID, or denial reason text.
+   It carries only: a validated Threat Matrix `techniqueId` (`T-NNNN`, dropped
+   if malformed) and its source, a detection confidence, the coarse enforcement
+   outcome (`deny`/`allow`), the integrator's self-declared `packageName`/
+   `agentCategory`, `daySinceInstall`, `runtimeEnv`, `triggeredAt`, and a
+   `sensorToken` — a stable per-device pseudonym (`sha256(host+user+local salt)`)
+   that lets the Registry de-duplicate without identifying you.
+
+```typescript
+const client = new AIMClient({
+  baseUrl: 'https://aim.example.com',
+  apiKey: process.env.AIM_API_KEY,
+  telemetry: {
+    enabled: true,                 // stage 1: capture records locally
+    relay: {
+      enabled: true,               // stage 2: upload anonymized indicators
+      packageName: 'acme/support-agent', // your app's public sensor label
+      packageVersion: '2.1.0',
+      // registryUrl defaults to https://api.oa2a.org
+      // intervalMs defaults to 60000, batchSize to 50
+    },
+  },
+});
+
+// Per-action inputs (populated by the runtime-protection module, or supplied
+// directly). Ignored unless telemetry is enabled.
+await client.verifyAction({
+  action: 'file:read',
+  resource: '/data/sensitive.json',
+  telemetry: {
+    intent: { intentClass: 'exfiltration', confidence: 0.7, blocked: true, source: 'nanomind-intent' },
+    detection: {
+      injectionDetected: true,
+      techniqueId: 'T-2002',
+      techniqueSource: 'interim-mapping',
+      confidence: 0.84,
+      detector: 'nanomind-guard',
+      detectedAt: new Date().toISOString(),
+    },
+  },
+});
+
+// Stop the internally managed flush timers when shutting down.
+client.closeTelemetry();
+```
+
+**Guarantees.** Telemetry runs off the enforcement path and is best-effort: a
+capture, join, or upload failure is swallowed and never changes an action's
+verification result. When both opt-ins are off, no correlation ID is minted, no
+header is attached, and nothing is written or sent.
+
+`TelemetryConfig` fields: `enabled` (capture switch), `enforcementSource`
+(stamped on the enforcement fact, default `aim-pdp`), `joiner` (supply your own
+to control the sink/lifecycle), and `relay` (`RelayConfig`: `enabled`,
+`registryUrl`, `packageName`, `packageVersion`, `agentCategory`, `dataDir`,
+`batchSize`, `intervalMs`, `timeoutMs`). The `CorrelatedRelay` class is also
+exported for standalone use (e.g. draining the local log from a CLI).
+
 ## Configuration
 
 ### Environment Variables

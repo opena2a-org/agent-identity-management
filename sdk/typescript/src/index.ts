@@ -240,6 +240,15 @@ export {
   readCorrelatedRecords,
   CorrelationJoiner,
   isHighConfidence,
+  CorrelatedRelay,
+  DEFAULT_REGISTRY_URL,
+  RUNTIME_TELEMETRY_PATH,
+  RELAY_EVENT_TYPE,
+  SENTINEL_PACKAGE_NAME,
+  openA2AHome,
+  deriveSensorToken,
+  detectRuntimeEnv,
+  daysSinceInstall,
   isValidTechniqueId,
   isTechniqueIdFormat,
   mapAttackClass,
@@ -258,6 +267,8 @@ export {
   type EnforcementEvent,
   type IntentEvent,
   type DetectionEvent,
+  type RelayConfig,
+  type FlushResult,
 } from './telemetry';
 
 // Version

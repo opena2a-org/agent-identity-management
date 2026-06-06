@@ -2,7 +2,7 @@
  * AIM SDK Type Definitions
  */
 
-import type { CorrelationJoiner, IntentInput, DetectionInput } from '../telemetry';
+import type { CorrelationJoiner, IntentInput, DetectionInput, RelayConfig } from '../telemetry';
 
 /**
  * Agent types supported by AIM
@@ -99,6 +99,13 @@ export interface TelemetryConfig {
   joiner?: CorrelationJoiner;
   /** Stamped onto the enforcement fact's `source`. Default 'aim-pdp'. */
   enforcementSource?: string;
+  /**
+   * Stage-2 opt-in: ship anonymized indicators from the local log to the
+   * Registry. Inert unless BOTH `enabled` (above, capture) and `relay.enabled`
+   * (share) are true. Only anonymized `SharedIndicator`s leave the machine —
+   * never full correlated records. When omitted, nothing is uploaded.
+   */
+  relay?: RelayConfig;
 }
 
 /**

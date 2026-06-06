@@ -75,3 +75,17 @@ export {
 } from './technique-mapping';
 
 export type { InterimMappingEntry } from './technique-mapping';
+
+export {
+  CorrelatedRelay,
+  DEFAULT_REGISTRY_URL,
+  RUNTIME_TELEMETRY_PATH,
+  RELAY_EVENT_TYPE,
+  SENTINEL_PACKAGE_NAME,
+  openA2AHome,
+  deriveSensorToken,
+  detectRuntimeEnv,
+  daysSinceInstall,
+} from './relay';
+
+export type { RelayConfig, FlushResult } from './relay';

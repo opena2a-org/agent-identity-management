@@ -15,12 +15,17 @@ import {
   CorrelationJoiner,
   CORRELATION_HEADER,
   isCorrelationId,
+  buildCorrelatedRecord,
+  writeCorrelatedRecord,
   type CorrelatedRecord,
   type IntentInput,
   type DetectionInput,
 } from '../telemetry';
 import { generateKeyPair, toBase64 } from '../crypto/ed25519';
 import type { AgentCredentials, VerificationResult } from '../types';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -251,6 +256,110 @@ describe('AIMClient causal-denial telemetry', () => {
   describe('lifecycle', () => {
     it('closeTelemetry is safe with no internally managed joiner', () => {
       const client = new AIMClient({ telemetry: { enabled: true } });
+      expect(() => client.closeTelemetry()).not.toThrow();
+    });
+  });
+
+  describe('upload relay wiring (stage-2 opt-in)', () => {
+    const tmpDirs: string[] = [];
+    function relayDir(): string {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-aimclient-relay-'));
+      tmpDirs.push(dir);
+      // Seed one denied-injection record so the relay has something to ship.
+      writeCorrelatedRecord(
+        buildCorrelatedRecord({
+          correlationId: 'cde_000000000_aabbccddeeff',
+          agentId: 'agent-x',
+          enforcement: {
+            decision: 'deny',
+            outcome: 'DENY_INTENT',
+            capability: 'net:connect',
+            resource: 'https://evil.example',
+            occurredAt: '2026-06-06T00:00:00.000Z',
+            source: 'aim-pdp',
+          },
+          detection: {
+            injectionDetected: true,
+            techniqueId: 'T-2002',
+            techniqueSource: 'interim-mapping',
+            confidence: 0.84,
+            detector: 'nanomind-guard',
+            detectedAt: '2026-06-06T00:00:00.000Z',
+          },
+          intent: { intentClass: 'exfiltration', confidence: 0.7, blocked: true, source: 'nm-intent' },
+        }),
+        dir
+      );
+      return dir;
+    }
+    afterEach(() => {
+      for (const d of tmpDirs.splice(0)) {
+        try {
+          fs.rmSync(d, { recursive: true, force: true });
+        } catch {
+          /* best-effort */
+        }
+      }
+    });
+
+    it('starts the relay after a verifyAction when relay sharing is opted in', async () => {
+      const dir = relayDir();
+      const relayFetch = vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({ eventId: 'e1' }),
+        text: async () => '',
+      }));
+      const client = new AIMClient({
+        telemetry: {
+          enabled: true,
+          relay: {
+            enabled: true,
+            dataDir: dir,
+            intervalMs: 10,
+            fetchImpl: relayFetch as unknown as typeof fetch,
+          },
+        },
+      });
+      client.setCredentials(await realCredentials());
+      mockVerifyResponse({ actionAllowed: true });
+
+      await client.verifyAction({ action: 'db:read', resource: 'users' });
+      await vi.waitFor(() => expect(relayFetch).toHaveBeenCalled(), { timeout: 1000 });
+      client.closeTelemetry();
+    });
+
+    it('does NOT start the relay when only capture is enabled', async () => {
+      const dir = relayDir();
+      const relayFetch = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' }));
+      const client = new AIMClient({
+        telemetry: {
+          enabled: true,
+          relay: {
+            enabled: false, // stage-2 NOT opted in
+            dataDir: dir,
+            intervalMs: 10,
+            fetchImpl: relayFetch as unknown as typeof fetch,
+          },
+        },
+      });
+      client.setCredentials(await realCredentials());
+      mockVerifyResponse({ actionAllowed: true });
+
+      await client.verifyAction({ action: 'db:read', resource: 'users' });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(relayFetch).not.toHaveBeenCalled();
+      client.closeTelemetry();
+    });
+
+    it('closeTelemetry stops the relay safely', async () => {
+      const dir = relayDir();
+      const client = new AIMClient({
+        telemetry: { enabled: true, relay: { enabled: true, dataDir: dir, intervalMs: 10 } },
+      });
+      client.setCredentials(await realCredentials());
+      mockVerifyResponse({ actionAllowed: true });
+      await client.verifyAction({ action: 'db:read', resource: 'users' });
       expect(() => client.closeTelemetry()).not.toThrow();
     });
   });

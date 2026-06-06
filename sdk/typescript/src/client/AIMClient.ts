@@ -32,9 +32,11 @@ import {
 import type { SecretsClient } from '../secrets';
 import {
   CorrelationJoiner,
+  CorrelatedRelay,
   correlationHeaders,
   mintCorrelationId,
   type EnforcementInput,
+  type RelayConfig,
 } from '../telemetry';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
@@ -79,6 +81,9 @@ export class AIMClient {
   private readonly enforcementSource: string;
   private readonly suppliedJoiner: CorrelationJoiner | null;
   private ownJoiner: CorrelationJoiner | undefined;
+  // Stage-2 opt-in: upload anonymized indicators to the Registry.
+  private readonly relayConfig: RelayConfig | null;
+  private ownRelay: CorrelatedRelay | undefined;
 
   constructor(config: AIMClientConfig = {}) {
     this.config = {
@@ -96,6 +101,7 @@ export class AIMClient {
     this.telemetryEnabled = telemetry.enabled === true;
     this.enforcementSource = telemetry.enforcementSource ?? DEFAULT_ENFORCEMENT_SOURCE;
     this.suppliedJoiner = telemetry.joiner ?? null;
+    this.relayConfig = telemetry.relay ?? null;
 
     // Try to load credentials from environment
     this.credentials = loadCredentialsFromEnv();
@@ -398,6 +404,8 @@ export class AIMClient {
    */
   private getJoiner(): CorrelationJoiner | null {
     if (!this.telemetryEnabled) return null;
+    // Spin up the upload relay alongside the joiner when stage-2 sharing is on.
+    this.ensureRelay();
     if (this.suppliedJoiner) return this.suppliedJoiner;
     if (!this.ownJoiner) {
       this.ownJoiner = new CorrelationJoiner();
@@ -407,13 +415,30 @@ export class AIMClient {
   }
 
   /**
-   * Stop the internally managed telemetry joiner timer, if one was created.
-   * A caller-supplied joiner is left untouched (the caller owns its lifecycle).
+   * Lazily start the managed upload relay. No-op unless telemetry capture AND
+   * relay sharing are both opted in (two-stage consent). The relay drains the
+   * local correlated-events log to the Registry on its own unref'd timer.
+   */
+  private ensureRelay(): void {
+    if (!this.telemetryEnabled || this.relayConfig?.enabled !== true) return;
+    if (this.ownRelay) return;
+    this.ownRelay = new CorrelatedRelay(this.relayConfig);
+    this.ownRelay.start();
+  }
+
+  /**
+   * Stop the internally managed telemetry joiner timer and upload relay, if
+   * created. A caller-supplied joiner is left untouched (the caller owns its
+   * lifecycle).
    */
   closeTelemetry(): void {
     if (this.ownJoiner) {
       this.ownJoiner.stop();
       this.ownJoiner = undefined;
+    }
+    if (this.ownRelay) {
+      this.ownRelay.stop();
+      this.ownRelay = undefined;
     }
   }
 
