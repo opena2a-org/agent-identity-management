@@ -136,4 +136,25 @@ describe('CorrelationJoiner', () => {
     expect(h.records).toHaveLength(1); // first id completed
     expect(h.joiner.pending).toBe(1); // second id still waiting
   });
+
+  it('caps buffered correlation IDs with oldest-eviction', () => {
+    const records: CorrelatedRecord[] = [];
+    const joiner = new CorrelationJoiner({
+      windowMs: 60_000,
+      maxBuffers: 3,
+      onRecord: (r) => records.push(r),
+    });
+    const mk = (s: string) => `cde_000000000_${s}`;
+    // Four distinct IDs into a cap of 3 — the oldest ('a') is evicted.
+    ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc', 'dddddddddddd'].forEach((s) =>
+      joiner.ingestEnforcement(enforcement(mk(s)))
+    );
+    expect(joiner.pending).toBe(3);
+    expect(joiner.droppedOverflow).toBe(1);
+
+    // The newest survivor ('d') still completes normally — eviction took the oldest.
+    joiner.ingestIntent(intent(mk('dddddddddddd')));
+    joiner.ingestDetection(detection(mk('dddddddddddd')));
+    expect(records).toHaveLength(1);
+  });
 });
