@@ -329,6 +329,48 @@ describe('AIMClient causal-denial telemetry', () => {
       client.closeTelemetry();
     });
 
+    it('auto-joiner writes where the relay reads — full path uploads with no manual seed', async () => {
+      // Regression: relay.dataDir must also steer the auto-created joiner, or the
+      // relay reads an empty dir and silently uploads nothing.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-aimclient-align-'));
+      tmpDirs.push(dir);
+      const relayFetch = vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({ eventId: 'e1' }),
+        text: async () => '',
+      }));
+      const client = new AIMClient({
+        telemetry: {
+          enabled: true,
+          // No supplied joiner: AIMClient creates one and must point it at `dir`.
+          relay: {
+            enabled: true,
+            dataDir: dir,
+            intervalMs: 10,
+            fetchImpl: relayFetch as unknown as typeof fetch,
+          },
+        },
+      });
+      client.setCredentials(await realCredentials());
+      mockVerifyResponse({ actionAllowed: false, denialReason: 'blocked: injected exfil' });
+
+      await expect(
+        client.verifyAction({
+          action: 'net:connect',
+          resource: 'https://evil.example',
+          telemetry: { intent: SAMPLE_INTENT, detection: SAMPLE_DETECTION },
+        })
+      ).rejects.toThrow(ActionDeniedError);
+
+      // The denied-injection record assembled by the auto-joiner lands in `dir`,
+      // the relay reads it, and uploads — no manual seeding involved.
+      await vi.waitFor(() => expect(relayFetch).toHaveBeenCalled(), { timeout: 1500 });
+      const body = JSON.parse((relayFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.eventType).toBe('denied_injection_attempt');
+      client.closeTelemetry();
+    });
+
     it('does NOT start the relay when only capture is enabled', async () => {
       const dir = relayDir();
       const relayFetch = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' }));

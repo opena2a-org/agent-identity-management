@@ -35,16 +35,16 @@ const DEFAULT_MAX_BUFFERS = 10_000;
  * Defer a synchronous disk write off the caller's stack. The default sink runs
  * on the verifyAction path when a full record assembles inline; deferring keeps
  * fs.appendFileSync latency off that path. Falls back to setTimeout where
- * setImmediate is unavailable (non-Node runtimes).
+ * setImmediate is unavailable (non-Node runtimes). When `dataDir` is given the
+ * record is written there (so it matches where the relay reads); otherwise the
+ * writer's default (~/.opena2a) is used.
  */
-const deferWrite: (record: CorrelatedRecord) => void =
-  typeof setImmediate === 'function'
-    ? (record) => {
-        setImmediate(() => void writeCorrelatedRecord(record));
-      }
-    : (record) => {
-        setTimeout(() => void writeCorrelatedRecord(record), 0);
-      };
+const schedule: (fn: () => void) => void =
+  typeof setImmediate === 'function' ? (fn) => void setImmediate(fn) : (fn) => void setTimeout(fn, 0);
+
+function deferWrite(record: CorrelatedRecord, dataDir?: string): void {
+  schedule(() => void writeCorrelatedRecord(record, dataDir));
+}
 
 export interface EnforcementEvent {
   correlationId: string;
@@ -71,6 +71,12 @@ export interface JoinerOptions {
   joinerVersion?: string;
   /** Max buffered correlation IDs before oldest-eviction. Default 10000. */
   maxBuffers?: number;
+  /**
+   * Directory the DEFAULT sink writes to (must match where the relay reads).
+   * Ignored when a custom `onRecord` is supplied. Defaults to the writer's
+   * ~/.opena2a.
+   */
+  dataDir?: string;
 }
 
 interface Buffer {
@@ -102,7 +108,8 @@ export class CorrelationJoiner {
   constructor(options: JoinerOptions = {}) {
     this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
     this.now = options.now ?? Date.now;
-    this.onRecord = options.onRecord ?? deferWrite;
+    const dataDir = options.dataDir;
+    this.onRecord = options.onRecord ?? ((r) => deferWrite(r, dataDir));
     this.joinerVersion = options.joinerVersion ?? TELEMETRY_SCHEMA_VERSION;
     this.maxBuffers = options.maxBuffers && options.maxBuffers > 0 ? options.maxBuffers : DEFAULT_MAX_BUFFERS;
   }
