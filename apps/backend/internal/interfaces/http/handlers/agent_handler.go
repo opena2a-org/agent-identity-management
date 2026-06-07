@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -194,6 +195,26 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 
 // CreateAgent creates a new agent and automatically generates an API key for it
 // This is a streamlined 1-step process: create agent + create API key in one operation
+// registrationErrorStatus maps an error returned by AgentService.CreateAgent to
+// the HTTP status code the registration handlers should return. Known,
+// client-correctable conditions become 4xx so callers (SDKs, CI) can tell a bad
+// request apart from a server fault; everything else is an unexpected server
+// error (500). Shared by the authenticated and public registration handlers so
+// both surfaces map identically. The error message is safe to surface directly
+// (the service already sanitizes DB internals into these sentinels).
+func registrationErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, application.ErrAgentNameExists):
+		return fiber.StatusConflict
+	case errors.Is(err, application.ErrInvalidOrgOrUser):
+		// Foreign-key violation: the org/user from the credential no longer
+		// exists (e.g. stale API key, deleted org). Client error, not 500.
+		return fiber.StatusBadRequest
+	default:
+		return fiber.StatusInternalServerError
+	}
+}
+
 func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
@@ -233,13 +254,7 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	// SECURITY: No error logging to prevent information leakage
 	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID, userEmail)
 	if err != nil {
-		// Return 409 Conflict for duplicate agent name instead of leaking database internals
-		if err.Error() == "an agent with this name already exists" {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		return c.Status(registrationErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}

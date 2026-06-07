@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -351,6 +352,100 @@ func TestAgentHandler_CreateAgent_Success(t *testing.T) {
 
 	assert.Equal(t, newAgentID.String(), result["id"])
 	assert.Equal(t, "new-agent", result["name"])
+}
+
+// TestAgentHandler_CreateAgent_RegistrationErrorStatusCodes locks in that
+// known, client-correctable registration failures map to 4xx rather than 500.
+// Regression: an api-key registration whose org/user no longer exists (a
+// foreign-key violation surfaced as application.ErrInvalidOrgOrUser) used to
+// return 500, making a bad credential look like a backend outage to SDK/CI
+// callers.
+func TestAgentHandler_CreateAgent_RegistrationErrorStatusCodes(t *testing.T) {
+	tests := []struct {
+		name       string
+		serviceErr error
+		wantStatus int
+	}{
+		{
+			name:       "invalid org or user maps to 400",
+			serviceErr: application.ErrInvalidOrgOrUser,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "duplicate name maps to 409",
+			serviceErr: application.ErrAgentNameExists,
+			wantStatus: fiber.StatusConflict,
+		},
+		{
+			name:       "unexpected error maps to 500",
+			serviceErr: errors.New("some unexpected failure"),
+			wantStatus: fiber.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orgID := uuid.New()
+			userID := uuid.New()
+
+			mockAgentService := &MockAgentServiceImpl{
+				CreateAgentFunc: func(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error) {
+					return nil, tt.serviceErr
+				},
+			}
+
+			handler := NewAgentHandlerWithInterfaces(
+				mockAgentService,
+				&MockMCPServiceImpl{},
+				&MockAuditServiceImpl{},
+				&MockAPIKeyServiceImpl{},
+				nil,
+				&MockAlertServiceImpl{},
+				&MockVerificationEventServiceImpl{},
+				&MockCapabilityServiceImpl{},
+				&MockTagServiceImpl{},
+				&MockOrganizationRepository{},
+				&MockMCPAttestationServiceImpl{},
+			)
+
+			app := createTestAppWithAuth(handler, orgID, userID)
+			app.Post("/agents", handler.CreateAgent)
+
+			body := `{"name":"new-agent","displayName":"New Agent","agentType":"claude"}`
+			req := httptest.NewRequest("POST", "/agents", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+// TestRegistrationErrorStatus directly covers the shared error->status mapping
+// used by BOTH the authenticated (AgentHandler) and public (PublicAgentHandler)
+// registration handlers, including the wrapped-error path (errors.Is through
+// %w). The public handler takes a concrete service that can't be mocked at the
+// handler layer, so this is the regression guard for its 400/409/500 mapping.
+func TestRegistrationErrorStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"agent name exists -> 409", application.ErrAgentNameExists, fiber.StatusConflict},
+		{"invalid org or user -> 400", application.ErrInvalidOrgOrUser, fiber.StatusBadRequest},
+		{"wrapped invalid org/user -> 400", fmt.Errorf("create agent: %w", application.ErrInvalidOrgOrUser), fiber.StatusBadRequest},
+		{"unknown error -> 500", errors.New("some unexpected failure"), fiber.StatusInternalServerError},
+		{"nil error -> 500", nil, fiber.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, registrationErrorStatus(tt.err))
+		})
+	}
 }
 
 func TestAgentHandler_CreateAgent_InvalidJSON_WithMocks(t *testing.T) {
