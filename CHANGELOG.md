@@ -9,6 +9,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 > (`aim-sdk` on PyPI, `@opena2a/aim-sdk` on npm, `org.opena2a:aim-sdk` on Maven
 > Central) under their own `sdk-*-v<version>` tags.
 
+## [Unreleased]
+
+### Fixed
+
+- Agent registration now returns `400 Bad Request` (was `500 Internal Server
+  Error`) when the request references an organization or user that no longer
+  exists — a foreign-key violation surfaced when a stale API key or deleted org
+  is used. A bad credential is a client error, not a backend fault, and the 500
+  made it look like an outage to SDK and CI callers. The duplicate-name case
+  (`409 Conflict`) is unchanged. Both conditions are now typed sentinel errors
+  (`application.ErrAgentNameExists`, `application.ErrInvalidOrgOrUser`) mapped
+  via `errors.Is` in the authenticated and public registration handlers,
+  replacing fragile error-string comparison.
+
 ## [1.0.0] - 2026-06-01
 
 First stable release of the AIM platform. The stage in

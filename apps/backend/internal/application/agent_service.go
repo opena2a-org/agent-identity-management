@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -11,6 +12,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+)
+
+// Registration errors returned by CreateAgent for known, client-correctable
+// conditions. They are sentinels so HTTP handlers can map them to the right
+// status code with errors.Is instead of fragile string comparison. The Error()
+// strings double as the safe, user-facing messages (no DB internals leak).
+var (
+	// ErrAgentNameExists is returned when an agent with the same name already
+	// exists in the organization (unique-constraint violation). Maps to 409.
+	ErrAgentNameExists = errors.New("an agent with this name already exists")
+
+	// ErrInvalidOrgOrUser is returned when the registration references an
+	// organization or user that does not exist (foreign-key violation) — a bad
+	// credential or stale token, not a server fault. Maps to 400.
+	ErrInvalidOrgOrUser = errors.New("invalid organization or user for this registration")
 )
 
 // AgentService handles agent business logic
@@ -265,9 +281,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		msg := err.Error()
 		switch {
 		case strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
-			return nil, fmt.Errorf("an agent with this name already exists")
+			return nil, ErrAgentNameExists
 		case strings.Contains(msg, "foreign key constraint"):
-			return nil, fmt.Errorf("invalid organization or user for this registration")
+			return nil, ErrInvalidOrgOrUser
 		case strings.Contains(msg, "pq:"):
 			// Any other PostgreSQL driver error: log the detail server-side, return generic.
 			fmt.Printf("agent creation failed (database error): %v\n", err)
