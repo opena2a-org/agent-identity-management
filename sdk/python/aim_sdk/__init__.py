@@ -142,6 +142,21 @@ from .a2a import (
     create_a2a_client_from_env,
 )
 
+# Causal-denial telemetry (opt-in, best-effort, off the enforcement path).
+from .telemetry import (
+    CorrelationJoiner,
+    CorrelatedRelay,
+    EnforcementInput,
+    IntentInput,
+    DetectionInput,
+    CorrelatedRecord,
+    SharedIndicator,
+    build_correlated_record,
+    to_shared_indicator,
+    interim_technique_fields,
+    mint_correlation_id,
+)
+
 # Read version from VERSION file (single source of truth)
 # Supports both development (file in parent dir) and installed package scenarios
 import os as _os
@@ -233,4 +248,16 @@ __all__ = [
     "aim_verify",
     "aim_verify_database",
     "aim_verify_api_call",
+    # Causal-denial telemetry (opt-in)
+    "CorrelationJoiner",
+    "CorrelatedRelay",
+    "EnforcementInput",
+    "IntentInput",
+    "DetectionInput",
+    "CorrelatedRecord",
+    "SharedIndicator",
+    "build_correlated_record",
+    "to_shared_indicator",
+    "interim_technique_fields",
+    "mint_correlation_id",
 ]
