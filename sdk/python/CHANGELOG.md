@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-06-06
+
+### Added
+
+- **Causal-denial telemetry (opt-in, parity with the TypeScript SDK).** A new
+  `aim_sdk.telemetry` package joins the injection cause (detection inference),
+  the classified intent, and the authorization outcome (enforcement fact) into
+  one correlated record so you can see *why* an action was blocked. Off by
+  default, best-effort, and off the enforcement critical path — it never changes
+  a verdict and never raises into `verify_capability`.
+  - `AIMClient(..., telemetry={...})` enables it via two independent opt-ins:
+    `telemetry.enabled` (stage 1: capture records locally) and
+    `telemetry.relay.enabled` (stage 2: share anonymized indicators).
+  - `verify_capability(..., telemetry={"intent": ..., "detection": ...})` is the
+    seam the injection detector / intent classifier populate.
+  - Two tiers: the full record stays local (`~/.opena2a/correlated-events.jsonl`,
+    authoritative); only an anonymized `SharedIndicator` may leave, carrying no
+    identifiers, payloads, paths, credentials, or the correlation key. The relay
+    egress-validates technique fields (`^T-\d{1,6}$` + source allowlist +
+    confidence in [0,1]) and uploads only `denied_injection_attempt` indicators
+    to the Registry's public, count-only endpoint.
+  - New public exports: `CorrelationJoiner`, `CorrelatedRelay`,
+    `EnforcementInput`, `IntentInput`, `DetectionInput`, `build_correlated_record`,
+    `to_shared_indicator`, `interim_technique_fields`, `mint_correlation_id`.
+  - `AIMClient.close()` / `close_telemetry()` stop the managed joiner and relay
+    threads.
+
 ## [1.23.0] - 2026-06-01
 
 ### Added (provisional)
