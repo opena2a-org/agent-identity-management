@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `to_shared_indicator`, `interim_technique_fields`, `mint_correlation_id`.
   - `AIMClient.close()` / `close_telemetry()` stop the managed joiner and relay
     threads.
+  - Hardening: the sensor-token salt file is read/created with `O_NOFOLLOW` +
+    `fstat()` on the held descriptor and an `O_EXCL` re-create, so a pre-planted
+    symlink at the salt path is never followed (no TOCTOU, no write-through). The
+    deferred-write queue drops + counts (`dropped_writes`) under extreme
+    saturation instead of falling back to a synchronous write, keeping disk
+    latency strictly off the enforcement path.
 
 ## [1.23.0] - 2026-06-01
 

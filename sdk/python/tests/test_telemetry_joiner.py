@@ -153,3 +153,26 @@ def test_default_sink_defers_write_to_disk():
         joiner.stop()
         assert len(recs) == 1
         assert recs[0].assembly.completeness == "full"
+
+
+def test_overflow_drops_and_counts_without_sync_write():
+    # Under deferred-queue saturation the sink must DROP + count, never perform a
+    # synchronous disk write on the caller's (enforcement) thread.
+    import queue as _q
+
+    joiner = CorrelationJoiner(data_dir="/telemetry/should/not/write/here")
+    # Pre-fill a tiny queue and stop the writer from draining it.
+    joiner._write_queue = _q.Queue(maxsize=1)
+    joiner._ensure_writer = lambda: None  # type: ignore[assignment]
+    rec = build_record()
+    joiner._write_queue.put_nowait(rec)  # saturate
+    joiner._deferred_default_sink(rec)   # overflow -> drop, no raise
+    joiner._deferred_default_sink(rec)   # again
+    assert joiner.dropped_writes == 2
+    # the saturating queue still holds exactly its one item (no drain, no extra)
+    assert joiner._write_queue.qsize() == 1
+
+
+def build_record():
+    from aim_sdk.telemetry import build_correlated_record
+    return build_correlated_record(CID, "a", _enf(), intent=_intent(), detection=_detection())

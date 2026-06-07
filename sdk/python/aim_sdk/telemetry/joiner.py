@@ -92,6 +92,10 @@ class CorrelationJoiner:
         self.dropped_orphans = 0
         #: Count of buffers evicted because the max_buffers cap was reached.
         self.dropped_overflow = 0
+        #: Count of assembled records dropped because the deferred-write queue was
+        #: saturated. Dropping (rather than a synchronous write) keeps disk latency
+        #: off the enforcement path under extreme flood.
+        self.dropped_writes = 0
 
         # Deferred-write plumbing for the default sink only.
         self._custom_sink = on_record
@@ -242,12 +246,11 @@ class CorrelationJoiner:
         try:
             self._write_queue.put_nowait(record)  # type: ignore[union-attr]
         except queue.Full:
-            # Queue saturated -- fall back to a direct best-effort write so the
-            # record is not silently lost.
-            try:
-                write_correlated_record(record, self._data_dir)
-            except Exception:
-                pass
+            # Queue saturated. The enforcement path's invariant -- never pay disk
+            # latency -- takes priority over capturing every record, so under
+            # extreme flood we DROP (best-effort telemetry) and count it rather
+            # than performing a synchronous write on the caller's thread.
+            self.dropped_writes += 1
 
     def _ensure_writer(self) -> None:
         if self._writer_thread is not None:

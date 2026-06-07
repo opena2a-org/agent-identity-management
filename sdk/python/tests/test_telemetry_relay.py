@@ -199,6 +199,39 @@ def test_untrusted_salt_is_regenerated():
         assert stat.S_IMODE(os.stat(salt_path).st_mode) & 0o077 == 0
 
 
+@pytest.mark.skipif(
+    not hasattr(os, "symlink") or not hasattr(os, "getuid") or not hasattr(os, "O_NOFOLLOW"),
+    reason="POSIX symlink + O_NOFOLLOW semantics only",
+)
+def test_salt_symlink_is_not_followed():
+    # An attacker who pre-plants a symlink at the salt path (pointing at a file
+    # they want disclosed/used) must NOT have its target read or written through.
+    import getpass
+    import hashlib
+    import socket
+
+    with tempfile.TemporaryDirectory() as d:
+        secret = os.path.join(d, "secret.txt")
+        with open(secret, "w", encoding="utf-8") as fh:
+            fh.write("TOPSECRET-salt-contents")
+        salt_path = os.path.join(d, "gtin-sensor-salt")
+        os.symlink(secret, salt_path)
+
+        token = derive_sensor_token(d)
+
+        # The planted symlink was replaced with a real, owner-only regular file.
+        assert not os.path.islink(salt_path)
+        assert stat.S_ISREG(os.stat(salt_path).st_mode)
+        assert stat.S_IMODE(os.stat(salt_path).st_mode) & 0o077 == 0
+        # The secret target was neither read into the token nor truncated.
+        with open(secret, encoding="utf-8") as fh:
+            assert fh.read() == "TOPSECRET-salt-contents"
+        leaked = hashlib.sha256(
+            f"{socket.gethostname()}|{getpass.getuser()}|TOPSECRET-salt-contents".encode()
+        ).hexdigest()
+        assert token != leaked
+
+
 def test_open_a2a_home_ignores_relative_env(monkeypatch):
     monkeypatch.setenv("OPENA2A_HOME", "relative/path")
     assert open_a2a_home().endswith(os.path.join(".opena2a"))

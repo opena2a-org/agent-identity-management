@@ -91,43 +91,66 @@ def _load_or_create_salt(data_dir: str) -> str:
     confidentiality is what anonymizes the sensor token (host+user are
     low-entropy), so an EXISTING salt is reused only when it is a regular file,
     owned by us, with no group/other permission bits. A pre-created
-    world-readable or wrong-owner salt is NOT trusted: it is overwritten with a
+    world-readable or wrong-owner salt is NOT trusted: it is replaced with a
     fresh 0600 salt, closing the "attacker pre-creates a readable salt to
     de-anonymize the sensor token" vector. Permission checks apply on POSIX only
     (mode bits are not meaningful on Windows, where ACLs govern access).
+
+    Symlink-hardened (no TOCTOU): the read path opens the file with O_NOFOLLOW
+    and validates via fstat() on the held descriptor, so an attacker cannot swap
+    the validated file for a symlink between the permission check and the read.
+    The (re)create path uses O_EXCL | O_NOFOLLOW after unlinking any pre-existing
+    entry, so a planted symlink is never followed and the target is never
+    written through. O_NOFOLLOW is absent on some platforms (e.g. Windows, which
+    lacks POSIX symlink semantics here); it degrades to 0 there.
     """
+    import stat as _stat
+
     salt_path = os.path.join(data_dir, "gtin-sensor-salt")
     is_posix = hasattr(os, "getuid")
-    if os.path.exists(salt_path):
-        try:
-            st = os.stat(salt_path)
-            import stat as _stat
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
 
-            is_file = _stat.S_ISREG(st.st_mode)
-            owner_only = (not is_posix) or (st.st_mode & 0o077) == 0
-            same_owner = (not is_posix) or st.st_uid == os.getuid()  # type: ignore[attr-defined]
-            if is_file and owner_only and same_owner:
-                with open(salt_path, "r", encoding="utf-8") as fh:
-                    existing = fh.read().strip()
+    # Read path: open the real file (refusing a final-component symlink), then
+    # fstat the descriptor we actually hold -- no window between check and read.
+    try:
+        fd = os.open(salt_path, os.O_RDONLY | nofollow)
+    except OSError:
+        fd = None  # missing, or a symlink (ELOOP) -> (re)create below
+    if fd is not None:
+        try:
+            st = os.fstat(fd)
+            trusted = _stat.S_ISREG(st.st_mode)
+            if is_posix:
+                trusted = (
+                    trusted
+                    and (st.st_mode & 0o077) == 0
+                    and st.st_uid == os.getuid()  # type: ignore[attr-defined]
+                )
+            if trusted:
+                existing = os.read(fd, 4096).decode("utf-8", "replace").strip()
                 if existing:
                     return existing
-            # Untrusted (loose perms, wrong owner, not a file, or empty) -- replace.
+            # Untrusted (loose perms, wrong owner, not a regular file, empty).
         except OSError:
             pass  # fall through to (re)create
+        finally:
+            os.close(fd)
 
+    # (Re)create: remove any pre-existing entry (possibly a symlink) first, then
+    # create exclusively without following symlinks. O_EXCL means we never write
+    # through an attacker-planted link; a lost create race raises and the caller
+    # falls back to an ephemeral salt.
     salt = os.urandom(32).hex()
     os.makedirs(data_dir, exist_ok=True)
-    # Create with 0600 from the start (mirror writeFileSync({mode:0o600})).
-    fd = os.open(salt_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.unlink(salt_path)
+    except OSError:
+        pass  # nothing to remove
+    fd = os.open(salt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow, 0o600)
     try:
         os.write(fd, salt.encode("utf-8"))
     finally:
         os.close(fd)
-    # Tighten perms even if the file pre-existed with looser bits.
-    try:
-        os.chmod(salt_path, 0o600)
-    except OSError:
-        pass  # best-effort
     return salt
 
 
