@@ -187,6 +187,55 @@ aim-sdk --version                # Show SDK version
 
 For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
 
+## Causal-denial telemetry (opt-in)
+
+When a verification is denied, the SDK can join the injection cause, the
+classified intent, and the authorization outcome into one local correlated
+record so you can see **why** an action was blocked. It is OFF by default and
+best-effort -- it never changes a verdict and never adds latency to the
+enforcement path. Two independent opt-ins gate it:
+
+```python
+from aim_sdk import AIMClient
+from aim_sdk.telemetry import IntentInput, DetectionInput
+
+client = AIMClient(
+    agent_id="...", api_key="aim_abc123", aim_url="https://aim.opena2a.org",
+    telemetry={
+        "enabled": True,                       # stage 1: capture records locally
+        "relay": {                             # stage 2: share anonymized indicators
+            "enabled": True,                   #   (separate, explicit opt-in)
+            "package_name": "my-service",      #   self-declared sensor label
+        },
+    },
+)
+
+# The injection detector / intent classifier populate the optional seam:
+client.verify_capability(
+    "net:connect", resource="https://example/data",
+    telemetry={
+        "intent": IntentInput(intent_class="exfiltration", confidence=0.7,
+                              blocked=True, source="nanomind-intent"),
+        "detection": DetectionInput(injection_detected=True, confidence=0.84,
+                                    detector="nanomind-guard",
+                                    technique_source="interim-mapping",
+                                    technique_id="T-2002"),
+    },
+)
+
+client.close()  # stops the managed joiner/relay threads (or use a `with` block)
+```
+
+**Two tiers, by design.** The full correlated record is authoritative and stays
+on the machine (`~/.opena2a/correlated-events.jsonl`). Only an anonymized
+**indicator** -- event type, Threat-Matrix technique ID, confidence, runtime,
+and an anonymous per-device sensor token -- may leave, and only when relay
+sharing is opted in. Identifiers (agent ID, resource, capability, credential
+references, payloads, the correlation key) are never shared, and the relay
+egress-validates technique fields before transmission. Only
+`denied_injection_attempt` indicators are uploaded, to the Registry's public,
+count-only endpoint.
+
 ## Manual mode (no OAuth)
 
 For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key:

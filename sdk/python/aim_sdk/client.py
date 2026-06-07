@@ -55,6 +55,17 @@ from .security_logging import (
     SecurityEventType,
     EventSeverity,
 )
+from .telemetry import (
+    CorrelationJoiner,
+    CorrelatedRelay,
+    EnforcementInput,
+    correlation_headers,
+    mint_correlation_id,
+    open_a2a_home,
+)
+
+# Default enforcement-source label stamped on captured telemetry records.
+DEFAULT_ENFORCEMENT_SOURCE = "aim-sdk"
 
 
 # Capability format validation pattern (namespace:action)
@@ -294,7 +305,8 @@ class AIMClient:
         auto_retry: bool = True,
         max_retries: int = 3,
         sdk_token_id: Optional[str] = None,
-        oauth_token_manager: Optional[Any] = None
+        oauth_token_manager: Optional[Any] = None,
+        telemetry: Optional[Dict[str, Any]] = None,
     ):
         # Validate required parameters
         if not agent_id:
@@ -370,6 +382,27 @@ class AIMClient:
 
         # Lazy-initialized secrets client
         self._secrets = None
+
+        # ------------------------------------------------------------------ #
+        # Causal-denial telemetry -- opt-in, best-effort, off the enforcement
+        # path. Two-stage consent: capture (telemetry.enabled) is stage 1; the
+        # upload relay (telemetry.relay.enabled) is a SEPARATE stage-2 opt-in.
+        # Both default OFF -- no surprise timers, disk writes, or headers.
+        # ------------------------------------------------------------------ #
+        telemetry = telemetry or {}
+        self._telemetry_enabled = telemetry.get("enabled") is True
+        self._enforcement_source = telemetry.get("enforcement_source") or DEFAULT_ENFORCEMENT_SOURCE
+        self._supplied_joiner = telemetry.get("joiner")
+        self._relay_config = telemetry.get("relay")
+        # Resolve ONE telemetry dir shared by the auto-joiner sink and the relay,
+        # so the relay always reads exactly where the joiner writes (the dataDir
+        # alignment lesson). A relay.data_dir override wins; else ~/.opena2a.
+        relay_data_dir = None
+        if isinstance(self._relay_config, dict):
+            relay_data_dir = self._relay_config.get("data_dir")
+        self._telemetry_dir = relay_data_dir or open_a2a_home()
+        self._own_joiner: Optional[CorrelationJoiner] = None
+        self._own_relay: Optional[CorrelatedRelay] = None
 
     @property
     def secrets(self):
@@ -545,8 +578,14 @@ class AIMClient:
                 # If OAuth token fails, no authentication will be added
                 pass
 
-        # Merge session headers with additional headers (additional_headers take precedence)
+        # Merge session headers with additional headers (additional_headers take precedence).
+        # custom_headers (e.g. the best-effort correlation ID) are layered last but
+        # never override the auth headers above.
         merged_headers = {**self.session.headers, **additional_headers}
+        if custom_headers:
+            for k, v in custom_headers.items():
+                if k not in additional_headers:
+                    merged_headers[k] = v
 
         try:
             # CRITICAL: If we have pre-serialized JSON (for Ed25519 signing), use it directly
@@ -579,7 +618,7 @@ class AIMClient:
             # Retry on server errors if enabled
             if response.status_code >= 500 and self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)  # Exponential backoff
-                return self._make_request(method, endpoint, data, retry_count + 1)
+                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
 
             # Debug 400 errors (disabled in production)
             # if response.status_code == 400:
@@ -591,13 +630,13 @@ class AIMClient:
         except requests.exceptions.Timeout:
             if self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)
-                return self._make_request(method, endpoint, data, retry_count + 1)
+                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
             raise VerificationError("Request timeout")
 
         except requests.exceptions.ConnectionError:
             if self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)
-                return self._make_request(method, endpoint, data, retry_count + 1)
+                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
             raise VerificationError("Connection failed")
 
         except requests.exceptions.RequestException as e:
@@ -608,7 +647,8 @@ class AIMClient:
         capability: str,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        timeout_seconds: int = 300
+        timeout_seconds: int = 300,
+        telemetry: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """
         Request verification for a capability from AIM.
@@ -625,6 +665,12 @@ class AIMClient:
             resource: Resource being accessed (e.g., "users_table", "admin@example.com")
             context: Additional context about the capability usage
             timeout_seconds: Maximum time to wait for approval (default: 300s = 5min)
+            telemetry: Optional causal-denial telemetry seam (best-effort, off the
+                enforcement path). A dict with optional ``intent`` (IntentInput)
+                and ``detection`` (DetectionInput) parts that the injection
+                detector / intent classifier populate; joined with the enforcement
+                outcome into one correlated record. Ignored unless telemetry
+                capture was opted in at client construction.
 
         Returns:
             Verification result dict with keys:
@@ -675,6 +721,10 @@ class AIMClient:
         # SDK API endpoint
         endpoint = "/api/v1/sdk-api/verifications"
 
+        # Mint the correlation ID at the earliest ingestion point and propagate it
+        # best-effort. Minting/headers are skipped entirely when telemetry is off.
+        correlation_id = mint_correlation_id() if self._telemetry_enabled else None
+
         # Send verification request using direct HTTP call to avoid double-signing
         try:
             url = f"{self.aim_url}{endpoint}"
@@ -692,7 +742,10 @@ class AIMClient:
             # Add SDK token header if available (for usage tracking only, not auth)
             if self.sdk_token_id:
                 headers['X-SDK-Token'] = self.sdk_token_id
-            
+
+            # Attach the correlation ID (best-effort, never overrides auth headers).
+            headers.update(correlation_headers(correlation_id))
+
             response = self.session.request(
                 method="POST",
                 url=url,
@@ -752,6 +805,12 @@ class AIMClient:
 
             # If approved (or auto-approved in monitoring mode), return immediately
             if status in ("approved", "auto-approved"):
+                # Record the enforcement outcome (allow) BEFORE returning, so the
+                # causal-denial joiner sees the matching enforcement fact.
+                if correlation_id:
+                    self._record_verification_telemetry(
+                        correlation_id, capability, resource, "allow", None, telemetry
+                    )
                 security_logger.log_authorization(
                     AuthzEventType.CAPABILITY_GRANTED,
                     action=capability,
@@ -774,6 +833,12 @@ class AIMClient:
             # If denied, raise error
             if status == "denied":
                 reason = result.get("denial_reason", "Action denied by policy")
+                # Record the enforcement outcome (deny) BEFORE the raise -- this is
+                # the causal-denial case the telemetry exists to capture.
+                if correlation_id:
+                    self._record_verification_telemetry(
+                        correlation_id, capability, resource, "deny", reason, telemetry
+                    )
                 security_logger.log_authorization(
                     AuthzEventType.CAPABILITY_DENIED,
                     action=capability,
@@ -784,9 +849,14 @@ class AIMClient:
                 )
                 raise ActionDeniedError(f"Action denied: {reason}")
 
-            # If pending, poll for result
+            # If pending, poll for result (thread the telemetry context through so
+            # a JIT approval/denial is captured the same way).
             if status == "pending":
-                return self._wait_for_approval(verification_id, timeout_seconds)
+                return self._wait_for_approval(
+                    verification_id, timeout_seconds,
+                    correlation_id=correlation_id, capability=capability,
+                    resource=resource, telemetry=telemetry,
+                )
 
             raise VerificationError(f"Unexpected verification status: {status}")
 
@@ -836,13 +906,114 @@ class AIMClient:
                 "error": f"Unexpected error: {type(e).__name__}: {str(e)}"
             }
 
+    # ---------------------------------------------------------------------- #
+    # Causal-denial telemetry helpers (best-effort, off the enforcement path).
+    # ---------------------------------------------------------------------- #
+    def _record_verification_telemetry(
+        self,
+        correlation_id: str,
+        capability: str,
+        resource: Optional[str],
+        decision: str,
+        denied_reason: Optional[str],
+        telemetry_seam: Optional[Dict[str, Any]],
+    ) -> None:
+        """
+        Feed the enforcement outcome (and any supplied intent/detection) into the
+        correlation joiner. Fully best-effort: a missing joiner, missing agent, or
+        any raised error is swallowed so capability verification is never affected.
+        """
+        try:
+            joiner = self._get_joiner()
+            if joiner is None or not self.agent_id:
+                return
+
+            enforcement = EnforcementInput(
+                decision=decision,
+                outcome="ALLOW" if decision == "allow" else "DENY",
+                capability=capability,
+                resource=resource or "",
+                source=self._enforcement_source,
+                denied_reason=None if decision == "allow" else denied_reason,
+            )
+            joiner.ingest_enforcement(correlation_id, self.agent_id, enforcement)
+
+            if telemetry_seam:
+                intent = telemetry_seam.get("intent")
+                detection = telemetry_seam.get("detection")
+                if intent is not None:
+                    joiner.ingest_intent(correlation_id, intent)
+                if detection is not None:
+                    joiner.ingest_detection(correlation_id, detection)
+        except Exception as error:  # pragma: no cover - defensive
+            try:
+                console.debug(f"telemetry error (ignored): {error}")
+            except Exception:
+                pass
+
+    def _get_joiner(self) -> Optional[CorrelationJoiner]:
+        """
+        Resolve the joiner: a caller-supplied one wins; otherwise lazily create
+        and start an internally managed joiner with a daemon flush thread. Returns
+        None when telemetry is disabled.
+        """
+        if not self._telemetry_enabled:
+            return None
+        # Spin up the upload relay alongside the joiner when stage-2 sharing is on.
+        self._ensure_relay()
+        if self._supplied_joiner is not None:
+            return self._supplied_joiner
+        if self._own_joiner is None:
+            # Write to the same dir the relay reads, so an enabled relay actually
+            # finds the records this joiner produces.
+            self._own_joiner = CorrelationJoiner(data_dir=self._telemetry_dir)
+            self._own_joiner.start()
+        return self._own_joiner
+
+    def _ensure_relay(self) -> None:
+        """
+        Lazily start the managed upload relay. No-op unless telemetry capture AND
+        relay sharing are both opted in (two-stage consent). The relay drains the
+        local correlated-events log to the Registry on its own daemon timer.
+        """
+        if not self._telemetry_enabled or not isinstance(self._relay_config, dict):
+            return
+        if self._relay_config.get("enabled") is not True:
+            return
+        if self._own_relay is not None:
+            return
+        # Pin the relay to the same resolved dir as the auto-joiner sink.
+        relay_kwargs = {k: v for k, v in self._relay_config.items() if k != "data_dir"}
+        self._own_relay = CorrelatedRelay(data_dir=self._telemetry_dir, **relay_kwargs)
+        self._own_relay.start()
+
+    def close_telemetry(self) -> None:
+        """
+        Stop the internally managed telemetry joiner thread and upload relay, if
+        created. A caller-supplied joiner is left untouched (the caller owns its
+        lifecycle). Safe to call multiple times.
+        """
+        if self._own_joiner is not None:
+            try:
+                self._own_joiner.stop()
+            except Exception:
+                pass
+            self._own_joiner = None
+        if self._own_relay is not None:
+            try:
+                self._own_relay.stop()
+            except Exception:
+                pass
+            self._own_relay = None
+
     # Backwards compatibility alias
     def verify_action(
         self,
         action_type: str,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        timeout_seconds: int = 300
+        timeout_seconds: int = 300,
+        telemetry: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """
         DEPRECATED: Use verify_capability() instead.
@@ -859,10 +1030,19 @@ class AIMClient:
             capability=action_type,
             resource=resource,
             context=context,
-            timeout_seconds=timeout_seconds
+            timeout_seconds=timeout_seconds,
+            telemetry=telemetry,
         )
 
-    def _wait_for_approval(self, verification_id: str, timeout_seconds: int) -> Dict:
+    def _wait_for_approval(
+        self,
+        verification_id: str,
+        timeout_seconds: int,
+        correlation_id: Optional[str] = None,
+        capability: Optional[str] = None,
+        resource: Optional[str] = None,
+        telemetry: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
         """
         Poll AIM server for verification approval.
 
@@ -983,6 +1163,10 @@ class AIMClient:
                 status = result.get("status")
 
                 if status in ("approved", "auto-approved"):
+                    if correlation_id and capability:
+                        self._record_verification_telemetry(
+                            correlation_id, capability, resource, "allow", None, telemetry
+                        )
                     security_logger.log_authorization(
                         AuthzEventType.JIT_APPROVED,
                         action="capability_verification",
@@ -1004,6 +1188,10 @@ class AIMClient:
 
                 if status == "denied":
                     reason = result.get("denial_reason", "Action denied")
+                    if correlation_id and capability:
+                        self._record_verification_telemetry(
+                            correlation_id, capability, resource, "deny", reason, telemetry
+                        )
                     security_logger.log_authorization(
                         AuthzEventType.JIT_DENIED,
                         action="capability_verification",
@@ -2889,7 +3077,8 @@ class AIMClient:
         return decorator
 
     def close(self):
-        """Close the HTTP session."""
+        """Close the HTTP session and stop any managed telemetry threads."""
+        self.close_telemetry()
         self.session.close()
 
     def __enter__(self):
