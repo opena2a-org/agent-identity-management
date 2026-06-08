@@ -168,6 +168,10 @@ type CreateAgentRequest struct {
 	Capabilities     []string               `json:"capabilities,omitempty"` // Agent capabilities
 	TagIds           []string               `json:"tagIds,omitempty"`       // ✅ Tags to apply during registration
 	Metadata         map[string]interface{} `json:"metadata,omitempty"`     // Custom agent metadata (model, department, etc.)
+	// DeclaredPurpose is the optional structured "what is this agent for" declaration
+	// (atx-spec core.md §1.5). Identity/attestation + offline detection signal only;
+	// never an authorization input.
+	DeclaredPurpose *domain.DeclaredPurpose `json:"declaredPurpose,omitempty"`
 }
 
 // CreateAgent creates a new agent
@@ -260,6 +264,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		TalksTo:             req.TalksTo,      // MCP servers this agent communicates with
 		Capabilities:        req.Capabilities, // ✅ Store detected capabilities from SDK
 		Metadata:            req.Metadata,     // ✅ Custom metadata (model, department, owner, etc.)
+		DeclaredPurpose:     req.DeclaredPurpose,
 		Status:              domain.AgentStatusPending, // Agents start as pending, verification is earned
 		CreatedBy:           userID,
 		CreatedByName:       createdByName,   // ✅ Denormalized for audit trail
@@ -271,6 +276,19 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	// Only set encrypted private key if we generated it server-side
 	if encryptedPrivateKey != "" {
 		agent.EncryptedPrivateKey = &encryptedPrivateKey // ✅ Encrypted storage (never exposed in API)
+	}
+
+	// Validate the optional declared purpose (atx-spec core.md §1.5). Hard
+	// structural errors reject the request; coherence issues are issuance-time
+	// hygiene logged warn-only during the optional phase. declaredPurpose is never
+	// an authorization input — this is identity validation + a detection signal.
+	if agent.DeclaredPurpose != nil {
+		if err := agent.DeclaredPurpose.Validate(agent.Capabilities); err != nil {
+			return nil, fmt.Errorf("invalid declaredPurpose: %w", err)
+		}
+		for _, w := range agent.DeclaredPurpose.CoherenceWarnings(agent.Capabilities) {
+			fmt.Printf("Warning: agent %q declaredPurpose coherence: %s\n", agent.Name, w)
+		}
 	}
 
 	if err := s.agentRepo.Create(agent); err != nil {
@@ -532,6 +550,23 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	// Update metadata
 	if req.Metadata != nil {
 		agent.Metadata = req.Metadata
+	}
+	// Update the optional declared purpose (atx-spec core.md §1.5). Validate
+	// against the effective granted capabilities (the incoming set if the request
+	// also changes capabilities, otherwise the stored set). Hard errors reject;
+	// coherence issues are warn-only hygiene. Never an authorization input.
+	if req.DeclaredPurpose != nil {
+		agent.DeclaredPurpose = req.DeclaredPurpose
+		grantedCaps := agent.Capabilities
+		if len(req.Capabilities) > 0 {
+			grantedCaps = req.Capabilities
+		}
+		if err := agent.DeclaredPurpose.Validate(grantedCaps); err != nil {
+			return nil, fmt.Errorf("invalid declaredPurpose: %w", err)
+		}
+		for _, w := range agent.DeclaredPurpose.CoherenceWarnings(grantedCaps) {
+			fmt.Printf("Warning: agent %q declaredPurpose coherence: %s\n", agent.Name, w)
+		}
 	}
 
 	if err := s.agentRepo.Update(agent); err != nil {

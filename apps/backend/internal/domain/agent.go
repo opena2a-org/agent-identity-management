@@ -109,6 +109,10 @@ type Agent struct {
 	LastHeartbeat            *time.Time             `json:"lastHeartbeat"`
 	// Custom metadata for the agent (model, department, owner, etc.)
 	Metadata                 map[string]interface{} `json:"metadata,omitempty"`
+	// DeclaredPurpose is the publisher's optional structured declaration of what
+	// the agent is for (atx-spec core.md §1.5). Identity/attestation + offline
+	// detection signal only; never an authorization input. Nil = not declared.
+	DeclaredPurpose *DeclaredPurpose `json:"declaredPurpose,omitempty"`
 }
 
 // AgentRepository defines the interface for agent persistence
