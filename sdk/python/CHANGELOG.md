@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-06-08
+
+### Fixed
+
+- **CLI login no longer doubles the "Token exchange failed:" prefix.** `aim-sdk
+  login` printed `Token exchange failed: Token exchange failed: 405` when the
+  token endpoint returned a non-JSON error — the classic symptom of pointing the
+  SDK at the dashboard URL (`https://aim.opena2a.org`) instead of the API base.
+  The message now surfaces the server's `error_description` and, on a non-JSON
+  response, a one-line hint that the URL should be the AIM API base. (#286)
+
+### Internal
+
+- Guard `tests/test_sdk_verification.py`'s manual smoke script under `__main__`
+  so it no longer makes a network call during `pytest` collection. (#283)
+
 ## [1.24.0] - 2026-06-06
 
 ### Added
