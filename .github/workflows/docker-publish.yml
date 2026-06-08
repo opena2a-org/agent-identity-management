@@ -43,18 +43,41 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Registry logins are wrapped in a retry loop: transient registry 500s
+      # (e.g. registry-1.docker.io HTTP 500, observed on run 27146602888) have
+      # no built-in retry in docker/login-action and otherwise paint the repo
+      # red until a manual re-run. Backoff is linear (10s, 20s, 30s, 40s).
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin; then
+              echo "Docker Hub login succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Docker Hub login attempt $attempt failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "Docker Hub login failed after 5 attempts"
+          exit 1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin; then
+              echo "GHCR login succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "GHCR login attempt $attempt failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "GHCR login failed after 5 attempts"
+          exit 1
 
       - name: Extract metadata (GHCR)
         id: meta-ghcr
@@ -142,18 +165,39 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # See build-backend for rationale: retry transient registry 500s that
+      # docker/login-action does not retry on its own.
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin; then
+              echo "Docker Hub login succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Docker Hub login attempt $attempt failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "Docker Hub login failed after 5 attempts"
+          exit 1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin; then
+              echo "GHCR login succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "GHCR login attempt $attempt failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "GHCR login failed after 5 attempts"
+          exit 1
 
       - name: Extract metadata (GHCR)
         id: meta-ghcr
