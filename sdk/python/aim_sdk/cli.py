@@ -271,8 +271,24 @@ def exchange_code_for_tokens(aim_url: str, code: str, code_verifier: str, redire
         if response.status_code == 200:
             return response.json()
         else:
-            error_data = response.json() if response.content else {}
-            return {'error': error_data.get('error', f'Token exchange failed: {response.status_code}')}
+            # Return a BARE reason — the caller prefixes "Token exchange failed: ".
+            # (Previously this returned a pre-prefixed string, so login() printed
+            # "Token exchange failed: Token exchange failed: 405".) Prefer the
+            # server's human-readable error_description, then error, then a status
+            # line that hints at the most common misconfiguration: pointing the SDK
+            # at the dashboard/frontend URL instead of the AIM API base.
+            try:
+                error_data = response.json() if response.content else {}
+            except ValueError:
+                error_data = {}
+            reason = error_data.get('error_description') or error_data.get('error')
+            if not reason:
+                reason = (
+                    f"HTTP {response.status_code} from {token_url} — verify the "
+                    f"server URL is the AIM API base (e.g. https://api.aim.opena2a.org), "
+                    f"not the dashboard URL"
+                )
+            return {'error': reason}
     except requests.RequestException as e:
         return {'error': f'Network error: {str(e)}'}
 
