@@ -35,39 +35,48 @@ def sign_payload(payload_dict, private_key):
 
     return signature_b64
 
-# Test 1: Trigger violation with delete_database (high risk, no capability)
-print("🧪 Test 1: Attempting delete_database (should trigger violation)")
-timestamp = datetime.utcnow().isoformat() + "Z"
+def main():
+    """Manual smoke script: trigger a capability violation against a running
+    backend at BASE_URL. This is NOT a pytest test — it makes live HTTP calls
+    and must only run when invoked directly (guarded by __main__ below) so that
+    `pytest` collection does not attempt the network call and fail."""
+    # Test 1: Trigger violation with delete_database (high risk, no capability)
+    print("🧪 Test 1: Attempting delete_database (should trigger violation)")
+    timestamp = datetime.utcnow().isoformat() + "Z"
 
-payload = {
-    "agent_id": AGENT_ID,
-    "action_type": "delete_database",
-    "resource": None,
-    "context": {"risk_level": "critical"},
-    "timestamp": timestamp
-}
+    payload = {
+        "agent_id": AGENT_ID,
+        "action_type": "delete_database",
+        "resource": None,
+        "context": {"risk_level": "critical"},
+        "timestamp": timestamp
+    }
 
-signature = sign_payload(payload, private_key)
+    signature = sign_payload(payload, private_key)
 
-request_payload = {
-    **payload,
-    "signature": signature,
-    "public_key": public_key_b64
-}
+    request_payload = {
+        **payload,
+        "signature": signature,
+        "public_key": public_key_b64
+    }
 
-response = requests.post(
-    f"{BASE_URL}/api/v1/sdk-api/verifications",
-    json=request_payload
-)
+    response = requests.post(
+        f"{BASE_URL}/api/v1/sdk-api/verifications",
+        json=request_payload
+    )
 
-print(f"Status: {response.status_code}")
-print(f"Response: {response.json()}")
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.json()}")
 
-# Check violations count
-time.sleep(1)
-violations_response = requests.get(f"{BASE_URL}/api/v1/violations")
-if violations_response.status_code == 200:
-    violations_data = violations_response.json()
-    print(f"\n✅ Total violations: {violations_data.get('total', 0)}")
-else:
-    print(f"\n❌ Failed to fetch violations: {violations_response.status_code}")
+    # Check violations count
+    time.sleep(1)
+    violations_response = requests.get(f"{BASE_URL}/api/v1/violations")
+    if violations_response.status_code == 200:
+        violations_data = violations_response.json()
+        print(f"\n✅ Total violations: {violations_data.get('total', 0)}")
+    else:
+        print(f"\n❌ Failed to fetch violations: {violations_response.status_code}")
+
+
+if __name__ == "__main__":
+    main()
