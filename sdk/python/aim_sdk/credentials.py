@@ -24,7 +24,7 @@ import os
 import json
 import shutil
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 
 # Security logging for SOC monitoring
@@ -167,15 +167,16 @@ def load_sdk_credentials() -> Optional[Dict[str, Any]]:
             )
 
     # 3. Check SDK package for fresh download
-    sdk_package_creds = _find_sdk_package_credentials()
-    if sdk_package_creds:
+    found = _find_sdk_package_credentials()
+    if found:
+        sdk_package_creds, source_path = found
         # Install to home directory
-        _install_sdk_credentials(sdk_package_creds)
+        _install_sdk_credentials(sdk_package_creds, source_path)
         security_logger.log_credential_event(
             CredEventType.CREDENTIAL_CREATED,
             credential_type="sdk_oauth",
             success=True,
-            details={"source": "sdk_package", "installed_to": "sdk_credentials.json"}
+            details={"source": str(source_path), "installed_to": "sdk_credentials.json"}
         )
         return sdk_package_creds
 
@@ -227,7 +228,7 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
         return False
 
 
-def _find_sdk_package_credentials() -> Optional[Dict[str, Any]]:
+def _find_sdk_package_credentials() -> Optional[Tuple[Dict[str, Any], Path]]:
     """
     Find SDK credentials in the installed package (for fresh downloads).
 
@@ -267,36 +268,38 @@ def _find_sdk_package_credentials() -> Optional[Dict[str, Any]]:
                 with open(path, 'r') as f:
                     data = json.load(f)
                 if detect_credential_type(data) == CredentialType.SDK_OAUTH:
-                    return data
+                    return data, path
             except Exception:
                 continue
 
     return None
 
 
-def _install_sdk_credentials(credentials: Dict[str, Any]) -> None:
-    """Install SDK credentials from package to home directory.
+def _install_sdk_credentials(credentials: Dict[str, Any], source_path: Optional[Path] = None) -> None:
+    """Adopt SDK credentials discovered on this machine into the home directory.
 
-    Bundled SDK credentials in the package or CWD are adopted as a
-    convenience for the first run after a fresh download. The home
-    location is the long-term source of truth; on subsequent runs the
-    SDK reads from there first and ignores the bundled file (#178).
+    The credentials are read from the first existing path in the search order
+    (CWD, the installed package dir, or the nearest ancestor ``.aim/``) -- they
+    are NOT baked into the published package. The home location is the long-term
+    source of truth; on subsequent runs the SDK reads from there first and
+    ignores the discovered file (#178).
     """
     try:
         token_id = credentials.get("sdkTokenId") or credentials.get("sdk_token_id") or ""
         token_id_short = (token_id[:8] + "...") if token_id else "unknown"
-        # Visible warning so operators see when bundled (potentially stale)
-        # credentials are being adopted. Audit #37: the silent install path
-        # was how stale bundled tokens crept into the home file across
-        # demo prep runs.
+        # Name the ACTUAL source path so this line is never mistaken for a
+        # credential shipped inside the package -- it is not (see docstring).
+        # Audit #37: the silent install path was how stale tokens crept into the
+        # home file across demo-prep runs, so the adoption stays visible.
+        origin = str(source_path) if source_path else "a discovered .aim directory"
         print(
-            "INFO: Adopting SDK credentials from bundled package (token "
-            f"{token_id_short}). Long-term source: {SDK_CREDENTIALS_FILE}."
+            f"INFO: Adopting existing SDK credentials found at {origin} "
+            f"(token {token_id_short}). Long-term source: {SDK_CREDENTIALS_FILE}."
         )
         save_sdk_credentials(credentials)
-        print(f"✅ SDK credentials installed to {SDK_CREDENTIALS_FILE}")
+        print(f"SDK credentials installed to {SDK_CREDENTIALS_FILE}")
     except Exception as e:
-        print(f"⚠️  Failed to install SDK credentials: {e}")
+        print(f"Failed to install SDK credentials: {e}")
 
 
 def _migrate_sdk_credentials(credentials: Dict[str, Any]) -> None:

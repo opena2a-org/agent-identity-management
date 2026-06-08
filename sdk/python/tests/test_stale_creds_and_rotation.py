@@ -90,18 +90,38 @@ class TestInstallSdkCredentialsWarning:
             "email": "u@example.com",
             "schemaVersion": "1.0",
         }
+        src = tmp_path / "src" / ".aim" / "sdk_credentials.json"
         with patch("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json"):
             with patch("aim_sdk.credentials.save_sdk_credentials", return_value=True) as mock_save:
                 buf = io.StringIO()
                 with redirect_stdout(buf):
-                    _install_sdk_credentials(creds)
+                    _install_sdk_credentials(creds, source_path=src)
 
                 out = buf.getvalue()
-                assert "Adopting SDK credentials from bundled package" in out
+                assert "Adopting existing SDK credentials found at" in out
+                # The misleading "bundled package" wording must NOT return — it
+                # made a discovered ~/.aim credential look like a shipped secret.
+                assert "bundled package" not in out
+                # The ACTUAL source path is named so it can't be mistaken for a
+                # credential baked into the published package.
+                assert str(src) in out
                 # Truncated token id (first 8 chars + ellipsis), full token not echoed.
                 assert "abcdefgh..." in out
                 assert "abcdefghij1234567890" not in out
                 mock_save.assert_called_once()
+
+    def test_install_without_source_path_is_generic_not_bundled(self, tmp_path):
+        """No source path -> a generic origin, still never claims 'bundled package'."""
+        creds = {"aimUrl": "https://aim.example.com", "sdkTokenId": "zzzzzzzz1111",
+                 "refreshToken": "rt", "schemaVersion": "1.0"}
+        with patch("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json"):
+            with patch("aim_sdk.credentials.save_sdk_credentials", return_value=True):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    _install_sdk_credentials(creds)
+                out = buf.getvalue()
+                assert "bundled package" not in out
+                assert "Adopting existing SDK credentials" in out
 
 
 # ---------------------------------------------------------------------------

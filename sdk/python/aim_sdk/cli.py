@@ -312,7 +312,15 @@ def login(args):
             print(f"Already authenticated as: {user_email}")
             print(f"Server: {existing_url}")
             print()
-            response = input("Re-authenticate? [y/N]: ").strip().lower()
+            try:
+                response = input("Re-authenticate? [y/N]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                # Non-interactive stdin (CI / piped) or Ctrl-D/Ctrl-C: don't
+                # crash with a raw traceback — keep the existing credentials and
+                # tell the user how to force a re-auth non-interactively.
+                print("\nNo input received; keeping existing credentials. "
+                      "Pass --force to re-authenticate non-interactively.")
+                return 0
             if response != 'y':
                 print("Login cancelled.")
                 return 0
