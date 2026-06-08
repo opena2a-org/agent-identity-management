@@ -62,8 +62,9 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		                    trust_score, talks_to, capabilities, metadata,
 		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		                    pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled, pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
-		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id,
+		                    declared_purpose)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
 	`
 
 	now := time.Now()
@@ -99,6 +100,16 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	}
 	if agent.Metadata == nil {
 		metadataJSON = []byte("{}")
+	}
+
+	// Marshal declared_purpose to JSONB; SQL NULL (untyped nil) when not declared.
+	var declaredPurposeParam interface{}
+	if agent.DeclaredPurpose != nil {
+		declaredPurposeJSON, mErr := json.Marshal(agent.DeclaredPurpose)
+		if mErr != nil {
+			return fmt.Errorf("failed to marshal declared_purpose: %w", mErr)
+		}
+		declaredPurposeParam = declaredPurposeJSON
 	}
 
 	_, err = r.db.Exec(query,
@@ -138,6 +149,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.CreatedByEmail,
 		agent.CreatedBySDKTokenID,
 		agent.CreatedByAPIKeyID,
+		declaredPurposeParam,
 	)
 
 	return err
@@ -153,7 +165,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		       pqc_public_key, pqc_key_algorithm, COALESCE(hybrid_mode_enabled, false), pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
 		       updated_by, COALESCE(updated_by_name, ''), COALESCE(updated_by_email, ''),
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE id = $1
 	`
@@ -169,6 +181,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	talksToJSON := make([]byte, 0)
 	capabilitiesJSON := make([]byte, 0)
 	metadataJSON := make([]byte, 0)
+	declaredPurposeJSON := make([]byte, 0)
 	var lastActive sql.NullTime
 	var keyCreatedAt sql.NullTime
 	var keyExpiresAt sql.NullTime
@@ -227,6 +240,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&agent.UpdatedByEmail,
 		&agent.CapabilityViolationCount,
 		&agent.IsCompromised,
+		&declaredPurposeJSON,
 	)
 
 	if err == sql.ErrNoRows {
@@ -323,6 +337,13 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		}
 	}
 
+	// Unmarshal declared_purpose from JSONB
+	if len(declaredPurposeJSON) > 0 {
+		if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
+		}
+	}
+
 	return agent, nil
 }
 
@@ -333,7 +354,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -356,6 +377,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		var documentationURL sql.NullString
 		talksToJSON := make([]byte, 0)
 		metadataJSON := make([]byte, 0)
+		declaredPurposeJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -380,6 +402,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&agent.CreatedByEmail,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
+			&declaredPurposeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -418,6 +441,13 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			}
 		}
 
+		// Unmarshal declared_purpose from JSONB
+		if len(declaredPurposeJSON) > 0 {
+			if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -435,8 +465,9 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		    key_created_at = $18, key_expires_at = $19, key_rotation_grace_until = $20,
 		    previous_public_key = $21, rotation_count = $22,
 		    pqc_public_key = $23, pqc_key_algorithm = $24, hybrid_mode_enabled = $25,
-		    pqc_key_created_at = $26, pqc_key_expires_at = $27, previous_pqc_public_key = $28
-		WHERE id = $29
+		    pqc_key_created_at = $26, pqc_key_expires_at = $27, previous_pqc_public_key = $28,
+		    declared_purpose = $29
+		WHERE id = $30
 	`
 
 	agent.UpdatedAt = time.Now()
@@ -460,6 +491,16 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 	}
 	if agent.Metadata == nil {
 		metadataJSON = []byte("{}")
+	}
+
+	// Marshal declared_purpose to JSONB; SQL NULL (untyped nil) when not declared.
+	var declaredPurposeParam interface{}
+	if agent.DeclaredPurpose != nil {
+		b, mErr := json.Marshal(agent.DeclaredPurpose)
+		if mErr != nil {
+			return fmt.Errorf("failed to marshal declared_purpose: %w", mErr)
+		}
+		declaredPurposeParam = b
 	}
 
 	_, err = r.db.Exec(query,
@@ -491,6 +532,7 @@ func (r *AgentRepository) Update(agent *domain.Agent) error {
 		agent.PQCKeyCreatedAt,
 		agent.PQCKeyExpiresAt,
 		agent.PreviousPQCPublicKey,
+		declaredPurposeParam,
 		agent.ID,
 	)
 
@@ -511,7 +553,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -533,6 +575,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		var documentationURL sql.NullString
 		talksToJSON := make([]byte, 0)
 		metadataJSON := make([]byte, 0)
+		declaredPurposeJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -557,6 +600,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.CreatedByEmail,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
+			&declaredPurposeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -589,6 +633,13 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		if len(metadataJSON) > 0 {
 			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		// Unmarshal declared_purpose from JSONB
+		if len(declaredPurposeJSON) > 0 {
+			if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
 			}
 		}
 
@@ -631,7 +682,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE organization_id = $1
 		  AND (
@@ -662,6 +713,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		var documentationURL sql.NullString
 		talksToJSON := make([]byte, 0)
 		metadataJSON := make([]byte, 0)
+		declaredPurposeJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -684,6 +736,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.CreatedBy,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
+			&declaredPurposeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -719,6 +772,13 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			}
 		}
 
+		// Unmarshal declared_purpose from JSONB
+		if len(declaredPurposeJSON) > 0 {
+			if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -737,7 +797,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE organization_id = $1
 		  AND (
@@ -768,6 +828,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		var documentationURL sql.NullString
 		talksToJSON := make([]byte, 0)
 		metadataJSON := make([]byte, 0)
+		declaredPurposeJSON := make([]byte, 0)
 		err := rows.Scan(
 			&agent.ID,
 			&agent.OrganizationID,
@@ -790,6 +851,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.CreatedBy,
 			&agent.CapabilityViolationCount,
 			&agent.IsCompromised,
+			&declaredPurposeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -825,6 +887,13 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			}
 		}
 
+		// Unmarshal declared_purpose from JSONB
+		if len(declaredPurposeJSON) > 0 {
+			if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
+			}
+		}
+
 		agents = append(agents, agent)
 	}
 
@@ -840,7 +909,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       talks_to, capabilities, metadata,
-		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false)
+		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE organization_id = $1 AND name = $2
 		LIMIT 1
@@ -863,6 +932,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	talksToJSON := make([]byte, 0)
 	capabilitiesJSON := make([]byte, 0)
 	metadataJSON := make([]byte, 0)
+	declaredPurposeJSON := make([]byte, 0)
 
 	err := r.db.QueryRow(query, orgID, name).Scan(
 		&agent.ID,
@@ -894,6 +964,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&metadataJSON,
 		&agent.CapabilityViolationCount,
 		&agent.IsCompromised,
+		&declaredPurposeJSON,
 	)
 
 	if err == sql.ErrNoRows {
@@ -959,6 +1030,13 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	if len(metadataJSON) > 0 {
 		if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
+	// Unmarshal declared_purpose from JSONB
+	if len(declaredPurposeJSON) > 0 {
+		if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
 		}
 	}
 
