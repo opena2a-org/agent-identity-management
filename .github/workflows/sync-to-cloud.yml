@@ -1,0 +1,142 @@
+name: Sync to AIM Cloud
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'apps/web/**'
+      - 'sdk/**'
+
+  # Allow manual trigger for ad-hoc syncs
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source (agent-identity-management)
+        uses: actions/checkout@v4
+        with:
+          path: source
+          fetch-depth: 2  # Need previous commit for change detection
+
+      # Preflight: confirm the sync token can actually reach the downstream repo
+      # BEFORE attempting the checkout. The original workflow was removed (#203)
+      # because a missing/expired AIM_CLOUD_SYNC_TOKEN made the target checkout
+      # hard-fail on every push to main, leaving a wall of red runs. Here a bad
+      # token instead emits a warning annotation and the job ends green, so the
+      # workflow can live on main and auto-activates the moment a valid token is
+      # provisioned (no code change needed to "turn it back on").
+      - name: Preflight - verify sync token can reach aim-cloud
+        id: preflight
+        env:
+          GH_TOKEN: ${{ secrets.AIM_CLOUD_SYNC_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning title=Sync skipped::AIM_CLOUD_SYNC_TOKEN is not set. Provision a token with contents:write + pull-requests:write on opena2a-org/aim-cloud to enable the sync."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh api repos/opena2a-org/aim-cloud --silent 2>/dev/null; then
+            echo "Token validated against opena2a-org/aim-cloud."
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Sync skipped::AIM_CLOUD_SYNC_TOKEN cannot access opena2a-org/aim-cloud (expired or missing scopes). Refresh the secret with a token that has contents:write + pull-requests:write on aim-cloud."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+      - name: Checkout target (aim-cloud)
+        if: steps.preflight.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: opena2a-org/aim-cloud
+          token: ${{ secrets.AIM_CLOUD_SYNC_TOKEN }}
+          path: target
+
+      - name: Set up Go
+        if: steps.preflight.outputs.ok == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: target/apps/backend/go.sum
+
+      - name: Run sync script
+        if: steps.preflight.outputs.ok == 'true'
+        run: |
+          chmod +x source/scripts/sync-to-cloud.sh
+          source/scripts/sync-to-cloud.sh source target
+
+      - name: Check for changes
+        id: changes
+        if: steps.preflight.outputs.ok == 'true'
+        working-directory: target
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to sync"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --cached --stat
+          fi
+
+      - name: Create PR if changes exist
+        if: steps.preflight.outputs.ok == 'true' && steps.changes.outputs.has_changes == 'true'
+        working-directory: target
+        env:
+          GH_TOKEN: ${{ secrets.AIM_CLOUD_SYNC_TOKEN }}
+        run: |
+          git config user.name "OpenA2A Sync Bot"
+          git config user.email "sync@opena2a.org"
+
+          SOURCE_SHA=$(git -C ../source rev-parse --short HEAD)
+          SOURCE_MSG=$(git -C ../source log -1 --pretty=%s)
+          BRANCH="sync/aim-${SOURCE_SHA}-$(date +%Y%m%d)"
+
+          git checkout -b "$BRANCH"
+          git commit -m "$(cat <<EOF
+          Sync from agent-identity-management ${SOURCE_SHA}
+
+          Source commit: ${SOURCE_MSG}
+          Automated by sync-to-cloud workflow.
+          EOF
+          )"
+
+          git push origin "$BRANCH"
+
+          # Check if an open sync PR already exists
+          EXISTING=$(gh pr list --repo opena2a-org/aim-cloud --state open --label "sync" --json number -q '.[0].number' 2>/dev/null || echo "")
+
+          if [[ -n "$EXISTING" ]]; then
+            echo "Existing sync PR #${EXISTING} found. Creating new PR -- close the old one if superseded."
+          fi
+
+          gh pr create \
+            --repo opena2a-org/aim-cloud \
+            --title "Sync from agent-identity-management (${SOURCE_SHA})" \
+            --body "$(cat <<'BODY'
+          ## Automated Sync
+
+          This PR was created by the sync-to-cloud workflow. It applies changes
+          from the public `agent-identity-management` repo to `aim-cloud`.
+
+          ### What to review
+
+          - Verify no protected files were overwritten (check `.sync-protect`)
+          - Confirm Go import paths were rewritten correctly
+          - Run `go build ./...` in `apps/backend/` to verify compilation
+          - Check that cloud-only features (Stripe, Google OAuth, onboarding) are intact
+
+          ### Protected files
+
+          Files listed in `.sync-protect` are never overwritten. If a shared file
+          needs cloud-specific changes, update `.sync-protect` accordingly.
+          BODY
+          )" \
+            --label "sync"
