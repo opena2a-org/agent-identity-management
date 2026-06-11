@@ -860,7 +860,7 @@ func TestRegistrationService_CreateManualRegistrationRequest_UserExists(t *testi
 
 	service := NewRegistrationService(nil, mockUserRepo, nil, nil, nil)
 
-	req, err := service.CreateManualRegistrationRequest(ctx, "existing@example.com", "John", "Doe", "Password123!")
+	req, err := service.CreateManualRegistrationRequest(ctx, "existing@example.com", "John", "Doe", "Password123!", nil)
 
 	assert.Nil(t, req)
 	assert.Equal(t, ErrUserAlreadyExists, err)
@@ -885,7 +885,7 @@ func TestRegistrationService_CreateManualRegistrationRequest_PendingRequestExist
 
 	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
 
-	req, err := service.CreateManualRegistrationRequest(ctx, "pending@example.com", "John", "Doe", "Password123!")
+	req, err := service.CreateManualRegistrationRequest(ctx, "pending@example.com", "John", "Doe", "Password123!", nil)
 
 	assert.Nil(t, req)
 	assert.Equal(t, ErrRegistrationRequestExists, err)
@@ -905,11 +905,56 @@ func TestRegistrationService_CreateManualRegistrationRequest_WeakPassword(t *tes
 	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
 
 	// Weak password
-	req, err := service.CreateManualRegistrationRequest(ctx, "new@example.com", "John", "Doe", "weak")
+	req, err := service.CreateManualRegistrationRequest(ctx, "new@example.com", "John", "Doe", "weak", nil)
 
 	assert.Nil(t, req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "password validation failed")
+}
+
+func TestRegistrationService_CreateManualRegistrationRequest_StoresSignupProfile(t *testing.T) {
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "survey@example.com").Return(nil, errors.New("not found"))
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "survey@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("CreateRegistrationRequest", ctx, mock.AnythingOfType("*domain.UserRegistrationRequest")).Return(nil)
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	profile := map[string]string{
+		"role":           "developer",
+		"primaryUseCase": "securing-production-agents",
+		"referralSource": "github",
+	}
+	req, err := service.CreateManualRegistrationRequest(ctx, "survey@example.com", "John", "Doe", "Password123!", profile)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, req)
+	assert.Equal(t, map[string]interface{}{domain.SignupProfileMetadataKey: profile}, req.Metadata)
+	mockRegRepo.AssertExpectations(t)
+}
+
+func TestRegistrationService_CreateManualRegistrationRequest_NoProfileLeavesMetadataNil(t *testing.T) {
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "plain@example.com").Return(nil, errors.New("not found"))
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "plain@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("CreateRegistrationRequest", ctx, mock.AnythingOfType("*domain.UserRegistrationRequest")).Return(nil)
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateManualRegistrationRequest(ctx, "plain@example.com", "John", "Doe", "Password123!", nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, req)
+	assert.Nil(t, req.Metadata)
+	mockRegRepo.AssertExpectations(t)
 }
 
 func TestRegistrationService_CreateAccessRequest_Success(t *testing.T) {

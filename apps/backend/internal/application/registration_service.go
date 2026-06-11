@@ -56,10 +56,13 @@ func NewRegistrationService(
 	}
 }
 
-// CreateManualRegistrationRequest creates a registration request for email/password user registration
+// CreateManualRegistrationRequest creates a registration request for email/password user registration.
+// signupProfile holds optional, already-validated questionnaire answers
+// (see domain.BuildSignupProfile); pass nil when none were given.
 func (s *RegistrationService) CreateManualRegistrationRequest(
 	ctx context.Context,
 	email, firstName, lastName, password string,
+	signupProfile map[string]string,
 ) (*domain.UserRegistrationRequest, error) {
 	// Check if user already exists
 	existingUser, err := s.userRepo.GetByEmail(email)
@@ -99,6 +102,12 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		lastName,
 		hashedPassword,
 	)
+
+	if len(signupProfile) > 0 {
+		req.Metadata = map[string]interface{}{
+			domain.SignupProfileMetadataKey: signupProfile,
+		}
+	}
 
 	if shouldAutoApprove {
 		req.Status = domain.RegistrationStatusApproved
@@ -239,11 +248,11 @@ func (s *RegistrationService) CreateAccessRequest(
 		Status:             domain.RegistrationStatusPending,
 		RequestedAt:        now,
 		OAuthEmailVerified: false,
-		Metadata:           map[string]interface{}{
+		Metadata: map[string]interface{}{
 			"reason": reason,
 		},
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	// Add organization name to metadata if provided
@@ -319,7 +328,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	}
 
 	// Determine provider based on registration request type
-	provider := "local" // Default to local for email/password
+	provider := "local"     // Default to local for email/password
 	providerID := req.Email // Use email as provider ID for local auth
 
 	// If OAuth registration, use OAuth provider info
@@ -335,7 +344,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing users: %w", err)
 	}
-	
+
 	userRole := domain.RoleViewer // Default to viewer
 	if len(existingUsers) == 0 {
 		userRole = domain.RoleAdmin // First user becomes admin
@@ -350,7 +359,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		Role:           userRole, // Admin if first user, otherwise viewer
 		Provider:       provider,
 		ProviderID:     providerID,
-		PasswordHash:   req.PasswordHash,  // Will be set for email/password registrations
+		PasswordHash:   req.PasswordHash, // Will be set for email/password registrations
 		ApprovedBy:     &reviewerID,
 		ApprovedAt:     &time.Time{},
 		Status:         domain.UserStatusActive, // Set user as active upon approval
@@ -625,7 +634,7 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 
 	// Organization doesn't exist, create new one
 	fmt.Printf("📝 Creating new organization for domain: %s\n", domainName)
-	
+
 	newOrg := &domain.Organization{
 		ID:        uuid.New(),
 		Name:      domainName, // Use domain as organization name

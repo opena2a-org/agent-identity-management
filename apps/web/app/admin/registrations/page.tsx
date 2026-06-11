@@ -10,8 +10,8 @@ interface RegistrationRequest {
   email: string;
   firstName: string;
   lastName: string;
-  oauthProvider: "google" | "microsoft" | "okta";
-  oauthUserId: string;
+  oauthProvider?: "google" | "microsoft" | "okta" | "local";
+  oauthUserId?: string;
   status: "pending" | "approved" | "rejected";
   requestedAt: string;
   reviewedAt?: string;
@@ -19,6 +19,13 @@ interface RegistrationRequest {
   rejectionReason?: string;
   profilePictureUrl?: string;
   oauthEmailVerified: boolean;
+  metadata?: {
+    signupProfile?: {
+      role?: string;
+      primaryUseCase?: string;
+      referralSource?: string;
+    };
+  };
 }
 
 export default function RegistrationsPage() {

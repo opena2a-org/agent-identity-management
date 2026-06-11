@@ -33,10 +33,20 @@ func NewPublicRegistrationHandler(
 
 // RegisterUserRequest represents the public registration request
 type RegisterUserRequest struct {
-	Email     string `json:"email" validate:"required,email"`
-	FirstName string `json:"firstName" validate:"required,min=1,max=100"`
-	LastName  string `json:"lastName" validate:"required,min=1,max=100"`
-	Password  string `json:"password" validate:"required,min=8"`
+	Email         string                `json:"email" validate:"required,email"`
+	FirstName     string                `json:"firstName" validate:"required,min=1,max=100"`
+	LastName      string                `json:"lastName" validate:"required,min=1,max=100"`
+	Password      string                `json:"password" validate:"required,min=8"`
+	SignupProfile *SignupProfileRequest `json:"signupProfile,omitempty"`
+}
+
+// SignupProfileRequest carries the optional signup questionnaire answers.
+// Values must come from the closed vocabularies in domain (SignupProfileRoles,
+// SignupProfileUseCases, SignupProfileReferralSources).
+type SignupProfileRequest struct {
+	Role           string `json:"role,omitempty"`
+	PrimaryUseCase string `json:"primaryUseCase,omitempty"`
+	ReferralSource string `json:"referralSource,omitempty"`
 }
 
 // RegisterUserResponse represents the registration response
@@ -69,8 +79,8 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	}
 
 	// Basic validation (struct tags handle detailed validation)
-	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.FirstName) == "" || 
-	   strings.TrimSpace(req.LastName) == "" || strings.TrimSpace(req.Password) == "" {
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.FirstName) == "" ||
+		strings.TrimSpace(req.LastName) == "" || strings.TrimSpace(req.Password) == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"error":   "All fields are required",
@@ -82,6 +92,23 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	firstName := strings.TrimSpace(req.FirstName)
 	lastName := strings.TrimSpace(req.LastName)
 
+	// Validate the optional signup questionnaire answers (closed vocabulary)
+	var signupProfile map[string]string
+	if req.SignupProfile != nil {
+		var profileErr error
+		signupProfile, profileErr = domain.BuildSignupProfile(
+			strings.TrimSpace(req.SignupProfile.Role),
+			strings.TrimSpace(req.SignupProfile.PrimaryUseCase),
+			strings.TrimSpace(req.SignupProfile.ReferralSource),
+		)
+		if profileErr != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"error":   profileErr.Error(),
+			})
+		}
+	}
+
 	// Create manual registration request with password
 	registrationRequest, err := h.registrationService.CreateManualRegistrationRequest(
 		c.Context(),
@@ -89,6 +116,7 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		firstName,
 		lastName,
 		req.Password,
+		signupProfile,
 	)
 	if err != nil {
 		// Handle specific error cases
@@ -121,10 +149,10 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
-		Success: true,
-		Message: "Registration request submitted successfully. Please wait for admin approval.",
+		Success:             true,
+		Message:             "Registration request submitted successfully. Please wait for admin approval.",
 		RegistrationRequest: registrationRequest,
-		RequestID: registrationRequest.ID,
+		RequestID:           registrationRequest.ID,
 	})
 }
 
@@ -180,15 +208,15 @@ func (h *PublicRegistrationHandler) CheckRegistrationStatus(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"success":    true,
-		"status":     registrationRequest.Status,
-		"message":    statusMessage,
-		"requestId":  registrationRequest.ID,
-		"email":      registrationRequest.Email,
-		"firstName":  registrationRequest.FirstName,
-		"lastName":   registrationRequest.LastName,
+		"success":     true,
+		"status":      registrationRequest.Status,
+		"message":     statusMessage,
+		"requestId":   registrationRequest.ID,
+		"email":       registrationRequest.Email,
+		"firstName":   registrationRequest.FirstName,
+		"lastName":    registrationRequest.LastName,
 		"requestedAt": registrationRequest.RequestedAt,
-		"reviewedAt": registrationRequest.ReviewedAt,
+		"reviewedAt":  registrationRequest.ReviewedAt,
 	})
 }
 
@@ -200,13 +228,13 @@ type LoginRequest struct {
 
 // LoginResponse represents the login response
 type LoginResponse struct {
-	Success                bool          `json:"success"`
-	Message                string        `json:"message"`
-	User                   *domain.User  `json:"user"`
-	AccessToken            *string       `json:"accessToken,omitempty"`
-	RefreshToken           *string       `json:"refreshToken,omitempty"`
-	IsApproved             bool          `json:"isApproved"`
-	RequiresPasswordChange bool          `json:"requiresPasswordChange,omitempty"`
+	Success                bool         `json:"success"`
+	Message                string       `json:"message"`
+	User                   *domain.User `json:"user"`
+	AccessToken            *string      `json:"accessToken,omitempty"`
+	RefreshToken           *string      `json:"refreshToken,omitempty"`
+	IsApproved             bool         `json:"isApproved"`
+	RequiresPasswordChange bool         `json:"requiresPasswordChange,omitempty"`
 }
 
 // Login handles public user login with email and password
@@ -297,7 +325,7 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 						// Default organization for registration requests without org
 						orgID = uuid.MustParse("e7743fb0-d42d-4c3d-8684-38dc189f9ad4")
 					}
-					
+
 					tempUser := &domain.User{
 						ID:             regRequest.ID,
 						OrganizationID: orgID,
@@ -394,13 +422,13 @@ func (h *PublicRegistrationHandler) generatePasswordChangeRequiredResponse(c fib
 	}
 
 	response := &LoginResponse{
-		Success:              true,
-		User:                 user,
-		IsApproved:           true,
-		AccessToken:          &accessToken,
-		RefreshToken:         &refreshToken,
+		Success:                true,
+		User:                   user,
+		IsApproved:             true,
+		AccessToken:            &accessToken,
+		RefreshToken:           &refreshToken,
 		RequiresPasswordChange: true,
-		Message:              "You must change your password before continuing",
+		Message:                "You must change your password before continuing",
 	}
 
 	// Set cookies for web clients
@@ -478,6 +506,28 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"error":   "Reason must be at least 10 characters",
+		})
+	}
+
+	// Enforce length caps explicitly: this endpoint is unauthenticated and the
+	// reason/organizationName values are persisted to registration metadata,
+	// and the struct validate tags are not wired to a fiber StructValidator.
+	if len(req.Reason) > 1000 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Reason must be at most 1000 characters",
+		})
+	}
+	if len(req.FullName) > 200 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Full name must be at most 200 characters",
+		})
+	}
+	if req.OrganizationName != nil && len(*req.OrganizationName) > 200 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "Organization name must be at most 200 characters",
 		})
 	}
 

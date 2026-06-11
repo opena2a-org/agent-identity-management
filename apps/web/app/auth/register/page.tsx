@@ -15,6 +15,32 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
+// Values must match the backend vocabulary in domain/signup_profile.go
+const ROLE_OPTIONS = [
+  { value: "developer", label: "Developer" },
+  { value: "security-engineer", label: "Security engineer" },
+  { value: "founder-or-exec", label: "Founder or executive" },
+  { value: "student-or-researcher", label: "Student or researcher" },
+  { value: "other", label: "Other" },
+];
+
+const USE_CASE_OPTIONS = [
+  { value: "securing-production-agents", label: "Securing AI agents in production" },
+  { value: "evaluating-for-team", label: "Evaluating AIM for my team" },
+  { value: "research-or-learning", label: "Research or learning" },
+  { value: "personal-project", label: "Personal project" },
+  { value: "other", label: "Other" },
+];
+
+const REFERRAL_OPTIONS = [
+  { value: "github", label: "GitHub" },
+  { value: "search", label: "Search engine" },
+  { value: "social-media", label: "Social media" },
+  { value: "colleague-or-friend", label: "Colleague or friend" },
+  { value: "blog-or-article", label: "Blog or article" },
+  { value: "other", label: "Other" },
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -24,6 +50,9 @@ export default function RegisterPage() {
     lastName: "",
     password: "",
     confirmPassword: "",
+    role: "",
+    primaryUseCase: "",
+    referralSource: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -58,6 +87,12 @@ export default function RegisterPage() {
       newErrors.confirmPassword = "Passwords do not match";
     }
 
+    if (!formData.role) newErrors.role = "Please select an option";
+    if (!formData.primaryUseCase)
+      newErrors.primaryUseCase = "Please select an option";
+    if (!formData.referralSource)
+      newErrors.referralSource = "Please select an option";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,6 +111,11 @@ export default function RegisterPage() {
         lastName: formData.lastName,
         password: formData.password,
         provider: "local",
+        signupProfile: {
+          role: formData.role,
+          primaryUseCase: formData.primaryUseCase,
+          referralSource: formData.referralSource,
+        },
       });
 
       if (response.success) {
@@ -306,6 +346,114 @@ export default function RegisterPage() {
                   {errors.confirmPassword}
                 </p>
               )}
+            </div>
+
+            <div className="pt-2 border-t border-gray-200 space-y-4">
+              <p className="text-sm text-gray-600">
+                A few quick questions so we can improve AIM:
+              </p>
+
+              <div>
+                <label
+                  htmlFor="role"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  What best describes you?
+                </label>
+                <select
+                  id="role"
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value })
+                  }
+                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.role ? "border-red-500" : "border-gray-300"
+                  } ${formData.role ? "text-gray-900" : "text-gray-400"}`}
+                >
+                  <option value="" disabled>
+                    Select an option
+                  </option>
+                  {ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.role && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.role}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="primaryUseCase"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  What will you use AIM for?
+                </label>
+                <select
+                  id="primaryUseCase"
+                  value={formData.primaryUseCase}
+                  onChange={(e) =>
+                    setFormData({ ...formData, primaryUseCase: e.target.value })
+                  }
+                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.primaryUseCase ? "border-red-500" : "border-gray-300"
+                  } ${formData.primaryUseCase ? "text-gray-900" : "text-gray-400"}`}
+                >
+                  <option value="" disabled>
+                    Select an option
+                  </option>
+                  {USE_CASE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.primaryUseCase && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.primaryUseCase}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="referralSource"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  How did you hear about AIM?
+                </label>
+                <select
+                  id="referralSource"
+                  value={formData.referralSource}
+                  onChange={(e) =>
+                    setFormData({ ...formData, referralSource: e.target.value })
+                  }
+                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.referralSource ? "border-red-500" : "border-gray-300"
+                  } ${formData.referralSource ? "text-gray-900" : "text-gray-400"}`}
+                >
+                  <option value="" disabled>
+                    Select an option
+                  </option>
+                  {REFERRAL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.referralSource && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.referralSource}
+                  </p>
+                )}
+              </div>
             </div>
 
             <button

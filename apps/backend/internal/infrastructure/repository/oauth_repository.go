@@ -3,12 +3,48 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// maxRegistrationMetadataBytes bounds the metadata column: every current
+// producer (signup profile, access-request reason) stays well under this, and
+// registration requests originate from unauthenticated endpoints, so an
+// unbounded write here would be a storage-abuse vector.
+const maxRegistrationMetadataBytes = 16 * 1024
+
+// marshalRegistrationMetadata converts the metadata map to a JSONB parameter
+// (NULL when empty).
+func marshalRegistrationMetadata(m map[string]interface{}) (interface{}, error) {
+	if len(m) == 0 {
+		return nil, nil
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal registration metadata: %w", err)
+	}
+	if len(raw) > maxRegistrationMetadataBytes {
+		return nil, fmt.Errorf("registration metadata exceeds %d bytes", maxRegistrationMetadataBytes)
+	}
+	return raw, nil
+}
+
+// unmarshalRegistrationMetadata converts a scanned JSONB value back to a map
+// (nil when the column is NULL).
+func unmarshalRegistrationMetadata(raw []byte) (map[string]interface{}, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal registration metadata: %w", err)
+	}
+	return m, nil
+}
 
 type OAuthRepositoryPostgres struct {
 	db *sqlx.DB
@@ -27,13 +63,18 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		INSERT INTO user_registration_requests (
 			id, email, first_name, last_name,
 			organization_id, status, requested_at,
-			password_hash, created_at, updated_at
+			password_hash, metadata, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	metadata, err := marshalRegistrationMetadata(req.Metadata)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.ExecContext(ctx, query,
 		req.ID,
 		req.Email,
 		req.FirstName,
@@ -42,6 +83,7 @@ func (r *OAuthRepositoryPostgres) CreateRegistrationRequest(ctx context.Context,
 		req.Status,
 		req.RequestedAt,
 		req.PasswordHash,
+		metadata,
 		req.CreatedAt,
 		req.UpdatedAt,
 	)
@@ -57,12 +99,13 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id
 	query := `
 		SELECT id, email, first_name, last_name,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
-			   rejection_reason, password_hash, created_at, updated_at
+			   rejection_reason, password_hash, metadata, created_at, updated_at
 		FROM user_registration_requests
 		WHERE id = $1
 	`
 
 	var req domain.UserRegistrationRequest
+	var metadataRaw []byte
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID,
@@ -76,6 +119,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id
 		&req.ReviewedBy,
 		&req.RejectionReason,
 		&req.PasswordHash,
+		&metadataRaw,
 		&req.CreatedAt,
 		&req.UpdatedAt,
 	)
@@ -85,6 +129,10 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequest(ctx context.Context, id
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get registration request: %w", err)
+	}
+
+	if req.Metadata, err = unmarshalRegistrationMetadata(metadataRaw); err != nil {
+		return nil, err
 	}
 
 	return &req, nil
@@ -108,7 +156,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 	query := `
 		SELECT id, email, first_name, last_name,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
-			   rejection_reason, password_hash, created_at, updated_at
+			   rejection_reason, password_hash, metadata, created_at, updated_at
 		FROM user_registration_requests
 		WHERE email = $1 AND status = $2
 		ORDER BY created_at DESC
@@ -116,6 +164,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 	`
 
 	var req domain.UserRegistrationRequest
+	var metadataRaw []byte
 
 	err := r.db.QueryRowContext(ctx, query, email, domain.RegistrationStatusPending).Scan(
 		&req.ID,
@@ -129,6 +178,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 		&req.ReviewedBy,
 		&req.RejectionReason,
 		&req.PasswordHash,
+		&metadataRaw,
 		&req.CreatedAt,
 		&req.UpdatedAt,
 	)
@@ -138,6 +188,10 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmail(
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get registration request: %w", err)
+	}
+
+	if req.Metadata, err = unmarshalRegistrationMetadata(metadataRaw); err != nil {
+		return nil, err
 	}
 
 	return &req, nil
@@ -151,7 +205,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 	query := `
 		SELECT id, email, first_name, last_name,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
-			   rejection_reason, password_hash, created_at, updated_at
+			   rejection_reason, password_hash, metadata, created_at, updated_at
 		FROM user_registration_requests
 		WHERE email = $1
 		ORDER BY created_at DESC
@@ -159,6 +213,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 	`
 
 	var req domain.UserRegistrationRequest
+	var metadataRaw []byte
 
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
 		&req.ID,
@@ -172,6 +227,7 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 		&req.ReviewedBy,
 		&req.RejectionReason,
 		&req.PasswordHash,
+		&metadataRaw,
 		&req.CreatedAt,
 		&req.UpdatedAt,
 	)
@@ -180,6 +236,10 @@ func (r *OAuthRepositoryPostgres) GetRegistrationRequestByEmailAnyStatus(
 		return nil, fmt.Errorf("registration request not found")
 	}
 	if err != nil {
+		return nil, err
+	}
+
+	if req.Metadata, err = unmarshalRegistrationMetadata(metadataRaw); err != nil {
 		return nil, err
 	}
 
@@ -206,7 +266,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 	query := `
 		SELECT id, email, first_name, last_name,
 			   organization_id, status, requested_at, reviewed_at, reviewed_by,
-			   rejection_reason, password_hash, created_at, updated_at
+			   rejection_reason, password_hash, metadata, created_at, updated_at
 		FROM user_registration_requests
 		WHERE status = $1 AND (organization_id = $2 OR organization_id IS NULL)
 		ORDER BY requested_at DESC
@@ -222,6 +282,7 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 	requests := make([]*domain.UserRegistrationRequest, 0)
 	for rows.Next() {
 		var req domain.UserRegistrationRequest
+		var metadataRaw []byte
 
 		err := rows.Scan(
 			&req.ID,
@@ -235,11 +296,16 @@ func (r *OAuthRepositoryPostgres) ListPendingRegistrationRequests(
 			&req.ReviewedBy,
 			&req.RejectionReason,
 			&req.PasswordHash,
+			&metadataRaw,
 			&req.CreatedAt,
 			&req.UpdatedAt,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan registration request: %w", err)
+		}
+
+		if req.Metadata, err = unmarshalRegistrationMetadata(metadataRaw); err != nil {
+			return nil, 0, err
 		}
 
 		requests = append(requests, &req)

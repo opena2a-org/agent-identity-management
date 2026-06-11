@@ -1435,6 +1435,35 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 	})
 }
 
+// ListRegistrationRequests returns pending registration requests for the
+// admin registrations page (includes signup profile answers via metadata)
+func (h *AdminHandler) ListRegistrationRequests(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+
+	limit := 50
+	if parsed, err := strconv.Atoi(c.Query("limit", "50")); err == nil && parsed > 0 && parsed <= 100 {
+		limit = parsed
+	}
+	offset := 0
+	if parsed, err := strconv.Atoi(c.Query("offset", "0")); err == nil && parsed >= 0 {
+		offset = parsed
+	}
+
+	requests, total, err := h.getRegistrationService().ListPendingRegistrationRequests(c.Context(), orgID, limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch registration requests",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"requests": requests,
+		"total":    total,
+		"limit":    limit,
+		"offset":   offset,
+	})
+}
+
 // ApproveRegistrationRequest approves a pending registration request from the users page
 func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 	orgID := c.Locals("organization_id").(uuid.UUID)
