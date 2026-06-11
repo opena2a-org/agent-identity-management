@@ -219,12 +219,13 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `page` (optional): Page number (default: 1)
-- `limit` (optional): Items per page (default: 20, max: 100)
-- `status` (optional): Filter by status (`active`, `pending_verification`, `revoked`)
-- `type` (optional): Filter by type (`ai_agent`, `mcp_server`)
+- `limit` (optional): Page size. When omitted, all agents are returned.
+- `offset` (optional): Number of agents to skip (default: 0). Only applied when `limit` is set.
 
 **Response:**
+
+`total` is always the organization-wide agent count, so clients can keep paginating. The `limit` and `offset` fields are echoed back only when `limit` was provided.
+
 ```json
 {
   "agents": [
@@ -232,19 +233,17 @@ Authorization: Bearer YOUR_JWT_TOKEN
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "name": "my-agent",
       "displayName": "My Awesome Agent",
-      "type": "ai_agent",
-      "status": "active",
+      "agentType": "ai_agent",
+      "status": "verified",
       "trustScore": 75.5,
-      "lastVerifiedAt": "2025-10-08T00:00:00Z",
+      "capabilities": ["file:read"],
+      "tags": [],
       "createdAt": "2025-10-07T00:00:00Z"
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 45,
-    "totalPages": 3
-  }
+  "total": 45,
+  "limit": 20,
+  "offset": 0
 }
 ```
 

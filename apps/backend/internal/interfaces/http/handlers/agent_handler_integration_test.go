@@ -3469,3 +3469,62 @@ func TestAgentHandler_ListAgents_InvalidPagingParams(t *testing.T) {
 	assert.Equal(t, 0, gotLimit)
 	assert.Equal(t, 0, gotOffset)
 }
+
+// Bulk enrichment failures degrade to empty capabilities/tags (the same
+// behavior the old per-agent path had), never a 500 or a panic. Note a
+// nil map is read-safe in Go; this locks that in against "fixes" that
+// assume otherwise.
+func TestAgentHandler_ListAgents_BulkEnrichmentErrorsDegrade(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+			return []*domain.Agent{{ID: uuid.New(), OrganizationID: orgID, Name: "agent1"}}, 1, nil
+		},
+	}
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetCapabilitiesByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+			return nil, errors.New("capabilities query failed")
+		},
+	}
+	mockTagService := &MockTagServiceImpl{
+		GetAgentTagsByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+			return nil, errors.New("tags query failed")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		mockCapabilityService,
+		mockTagService,
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents", handler.ListAgents)
+
+	req := httptest.NewRequest("GET", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	agents := result["agents"].([]interface{})
+	require.Len(t, agents, 1)
+	first := agents[0].(map[string]interface{})
+	assert.Equal(t, []interface{}{}, first["capabilities"])
+	assert.Equal(t, []interface{}{}, first["tags"])
+}
