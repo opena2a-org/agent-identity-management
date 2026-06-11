@@ -349,6 +349,14 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 
 // GetByOrganization retrieves all agents in an organization
 func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, error) {
+	agents, _, err := r.GetByOrganizationPaged(orgID, 0, 0)
+	return agents, err
+}
+
+// GetByOrganizationPaged retrieves one page of an organization's agents
+// plus the total agent count for the organization. limit <= 0 returns
+// all agents.
+func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
@@ -359,10 +367,15 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
 	`
+	args := []interface{}{orgID}
+	if limit > 0 {
+		query += " LIMIT $2 OFFSET $3"
+		args = append(args, limit, offset)
+	}
 
-	rows, err := r.db.Query(query, orgID)
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -405,7 +418,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 			&declaredPurposeJSON,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		// Convert nullable fields
@@ -431,27 +444,37 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 		// Unmarshal talks_to from JSONB (handles both string and object formats)
 		agent.TalksTo, err = unmarshalTalksTo(talksToJSON)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		// Unmarshal metadata from JSONB
 		if len(metadataJSON) > 0 {
 			if err := json.Unmarshal(metadataJSON, &agent.Metadata); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+				return nil, 0, fmt.Errorf("failed to unmarshal metadata: %w", err)
 			}
 		}
 
 		// Unmarshal declared_purpose from JSONB
 		if len(declaredPurposeJSON) > 0 {
 			if err := json.Unmarshal(declaredPurposeJSON, &agent.DeclaredPurpose); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
+				return nil, 0, fmt.Errorf("failed to unmarshal declared_purpose: %w", err)
 			}
 		}
 
 		agents = append(agents, agent)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
 
-	return agents, nil
+	total := len(agents)
+	if limit > 0 {
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE organization_id = $1`, orgID).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	return agents, total, nil
 }
 
 // Update updates an agent

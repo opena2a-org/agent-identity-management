@@ -49,6 +49,7 @@ type CapabilityRepository interface {
 	GetCapabilityByID(id uuid.UUID) (*AgentCapability, error)
 	GetCapabilitiesByAgentID(agentID uuid.UUID) ([]*AgentCapability, error)
 	GetActiveCapabilitiesByAgentID(agentID uuid.UUID) ([]*AgentCapability, error)
+	GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*AgentCapability, error)
 	RevokeCapability(id uuid.UUID, revokedAt time.Time) error
 	DeleteCapability(id uuid.UUID) error
 

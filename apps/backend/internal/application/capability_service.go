@@ -468,6 +468,16 @@ func (s *CapabilityService) GetAgentCapabilities(
 	return s.capabilityRepo.GetCapabilitiesByAgentID(agentID)
 }
 
+// GetCapabilitiesByAgentIDs retrieves capabilities for many agents in a
+// single query, keyed by agent ID
+func (s *CapabilityService) GetCapabilitiesByAgentIDs(
+	ctx context.Context,
+	agentIDs []uuid.UUID,
+	activeOnly bool,
+) (map[uuid.UUID][]*domain.AgentCapability, error) {
+	return s.capabilityRepo.GetCapabilitiesByAgentIDs(agentIDs, activeOnly)
+}
+
 // CapabilityDefinition represents a capability type available in the system
 type CapabilityDefinition struct {
 	Type           string `json:"type"`

@@ -2187,3 +2187,38 @@ func TestTagService_CreateTag_RepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create tag")
 	mockTagRepo.AssertExpectations(t)
 }
+
+// GetByOrganizationPaged pages over GetByOrganization for tests.
+func (m *MockAgentRepoForTags) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(agents)
+	if limit > 0 {
+		if offset >= len(agents) {
+			agents = nil
+		} else {
+			agents = agents[offset:]
+		}
+		if len(agents) > limit {
+			agents = agents[:limit]
+		}
+	}
+	return agents, total, nil
+}
+
+// GetAgentTagsByAgentIDs aggregates the per-agent mocks for tests.
+func (m *MockTagRepoForTags) GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	result := make(map[uuid.UUID][]*domain.Tag, len(agentIDs))
+	for _, agentID := range agentIDs {
+		tags, err := m.GetAgentTags(ctx, agentID)
+		if err != nil {
+			return nil, err
+		}
+		if len(tags) > 0 {
+			result[agentID] = tags
+		}
+	}
+	return result, nil
+}
