@@ -97,10 +97,12 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 	}
 
 	// ✅ Fetch tags from agent_tags table
-	var agentTags []*domain.Tag
+	agentTags := make([]*domain.Tag, 0)
 	if h.tagService != nil {
 		// Log error but don't fail - return empty tags
-		agentTags, _ = h.tagService.GetAgentTags(c.Context(), agent.ID)
+		if fetched, err := h.tagService.GetAgentTags(c.Context(), agent.ID); err == nil && fetched != nil {
+			agentTags = fetched
+		}
 	}
 
 	return agentResponse(agent, capabilities, agentTags)
