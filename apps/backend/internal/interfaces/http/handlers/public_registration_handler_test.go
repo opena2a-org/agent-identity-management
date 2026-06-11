@@ -86,6 +86,56 @@ func TestPublicRegistrationHandler_RegisterUser_MissingPassword(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestPublicRegistrationHandler_RegisterUser_InvalidSignupProfileValue(t *testing.T) {
+	// Profile validation runs before the registration service is called,
+	// so an out-of-vocabulary answer must 400 even with valid credentials.
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/register", handler.RegisterUser)
+
+	body := `{"email":"test@example.com","firstName":"John","lastName":"Doe","password":"Password123!","signupProfile":{"role":"supreme-leader"}}`
+	req := httptest.NewRequest("POST", "/public/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPublicRegistrationHandler_RequestAccess_OversizeFieldsRejected(t *testing.T) {
+	// Length caps run before any service lookup, so a zero-value handler
+	// (nil services) returning 400 instead of panicking proves ordering.
+	handler := &PublicRegistrationHandler{}
+	app := fiber.New()
+	app.Post("/public/request-access", handler.RequestAccess)
+
+	longReason := strings.Repeat("a", 1001)
+	longName := strings.Repeat("b", 201)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"oversize reason", `{"email":"t@example.com","fullName":"John Doe","reason":"` + longReason + `"}`},
+		{"oversize full name", `{"email":"t@example.com","fullName":"` + longName + `","reason":"a valid reason here"}`},
+		{"oversize organization name", `{"email":"t@example.com","fullName":"John Doe","organizationName":"` + longName + `","reason":"a valid reason here"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/public/request-access", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		})
+	}
+}
+
 // ===========================
 // PublicRegistrationHandler.CheckRegistrationStatus Tests
 // ===========================

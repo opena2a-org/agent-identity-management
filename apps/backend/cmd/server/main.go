@@ -1486,6 +1486,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	admin.Delete("/users/:id", h.Admin.PermanentlyDeleteUser)   // Hard delete - removes from database
 
 	// Registration request management (for pending OAuth registrations)
+	admin.Get("/registration-requests", h.Admin.ListRegistrationRequests)
 	admin.Post("/registration-requests/:id/approve", h.Admin.ApproveRegistrationRequest)
 	admin.Post("/registration-requests/:id/reject", h.Admin.RejectRegistrationRequest)
 

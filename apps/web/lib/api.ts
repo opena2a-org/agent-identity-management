@@ -741,6 +741,11 @@ class APIClient {
     lastName: string;
     password: string;
     provider: string;
+    signupProfile?: {
+      role?: string;
+      primaryUseCase?: string;
+      referralSource?: string;
+    };
   }): Promise<{
     success: boolean;
     message: string;

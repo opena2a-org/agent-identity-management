@@ -9,8 +9,10 @@ interface RegistrationRequest {
   email: string
   firstName: string
   lastName: string
-  oauthProvider: 'google' | 'microsoft' | 'okta'
-  oauthUserId: string
+  // Absent for email/password registrations (the backend list query does not
+  // populate OAuth columns), so always guard when rendering
+  oauthProvider?: 'google' | 'microsoft' | 'okta' | 'local'
+  oauthUserId?: string
   status: 'pending' | 'approved' | 'rejected'
   requestedAt: string
   reviewedAt?: string
@@ -18,6 +20,13 @@ interface RegistrationRequest {
   rejectionReason?: string
   profilePictureUrl?: string
   oauthEmailVerified: boolean
+  metadata?: {
+    signupProfile?: {
+      role?: string
+      primaryUseCase?: string
+      referralSource?: string
+    }
+  }
 }
 
 interface RegistrationRequestCardProps {
@@ -30,7 +39,30 @@ const providerColors = {
   google: 'bg-blue-100 text-blue-700',
   microsoft: 'bg-gray-800 text-white',
   okta: 'bg-blue-600 text-white',
+  local: 'bg-gray-100 text-gray-700',
 }
+
+// Human-readable labels for the signup questionnaire slugs
+// (vocabulary defined in backend domain/signup_profile.go)
+const signupProfileLabels: Record<string, string> = {
+  developer: 'Developer',
+  'security-engineer': 'Security engineer',
+  'founder-or-exec': 'Founder or executive',
+  'student-or-researcher': 'Student or researcher',
+  'securing-production-agents': 'Securing production agents',
+  'evaluating-for-team': 'Evaluating for team',
+  'research-or-learning': 'Research or learning',
+  'personal-project': 'Personal project',
+  github: 'GitHub',
+  search: 'Search engine',
+  'social-media': 'Social media',
+  'colleague-or-friend': 'Colleague or friend',
+  'blog-or-article': 'Blog or article',
+  other: 'Other',
+}
+
+const formatProfileValue = (value?: string) =>
+  value ? (signupProfileLabels[value] ?? value) : null
 
 export function RegistrationRequestCard({ request, onApproved, onRejected }: RegistrationRequestCardProps) {
   const [isApproving, setIsApproving] = useState(false)
@@ -40,6 +72,13 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
   const [error, setError] = useState<string | null>(null)
 
   const fullName = [request.firstName, request.lastName].filter(Boolean).join(' ') || 'Unknown'
+
+  const signupProfile = request.metadata?.signupProfile
+  const profileEntries = [
+    { label: 'Role', value: formatProfileValue(signupProfile?.role) },
+    { label: 'Use case', value: formatProfileValue(signupProfile?.primaryUseCase) },
+    { label: 'Heard via', value: formatProfileValue(signupProfile?.referralSource) },
+  ].filter((entry) => entry.value)
 
   const handleApprove = async () => {
     setIsApproving(true)
@@ -116,8 +155,8 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
                 </div>
               </div>
 
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${providerColors[request.oauthProvider]}`}>
-                {request.oauthProvider.toUpperCase()}
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${providerColors[request.oauthProvider ?? 'local']}`}>
+                {(request.oauthProvider ?? 'local').toUpperCase()}
               </span>
             </div>
 
@@ -142,6 +181,21 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
                 )}
               </div>
             </div>
+
+            {/* Signup Profile Answers */}
+            {profileEntries.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {profileEntries.map((entry) => (
+                  <span
+                    key={entry.label}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-xs"
+                  >
+                    <span className="text-gray-500">{entry.label}:</span>
+                    <span className="font-medium text-gray-800">{entry.value}</span>
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (
