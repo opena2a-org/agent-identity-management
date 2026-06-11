@@ -57,6 +57,7 @@ type TagRepository interface {
 	AddTagsToAgent(ctx context.Context, agentID uuid.UUID, tagIDs []uuid.UUID) error
 	RemoveTagFromAgent(ctx context.Context, agentID uuid.UUID, tagID uuid.UUID) error
 	GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*Tag, error)
+	GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*Tag, error)
 
 	// MCP Server Tag Relationships
 	AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UUID, tagIDs []uuid.UUID) error

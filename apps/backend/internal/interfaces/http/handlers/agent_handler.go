@@ -96,34 +96,36 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 		capabilities = []*domain.AgentCapability{}
 	}
 
+	// ✅ Fetch tags from agent_tags table
+	agentTags := make([]*domain.Tag, 0)
+	if h.tagService != nil {
+		// Log error but don't fail - return empty tags
+		if fetched, err := h.tagService.GetAgentTags(c.Context(), agent.ID); err == nil && fetched != nil {
+			agentTags = fetched
+		}
+	}
+
+	return agentResponse(agent, capabilities, agentTags)
+}
+
+// agentResponse renders an agent plus its prefetched capabilities and tags
+func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, agentTags []*domain.Tag) fiber.Map {
 	// Extract capability types as simple string array (frontend compatible)
 	capabilityTypes := make([]string, 0, len(capabilities))
 	for _, cap := range capabilities {
 		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
 	}
 
-	// ✅ Fetch tags from agent_tags table
-	tags := make([]fiber.Map, 0)
-	if h.tagService != nil {
-		agentTags, err := h.tagService.GetAgentTags(c.Context(), agent.ID)
-		if err != nil {
-			// Log error but don't fail - return empty tags
-			tags = []fiber.Map{}
-		} else {
-			tags = make([]fiber.Map, 0, len(agentTags))
-			for _, tag := range agentTags {
-				tags = append(tags, fiber.Map{
-					"id":          tag.ID,
-					"key":         tag.Key,
-					"value":       tag.Value,
-					"category":    tag.Category,
-					"description": tag.Description,
-					"color":       tag.Color,
-				})
-			}
-		}
-	} else {
-		tags = []fiber.Map{}
+	tags := make([]fiber.Map, 0, len(agentTags))
+	for _, tag := range agentTags {
+		tags = append(tags, fiber.Map{
+			"id":          tag.ID,
+			"key":         tag.Key,
+			"value":       tag.Value,
+			"category":    tag.Category,
+			"description": tag.Description,
+			"color":       tag.Color,
+		})
 	}
 
 	// Return flat response with all agent fields + capabilities + tags (camelCase for frontend)
@@ -171,27 +173,65 @@ func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fib
 	}
 }
 
-// ListAgents returns all agents for the organization
+// ListAgents returns agents for the organization. Optional limit/offset
+// query parameters page server-side; without them all agents are
+// returned (existing client behavior).
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
 	}
 
-	agents, err := h.agentService.ListAgents(c.Context(), orgID)
+	limit := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset > 0 {
+			offset = parsedOffset
+		}
+	}
+
+	agents, total, err := h.agentService.ListAgentsPaged(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",
 		})
 	}
+
+	// Prefetch capabilities and tags for the whole page in one query
+	// each, instead of two queries per agent
+	agentIDs := make([]uuid.UUID, len(agents))
+	for i, agent := range agents {
+		agentIDs[i] = agent.ID
+	}
+	capsByAgent, err := h.capabilityService.GetCapabilitiesByAgentIDs(c.Context(), agentIDs, true)
+	if err != nil {
+		// Log error but don't fail - return empty capabilities
+		capsByAgent = map[uuid.UUID][]*domain.AgentCapability{}
+	}
+	var tagsByAgent map[uuid.UUID][]*domain.Tag
+	if h.tagService != nil {
+		// Log error but don't fail - return empty tags
+		tagsByAgent, _ = h.tagService.GetAgentTagsByAgentIDs(c.Context(), agentIDs)
+	}
+
 	enriched := make([]fiber.Map, 0, len(agents))
 	for _, agent := range agents {
-		enriched = append(enriched, h.enrichAgentResponse(c, agent))
+		enriched = append(enriched, agentResponse(agent, capsByAgent[agent.ID], tagsByAgent[agent.ID]))
 	}
-	return c.JSON(fiber.Map{
+	response := fiber.Map{
 		"agents": enriched,
-		"total":  len(enriched),
-	})
+		"total":  total,
+	}
+	if limit > 0 {
+		response["limit"] = limit
+		response["offset"] = offset
+	}
+	return c.JSON(response)
 }
 
 // CreateAgent creates a new agent and automatically generates an API key for it

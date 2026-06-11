@@ -3270,3 +3270,261 @@ func TestAgentHandler_GetAgentKeyVault_IncludesPQCFields(t *testing.T) {
 	assert.NotNil(t, result["pqcKeyCreatedAt"])
 	assert.NotNil(t, result["pqcKeyExpiresAt"])
 }
+
+// ===========================
+// AgentHandler.ListAgents bulk enrichment + pagination tests
+// ===========================
+
+// TestAgentHandler_ListAgents_UsesBulkEnrichment locks in the 3-query list
+// path: capabilities and tags for the whole page come from one bulk call
+// each. Regression: the list handler used to call GetAgentCapabilities and
+// GetAgentTags per agent (1+2N queries), which made the agents page crawl
+// on large orgs.
+func TestAgentHandler_ListAgents_UsesBulkEnrichment(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agent1 := uuid.New()
+	agent2 := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+			return []*domain.Agent{
+				{ID: agent1, OrganizationID: orgID, Name: "agent1"},
+				{ID: agent2, OrganizationID: orgID, Name: "agent2"},
+			}, 2, nil
+		},
+	}
+
+	bulkCapCalls := 0
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetAgentCapabilitiesFunc: func(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error) {
+			t.Fatal("per-agent GetAgentCapabilities must not be called by ListAgents")
+			return nil, nil
+		},
+		GetCapabilitiesByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+			bulkCapCalls++
+			assert.True(t, activeOnly)
+			assert.Len(t, agentIDs, 2)
+			return map[uuid.UUID][]*domain.AgentCapability{
+				agent1: {{ID: uuid.New(), AgentID: agent1, CapabilityType: "file:read"}},
+			}, nil
+		},
+	}
+
+	bulkTagCalls := 0
+	mockTagService := &MockTagServiceImpl{
+		GetAgentTagsFunc: func(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
+			t.Fatal("per-agent GetAgentTags must not be called by ListAgents")
+			return nil, nil
+		},
+		GetAgentTagsByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+			bulkTagCalls++
+			assert.Len(t, agentIDs, 2)
+			return map[uuid.UUID][]*domain.Tag{
+				agent2: {{ID: uuid.New(), Key: "env", Value: "production"}},
+			}, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		mockCapabilityService,
+		mockTagService,
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents", handler.ListAgents)
+
+	req := httptest.NewRequest("GET", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, 1, bulkCapCalls)
+	assert.Equal(t, 1, bulkTagCalls)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	agents, ok := result["agents"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, agents, 2)
+
+	first := agents[0].(map[string]interface{})
+	second := agents[1].(map[string]interface{})
+	assert.Len(t, first["capabilities"], 1)
+	assert.Len(t, first["tags"], 0)
+	assert.Len(t, second["capabilities"], 0)
+	assert.Len(t, second["tags"], 1)
+
+	// Default (no limit param) keeps the legacy response shape
+	assert.Equal(t, float64(2), result["total"])
+	_, hasLimit := result["limit"]
+	assert.False(t, hasLimit)
+}
+
+func TestAgentHandler_ListAgents_Pagination(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	var gotLimit, gotOffset int
+	mockAgentService := &MockAgentServiceImpl{
+		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+			gotLimit, gotOffset = limit, offset
+			// One page of a 45-agent org
+			return []*domain.Agent{
+				{ID: uuid.New(), OrganizationID: orgID, Name: "agent21"},
+				{ID: uuid.New(), OrganizationID: orgID, Name: "agent22"},
+			}, 45, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents", handler.ListAgents)
+
+	req := httptest.NewRequest("GET", "/agents?limit=20&offset=20", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, 20, gotLimit)
+	assert.Equal(t, 20, gotOffset)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	agents, ok := result["agents"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, agents, 2)
+	// total is the org-wide count, not the page size, so clients can
+	// keep paginating
+	assert.Equal(t, float64(45), result["total"])
+	assert.Equal(t, float64(20), result["limit"])
+	assert.Equal(t, float64(20), result["offset"])
+}
+
+// Invalid or negative paging params fall back to the unpaged path instead
+// of erroring.
+func TestAgentHandler_ListAgents_InvalidPagingParams(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	var gotLimit, gotOffset int
+	mockAgentService := &MockAgentServiceImpl{
+		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+			gotLimit, gotOffset = limit, offset
+			return []*domain.Agent{}, 0, nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents", handler.ListAgents)
+
+	req := httptest.NewRequest("GET", "/agents?limit=abc&offset=-5", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, 0, gotLimit)
+	assert.Equal(t, 0, gotOffset)
+}
+
+// Bulk enrichment failures degrade to empty capabilities/tags (the same
+// behavior the old per-agent path had), never a 500 or a panic. Note a
+// nil map is read-safe in Go; this locks that in against "fixes" that
+// assume otherwise.
+func TestAgentHandler_ListAgents_BulkEnrichmentErrorsDegrade(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+			return []*domain.Agent{{ID: uuid.New(), OrganizationID: orgID, Name: "agent1"}}, 1, nil
+		},
+	}
+	mockCapabilityService := &MockCapabilityServiceImpl{
+		GetCapabilitiesByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+			return nil, errors.New("capabilities query failed")
+		},
+	}
+	mockTagService := &MockTagServiceImpl{
+		GetAgentTagsByAgentIDsFunc: func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+			return nil, errors.New("tags query failed")
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		mockCapabilityService,
+		mockTagService,
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Get("/agents", handler.ListAgents)
+
+	req := httptest.NewRequest("GET", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	agents := result["agents"].([]interface{})
+	require.Len(t, agents, 1)
+	first := agents[0].(map[string]interface{})
+	assert.Equal(t, []interface{}{}, first["capabilities"])
+	assert.Equal(t, []interface{}{}, first["tags"])
+}

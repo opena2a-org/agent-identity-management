@@ -16,32 +16,33 @@ import (
 
 // MockAgentServiceImpl implements AgentServicer interface
 type MockAgentServiceImpl struct {
-	CreateAgentFunc                 func(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error)
-	GetAgentFunc                    func(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
-	GetAgentByNameFunc              func(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
-	ListAgentsFunc                  func(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
-	UpdateAgentFunc                 func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
-	DeleteAgentFunc                 func(ctx context.Context, id uuid.UUID) error
-	VerifyAgentFunc                 func(ctx context.Context, id uuid.UUID) error
-	SuspendAgentFunc                func(ctx context.Context, id uuid.UUID) error
-	RevokeAgentFunc                 func(ctx context.Context, id uuid.UUID) error
-	ReactivateAgentFunc             func(ctx context.Context, id uuid.UUID) error
-	RecalculateTrustScoreFunc       func(ctx context.Context, id uuid.UUID) (*domain.TrustScore, error)
-	UpdateTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID, newScore float64) error
-	RotateCredentialsFunc           func(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error)
-	GetAgentCredentialsFunc         func(ctx context.Context, agentID uuid.UUID) (publicKey, privateKey string, err error)
-	UpdateAgentPublicKeyFunc        func(ctx context.Context, agentID uuid.UUID, publicKey string) error
-	AddMCPServersFunc               func(ctx context.Context, agentID uuid.UUID, mcpServerIdentifiers []string) (*domain.Agent, []string, error)
-	RemoveMCPServerFunc             func(ctx context.Context, agentID uuid.UUID, mcpServerIdentifier string) (*domain.Agent, error)
-	VerifyCapabilityFunc            func(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (allowed bool, reason string, auditID uuid.UUID, err error)
-	LogCapabilityResultFunc         func(ctx context.Context, agentID uuid.UUID, auditID uuid.UUID, success bool, errorMsg string, result map[string]interface{}) error
-	HasCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
-	UpdateLastActiveFunc            func(ctx context.Context, agentID uuid.UUID) error
-	DetectMCPServersFromConfigFunc  func(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
+	CreateAgentFunc                func(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error)
+	GetAgentFunc                   func(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
+	GetAgentByNameFunc             func(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
+	ListAgentsFunc                 func(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
+	ListAgentsPagedFunc            func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error)
+	UpdateAgentFunc                func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
+	DeleteAgentFunc                func(ctx context.Context, id uuid.UUID) error
+	VerifyAgentFunc                func(ctx context.Context, id uuid.UUID) error
+	SuspendAgentFunc               func(ctx context.Context, id uuid.UUID) error
+	RevokeAgentFunc                func(ctx context.Context, id uuid.UUID) error
+	ReactivateAgentFunc            func(ctx context.Context, id uuid.UUID) error
+	RecalculateTrustScoreFunc      func(ctx context.Context, id uuid.UUID) (*domain.TrustScore, error)
+	UpdateTrustScoreFunc           func(ctx context.Context, agentID uuid.UUID, newScore float64) error
+	RotateCredentialsFunc          func(ctx context.Context, id uuid.UUID) (publicKey, privateKey string, err error)
+	GetAgentCredentialsFunc        func(ctx context.Context, agentID uuid.UUID) (publicKey, privateKey string, err error)
+	UpdateAgentPublicKeyFunc       func(ctx context.Context, agentID uuid.UUID, publicKey string) error
+	AddMCPServersFunc              func(ctx context.Context, agentID uuid.UUID, mcpServerIdentifiers []string) (*domain.Agent, []string, error)
+	RemoveMCPServerFunc            func(ctx context.Context, agentID uuid.UUID, mcpServerIdentifier string) (*domain.Agent, error)
+	VerifyCapabilityFunc           func(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (allowed bool, reason string, auditID uuid.UUID, err error)
+	LogCapabilityResultFunc        func(ctx context.Context, agentID uuid.UUID, auditID uuid.UUID, success bool, errorMsg string, result map[string]interface{}) error
+	HasCapabilityFunc              func(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
+	UpdateLastActiveFunc           func(ctx context.Context, agentID uuid.UUID) error
+	DetectMCPServersFromConfigFunc func(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
 	// PQC methods
-	UpdateAgentPQCKeyFunc           func(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error
-	RotateAgentPQCKeyFunc           func(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error
-	SetAgentHybridModeFunc          func(ctx context.Context, agentID uuid.UUID, enabled bool) error
+	UpdateAgentPQCKeyFunc  func(ctx context.Context, agentID uuid.UUID, pqcPublicKey string, algorithm string, hybridMode bool) error
+	RotateAgentPQCKeyFunc  func(ctx context.Context, agentID uuid.UUID, newPQCPublicKey string, algorithm string) error
+	SetAgentHybridModeFunc func(ctx context.Context, agentID uuid.UUID, enabled bool) error
 }
 
 func (m *MockAgentServiceImpl) CreateAgent(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error) {
@@ -221,18 +222,18 @@ func (m *MockAgentServiceImpl) SetAgentHybridMode(ctx context.Context, agentID u
 
 // MockMCPServiceImpl implements MCPServicer interface
 type MockMCPServiceImpl struct {
-	CreateMCPServerFunc              func(ctx context.Context, req *application.CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error)
-	GetMCPServerFunc                 func(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error)
-	GetMCPServerByNameFunc           func(ctx context.Context, orgID uuid.UUID, name string) (*domain.MCPServer, error)
-	ListMCPServersFunc               func(ctx context.Context, orgID uuid.UUID) ([]*domain.MCPServer, error)
-	UpdateMCPServerFunc              func(ctx context.Context, id uuid.UUID, req *application.UpdateMCPServerRequest) (*domain.MCPServer, error)
-	DeleteMCPServerFunc              func(ctx context.Context, id uuid.UUID) error
-	VerifyMCPServerFunc              func(ctx context.Context, id uuid.UUID, userID uuid.UUID, userIP string) error
-	AddPublicKeyFunc                 func(ctx context.Context, serverID uuid.UUID, req *application.AddPublicKeyRequest) error
-	GetVerificationStatusFunc        func(ctx context.Context, id uuid.UUID) (*domain.MCPServerVerificationStatus, error)
-	VerifyMCPCapabilityFunc          func(ctx context.Context, mcpID uuid.UUID, capability string, resource string, targetService string, metadata map[string]interface{}) (allowed bool, reason string, auditID uuid.UUID, err error)
-	GetConnectedAgentsFunc           func(ctx context.Context, mcpServerID uuid.UUID) ([]application.ConnectedAgent, error)
-	GetConnectedAgentsCountFunc      func(ctx context.Context, mcpServerID uuid.UUID) (int, error)
+	CreateMCPServerFunc               func(ctx context.Context, req *application.CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error)
+	GetMCPServerFunc                  func(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error)
+	GetMCPServerByNameFunc            func(ctx context.Context, orgID uuid.UUID, name string) (*domain.MCPServer, error)
+	ListMCPServersFunc                func(ctx context.Context, orgID uuid.UUID) ([]*domain.MCPServer, error)
+	UpdateMCPServerFunc               func(ctx context.Context, id uuid.UUID, req *application.UpdateMCPServerRequest) (*domain.MCPServer, error)
+	DeleteMCPServerFunc               func(ctx context.Context, id uuid.UUID) error
+	VerifyMCPServerFunc               func(ctx context.Context, id uuid.UUID, userID uuid.UUID, userIP string) error
+	AddPublicKeyFunc                  func(ctx context.Context, serverID uuid.UUID, req *application.AddPublicKeyRequest) error
+	GetVerificationStatusFunc         func(ctx context.Context, id uuid.UUID) (*domain.MCPServerVerificationStatus, error)
+	VerifyMCPCapabilityFunc           func(ctx context.Context, mcpID uuid.UUID, capability string, resource string, targetService string, metadata map[string]interface{}) (allowed bool, reason string, auditID uuid.UUID, err error)
+	GetConnectedAgentsFunc            func(ctx context.Context, mcpServerID uuid.UUID) ([]application.ConnectedAgent, error)
+	GetConnectedAgentsCountFunc       func(ctx context.Context, mcpServerID uuid.UUID) (int, error)
 	GenerateVerificationChallengeFunc func(ctx context.Context, serverID uuid.UUID) (string, error)
 }
 
@@ -370,6 +371,7 @@ type MockCapabilityServiceImpl struct {
 	RevokeCapabilityFunc              func(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
 	GetCapabilityByIDFunc             func(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error)
 	GetAgentCapabilitiesFunc          func(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
+	GetCapabilitiesByAgentIDsFunc     func(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error)
 	ListCapabilitiesFunc              func(ctx context.Context, orgID uuid.UUID) ([]application.CapabilityDefinition, error)
 	ListCapabilitiesWithMetadataFunc  func(ctx context.Context, orgID uuid.UUID) (*application.ListCapabilitiesResponse, error)
 	ValidateAndRegisterCapabilityFunc func(ctx context.Context, capability string, orgID uuid.UUID) error
@@ -457,8 +459,9 @@ func (m *MockCapabilityServiceImpl) GetRecentViolations(ctx context.Context, org
 
 // MockTagServiceImpl implements TagServicer interface
 type MockTagServiceImpl struct {
-	GetAgentTagsFunc     func(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
-	GetMCPServerTagsFunc func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
+	GetAgentTagsFunc           func(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
+	GetAgentTagsByAgentIDsFunc func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
+	GetMCPServerTagsFunc       func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
 }
 
 func (m *MockTagServiceImpl) GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
@@ -653,14 +656,14 @@ func (m *MockAuthServiceImpl) DeactivateUser(ctx context.Context, userID, orgID,
 
 // MockAdminServiceImpl implements AdminServicer interface
 type MockAdminServiceImpl struct {
-	GetPendingUsersFunc        func(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error)
-	ApproveUserFunc            func(ctx context.Context, userID, adminID uuid.UUID) error
-	RejectUserFunc             func(ctx context.Context, userID, adminID uuid.UUID, reason string) error
-	ActivateUserFunc           func(ctx context.Context, userID, adminID uuid.UUID) error
-	PermanentlyDeleteUserFunc  func(ctx context.Context, userID, adminID uuid.UUID) error
+	GetPendingUsersFunc         func(ctx context.Context, adminOrgID uuid.UUID) ([]*domain.User, error)
+	ApproveUserFunc             func(ctx context.Context, userID, adminID uuid.UUID) error
+	RejectUserFunc              func(ctx context.Context, userID, adminID uuid.UUID, reason string) error
+	ActivateUserFunc            func(ctx context.Context, userID, adminID uuid.UUID) error
+	PermanentlyDeleteUserFunc   func(ctx context.Context, userID, adminID uuid.UUID) error
 	GetOrganizationSettingsFunc func(ctx context.Context, orgID uuid.UUID) (*domain.Organization, error)
-	GetEnforcementSettingsFunc func(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error)
-	UpdateEnforcementModeFunc  func(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error
+	GetEnforcementSettingsFunc  func(ctx context.Context, orgID uuid.UUID) (*application.EnforcementSettings, error)
+	UpdateEnforcementModeFunc   func(ctx context.Context, orgID uuid.UUID, mode domain.EnforcementMode) error
 }
 
 // NOTE: Mock methods accept adminOrgID but delegate to original funcs that don't need it
@@ -803,10 +806,10 @@ func (m *MockSecurityServiceImpl) CountOpenIncidents(ctx context.Context, orgID 
 
 // MockSecurityServiceExtendedImpl implements SecurityServicerExtended interface
 type MockSecurityServiceExtendedImpl struct {
-	CountOpenIncidentsFunc   func(ctx context.Context, orgID uuid.UUID) (int, error)
-	GetThreatsFunc           func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error)
-	GetAnomaliesFunc         func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Anomaly, error)
-	GetSecurityMetricsFunc   func(ctx context.Context, orgID uuid.UUID) (*domain.SecurityMetrics, error)
+	CountOpenIncidentsFunc func(ctx context.Context, orgID uuid.UUID) (int, error)
+	GetThreatsFunc         func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Threat, error)
+	GetAnomaliesFunc       func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Anomaly, error)
+	GetSecurityMetricsFunc func(ctx context.Context, orgID uuid.UUID) (*domain.SecurityMetrics, error)
 }
 
 func (m *MockSecurityServiceExtendedImpl) CountOpenIncidents(ctx context.Context, orgID uuid.UUID) (int, error) {
@@ -1055,8 +1058,8 @@ func (m *MockMCPCapabilityServiceImpl) DetectCapabilities(ctx context.Context, m
 
 // MockAgentRepositoryerImpl implements AgentRepositoryer interface
 type MockAgentRepositoryerImpl struct {
-	GetByIDFunc          func(id uuid.UUID) (*domain.Agent, error)
-	GetByMCPServerFunc   func(mcpServerID, orgID uuid.UUID) ([]*domain.Agent, error)
+	GetByIDFunc            func(id uuid.UUID) (*domain.Agent, error)
+	GetByMCPServerFunc     func(mcpServerID, orgID uuid.UUID) ([]*domain.Agent, error)
 	GetByMCPServerNameFunc func(mcpServerName string, orgID uuid.UUID) ([]*domain.Agent, error)
 }
 
@@ -1129,17 +1132,17 @@ func (m *MockMCPAttestationServiceExtendedImpl) GetMCPAttestations(ctx context.C
 
 // MockComplianceServiceExtendedImpl implements ComplianceServicerExtended interface
 type MockComplianceServiceExtendedImpl struct {
-	GetComplianceStatusFunc       func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
-	GetComplianceMetricsFunc      func(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error)
-	GetAccessReviewFunc           func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
-	ListEvidenceFunc              func(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, error)
-	RunComplianceCheckFunc        func(ctx context.Context, orgID uuid.UUID, checkType string) (interface{}, error)
+	GetComplianceStatusFunc        func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	GetComplianceMetricsFunc       func(ctx context.Context, orgID uuid.UUID, startDate, endDate time.Time, interval string) (interface{}, error)
+	GetAccessReviewFunc            func(ctx context.Context, orgID uuid.UUID) (interface{}, error)
+	ListEvidenceFunc               func(ctx context.Context, orgID uuid.UUID, framework string, limit, offset int) ([]*domain.ComplianceEvidence, error)
+	RunComplianceCheckFunc         func(ctx context.Context, orgID uuid.UUID, checkType string) (interface{}, error)
 	ExportComplianceReportFullFunc func(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time, userID uuid.UUID) (*domain.ComplianceExportReport, error)
-	ExportToCSVFunc               func(ctx context.Context, orgID uuid.UUID, framework string) (string, error)
-	GetComplianceTrendingFunc     func(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time) (interface{}, error)
-	RecordComplianceSnapshotFunc  func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework) (*domain.ComplianceSnapshot, error)
-	CollectEvidenceFunc           func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework, checkName string, userID uuid.UUID) (*domain.ComplianceEvidence, error)
-	GetEvidenceForCheckFunc       func(ctx context.Context, orgID uuid.UUID, checkName string) ([]*domain.ComplianceEvidence, error)
+	ExportToCSVFunc                func(ctx context.Context, orgID uuid.UUID, framework string) (string, error)
+	GetComplianceTrendingFunc      func(ctx context.Context, orgID uuid.UUID, framework string, startDate, endDate time.Time) (interface{}, error)
+	RecordComplianceSnapshotFunc   func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework) (*domain.ComplianceSnapshot, error)
+	CollectEvidenceFunc            func(ctx context.Context, orgID uuid.UUID, framework domain.ComplianceFramework, checkName string, userID uuid.UUID) (*domain.ComplianceEvidence, error)
+	GetEvidenceForCheckFunc        func(ctx context.Context, orgID uuid.UUID, checkName string) ([]*domain.ComplianceEvidence, error)
 }
 
 func (m *MockComplianceServiceExtendedImpl) GetComplianceStatus(ctx context.Context, orgID uuid.UUID) (interface{}, error) {
@@ -1235,8 +1238,8 @@ func (m *MockComplianceServiceExtendedImpl) GetEvidenceForCheck(ctx context.Cont
 
 // MockVerificationEventServiceExtendedImpl implements VerificationEventServicerExtended interface
 type MockVerificationEventServiceExtendedImpl struct {
-	LogVerificationEventFunc       func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
-	GetLast24HoursStatisticsFunc   func(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error)
+	LogVerificationEventFunc     func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	GetLast24HoursStatisticsFunc func(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error)
 }
 
 func (m *MockVerificationEventServiceExtendedImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
@@ -1298,11 +1301,11 @@ func (m *MockAgentServiceForVerificationImpl) CreateSecurityAlert(ctx context.Co
 
 // MockAuditServiceForVerificationImpl implements AuditServicerForVerification interface
 type MockAuditServiceForVerificationImpl struct {
-	LogActionFunc    func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
+	LogActionFunc        func(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error
 	GetAgentActivityFunc func(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
-	GetAuditLogsFunc func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
-	GetByIDFunc      func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
-	LogFunc          func(ctx context.Context, entry *domain.AuditLog) error
+	GetAuditLogsFunc     func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
+	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
+	LogFunc              func(ctx context.Context, entry *domain.AuditLog) error
 }
 
 func (m *MockAuditServiceForVerificationImpl) LogAction(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error {
@@ -1394,12 +1397,12 @@ func (m *MockAlertServiceForVerificationImpl) DetectUnusualAccessPatterns(ctx co
 
 // MockVerificationEventServiceForVerificationImpl implements VerificationEventServicerForVerification interface
 type MockVerificationEventServiceForVerificationImpl struct {
-	LogVerificationEventFunc       func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
-	CreateVerificationEventFunc    func(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
-	GetVerificationEventFunc       func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
-	UpdateVerificationResultFunc   func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
-	SearchVerificationsFunc        func(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)
-	UpdateExecutionStatusFunc      func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
+	LogVerificationEventFunc     func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	CreateVerificationEventFunc  func(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
+	GetVerificationEventFunc     func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
+	UpdateVerificationResultFunc func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
+	SearchVerificationsFunc      func(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)
+	UpdateExecutionStatusFunc    func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
 }
 
 func (m *MockVerificationEventServiceForVerificationImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
@@ -1462,9 +1465,9 @@ func (m *MockOrganizationRepositoryerImpl) GetByID(id uuid.UUID) (*domain.Organi
 
 // MockTrustCalculatorServicerImpl implements TrustCalculatorServicer interface
 type MockTrustCalculatorServicerImpl struct {
-	CalculateTrustScoreFunc             func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
-	GetLatestTrustScoreFunc             func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
-	GetTrustScoreHistoryAuditTrailFunc  func(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
+	CalculateTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetLatestTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
+	GetTrustScoreHistoryAuditTrailFunc func(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
 }
 
 func (m *MockTrustCalculatorServicerImpl) CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error) {
@@ -1554,4 +1557,63 @@ func (m *MockWebhookServicerImpl) TestWebhook(ctx context.Context, id uuid.UUID)
 		return m.TestWebhookFunc(ctx, id)
 	}
 	return &application.WebhookTestResult{Success: true, StatusCode: 200}, nil
+}
+
+// GetAgentTagsByAgentIDs aggregates the per-agent mocks for tests.
+func (m *MockTagServiceImpl) GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	if m.GetAgentTagsByAgentIDsFunc != nil {
+		return m.GetAgentTagsByAgentIDsFunc(ctx, agentIDs)
+	}
+	result := make(map[uuid.UUID][]*domain.Tag, len(agentIDs))
+	for _, agentID := range agentIDs {
+		tags, err := m.GetAgentTags(ctx, agentID)
+		if err != nil {
+			return nil, err
+		}
+		if len(tags) > 0 {
+			result[agentID] = tags
+		}
+	}
+	return result, nil
+}
+
+// GetCapabilitiesByAgentIDs aggregates the per-agent mocks for tests.
+func (m *MockCapabilityServiceImpl) GetCapabilitiesByAgentIDs(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+	if m.GetCapabilitiesByAgentIDsFunc != nil {
+		return m.GetCapabilitiesByAgentIDsFunc(ctx, agentIDs, activeOnly)
+	}
+	result := make(map[uuid.UUID][]*domain.AgentCapability, len(agentIDs))
+	for _, agentID := range agentIDs {
+		caps, err := m.GetAgentCapabilities(ctx, agentID, activeOnly)
+		if err != nil {
+			return nil, err
+		}
+		if len(caps) > 0 {
+			result[agentID] = caps
+		}
+	}
+	return result, nil
+}
+
+// ListAgentsPaged pages over ListAgents for tests.
+func (m *MockAgentServiceImpl) ListAgentsPaged(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	if m.ListAgentsPagedFunc != nil {
+		return m.ListAgentsPagedFunc(ctx, orgID, limit, offset)
+	}
+	agents, err := m.ListAgents(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(agents)
+	if limit > 0 {
+		if offset >= len(agents) {
+			agents = nil
+		} else {
+			agents = agents[offset:]
+		}
+		if len(agents) > limit {
+			agents = agents[:limit]
+		}
+	}
+	return agents, total, nil
 }

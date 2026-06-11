@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -203,6 +205,77 @@ func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uu
 	}
 
 	return capabilities, nil
+}
+
+// GetCapabilitiesByAgentIDs retrieves capabilities for many agents in a
+// single query, keyed by agent ID. When activeOnly is true, revoked
+// capabilities are excluded. Agents with no capabilities have no entry
+// in the returned map.
+func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+	result := make(map[uuid.UUID][]*domain.AgentCapability, len(agentIDs))
+	if len(agentIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(agentIDs))
+	args := make([]interface{}, len(agentIDs))
+	for i, id := range agentIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
+		FROM agent_capabilities
+		WHERE agent_id IN (%s)`, strings.Join(placeholders, ","))
+	if activeOnly {
+		query += " AND revoked_at IS NULL"
+	}
+	query += " ORDER BY created_at DESC"
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var capability domain.AgentCapability
+		scopeJSON := make([]byte, 0)
+		var grantedBy uuid.NullUUID
+		var revokedAt sql.NullTime
+
+		err := rows.Scan(
+			&capability.ID,
+			&capability.AgentID,
+			&capability.CapabilityType,
+			&scopeJSON,
+			&capability.ExecutionMode,
+			&grantedBy,
+			&capability.GrantedAt,
+			&revokedAt,
+			&capability.CreatedAt,
+			&capability.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if grantedBy.Valid {
+			capability.GrantedBy = &grantedBy.UUID
+		}
+		if revokedAt.Valid {
+			capability.RevokedAt = &revokedAt.Time
+		}
+		if len(scopeJSON) > 0 {
+			json.Unmarshal(scopeJSON, &capability.CapabilityScope)
+		}
+
+		result[capability.AgentID] = append(result[capability.AgentID], &capability)
+	}
+
+	return result, rows.Err()
 }
 
 // RevokeCapability marks a capability as revoked

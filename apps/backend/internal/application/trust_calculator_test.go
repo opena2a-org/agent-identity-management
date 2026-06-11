@@ -1168,3 +1168,44 @@ func TestTrustCalculator_ExecutionIsolation_WithAttestation(t *testing.T) {
 func timePtr(t time.Time) *time.Time {
 	return &t
 }
+
+// GetByOrganizationPaged pages over GetByOrganization for tests.
+func (m *TrustCalcMockAgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(agents)
+	if limit > 0 {
+		if offset >= len(agents) {
+			agents = nil
+		} else {
+			agents = agents[offset:]
+		}
+		if len(agents) > limit {
+			agents = agents[:limit]
+		}
+	}
+	return agents, total, nil
+}
+
+// GetCapabilitiesByAgentIDs aggregates the per-agent mocks for tests.
+func (m *MockCapabilityRepository) GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error) {
+	result := make(map[uuid.UUID][]*domain.AgentCapability, len(agentIDs))
+	for _, agentID := range agentIDs {
+		var caps []*domain.AgentCapability
+		var err error
+		if activeOnly {
+			caps, err = m.GetActiveCapabilitiesByAgentID(agentID)
+		} else {
+			caps, err = m.GetCapabilitiesByAgentID(agentID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(caps) > 0 {
+			result[agentID] = caps
+		}
+	}
+	return result, nil
+}

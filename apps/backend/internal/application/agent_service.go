@@ -509,6 +509,12 @@ func (s *AgentService) ListAgents(ctx context.Context, orgID uuid.UUID) ([]*doma
 	return s.agentRepo.GetByOrganization(orgID)
 }
 
+// ListAgentsPaged lists one page of an organization's agents plus the
+// total agent count. limit <= 0 returns all agents.
+func (s *AgentService) ListAgentsPaged(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	return s.agentRepo.GetByOrganizationPaged(orgID, limit, offset)
+}
+
 // UpdateAgent updates an agent. requestedBy is the authenticated user ID
 // driving the update; used as the RequestedBy on any capability_requests
 // rows created for new capability declarations in strict mode. A zero UUID

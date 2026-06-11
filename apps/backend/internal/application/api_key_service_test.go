@@ -715,3 +715,23 @@ func TestAPIKeyService_ValidateAPIKey_Expired(t *testing.T) {
 
 	mockAPIKeyRepo.AssertExpectations(t)
 }
+
+// GetByOrganizationPaged pages over GetByOrganization for tests.
+func (m *MockAgentRepoForAPIKey) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(agents)
+	if limit > 0 {
+		if offset >= len(agents) {
+			agents = nil
+		} else {
+			agents = agents[offset:]
+		}
+		if len(agents) > limit {
+			agents = agents[:limit]
+		}
+	}
+	return agents, total, nil
+}
