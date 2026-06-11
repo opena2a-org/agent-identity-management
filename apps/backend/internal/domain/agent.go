@@ -121,6 +121,7 @@ type AgentRepository interface {
 	GetByID(id uuid.UUID) (*Agent, error)
 	GetByName(orgID uuid.UUID, name string) (*Agent, error)
 	GetByOrganization(orgID uuid.UUID) ([]*Agent, error)
+	GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*Agent, int, error)
 	Update(agent *Agent) error
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*Agent, error)

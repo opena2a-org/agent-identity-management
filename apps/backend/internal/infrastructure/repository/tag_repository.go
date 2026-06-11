@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -261,6 +262,60 @@ func (r *TagRepository) GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]
 	}
 
 	return tags, nil
+}
+
+// GetAgentTagsByAgentIDs retrieves tags for many agents in a single
+// query, keyed by agent ID. Agents with no tags have no entry in the
+// returned map.
+func (r *TagRepository) GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	result := make(map[uuid.UUID][]*domain.Tag, len(agentIDs))
+	if len(agentIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(agentIDs))
+	args := make([]interface{}, len(agentIDs))
+	for i, id := range agentIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT at.agent_id, t.id, t.organization_id, t.key, t.value, t.category, t.description, t.color, t.created_at, t.created_by
+		FROM tags t
+		INNER JOIN agent_tags at ON t.id = at.tag_id
+		WHERE at.agent_id IN (%s)
+		ORDER BY t.category, t.key, t.value
+	`, strings.Join(placeholders, ","))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent tags: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var agentID uuid.UUID
+		tag := &domain.Tag{}
+		err := rows.Scan(
+			&agentID,
+			&tag.ID,
+			&tag.OrganizationID,
+			&tag.Key,
+			&tag.Value,
+			&tag.Category,
+			&tag.Description,
+			&tag.Color,
+			&tag.CreatedAt,
+			&tag.CreatedBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		result[agentID] = append(result[agentID], tag)
+	}
+
+	return result, rows.Err()
 }
 
 // AddTagsToMCPServer adds tags to an MCP server

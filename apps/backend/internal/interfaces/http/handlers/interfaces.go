@@ -21,6 +21,7 @@ type AgentServicer interface {
 	GetAgent(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
 	GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
 	ListAgents(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
+	ListAgentsPaged(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error)
 	UpdateAgent(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
 	DeleteAgent(ctx context.Context, id uuid.UUID) error
 	VerifyAgent(ctx context.Context, id uuid.UUID) error
@@ -76,6 +77,7 @@ type CapabilityServicer interface {
 	RevokeCapability(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
 	GetCapabilityByID(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error)
 	GetAgentCapabilities(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
+	GetCapabilitiesByAgentIDs(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error)
 	ListCapabilities(ctx context.Context, orgID uuid.UUID) ([]application.CapabilityDefinition, error)
 	ListCapabilitiesWithMetadata(ctx context.Context, orgID uuid.UUID) (*application.ListCapabilitiesResponse, error)
 	ValidateAndRegisterCapability(ctx context.Context, capability string, orgID uuid.UUID) error
@@ -87,6 +89,7 @@ type CapabilityServicer interface {
 // TagServicer defines the methods from TagService that handlers use
 type TagServicer interface {
 	GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
+	GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
 	GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
 }
 
