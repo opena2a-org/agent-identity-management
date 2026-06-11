@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout source (agent-identity-management)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: source
           fetch-depth: 2  # Need previous commit for change detection
@@ -52,7 +52,7 @@ jobs:
 
       - name: Checkout target (aim-cloud)
         if: steps.preflight.outputs.ok == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: opena2a-org/aim-cloud
           token: ${{ secrets.AIM_CLOUD_SYNC_TOKEN }}
