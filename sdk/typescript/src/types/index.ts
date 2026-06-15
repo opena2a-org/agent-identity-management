@@ -3,6 +3,7 @@
  */
 
 import type { CorrelationJoiner, IntentInput, DetectionInput, RelayConfig } from '../telemetry';
+import type { LocalVerificationConfig } from '../local';
 
 /**
  * Agent types supported by AIM
@@ -79,6 +80,12 @@ export interface AIMClientConfig {
   headers?: Record<string, string>;
   /** Causal-denial telemetry (opt-in, best-effort, off the enforcement path). */
   telemetry?: TelemetryConfig;
+  /**
+   * Spec-compliant local ATX verification (opt-in). When set, the client can
+   * verify a resolved credential offline against these cached trust anchors
+   * instead of calling the central PDP per action. See {@link LocalVerificationConfig}.
+   */
+  localVerification?: LocalVerificationConfig;
 }
 
 /**

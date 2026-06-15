@@ -222,6 +222,21 @@ export {
   type AuditLogOptions,
 } from './secrets';
 
+// Local, offline ATX credential verification (spec-compliant local-verify path,
+// powered by the shared conformance-locked @opena2a/atx-verify verifier).
+export {
+  LocalVerifier,
+  type LocalVerificationConfig,
+  type LocalAuthorizationOptions,
+  type LocalAuthorizationResult,
+  type Atx,
+  type AtxPublicKey,
+  type AtxTrustAnchors,
+  type AtxVerificationResult,
+  type RejectCategory,
+  type ResolutionContext,
+} from './local';
+
 // Causal-denial telemetry (correlate why a blocked action happened; off the
 // enforcement critical path, best-effort)
 export {

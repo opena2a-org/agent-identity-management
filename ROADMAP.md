@@ -536,6 +536,36 @@ TypeScript SDK for Node.js applications:
 
 ---
 
+### Local Credential Verification in the SDKs
+**Priority**: High
+**Status**: TypeScript shipped; Java planned
+
+The agent trust credential is a signed credential designed to be verified
+locally: a verifier checks the signature against the issuer's cached public key in
+roughly a millisecond, with the issuing node never on the verification path and
+revocation handled by an asynchronously-refreshed, short-lived cached list.
+Reference verifiers exist for Go and Python. This item brings that same local
+verification to the agent-side SDKs so that capability checks resolve from the
+signed credential's own claims without a per-action call to a central service,
+keeping verification fast and horizontally scalable. Network access is reserved
+for credential resolution and periodic revocation refresh, not per-action
+decisions.
+
+- **TypeScript SDK — shipped.** `@opena2a/aim-sdk` exposes a `LocalVerifier` and
+  `AIMClient.verifyActionLocally`, verifying ATX credentials offline against
+  cached trust anchors and authorizing from signed capabilities. It consumes the
+  shared `@opena2a/atx-verify` verifier (byte-for-byte interoperable with the Go
+  and Python reference verifiers), so there is a single conformance-locked
+  implementation rather than a per-SDK reimplementation. The existing remote
+  verification call is retained as a fallback.
+- **Java SDK — planned.** Port the same local-verify model (the Go verifier is the
+  reference) so JVM agents verify offline with the same conformance guarantees.
+
+**Use Case**: High-throughput agents that must authorize actions without a central
+verification round-trip; spec-compliant offline operation.
+
+---
+
 ### GitHub Copilot Integration
 **Priority**: Medium
 **Status**: Planned (Q2 2026)
