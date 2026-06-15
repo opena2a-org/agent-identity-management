@@ -35,8 +35,15 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 | **AIM backend HTTP API** | Fiber routes, auth, FGA enforcement | `tests/integration/*.go` | Endpoints return correct status codes against a live backend | (currently broken: needs a running backend with admin login configured — pre-existing issue, not part of this contract yet) |
 | **PQC migration** | ML-DSA / ML-KEM key generation | `internal/crypto/pqc/*_test.go` | Keys generate, sign, verify | `go test ./internal/crypto/pqc/` (passes today; not a real "boot" test but acceptable since the surface is pure crypto) |
 | **AIM backend list endpoints** | bulk-prefetch row enrichment on `GET /api/v1/mcp-servers` + `GET /api/v1/admin/verifications/pending` | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` | Boots throwaway Postgres + a fresh backend (no OTel stack); creates a tag, a server carrying it, and one `tool` capability, then asserts the list row comes back WITH the bulk-prefetched tag and `toolCount==1`; asserts pending-verifications returns 200 + the `verifications[]`/`pagination` shape. Catches bulk-query column/table typos that mock-backed unit tests cannot — see design rule 9 | `cd apps/backend/deployments/smoke && ./rest-list-endpoints-smoke.sh` |
+| **A2A page progressive load** | per-section loading on `/dashboard/a2a` (cards/tasks/consents/trust resolve independently) + consent-filter debounce | `apps/web/scripts/smoke-a2a-progressive.mjs` | Drives a real browser against a PRODUCTION build with the A2A API stubbed (no backend). Holds the tasks response open and asserts the card stats paint while the task chart still shows its own spinner (the page no longer blocks on the slowest call), then that the chart fills on release; asserts 6 rapid keystrokes into the consent filter collapse to 1 request. | `cd apps/web && npm run build && (npx next start -p 3737 &) && BASE_URL=http://localhost:3737 node scripts/smoke-a2a-progressive.mjs` |
 
 (More rows to be added as components grow smoke tests.)
+
+> Note on web timing checks: run them against `next build` + `next start`, not
+> `next dev`. Under dev-mode StrictMode/HMR the dashboard tab content does not
+> render deterministically — a dev-server artifact, not real (production) user
+> behavior — so the committed Playwright e2e suite (dev webServer) is the wrong
+> host for timing-sensitive assertions. Use the standalone prod smoke above.
 
 ## Smoke test design rules
 

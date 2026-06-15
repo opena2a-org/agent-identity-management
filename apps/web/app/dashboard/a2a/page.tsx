@@ -241,15 +241,27 @@ function LoadingState() {
   );
 }
 
+// Inline spinner for a single section/chart so the rest of the page can
+// paint while that section's data is still loading.
+function ChartLoading({ className = "h-full" }: { className?: string }) {
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+    </div>
+  );
+}
+
 // ============================================
 // TAB COMPONENTS
 // ============================================
 
-function OverviewTab({ agentCards, tasks, trustScores, loading }: {
+function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoading, trustLoading }: {
   agentCards: A2AAgentCard[];
   tasks: A2ATask[];
   trustScores: Map<string, number>;
-  loading: boolean;
+  cardsLoading: boolean;
+  tasksLoading: boolean;
+  trustLoading: boolean;
 }) {
   const stats = useMemo(() => ({
     totalCards: agentCards.length,
@@ -289,16 +301,18 @@ function OverviewTab({ agentCards, tasks, trustScores, loading }: {
     return Object.entries(buckets).map(([range, count]) => ({ range, count }));
   }, [trustScores]);
 
-  if (loading) return <LoadingState />;
-
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat) => (
-          <StatCard key={stat.name} stat={stat} />
-        ))}
-      </div>
+      {cardsLoading ? (
+        <ChartLoading className="py-8" />
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {statCards.map((stat) => (
+            <StatCard key={stat.name} stat={stat} />
+          ))}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -308,6 +322,7 @@ function OverviewTab({ agentCards, tasks, trustScores, loading }: {
             Task State Distribution
           </h3>
           <div className="h-64">
+            {tasksLoading ? <ChartLoading /> : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -327,6 +342,7 @@ function OverviewTab({ agentCards, tasks, trustScores, loading }: {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -336,6 +352,7 @@ function OverviewTab({ agentCards, tasks, trustScores, loading }: {
             Trust Score Distribution
           </h3>
           <div className="h-64">
+            {trustLoading ? <ChartLoading /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trustDistData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -345,6 +362,7 @@ function OverviewTab({ agentCards, tasks, trustScores, loading }: {
                 <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
@@ -532,14 +550,19 @@ function ConsentTab({ consents: initialConsents, loading }: { consents: A2AConse
   }, [initialConsents]);
 
   useEffect(() => {
-    if (userIdFilter) {
+    if (!userIdFilter) {
+      setConsents(initialConsents);
+      return;
+    }
+    // Debounce the server-side filter so typing does not fire one request
+    // per keystroke.
+    const handle = setTimeout(() => {
       api.listA2AConsents(userIdFilter).then(data => {
         const raw = data.consents || data as any;
         setConsents(Array.isArray(raw) ? raw : []);
       }).catch(() => setConsents([]));
-    } else {
-      setConsents(initialConsents);
-    }
+    }, 350);
+    return () => clearTimeout(handle);
   }, [userIdFilter, initialConsents]);
 
   const displayConsents = consents;
@@ -937,7 +960,13 @@ function SkillsTab({ agentCards, loading }: { agentCards: A2AAgentCard[]; loadin
 
 export default function A2AProtocolPage() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
-  const [loading, setLoading] = useState(true);
+  // Per-dataset loading flags so each section paints as its call resolves,
+  // instead of the whole page blocking on the slowest of the four (the
+  // 500-task fetch).
+  const [cardsLoading, setCardsLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [consentsLoading, setConsentsLoading] = useState(true);
+  const [trustLoading, setTrustLoading] = useState(true);
   const [agentCards, setAgentCards] = useState<A2AAgentCard[]>([]);
   const [tasks, setTasks] = useState<A2ATask[]>([]);
   const [consents, setConsents] = useState<A2AConsent[]>([]);
@@ -955,24 +984,33 @@ export default function A2AProtocolPage() {
     return map;
   }, [trustScores]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [cardsData, tasksData, consentsData, trustData] = await Promise.allSettled([
-        api.listA2AAgentCards(),
-        api.listA2ATasks({ limit: 500 }),
-        api.listA2AConsents(),
-        api.listA2ATrustScores(),
-      ]);
-      if (cardsData.status === "fulfilled") setAgentCards(cardsData.value.cards || []);
-      if (tasksData.status === "fulfilled") setTasks(tasksData.value.tasks || []);
-      if (consentsData.status === "fulfilled") setConsents(consentsData.value.consents || []);
-      if (trustData.status === "fulfilled") setTrustScores(trustData.value.scores || []);
-    } catch (err) {
-      console.error("Failed to fetch A2A data:", err);
-    } finally {
-      setLoading(false);
-    }
+  const fetchData = () => {
+    // Fire all four in parallel (as before) but resolve each independently
+    // so a section renders the moment its own data arrives.
+    setCardsLoading(true);
+    setTasksLoading(true);
+    setConsentsLoading(true);
+    setTrustLoading(true);
+
+    api.listA2AAgentCards()
+      .then(data => setAgentCards(data.cards || []))
+      .catch(err => console.error("Failed to fetch A2A agent cards:", err))
+      .finally(() => setCardsLoading(false));
+
+    api.listA2ATasks({ limit: 500 })
+      .then(data => setTasks(data.tasks || []))
+      .catch(err => console.error("Failed to fetch A2A tasks:", err))
+      .finally(() => setTasksLoading(false));
+
+    api.listA2AConsents()
+      .then(data => setConsents(data.consents || []))
+      .catch(err => console.error("Failed to fetch A2A consents:", err))
+      .finally(() => setConsentsLoading(false));
+
+    api.listA2ATrustScores()
+      .then(data => setTrustScores(data.scores || []))
+      .catch(err => console.error("Failed to fetch A2A trust scores:", err))
+      .finally(() => setTrustLoading(false));
   };
 
   useEffect(() => {
@@ -1011,17 +1049,17 @@ export default function A2AProtocolPage() {
   const renderTab = () => {
     switch (activeTab) {
       case "overview":
-        return <OverviewTab agentCards={agentCards} tasks={tasks} trustScores={trustScoreMap} loading={loading} />;
+        return <OverviewTab agentCards={agentCards} tasks={tasks} trustScores={trustScoreMap} cardsLoading={cardsLoading} tasksLoading={tasksLoading} trustLoading={trustLoading} />;
       case "cards":
-        return <AgentCardsTab agentCards={agentCards} loading={loading} onRefresh={handleRefresh} onDelete={requestDelete} />;
+        return <AgentCardsTab agentCards={agentCards} loading={cardsLoading} onRefresh={handleRefresh} onDelete={requestDelete} />;
       case "consent":
-        return <ConsentTab consents={consents} loading={loading} />;
+        return <ConsentTab consents={consents} loading={consentsLoading} />;
       case "tasks":
-        return <TasksTab tasks={tasks} loading={loading} />;
+        return <TasksTab tasks={tasks} loading={tasksLoading} />;
       case "trust":
-        return <TrustTab trustScores={trustScores} agentCards={agentCards} loading={loading} />;
+        return <TrustTab trustScores={trustScores} agentCards={agentCards} loading={trustLoading || cardsLoading} />;
       case "skills":
-        return <SkillsTab agentCards={agentCards} loading={loading} />;
+        return <SkillsTab agentCards={agentCards} loading={cardsLoading} />;
       default:
         return null;
     }
