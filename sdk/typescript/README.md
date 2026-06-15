@@ -51,6 +51,7 @@ console.log(`Trust score: ${result.trustScore}`);
 - **Express Middleware**: Easy integration with Express.js applications
 - **Fastify Plugin**: First-class support for Fastify applications
 - **Automatic Retries**: Built-in retry logic with exponential backoff
+- **Local Credential Verification**: Verify signed ATX credentials offline against cached trust anchors, no per-action call to a central service
 
 ## Express Integration
 
@@ -103,6 +104,67 @@ fastify.post('/api/data', {
   return { success: true };
 });
 ```
+
+## Local Credential Verification (offline)
+
+An ATX (Agent Trust eXtension) credential is a signed, portable credential
+designed to be verified *locally*: the signature is checked against the issuer's
+cached public key in roughly a millisecond, the issuing node is never on the
+verification path, and revocation rides on an asynchronously-refreshed,
+short-lived cached list. When you configure `localVerification` with cached trust
+anchors, the client verifies a resolved credential offline and decides
+authorization from the credential's own signed claims — no per-action call to a
+central service. The remote `verifyAction` POST is retained as the fallback for
+when no local credential is available.
+
+The verifier is the shared, conformance-locked `@opena2a/atx-verify` — byte-for-byte
+interoperable with the Go (`opena2a-registry/pkg/atcverify`) and Python reference
+verifiers.
+
+```typescript
+import { AIMClient } from '@opena2a/aim-sdk';
+
+const client = new AIMClient({
+  // Cached once from AIM/the Registry; refresh the CRL off the hot path.
+  localVerification: {
+    trustedIssuers: ['did:opena2a:issuer-1'],
+    publicKeys: [{ algorithm: 'Ed25519', publicKeyHex: '<issuer raw ed25519 pubkey hex>' }],
+    // crl: { entries: [{ agentId, reason }] }, // optional cached revocation list
+  },
+});
+
+// Resolve the agent's ATX once (the AAP broker / network step), then cache it.
+client.setLocalCredential(resolvedAtx);
+
+// Per action: verified offline, sub-millisecond, no network.
+const result = await client.verifyActionLocally({ action: 'file:read' });
+// or just call verifyAction(): it takes the local path automatically when a
+// credential is cached, and falls back to the remote POST otherwise.
+```
+
+Authorization is gated on *signed* capabilities. ATX v1.1 credentials carry
+capabilities under the signature, so they are trusted; v1.0 capabilities are
+forgeable by the holder and are refused by default. Passing
+`requireSignedCapabilities: false` to `LocalVerifier.authorize` overrides this,
+but then authorization runs on holder-forgeable capabilities — only do this for a
+closed, trusted v1.0 deployment, never across a trust boundary.
+
+> **Single-issuer anchor sets.** The verifier does not yet bind a public key to
+> the issuer that owns it, so a `localVerification` anchor set must hold keys for
+> exactly one trusted issuer. For federated multi-issuer setups, use a separate
+> `AIMClient` / `LocalVerifier` per issuer until key-to-issuer binding lands in
+> `@opena2a/atx-verify`.
+
+For credential verification without the action-authorization adaptation, use the
+verifier directly:
+
+```typescript
+const verifier = client.getLocalVerifier();
+const { valid, context, rejectCategory } = await verifier!.verifyCredential(atx);
+```
+
+> Network is reserved for credential *resolution* (the AAP broker hands the agent
+> its ATX) and the periodic CRL refresh — never for a per-action decision.
 
 ## Causal-Denial Telemetry (opt-in)
 
@@ -276,7 +338,10 @@ client.setCredentials(saved);
 ### AIMClient
 
 - `registerAgent(options)` - Register a new agent
-- `verifyAction(options)` - Verify an action
+- `verifyAction(options, atx?)` - Verify an action (local path when a credential is cached, remote POST fallback otherwise)
+- `verifyActionLocally(options, atx?)` - Verify an action against a locally-held ATX credential, fully offline
+- `setLocalCredential(atx)` - Cache the resolved ATX credential for offline verification (pass `null` to clear)
+- `getLocalVerifier()` - The configured `LocalVerifier`, or `null` when local verification is not enabled
 - `getAgent()` - Get current agent info
 - `updateAgent(updates)` - Update agent metadata
 - `reportCapabilities(capabilities)` - Report agent capabilities

@@ -10,6 +10,7 @@ import type {
   VerificationResult,
   VerifyActionOptions,
 } from '../types';
+import { RiskLevel } from '../types';
 import { OAuthTokenManager, loadCredentialsFromEnv } from '../auth/oauth';
 import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '../crypto/ed25519';
 import {
@@ -17,9 +18,12 @@ import {
   AuthenticationError,
   ActionDeniedError,
   VerificationError,
+  ConfigurationError,
   NetworkError,
   parseAPIError,
 } from '../exceptions';
+import { LocalVerifier } from '../local';
+import type { Atx } from '../local';
 import {
   SandboxType,
   NetworkIsolation,
@@ -71,11 +75,17 @@ const DEFAULT_ENFORCEMENT_SOURCE = 'aim-pdp';
  * ```
  */
 export class AIMClient {
-  private readonly config: Required<AIMClientConfig>;
+  private readonly config: Required<Omit<AIMClientConfig, 'localVerification'>>;
   private tokenManager: OAuthTokenManager | null = null;
   private credentials: AgentCredentials | null = null;
   private agent: Agent | null = null;
   private _secrets: SecretsClient | null = null;
+
+  // Spec-compliant local ATX verification (opt-in). When a verifier and a
+  // resolved credential are present, verifyAction verifies the signed credential
+  // offline instead of calling the central PDP. The remote POST stays as fallback.
+  private readonly localVerifier: LocalVerifier | null;
+  private localCredential: Atx | null = null;
 
   // Causal-denial telemetry — opt-in, best-effort, off the enforcement path.
   private readonly telemetryEnabled: boolean;
@@ -109,6 +119,12 @@ export class AIMClient {
     // Resolve once: a relay.dataDir override (else ~/.opena2a) is the single
     // location both the auto-joiner sink and the relay use.
     this.telemetryDir = this.relayConfig?.dataDir ?? openA2AHome();
+
+    // Opt-in local verification: build a verifier from cached trust anchors.
+    // Absent this, verifyAction behaves exactly as before (remote POST).
+    this.localVerifier = config.localVerification
+      ? new LocalVerifier(config.localVerification)
+      : null;
 
     // Try to load credentials from environment
     this.credentials = loadCredentialsFromEnv();
@@ -322,9 +338,24 @@ export class AIMClient {
   }
 
   /**
-   * Verify an action
+   * Verify an action.
+   *
+   * When local verification is configured (a {@link LocalVerificationConfig} was
+   * passed to the constructor) AND a resolved ATX credential is available (via
+   * {@link setLocalCredential} or the `atx` argument), the signed credential is
+   * verified offline and authorization is decided from its signed claims — no
+   * call to the central PDP. Otherwise this falls back to the remote
+   * `POST /api/v1/verify` decision (the original behavior).
+   *
+   * @param atx Optional ATX credential to verify locally for this call. Overrides
+   *   any credential set via {@link setLocalCredential}.
    */
-  async verifyAction(options: VerifyActionOptions): Promise<VerificationResult> {
+  async verifyAction(options: VerifyActionOptions, atx?: Atx): Promise<VerificationResult> {
+    const credential = atx ?? this.localCredential;
+    if (this.localVerifier && credential) {
+      return this.verifyActionLocally(options, credential);
+    }
+
     if (!this.credentials) {
       throw new AuthenticationError('No credentials available. Register an agent first.');
     }
@@ -363,6 +394,90 @@ export class AIMClient {
         options.action,
         result.denialReason ?? 'Action not allowed',
         result.trustScore
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Cache a resolved ATX credential for the agent. This is the output of AAP
+   * credential resolution (the only step that touches the network); once cached,
+   * {@link verifyAction} / {@link verifyActionLocally} verify it offline per
+   * action. Pass `null` to clear it (falling back to the remote PDP path).
+   */
+  setLocalCredential(atx: Atx | null): void {
+    this.localCredential = atx;
+  }
+
+  /**
+   * The configured local verifier, or null when local verification is not enabled.
+   * Use it directly for credential verification without the action-authorization
+   * adaptation that {@link verifyActionLocally} performs.
+   */
+  getLocalVerifier(): LocalVerifier | null {
+    return this.localVerifier;
+  }
+
+  /**
+   * Verify an action against a locally-held ATX credential — fully offline,
+   * sub-millisecond after the first call. The credential's signature, expiry,
+   * revocation, and issuer trust are checked against the cached anchors, then a
+   * local broker policy authorizes the action from the credential's *signed*
+   * capabilities (v1.0 capabilities are forgeable and are refused by default).
+   *
+   * Mirrors {@link verifyAction}'s contract: returns a {@link VerificationResult}
+   * on allow and throws {@link ActionDeniedError} on deny.
+   *
+   * @param atx The ATX to verify. Falls back to the credential set via
+   *   {@link setLocalCredential}.
+   */
+  async verifyActionLocally(options: VerifyActionOptions, atx?: Atx): Promise<VerificationResult> {
+    if (!this.localVerifier) {
+      throw new ConfigurationError(
+        'Local verification is not configured. Pass `localVerification` (trust anchors) to the AIMClient constructor.',
+      );
+    }
+    const credential = atx ?? this.localCredential;
+    if (!credential) {
+      throw new VerificationError(
+        'No local ATX credential available. Resolve one and call setLocalCredential(), or pass it to verifyActionLocally().',
+      );
+    }
+
+    this.log('Verifying action locally:', options.action);
+
+    // Mint the correlation ID at the earliest ingestion point (telemetry off
+    // unless enabled), exactly as the remote path does.
+    const correlationId = this.telemetryEnabled ? mintCorrelationId() : undefined;
+
+    const auth = await this.localVerifier.authorize(credential, { action: options.action });
+
+    const result: VerificationResult = {
+      verified: auth.verified,
+      agentId: auth.agentId,
+      // An ATX carries no display name, so report the agent's DID rather than
+      // aliasing the opaque agentId as a "name" (which would misrepresent the
+      // field and diverge from the remote path's real agentName).
+      agentName: auth.agentDid,
+      trustScore: auth.trustScore,
+      riskLevel: options.riskLevel ?? RiskLevel.LOW,
+      actionAllowed: auth.actionAllowed,
+      denialReason: auth.denialReason,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Record the enforcement outcome (allow OR deny) BEFORE the deny throw, so the
+    // causal-denial case is captured. Best-effort; never affects the result.
+    if (correlationId) {
+      this.recordVerificationTelemetry(correlationId, options, result);
+    }
+
+    if (!result.actionAllowed) {
+      throw new ActionDeniedError(
+        options.action,
+        result.denialReason ?? 'Action not allowed',
+        result.trustScore,
       );
     }
 

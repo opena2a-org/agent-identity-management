@@ -13,5 +13,8 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   minify: false,
-  external: ['express', 'fastify'],
+  // @opena2a/atx-verify is ESM-only; keep it external and load it via a dynamic
+  // import() at runtime so both the CJS and ESM builds resolve it natively on
+  // every supported Node (a static require of an ESM package would throw).
+  external: ['express', 'fastify', '@opena2a/atx-verify'],
 });
