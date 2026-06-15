@@ -263,6 +263,16 @@ func (s *TagService) GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID
 	return tags, nil
 }
 
+// GetMCPServerTagsByServerIDs retrieves tags for many MCP servers in a
+// single query, keyed by MCP server ID
+func (s *TagService) GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	tags, err := s.tagRepo.GetMCPServerTagsByServerIDs(ctx, mcpServerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get mcp server tags: %w", err)
+	}
+	return tags, nil
+}
+
 // SuggestTagsForAgent suggests tags based on agent metadata
 // Smart suggestions based on agent type, capabilities, trust score, and MCP connections
 func (s *TagService) SuggestTagsForAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {

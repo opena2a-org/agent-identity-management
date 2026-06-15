@@ -91,6 +91,7 @@ type TagServicer interface {
 	GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
 	GetAgentTagsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
 	GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
+	GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
 }
 
 // APIKeyServicer defines the methods from APIKeyService that handlers use
@@ -217,6 +218,7 @@ type ComplianceServicerExtended interface {
 // MCPCapabilityServicer defines the methods from MCPCapabilityService that handlers use
 type MCPCapabilityServicer interface {
 	GetCapabilities(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error)
+	GetCapabilitiesByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error)
 	DetectCapabilities(ctx context.Context, mcpServerID uuid.UUID) error
 }
 
@@ -268,6 +270,7 @@ type SecurityServicerForAnalytics interface {
 type AgentServicerForVerification interface {
 	AgentServicer
 	CreateSecurityAlert(ctx context.Context, alert *domain.Alert) error
+	GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error)
 }
 
 // AuditServicerForVerification extends AuditServicer with Log method for VerificationHandler

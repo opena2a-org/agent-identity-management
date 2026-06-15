@@ -124,30 +124,34 @@ func (h *MCPHandler) getAttestationService() MCPAttestationServicerExtended {
 	return h.attestationService
 }
 
-// enrichMCPServerResponse adds tags to MCP server response
+// enrichMCPServerResponse adds tags to a single MCP server response. List
+// endpoints should use mcpServerResponse with prefetched tags instead, to
+// avoid a per-server tag query.
 func (h *MCPHandler) enrichMCPServerResponse(c fiber.Ctx, server *domain.MCPServer) fiber.Map {
 	// ✅ Fetch tags from mcp_server_tags table
-	tags := make([]fiber.Map, 0)
-	tagSvc := h.getTagService()
-	if tagSvc != nil {
-		serverTags, err := tagSvc.GetMCPServerTags(c.Context(), server.ID)
-		if err != nil {
-			tags = []fiber.Map{}
-		} else {
-			tags = make([]fiber.Map, 0, len(serverTags))
-			for _, tag := range serverTags {
-				tags = append(tags, fiber.Map{
-					"id":          tag.ID,
-					"key":         tag.Key,
-					"value":       tag.Value,
-					"category":    tag.Category,
-					"description": tag.Description,
-					"color":       tag.Color,
-				})
-			}
+	serverTags := make([]*domain.Tag, 0)
+	if tagSvc := h.getTagService(); tagSvc != nil {
+		// Log error but don't fail - return empty tags
+		if fetched, err := tagSvc.GetMCPServerTags(c.Context(), server.ID); err == nil && fetched != nil {
+			serverTags = fetched
 		}
-	} else {
-		tags = []fiber.Map{}
+	}
+	return mcpServerResponse(server, serverTags)
+}
+
+// mcpServerResponse renders an MCP server plus its prefetched tags. The
+// same response shape is used by single-server and bulk-list paths.
+func mcpServerResponse(server *domain.MCPServer, serverTags []*domain.Tag) fiber.Map {
+	tags := make([]fiber.Map, 0, len(serverTags))
+	for _, tag := range serverTags {
+		tags = append(tags, fiber.Map{
+			"id":          tag.ID,
+			"key":         tag.Key,
+			"value":       tag.Value,
+			"category":    tag.Category,
+			"description": tag.Description,
+			"color":       tag.Color,
+		})
 	}
 
 	return fiber.Map{
@@ -326,30 +330,40 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 		})
 	}
 
-	// ✅ Enrich each server with tags and tool count
+	// Prefetch tags and capabilities for the whole page in one query
+	// each, instead of two queries per server (the old 1+2N pattern).
+	serverIDs := make([]uuid.UUID, len(servers))
+	for i, server := range servers {
+		serverIDs[i] = server.ID
+	}
+
+	var tagsByServer map[uuid.UUID][]*domain.Tag
+	if tagSvc := h.getTagService(); tagSvc != nil {
+		// Log error but don't fail - servers degrade to empty tags
+		tagsByServer, _ = tagSvc.GetMCPServerTagsByServerIDs(c.Context(), serverIDs)
+	}
+
+	capsByServer := map[uuid.UUID][]*domain.MCPServerCapability{}
+	if capSvc := h.getMCPCapabilityService(); capSvc != nil {
+		// Log error but don't fail - servers degrade to a zero tool count
+		if fetched, err := capSvc.GetCapabilitiesByServerIDs(c.Context(), serverIDs); err == nil && fetched != nil {
+			capsByServer = fetched
+		}
+	}
+
 	enriched := make([]fiber.Map, 0, len(servers))
-	capSvc := h.getMCPCapabilityService()
 	for _, server := range servers {
-		serverMap := h.enrichMCPServerResponse(c, server)
+		serverMap := mcpServerResponse(server, tagsByServer[server.ID])
 
 		// ✅ Add actual tool count from mcp_server_capabilities table
-		if capSvc != nil {
-			capabilities, err := capSvc.GetCapabilities(c.Context(), server.ID)
-			if err == nil {
-				// Count only tools (not prompts/resources)
-				toolCount := 0
-				for _, cap := range capabilities {
-					if cap.CapabilityType == "tool" {
-						toolCount++
-					}
-				}
-				serverMap["toolCount"] = toolCount
-			} else {
-				serverMap["toolCount"] = 0
+		// (count only tools, not prompts/resources)
+		toolCount := 0
+		for _, cap := range capsByServer[server.ID] {
+			if cap.CapabilityType == "tool" {
+				toolCount++
 			}
-		} else {
-			serverMap["toolCount"] = 0
 		}
+		serverMap["toolCount"] = toolCount
 
 		enriched = append(enriched, serverMap)
 	}

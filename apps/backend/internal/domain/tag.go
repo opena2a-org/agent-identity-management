@@ -63,4 +63,5 @@ type TagRepository interface {
 	AddTagsToMCPServer(ctx context.Context, mcpServerID uuid.UUID, tagIDs []uuid.UUID) error
 	RemoveTagFromMCPServer(ctx context.Context, mcpServerID uuid.UUID, tagID uuid.UUID) error
 	GetMCPServerTags(ctx context.Context, mcpServerID uuid.UUID) ([]*Tag, error)
+	GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*Tag, error)
 }

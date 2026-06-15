@@ -137,6 +137,142 @@ func TestMCPHandler_ListMCPServers_ServiceError(t *testing.T) {
 	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 }
 
+// TestMCPHandler_ListMCPServers_BulkPrefetch locks the N+1 fix: the list
+// path must use the bulk tag/capability queries (keyed by server) and must
+// NOT fall back to a per-server query inside the loop.
+func TestMCPHandler_ListMCPServers_BulkPrefetch(t *testing.T) {
+	orgID := uuid.New()
+	serverID1 := uuid.New()
+	serverID2 := uuid.New()
+	tagID := uuid.New()
+
+	mockMCPService := &MockMCPServiceExtendedImpl{
+		ListMCPServersFunc: func(ctx context.Context, oID uuid.UUID) ([]*domain.MCPServer, error) {
+			return []*domain.MCPServer{
+				{ID: serverID1, OrganizationID: oID, Name: "Server1", Status: domain.MCPServerStatusVerified},
+				{ID: serverID2, OrganizationID: oID, Name: "Server2", Status: domain.MCPServerStatusPending},
+			}, nil
+		},
+	}
+
+	mockCapabilityService := &MockMCPCapabilityServiceImpl{
+		// Per-server query must never be called from the list path.
+		GetCapabilitiesFunc: func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error) {
+			t.Errorf("per-server GetCapabilities called for %s; list path must use the bulk query", mcpServerID)
+			return nil, nil
+		},
+		GetCapabilitiesByServerIDsFunc: func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error) {
+			assert.ElementsMatch(t, []uuid.UUID{serverID1, serverID2}, ids)
+			return map[uuid.UUID][]*domain.MCPServerCapability{
+				serverID1: {
+					{ID: uuid.New(), CapabilityType: "tool", Name: "tool-a"},
+					{ID: uuid.New(), CapabilityType: "tool", Name: "tool-b"},
+					{ID: uuid.New(), CapabilityType: "prompt", Name: "prompt-a"},
+				},
+			}, nil
+		},
+	}
+
+	mockTagService := &MockTagServiceImpl{
+		GetMCPServerTagsFunc: func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error) {
+			t.Errorf("per-server GetMCPServerTags called for %s; list path must use the bulk query", mcpServerID)
+			return nil, nil
+		},
+		GetMCPServerTagsByServerIDsFunc: func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+			assert.ElementsMatch(t, []uuid.UUID{serverID1, serverID2}, ids)
+			return map[uuid.UUID][]*domain.Tag{
+				serverID1: {{ID: tagID, Key: "env", Value: "prod"}},
+			}, nil
+		},
+	}
+
+	handler := createMCPHandlerWithMocks(mockMCPService, mockCapabilityService, nil, nil, nil, mockTagService, nil)
+
+	app := fiber.New()
+	app.Get("/mcp-servers", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.ListMCPServers(c)
+	})
+
+	req := httptest.NewRequest("GET", "/mcp-servers", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var result map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+
+	servers := result["mcpServers"].([]interface{})
+	require.Len(t, servers, 2)
+
+	byID := map[string]map[string]interface{}{}
+	for _, s := range servers {
+		m := s.(map[string]interface{})
+		byID[m["id"].(string)] = m
+	}
+
+	// Server1: 2 tools (prompt excluded) and 1 tag from the bulk maps.
+	s1 := byID[serverID1.String()]
+	assert.Equal(t, float64(2), s1["toolCount"])
+	assert.Len(t, s1["tags"].([]interface{}), 1)
+
+	// Server2: absent from both bulk maps -> zero tools, empty tags.
+	s2 := byID[serverID2.String()]
+	assert.Equal(t, float64(0), s2["toolCount"])
+	assert.Empty(t, s2["tags"].([]interface{}))
+}
+
+// TestMCPHandler_ListMCPServers_BulkDegradesOnError locks that a failure of
+// either bulk query degrades to empty tags / zero tool count with a 200,
+// matching the old per-server behavior.
+func TestMCPHandler_ListMCPServers_BulkDegradesOnError(t *testing.T) {
+	orgID := uuid.New()
+	serverID := uuid.New()
+
+	mockMCPService := &MockMCPServiceExtendedImpl{
+		ListMCPServersFunc: func(ctx context.Context, oID uuid.UUID) ([]*domain.MCPServer, error) {
+			return []*domain.MCPServer{
+				{ID: serverID, OrganizationID: oID, Name: "Server1", Status: domain.MCPServerStatusVerified},
+			}, nil
+		},
+	}
+	mockCapabilityService := &MockMCPCapabilityServiceImpl{
+		GetCapabilitiesByServerIDsFunc: func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error) {
+			return nil, assert.AnError
+		},
+	}
+	mockTagService := &MockTagServiceImpl{
+		GetMCPServerTagsByServerIDsFunc: func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+			return nil, assert.AnError
+		},
+	}
+
+	handler := createMCPHandlerWithMocks(mockMCPService, mockCapabilityService, nil, nil, nil, mockTagService, nil)
+
+	app := fiber.New()
+	app.Get("/mcp-servers", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		return handler.ListMCPServers(c)
+	})
+
+	req := httptest.NewRequest("GET", "/mcp-servers", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var result map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	servers := result["mcpServers"].([]interface{})
+	require.Len(t, servers, 1)
+	s := servers[0].(map[string]interface{})
+	assert.Equal(t, float64(0), s["toolCount"])
+	assert.Empty(t, s["tags"].([]interface{}))
+}
+
 // ===========================
 // GetMCPServer Tests
 // ===========================

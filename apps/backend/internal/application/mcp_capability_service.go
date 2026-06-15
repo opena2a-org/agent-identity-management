@@ -228,6 +228,12 @@ func (s *MCPCapabilityService) GetCapabilities(ctx context.Context, serverID uui
 	return s.capabilityRepo.GetByServerID(serverID)
 }
 
+// GetCapabilitiesByServerIDs retrieves active capabilities for many MCP
+// servers in a single query, keyed by MCP server ID
+func (s *MCPCapabilityService) GetCapabilitiesByServerIDs(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error) {
+	return s.capabilityRepo.GetByServerIDs(serverIDs)
+}
+
 // GetCapabilitiesByType retrieves capabilities by type
 func (s *MCPCapabilityService) GetCapabilitiesByType(ctx context.Context, serverID uuid.UUID, capType domain.MCPCapabilityType) ([]*domain.MCPServerCapability, error) {
 	return s.capabilityRepo.GetByServerIDAndType(serverID, capType)
