@@ -34,6 +34,7 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 | **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge, /api/v1/agents/:id/authorize handler | `apps/backend/deployments/otel-demo/smoke-backend.sh` | Boots throwaway Postgres + OTel demo stack + a fresh backend binary; logs in as admin, creates an agent, POSTs /authorize, asserts the response shape, then verifies the `fga.authorize` parent span with at least one `fga.*` child landed in Tempo. Hermetic — does not touch the user's running backend or persistent data | `cd apps/backend/deployments/otel-demo && ./smoke-backend.sh` |
 | **AIM backend HTTP API** | Fiber routes, auth, FGA enforcement | `tests/integration/*.go` | Endpoints return correct status codes against a live backend | (currently broken: needs a running backend with admin login configured — pre-existing issue, not part of this contract yet) |
 | **PQC migration** | ML-DSA / ML-KEM key generation | `internal/crypto/pqc/*_test.go` | Keys generate, sign, verify | `go test ./internal/crypto/pqc/` (passes today; not a real "boot" test but acceptable since the surface is pure crypto) |
+| **AIM backend list endpoints** | bulk-prefetch row enrichment on `GET /api/v1/mcp-servers` + `GET /api/v1/admin/verifications/pending` | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` | Boots throwaway Postgres + a fresh backend (no OTel stack); creates a tag, a server carrying it, and one `tool` capability, then asserts the list row comes back WITH the bulk-prefetched tag and `toolCount==1`; asserts pending-verifications returns 200 + the `verifications[]`/`pagination` shape. Catches bulk-query column/table typos that mock-backed unit tests cannot — see design rule 9 | `cd apps/backend/deployments/smoke && ./rest-list-endpoints-smoke.sh` |
 
 (More rows to be added as components grow smoke tests.)
 
@@ -100,6 +101,17 @@ A smoke test that fails halfway and leaves orphan containers/files/ports must be
 4 = a signal failed to land in its backend
 ```
 
+### 9. For degrade-on-error read paths, a 200 is NOT the signal — seed and assert the enriched value
+
+List/detail endpoints that enrich each row from a related table (tags, capabilities, names, counts) almost always degrade to an empty value on a query error rather than returning 500 — that is correct production behavior (one bad join should not blank the whole page). The trap is that it makes the failure **invisible at the HTTP status level**: a bulk-prefetch query with a wrong column or table name compiles, passes every mock-backed unit test, and still returns `200` with the enriched field silently empty.
+
+So the smoke for any such endpoint must **seed a real related row and assert it comes back through the query**, not just assert `200`:
+
+- For `GET /mcp-servers`: create a tag + attach it + seed a `tool` capability, then assert the list row has that tag and `toolCount == 1`. A broken bulk query shows up as a missing tag / `toolCount == 0`.
+- General rule: if the handler does `result, err := bulkFetch(...); if err != nil { result = empty }`, the only way a smoke catches a broken `bulkFetch` is to assert a non-empty, *specific* enriched value that only appears when the query is correct.
+
+This rule is repo-agnostic. Any service in the org with a row-enriching read path (the Registry trust-graph queries, ai-trust/HMA result joins, dashboard list endpoints) should follow it: seed the related entity, assert it surfaces, never settle for status-code-only coverage on a degrade-on-error path.
+
 ## Running smoke tests
 
 ### Locally
@@ -124,6 +136,9 @@ The `pre-push-review` skill should be extended (TODO) to run the smoke test for 
 | `apps/backend/internal/application/fga_engine.go` | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
 | `apps/backend/internal/interfaces/http/handlers/authorize_handler.go` | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
 | `apps/backend/cmd/server/main.go` (FGA wiring, Authorize handler init, route reg) | `apps/backend/deployments/otel-demo/smoke-backend.sh` |
+| `apps/backend/internal/interfaces/http/handlers/mcp_handler.go` (ListMCPServers) | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` |
+| `apps/backend/internal/interfaces/http/handlers/verification_handler.go` (ListPendingVerifications) | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` |
+| any new/changed repository bulk query feeding a list handler (`*ByIDs`, `*ByServerIDs`, `*ByAgentIDs`) | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` (extend it with the new seed+assert) |
 
 Until that wiring lands, the rule is: **before you push, manually run the smoke for any component touched in your diff**, and paste the `==> PASS` line into your PR description.
 
