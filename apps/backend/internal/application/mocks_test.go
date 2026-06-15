@@ -1021,3 +1021,17 @@ func (m *SharedMockTagRepository) GetAgentTagsByAgentIDs(ctx context.Context, ag
 	}
 	return result, nil
 }
+
+func (m *SharedMockTagRepository) GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	result := make(map[uuid.UUID][]*domain.Tag, len(mcpServerIDs))
+	for _, serverID := range mcpServerIDs {
+		tags, err := m.GetMCPServerTags(ctx, serverID)
+		if err != nil {
+			return nil, err
+		}
+		if len(tags) > 0 {
+			result[serverID] = tags
+		}
+	}
+	return result, nil
+}

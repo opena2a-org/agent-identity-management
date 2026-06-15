@@ -1477,3 +1477,82 @@ func TestNormalizeVerificationStatus(t *testing.T) {
 		})
 	}
 }
+
+// TestVerificationHandler_ListPendingVerifications_BulkAgentNames locks the
+// N+1 fix: events lacking an inline name resolve through a single bulk
+// GetAgentsByIDs call, and the per-event GetAgent must never be called.
+func TestVerificationHandler_ListPendingVerifications_BulkAgentNames(t *testing.T) {
+	agentA := uuid.New()
+	agentB := uuid.New()
+	inlineName := "inline-initiator"
+	now := time.Now()
+
+	mockEventService := &MockVerificationEventServiceForVerificationImpl{
+		SearchVerificationsFunc: func(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error) {
+			events := []*domain.VerificationEvent{
+				// Two events for agentA and one for agentB, all missing an
+				// inline name -> must be resolved via the bulk query.
+				{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentA, CreatedAt: now},
+				{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentA, CreatedAt: now},
+				{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentB, CreatedAt: now},
+				// One event already carries an inline name -> agentID not in bulk set.
+				{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentA, InitiatorName: &inlineName, CreatedAt: now},
+			}
+			return events, len(events), &domain.VerificationStatusCounts{}, nil
+		},
+	}
+
+	var bulkCalls int
+	var bulkRequested []uuid.UUID
+	mockAgentService := &MockAgentServiceForVerificationImpl{}
+	mockAgentService.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+		t.Errorf("per-event GetAgent called for %s; list path must use the bulk query", id)
+		return nil, nil
+	}
+	mockAgentService.GetAgentsByIDsFunc = func(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+		bulkCalls++
+		bulkRequested = ids
+		return []*domain.Agent{
+			{ID: agentA, DisplayName: "Agent A"},
+			{ID: agentB, Name: "agent-b-fallback"}, // no DisplayName -> Name fallback
+		}, nil
+	}
+
+	handler := NewVerificationHandlerWithInterfaces(
+		mockAgentService,
+		&MockAuditServiceForVerificationImpl{},
+		&MockAlertServiceForVerificationImpl{},
+		mockEventService,
+		&MockOrganizationRepositoryerImpl{},
+	)
+
+	app := setupVerificationTestApp(handler)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/verifications/pending", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	// Exactly one bulk call, for the two distinct name-missing agents only.
+	assert.Equal(t, 1, bulkCalls)
+	assert.ElementsMatch(t, []uuid.UUID{agentA, agentB}, bulkRequested)
+
+	var listResp PendingVerificationListResponse
+	body, _ := io.ReadAll(resp.Body)
+	require.NoError(t, json.Unmarshal(body, &listResp))
+	require.Len(t, listResp.Verifications, 4)
+
+	for _, v := range listResp.Verifications {
+		switch {
+		case v.AgentID == agentA.String() && v.AgentName == inlineName:
+			// inline-named event keeps its inline name
+		case v.AgentID == agentA.String():
+			assert.Equal(t, "Agent A", v.AgentName)
+		case v.AgentID == agentB.String():
+			assert.Equal(t, "agent-b-fallback", v.AgentName)
+		default:
+			t.Fatalf("unexpected agent id %s", v.AgentID)
+		}
+	}
+}

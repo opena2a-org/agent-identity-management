@@ -1441,6 +1441,33 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		}
 	}
 
+	// Prefetch names for events that lack an inline initiator/agent name in
+	// one bulk query, instead of one GetAgent call per event.
+	agentNameByID := make(map[uuid.UUID]string)
+	missingNameIDs := make([]uuid.UUID, 0)
+	seenAgentID := make(map[uuid.UUID]bool)
+	for _, event := range events {
+		hasInlineName := (event.InitiatorName != nil && *event.InitiatorName != "") ||
+			(event.AgentName != nil && *event.AgentName != "")
+		if !hasInlineName && event.AgentID != nil && !seenAgentID[*event.AgentID] {
+			seenAgentID[*event.AgentID] = true
+			missingNameIDs = append(missingNameIDs, *event.AgentID)
+		}
+	}
+	if len(missingNameIDs) > 0 {
+		// Log error but don't fail - names degrade to empty, same as the
+		// old per-event lookup which left the name blank on error.
+		if agents, err := h.getAgentService().GetAgentsByIDs(c.Context(), missingNameIDs); err == nil {
+			for _, agent := range agents {
+				name := agent.DisplayName
+				if name == "" {
+					name = agent.Name
+				}
+				agentNameByID[agent.ID] = name
+			}
+		}
+	}
+
 	responseItems := make([]PendingVerificationResponse, 0)
 	for _, event := range events {
 		// Get agent name with fallbacks
@@ -1451,15 +1478,9 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 			agentName = *event.AgentName
 		}
 
-		// If still no name, try to get from agent repo
+		// If still no name, use the bulk-prefetched name
 		if agentName == "" && event.AgentID != nil {
-			if agent, err := h.getAgentService().GetAgent(c.Context(), *event.AgentID); err == nil {
-				if agent.DisplayName != "" {
-					agentName = agent.DisplayName
-				} else {
-					agentName = agent.Name
-				}
-			}
+			agentName = agentNameByID[*event.AgentID]
 		}
 
 		actionType := ""

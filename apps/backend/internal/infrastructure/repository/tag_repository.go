@@ -405,6 +405,60 @@ func (r *TagRepository) GetMCPServerTags(ctx context.Context, mcpServerID uuid.U
 	return tags, nil
 }
 
+// GetMCPServerTagsByServerIDs retrieves tags for many MCP servers in a
+// single query, keyed by MCP server ID. Servers with no tags have no
+// entry in the returned map.
+func (r *TagRepository) GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	result := make(map[uuid.UUID][]*domain.Tag, len(mcpServerIDs))
+	if len(mcpServerIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(mcpServerIDs))
+	args := make([]interface{}, len(mcpServerIDs))
+	for i, id := range mcpServerIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT mst.mcp_server_id, t.id, t.organization_id, t.key, t.value, t.category, t.description, t.color, t.created_at, t.created_by
+		FROM tags t
+		INNER JOIN mcp_server_tags mst ON t.id = mst.tag_id
+		WHERE mst.mcp_server_id IN (%s)
+		ORDER BY t.category, t.key, t.value
+	`, strings.Join(placeholders, ","))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get mcp server tags: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var serverID uuid.UUID
+		tag := &domain.Tag{}
+		err := rows.Scan(
+			&serverID,
+			&tag.ID,
+			&tag.OrganizationID,
+			&tag.Key,
+			&tag.Value,
+			&tag.Category,
+			&tag.Description,
+			&tag.Color,
+			&tag.CreatedAt,
+			&tag.CreatedBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		result[serverID] = append(result[serverID], tag)
+	}
+
+	return result, rows.Err()
+}
+
 // GetPopularTags retrieves the most popular tags by usage count
 func (r *TagRepository) GetPopularTags(ctx context.Context, organizationID uuid.UUID, limit int) ([]*domain.Tag, error) {
 	query := `

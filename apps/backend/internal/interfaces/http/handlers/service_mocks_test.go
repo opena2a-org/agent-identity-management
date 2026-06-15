@@ -18,6 +18,7 @@ import (
 type MockAgentServiceImpl struct {
 	CreateAgentFunc                func(ctx context.Context, req *application.CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error)
 	GetAgentFunc                   func(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
+	GetAgentsByIDsFunc             func(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error)
 	GetAgentByNameFunc             func(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
 	ListAgentsFunc                 func(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
 	ListAgentsPagedFunc            func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error)
@@ -57,6 +58,23 @@ func (m *MockAgentServiceImpl) GetAgent(ctx context.Context, id uuid.UUID) (*dom
 		return m.GetAgentFunc(ctx, id)
 	}
 	return nil, nil
+}
+
+func (m *MockAgentServiceImpl) GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	if m.GetAgentsByIDsFunc != nil {
+		return m.GetAgentsByIDsFunc(ctx, ids)
+	}
+	agents := make([]*domain.Agent, 0, len(ids))
+	for _, id := range ids {
+		agent, err := m.GetAgent(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if agent != nil {
+			agents = append(agents, agent)
+		}
+	}
+	return agents, nil
 }
 
 func (m *MockAgentServiceImpl) GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error) {
@@ -459,9 +477,10 @@ func (m *MockCapabilityServiceImpl) GetRecentViolations(ctx context.Context, org
 
 // MockTagServiceImpl implements TagServicer interface
 type MockTagServiceImpl struct {
-	GetAgentTagsFunc           func(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
-	GetAgentTagsByAgentIDsFunc func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
-	GetMCPServerTagsFunc       func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
+	GetAgentTagsFunc                func(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error)
+	GetAgentTagsByAgentIDsFunc      func(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
+	GetMCPServerTagsFunc            func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.Tag, error)
+	GetMCPServerTagsByServerIDsFunc func(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error)
 }
 
 func (m *MockTagServiceImpl) GetAgentTags(ctx context.Context, agentID uuid.UUID) ([]*domain.Tag, error) {
@@ -476,6 +495,23 @@ func (m *MockTagServiceImpl) GetMCPServerTags(ctx context.Context, mcpServerID u
 		return m.GetMCPServerTagsFunc(ctx, mcpServerID)
 	}
 	return []*domain.Tag{}, nil
+}
+
+func (m *MockTagServiceImpl) GetMCPServerTagsByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.Tag, error) {
+	if m.GetMCPServerTagsByServerIDsFunc != nil {
+		return m.GetMCPServerTagsByServerIDsFunc(ctx, mcpServerIDs)
+	}
+	result := make(map[uuid.UUID][]*domain.Tag, len(mcpServerIDs))
+	for _, serverID := range mcpServerIDs {
+		tags, err := m.GetMCPServerTags(ctx, serverID)
+		if err != nil {
+			return nil, err
+		}
+		if len(tags) > 0 {
+			result[serverID] = tags
+		}
+	}
+	return result, nil
 }
 
 // MockAPIKeyServiceImpl implements APIKeyServicer interface
@@ -1038,8 +1074,9 @@ func (m *MockMCPServiceExtendedImpl) GenerateVerificationChallenge(ctx context.C
 
 // MockMCPCapabilityServiceImpl implements MCPCapabilityServicer interface
 type MockMCPCapabilityServiceImpl struct {
-	GetCapabilitiesFunc    func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error)
-	DetectCapabilitiesFunc func(ctx context.Context, mcpServerID uuid.UUID) error
+	GetCapabilitiesFunc            func(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error)
+	GetCapabilitiesByServerIDsFunc func(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error)
+	DetectCapabilitiesFunc         func(ctx context.Context, mcpServerID uuid.UUID) error
 }
 
 func (m *MockMCPCapabilityServiceImpl) GetCapabilities(ctx context.Context, mcpServerID uuid.UUID) ([]*domain.MCPServerCapability, error) {
@@ -1047,6 +1084,24 @@ func (m *MockMCPCapabilityServiceImpl) GetCapabilities(ctx context.Context, mcpS
 		return m.GetCapabilitiesFunc(ctx, mcpServerID)
 	}
 	return []*domain.MCPServerCapability{}, nil
+}
+
+// GetCapabilitiesByServerIDs aggregates the per-server mocks for tests.
+func (m *MockMCPCapabilityServiceImpl) GetCapabilitiesByServerIDs(ctx context.Context, mcpServerIDs []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error) {
+	if m.GetCapabilitiesByServerIDsFunc != nil {
+		return m.GetCapabilitiesByServerIDsFunc(ctx, mcpServerIDs)
+	}
+	result := make(map[uuid.UUID][]*domain.MCPServerCapability, len(mcpServerIDs))
+	for _, serverID := range mcpServerIDs {
+		caps, err := m.GetCapabilities(ctx, serverID)
+		if err != nil {
+			return nil, err
+		}
+		if len(caps) > 0 {
+			result[serverID] = caps
+		}
+	}
+	return result, nil
 }
 
 func (m *MockMCPCapabilityServiceImpl) DetectCapabilities(ctx context.Context, mcpServerID uuid.UUID) error {
