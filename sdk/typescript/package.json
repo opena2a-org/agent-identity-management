@@ -64,7 +64,7 @@
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
-    "@opena2a/atx-verify": "0.1.1"
+    "@opena2a/atx-verify": "0.2.0"
   },
   "optionalDependencies": {
     "@noble/post-quantum": "^0.2.1"

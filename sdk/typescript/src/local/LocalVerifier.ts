@@ -56,23 +56,24 @@ function loadAtxVerify(): Promise<AtxVerifyModule> {
  * once from AIM/the Registry and cached; revocation rides on the short-lived,
  * asynchronously-refreshed CRL (soft-fail) per AAP §6.
  *
- * SECURITY — single-issuer anchor sets only (current limitation). The underlying
- * `@opena2a/atx-verify` verifier tries a credential's signature against EVERY
- * Ed25519 key in `publicKeys` and does not bind a key to the issuer DID that owns
- * it (`AtxPublicKey` carries no issuerDid/keyId). So if `publicKeys` holds keys
- * for more than one issuer, a credential claiming issuer A but signed by issuer
- * B's trusted key would verify and be attributed to A. Until key-to-issuer
- * binding lands upstream, configure anchors for exactly ONE trusted issuer per
- * `LocalVerifier` instance (one entry in `trustedIssuers`, only that issuer's
- * keys in `publicKeys`). Use separate instances for federated multi-issuer setups.
+ * SECURITY — multi-issuer anchor sets are safe when each key carries a DID-URL
+ * `keyId`. `@opena2a/atx-verify` (>= 0.2.0) binds a key to its controller DID:
+ * a key whose `keyId` is a DID-URL (e.g. `did:…:opena2a.org#key-1`) may only
+ * verify credentials issued by that DID (or, for v1.1, a signed issuerChain
+ * authority), so one trusted issuer's key cannot satisfy a credential issued
+ * under a different issuer's DID. Always set a DID-URL `keyId` on each key when
+ * `publicKeys` holds keys for more than one issuer. A key without a `keyId`
+ * fragment is unbound and eligible for any issuer — fine for a single-issuer
+ * anchor set, unsafe for a multi-issuer one.
  */
 export interface LocalVerificationConfig {
-  /**
-   * Issuer DIDs the verifier trusts. See the single-issuer security note above:
-   * prefer exactly one entry until upstream key-to-issuer binding ships.
-   */
+  /** Issuer DIDs the verifier trusts. */
   trustedIssuers: string[];
-  /** Issuer public keys keyed by algorithm. Ed25519 is verified; ML-DSA-65 presence is recorded. */
+  /**
+   * Issuer public keys keyed by algorithm. Ed25519 is verified; ML-DSA-65
+   * presence is recorded. Set each key's `keyId` to a DID-URL to bind it to its
+   * controller (required to be safe with a multi-issuer anchor set).
+   */
   publicKeys: AtxPublicKey[];
   /** Cached federated revocation list. Refresh off the hot path; absence soft-fails open on revocation only. */
   crl?: { entries: Array<{ agentId: string; reason?: string }> };

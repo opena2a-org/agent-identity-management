@@ -149,11 +149,12 @@ forgeable by the holder and are refused by default. Passing
 but then authorization runs on holder-forgeable capabilities — only do this for a
 closed, trusted v1.0 deployment, never across a trust boundary.
 
-> **Single-issuer anchor sets.** The verifier does not yet bind a public key to
-> the issuer that owns it, so a `localVerification` anchor set must hold keys for
-> exactly one trusted issuer. For federated multi-issuer setups, use a separate
-> `AIMClient` / `LocalVerifier` per issuer until key-to-issuer binding lands in
-> `@opena2a/atx-verify`.
+> **Multi-issuer anchor sets.** Give each key a DID-URL `keyId` (e.g.
+> `did:opena2a:authority:opena2a.org#key-1`). `@opena2a/atx-verify` binds a key
+> to its controller DID, so a key may only verify credentials issued by that DID
+> (or, for v1.1, a signed `issuerChain` authority) — one trusted issuer cannot
+> impersonate another. A key with no `keyId` fragment is unbound and eligible for
+> any issuer: fine for a single-issuer anchor set, unsafe for a multi-issuer one.
 
 For credential verification without the action-authorization adaptation, use the
 verifier directly:

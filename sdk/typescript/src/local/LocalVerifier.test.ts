@@ -141,25 +141,29 @@ describe('LocalVerifier.verifyCredential', () => {
     expect(result.rejectCategory).toBe('SIGNATURE_INVALID');
   });
 
-  // KNOWN LIMITATION (characterization / tripwire). @opena2a/atx-verify does not
-  // bind a public key to the issuer DID that owns it, so with a multi-issuer
-  // anchor set a credential claiming issuer A but signed by trusted issuer B's
-  // key currently verifies and is attributed to A. This is why
-  // LocalVerificationConfig documents single-issuer anchor sets only. When
-  // upstream key-to-issuer binding ships, this test will start FAILING — flip it
-  // to assert rejection at that point.
-  it('[limitation] currently accepts a cross-issuer signature in a multi-issuer anchor set', async () => {
+  // Key-to-issuer binding (@opena2a/atx-verify >= 0.2.0). With a multi-issuer
+  // anchor set, a credential claiming issuer A but signed by trusted issuer B's
+  // key is REJECTED, because B's key (keyId controller = issuer-B) is not
+  // controlled by the credential's issuer (A). One trusted issuer cannot
+  // impersonate another. (Engaging binding requires the key to carry a DID-URL
+  // keyId; a key with no keyId stays unbound for back-compat.)
+  it('rejects a cross-issuer signature in a multi-issuer anchor set', async () => {
+    const ISSUER_B = 'did:opena2a:issuer-B';
     const issuerB = genKey();
     const atxClaimingA = sign(baseAtx({ issuerDid: ISSUER_DID }), issuerB.privateKey);
     const verifier = new LocalVerifier(
-      anchors(issuerB.rawHex, { trustedIssuers: [ISSUER_DID, 'did:opena2a:issuer-B'] }),
+      anchors(issuerB.rawHex, {
+        trustedIssuers: [ISSUER_DID, ISSUER_B],
+        publicKeys: [
+          { algorithm: 'Ed25519', publicKeyHex: issuerB.rawHex, keyId: `${ISSUER_B}#key-1` },
+        ],
+      }),
     );
 
     const result = await verifier.verifyCredential(atxClaimingA);
 
-    // documents today's behavior; not the desired end state.
-    expect(result.valid).toBe(true);
-    expect(result.context?.issuerDid).toBe(ISSUER_DID);
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('SIGNATURE_INVALID');
   });
 });
 
