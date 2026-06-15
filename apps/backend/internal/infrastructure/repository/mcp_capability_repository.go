@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -161,6 +162,78 @@ func (r *MCPServerCapabilityRepository) GetByServerID(serverID uuid.UUID) ([]*do
 	}
 
 	return capabilities, nil
+}
+
+// GetByServerIDs retrieves active capabilities for many MCP servers in a
+// single query, keyed by MCP server ID. Servers with no capabilities have
+// no entry in the returned map.
+func (r *MCPServerCapabilityRepository) GetByServerIDs(serverIDs []uuid.UUID) (map[uuid.UUID][]*domain.MCPServerCapability, error) {
+	result := make(map[uuid.UUID][]*domain.MCPServerCapability, len(serverIDs))
+	if len(serverIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(serverIDs))
+	args := make([]interface{}, len(serverIDs))
+	for i, id := range serverIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			id, mcp_server_id, name, capability_type, description,
+			capability_schema, detected_at, last_verified_at, is_active,
+			created_at, updated_at
+		FROM mcp_server_capabilities
+		WHERE mcp_server_id IN (%s) AND is_active = true
+		ORDER BY capability_type, name
+	`, strings.Join(placeholders, ","))
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list mcp server capabilities: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		capability := &domain.MCPServerCapability{}
+		var description sql.NullString
+		capabilitySchema := make([]byte, 0)
+		var lastVerifiedAt sql.NullTime
+
+		err := rows.Scan(
+			&capability.ID,
+			&capability.MCPServerID,
+			&capability.Name,
+			&capability.CapabilityType,
+			&description,
+			&capabilitySchema,
+			&capability.DetectedAt,
+			&lastVerifiedAt,
+			&capability.IsActive,
+			&capability.CreatedAt,
+			&capability.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan mcp server capability: %w", err)
+		}
+
+		// Convert nullable fields
+		if description.Valid {
+			capability.Description = description.String
+		}
+		if capabilitySchema != nil {
+			capability.CapabilitySchema = capabilitySchema
+		}
+		if lastVerifiedAt.Valid {
+			capability.LastVerifiedAt = &lastVerifiedAt.Time
+		}
+
+		result[capability.MCPServerID] = append(result[capability.MCPServerID], capability)
+	}
+
+	return result, rows.Err()
 }
 
 func (r *MCPServerCapabilityRepository) GetByServerIDAndType(serverID uuid.UUID, capType domain.MCPCapabilityType) ([]*domain.MCPServerCapability, error) {
