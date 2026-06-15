@@ -1,0 +1,112 @@
+{
+  "$schema": "https://atx.opena2a.org/schemas/fixture-v1.json",
+  "name": "atx-v1/expired",
+  "description": "An otherwise-valid ATX whose ExpiresAt is earlier than the verifier's pinned clock. Verifier MUST REJECT with an expiry reason.",
+  "spec": [
+    {
+      "id": "ATX",
+      "ref": "https://github.com/opena2a-org/atx-spec/blob/main/core.md",
+      "section": "§1.1 Credential schema and §6 Threshold cosignature"
+    },
+    {
+      "id": "AIP",
+      "ref": "https://github.com/opena2a-org/agent-identity-protocol/blob/main/AIP-SPEC.md",
+      "section": "§3 Hybrid Ed25519 + ML-DSA-65 signing, §6.1 9-factor trust scoring"
+    },
+    {
+      "id": "RFC 8032",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+      "section": "§7.1 Test 1 (Ed25519 keypair source for issuer-primary)"
+    },
+    {
+      "id": "FIPS 204",
+      "ref": "https://csrc.nist.gov/pubs/fips/204/final",
+      "section": "ML-DSA-65 (Module-Lattice-Based DSA)"
+    }
+  ],
+  "keypairRefs": [
+    {
+      "role": "issuer-primary",
+      "path": "vectors/issuer-primary.json",
+      "algorithm": "Ed25519",
+      "publicKeyHex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "keyId": "did:opena2a:authority:opena2a.org#key-1"
+    }
+  ],
+  "verifierState": {
+    "clockRfc3339": "2026-05-24T00:00:00Z",
+    "trustedIssuers": [
+      "did:opena2a:authority:opena2a.org"
+    ],
+    "publicKeys": [
+      {
+        "role": "issuer-primary",
+        "path": "vectors/issuer-primary.json",
+        "algorithm": "Ed25519",
+        "publicKeyHex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+        "keyId": "did:opena2a:authority:opena2a.org#key-1"
+      },
+      {
+        "role": "issuer-cosigner-1",
+        "path": "vectors/issuer-cosigner-1.json",
+        "algorithm": "Ed25519",
+        "publicKeyHex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+        "keyId": "did:opena2a:authority:opena2a.org#key-2"
+      },
+      {
+        "role": "issuer-cosigner-2",
+        "path": "vectors/issuer-cosigner-2.json",
+        "algorithm": "Ed25519",
+        "publicKeyHex": "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025",
+        "keyId": "did:opena2a:authority:opena2a.org#key-3"
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "EXPIRED",
+    "reasonContains": "expired"
+  },
+  "atx": {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "atcVersion": "1.0",
+    "agentId": "agent_conformance_test_001",
+    "agentDid": "did:opena2a:agent:agent_conformance_test_001",
+    "publisher": "opena2a-conformance",
+    "publisherDid": "did:opena2a:publisher:opena2a-conformance",
+    "version": "1.0.0",
+    "contentHash": "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff",
+    "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
+    "transparencyLogIndex": 42,
+    "capabilities": [
+      "read:public",
+      "write:owned"
+    ],
+    "scanSummary": {
+      "hma": "passed",
+      "criticalFindings": 0,
+      "highFindings": 0,
+      "secretless": "clean",
+      "cryptoServe": "no-weak-crypto",
+      "oasbLevel": "L1"
+    },
+    "trustScore": 87.5,
+    "trustLevel": 4,
+    "issuedAt": "2024-12-25T00:00:00Z",
+    "expiresAt": "2025-01-01T00:00:00Z",
+    "issuerDid": "did:opena2a:authority:opena2a.org",
+    "issuerChain": [
+      "did:opena2a:authority:opena2a.org",
+      "did:opena2a:authority:opena2a.org-root"
+    ],
+    "signatures": [
+      {
+        "keyId": "did:opena2a:authority:opena2a.org#key-1",
+        "algorithm": "Ed25519",
+        "value": "JOSQmvkgHjPMBHMOwR+EdoTSNGB0wbYZPNoEJpTmHxmfJtR3gHKUtGdBpL1YNauzzdwlouv+NEgocN6wKfJyCw=="
+      }
+    ],
+    "revoked": false,
+    "createdAt": "2026-05-23T00:00:00Z"
+  }
+}
