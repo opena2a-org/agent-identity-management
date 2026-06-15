@@ -558,8 +558,12 @@ decisions.
   and Python reference verifiers), so there is a single conformance-locked
   implementation rather than a per-SDK reimplementation. The existing remote
   verification call is retained as a fallback.
-- **Java SDK — planned.** Port the same local-verify model (the Go verifier is the
-  reference) so JVM agents verify offline with the same conformance guarantees.
+- **Java SDK — shipped.** `org.opena2a.aim.atx` provides `LocalAtxVerifier` and
+  `AtxCanonicalizer`, a native port of the Go reference verifier (Ed25519 over the
+  v1.0 pipe / v1.1 JCS canonical payload, expiry, revocation, issuer-trust, and
+  key-to-issuer binding). Byte-for-byte interoperable with the TS/Go/Python
+  verifiers — gated by the pinned jcs-vectors canonical hash and the shared
+  conformance fixtures.
 
 **Use Case**: High-throughput agents that must authorize actions without a central
 verification round-trip; spec-compliant offline operation.

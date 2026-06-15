@@ -68,6 +68,14 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
         </dependency>
+        <!-- JCS (RFC 8785) for ATX v1.1 canonicalization. Same author as the
+             JS `canonicalize` lib the TS/JS verifiers use -> byte-agreement by
+             construction (pinned by atx-conformance/jcs-vectors). -->
+        <dependency>
+            <groupId>io.github.erdtman</groupId>
+            <artifactId>java-json-canonicalization</artifactId>
+            <version>1.1</version>
+        </dependency>
 
         <!-- Cryptography (Ed25519) -->
         <dependency>
