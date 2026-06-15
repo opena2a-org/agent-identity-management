@@ -34,8 +34,15 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 | **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge, /api/v1/agents/:id/authorize handler | `apps/backend/deployments/otel-demo/smoke-backend.sh` | Boots throwaway Postgres + OTel demo stack + a fresh backend binary; logs in as admin, creates an agent, POSTs /authorize, asserts the response shape, then verifies the `fga.authorize` parent span with at least one `fga.*` child landed in Tempo. Hermetic — does not touch the user's running backend or persistent data | `cd apps/backend/deployments/otel-demo && ./smoke-backend.sh` |
 | **AIM backend HTTP API** | Fiber routes, auth, FGA enforcement | `tests/integration/*.go` | Endpoints return correct status codes against a live backend | (currently broken: needs a running backend with admin login configured — pre-existing issue, not part of this contract yet) |
 | **PQC migration** | ML-DSA / ML-KEM key generation | `internal/crypto/pqc/*_test.go` | Keys generate, sign, verify | `go test ./internal/crypto/pqc/` (passes today; not a real "boot" test but acceptable since the surface is pure crypto) |
+| **A2A page progressive load** | per-section loading on `/dashboard/a2a` (cards/tasks/consents/trust resolve independently) + consent-filter debounce | `apps/web/scripts/smoke-a2a-progressive.mjs` | Drives a real browser against a PRODUCTION build with the A2A API stubbed (no backend). Holds the tasks response open and asserts the card stats paint while the task chart still shows its own spinner (the page no longer blocks on the slowest call), then that the chart fills on release; asserts 6 rapid keystrokes into the consent filter collapse to 1 request. | `cd apps/web && npm run build && (npx next start -p 3737 &) && BASE_URL=http://localhost:3737 node scripts/smoke-a2a-progressive.mjs` |
 
 (More rows to be added as components grow smoke tests.)
+
+> Note on web timing checks: run them against `next build` + `next start`, not
+> `next dev`. Under dev-mode StrictMode/HMR the dashboard tab content does not
+> render deterministically — a dev-server artifact, not real (production) user
+> behavior — so the committed Playwright e2e suite (dev webServer) is the wrong
+> host for timing-sensitive assertions. Use the standalone prod smoke above.
 
 ## Smoke test design rules
 
