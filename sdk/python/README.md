@@ -302,6 +302,7 @@ See [CHANGELOG.md](CHANGELOG.md) for history, [docs/VERSIONING.md](docs/VERSIONI
 - [TypeScript SDK](../typescript/README.md) — local-or-server mode
 - [opena2a CLI](https://github.com/opena2a-org/opena2a) — codebase auditing, credential migration, runtime monitoring
 - [AIM backend](../../README.md) — server, dashboard, deployment
+- [aicomply](https://github.com/opena2a-org/aicomply) — content-compliance companion (`pip install aicomply`); `@guard_io`/`@guard_output` scan the PII, credentials, and regulated data an agent reads and emits, complementing AIM's `@agent.perform_action` capability checks (AIM authorizes the action; aicomply inspects the content)
 
 ## License
 
