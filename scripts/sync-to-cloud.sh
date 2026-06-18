@@ -354,6 +354,16 @@ sync_migrations() {
     local fname
     fname=$(basename "$src_file")
     local dst_file="$dst_migrations/$fname"
+    local relpath="apps/backend/migrations/$fname"
+
+    # Respect .sync-protect: cloud pins some upstream migrations out of its tree
+    # (renamed/renumbered duplicates, bring-up-only test data). The basename
+    # guard below only skips identical filenames -- it misses a protected
+    # migration that was renumbered in cloud, re-syncing a duplicate number.
+    if is_protected "$relpath"; then
+      log_skip "$relpath (protected)"
+      continue
+    fi
 
     if [[ -f "$dst_file" ]]; then
       # Already exists -- do not overwrite (migrations are immutable)
