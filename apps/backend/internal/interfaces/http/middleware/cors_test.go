@@ -9,6 +9,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestVercelPreviewOriginAllowed(t *testing.T) {
+	allowed := []string{
+		"https://aim-cloud-git-feat-x-opena2a.vercel.app",
+		"https://aim-frontend-git-feat-x-opena2a.vercel.app",
+		"https://aim-cloud-abc123-opena2a.vercel.app",
+	}
+	for _, o := range allowed {
+		assert.True(t, vercelPreviewOriginAllowed(o), "should allow AIM preview: %s", o)
+	}
+
+	denied := []string{
+		"https://evil.vercel.app",
+		"https://aim-cloud-git-x-evil.vercel.app",     // wrong suffix
+		"http://aim-cloud-git-x-opena2a.vercel.app",   // not https
+		"https://aim-cloud-git-x-opena2a.vercel.app.evil.com", // suffix smuggling
+		"https://notaim-cloud-opena2a.vercel.app",
+		"https://aim-backend-git-x-opena2a.vercel.app", // not cloud/frontend
+		"",
+	}
+	for _, o := range denied {
+		assert.False(t, vercelPreviewOriginAllowed(o), "should deny: %s", o)
+	}
+}
+
 func TestValidateAndSanitizeCORSOrigins_RejectsWildcard(t *testing.T) {
 	origins := []string{"*"}
 	result := ValidateAndSanitizeCORSOrigins(origins)

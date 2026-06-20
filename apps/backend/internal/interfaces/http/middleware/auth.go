@@ -65,6 +65,34 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			})
 		}
 
+		// SECURITY: SDK refresh tokens (90-day) must never be accepted as bearer
+		// access tokens. They are only valid at the /auth/refresh endpoint, where
+		// they are exchanged for a short-lived access token. Rejecting them here
+		// stops a long-lived SDK token from being used as a session token.
+		if claims.Issuer == auth.IssuerSDK {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "SDK tokens cannot be used for API access; exchange it at /auth/refresh",
+			})
+		}
+
+		// SECURITY: only access tokens are valid bearers. A refresh token (or any
+		// non-access type) must not be replayed as a session token. An empty type
+		// is a legacy token issued before the `typ` claim existed — allowed during
+		// the rollout grace window; legacy tokens age out within their TTL.
+		if claims.TokenType != "" && claims.TokenType != auth.TokenTypeAccess {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "This token cannot be used for API access",
+			})
+		}
+
+		// SECURITY: reject tokens revoked server-side (e.g. on logout). No-op when
+		// revocation is not configured; fails closed on a store outage by default.
+		if jwtService.IsRevoked(c.Context(), claims.ID) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked",
+			})
+		}
+
 		// Parse UUIDs from claims
 		userID, err := uuid.Parse(claims.UserID)
 		if err != nil {
@@ -116,6 +144,24 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		claims, err := jwtService.ValidateToken(token)
 		if err != nil {
 			// Invalid token, but don't fail - just continue without auth
+			return c.Next()
+		}
+
+		// SECURITY: never treat an SDK refresh token as an authenticated bearer
+		// (see AuthMiddleware). Continue unauthenticated instead.
+		if claims.Issuer == auth.IssuerSDK {
+			return c.Next()
+		}
+
+		// SECURITY: only access tokens authenticate. A non-access type (e.g. a
+		// refresh token) must not set user context. Empty type = legacy, allowed
+		// during the grace window (see AuthMiddleware).
+		if claims.TokenType != "" && claims.TokenType != auth.TokenTypeAccess {
+			return c.Next()
+		}
+
+		// SECURITY: a revoked token must not authenticate, even optionally.
+		if jwtService.IsRevoked(c.Context(), claims.ID) {
 			return c.Next()
 		}
 

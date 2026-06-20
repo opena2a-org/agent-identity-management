@@ -54,6 +54,15 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 
 	// Check if this is an SDK token and verify it's not revoked BEFORE rotating
 	tokenID, err := h.jwtService.GetTokenID(req.RefreshToken)
+
+	// SECURITY: a refresh token revoked on logout must not be able to mint new
+	// tokens. (SDK tokens are additionally checked against the DB table below.)
+	if err == nil && tokenID != "" && h.jwtService.IsRevoked(c.Context(), tokenID) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Token has been revoked or is invalid",
+		})
+	}
+
 	if err == nil && tokenID != "" {
 		// Hash the token to check if it's tracked and revoked
 		hasher := sha256.New()
@@ -167,14 +176,13 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		}
 	}
 
-	// Return new tokens
-	// SECURITY: Access token expires in 15 minutes (900 seconds) by default
-	// This matches the JWT_ACCESS_TTL setting for short-lived access tokens
+	// Return new tokens. Report the REAL access-token lifetime (JWT_ACCESS_TTL)
+	// so clients schedule their refresh on the correct cadence.
 	return c.JSON(RefreshTokenResponse{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    900, // 15 minutes in seconds (configurable via JWT_ACCESS_TTL env)
+		ExpiresIn:    h.jwtService.AccessTTLSeconds(),
 	})
 }
 
