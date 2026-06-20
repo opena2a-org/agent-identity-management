@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,6 +16,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// inMemRevocationStore is a test double for auth.RevocationStore.
+type inMemRevocationStore struct{ m map[string]bool }
+
+func (s *inMemRevocationStore) Exists(ctx context.Context, key string) (bool, error) {
+	return s.m[key], nil
+}
+func (s *inMemRevocationStore) Set(ctx context.Context, key string, v interface{}, ttl time.Duration) error {
+	if s.m == nil {
+		s.m = map[string]bool{}
+	}
+	s.m[key] = true
+	return nil
+}
 
 func TestAuthMiddleware_NoToken(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
@@ -357,6 +372,72 @@ func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 	assert.Equal(t, userID, capturedUserID)
+}
+
+func TestAuthMiddleware_RejectsRevokedToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+	jwtService.SetRevoker(auth.NewTokenRevoker(&inMemRevocationStore{m: map[string]bool{}}, false))
+
+	access, _, err := jwtService.GenerateTokenPair(uuid.New().String(), uuid.New().String(), "u@example.com", "admin")
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	// Before revocation: token works.
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	// Revoke it, then the same token must be rejected.
+	require.NoError(t, jwtService.RevokeToken(context.Background(), access))
+
+	req2 := httptest.NewRequest("GET", "/protected", nil)
+	req2.Header.Set("Authorization", "Bearer "+access)
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, fiber.StatusUnauthorized, resp2.StatusCode)
+
+	body, _ := io.ReadAll(resp2.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	assert.Equal(t, "Token has been revoked", result["error"])
+}
+
+func TestOptionalAuthMiddleware_RejectsRevokedToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+	jwtService.SetRevoker(auth.NewTokenRevoker(&inMemRevocationStore{m: map[string]bool{}}, false))
+
+	access, _, err := jwtService.GenerateTokenPair(uuid.New().String(), uuid.New().String(), "u@example.com", "admin")
+	require.NoError(t, err)
+	require.NoError(t, jwtService.RevokeToken(context.Background(), access))
+
+	var hasUserID bool
+	app := fiber.New()
+	app.Use(OptionalAuthMiddleware(jwtService))
+	app.Get("/public", func(c fiber.Ctx) error {
+		hasUserID = c.Locals("user_id") != nil
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/public", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Request still succeeds (optional), but the revoked token must not authenticate.
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, hasUserID, "revoked token must not set user context")
 }
 
 func TestOptionalAuthMiddleware_NoToken(t *testing.T) {

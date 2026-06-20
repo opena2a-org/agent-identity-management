@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -47,9 +48,38 @@ type JWTClaims struct {
 
 // JWTService handles JWT operations
 type JWTService struct {
-	secret         []byte
-	accessExpiry   time.Duration
-	refreshExpiry  time.Duration
+	secret        []byte
+	accessExpiry  time.Duration
+	refreshExpiry time.Duration
+	revoker       *TokenRevoker
+}
+
+// SetRevoker attaches a token-revocation store. Optional: if never set,
+// revocation is disabled and IsRevoked always returns false.
+func (s *JWTService) SetRevoker(r *TokenRevoker) {
+	s.revoker = r
+}
+
+// IsRevoked reports whether the token identified by jti has been revoked.
+func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
+	return s.revoker.IsRevoked(ctx, jti)
+}
+
+// RevokeToken denylists the given token (by its jti) for its remaining lifetime.
+// Best-effort: an invalid/expired token or a missing revoker is a no-op.
+func (s *JWTService) RevokeToken(ctx context.Context, tokenString string) error {
+	if s.revoker == nil || tokenString == "" {
+		return nil
+	}
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil || claims.ExpiresAt == nil {
+		return nil
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return nil
+	}
+	return s.revoker.Revoke(ctx, claims.ID, ttl)
 }
 
 // NewJWTService creates a new JWT service.

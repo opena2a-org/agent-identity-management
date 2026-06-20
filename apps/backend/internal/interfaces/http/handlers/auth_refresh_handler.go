@@ -54,6 +54,15 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 
 	// Check if this is an SDK token and verify it's not revoked BEFORE rotating
 	tokenID, err := h.jwtService.GetTokenID(req.RefreshToken)
+
+	// SECURITY: a refresh token revoked on logout must not be able to mint new
+	// tokens. (SDK tokens are additionally checked against the DB table below.)
+	if err == nil && tokenID != "" && h.jwtService.IsRevoked(c.Context(), tokenID) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Token has been revoked or is invalid",
+		})
+	}
+
 	if err == nil && tokenID != "" {
 		// Hash the token to check if it's tracked and revoked
 		hasher := sha256.New()
