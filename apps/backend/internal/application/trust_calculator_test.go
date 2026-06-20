@@ -1264,6 +1264,59 @@ func TestTrustCalculator_ExecutionIsolation_NoAttestation(t *testing.T) {
 	assert.Equal(t, 0.3, isolation, "Without attestation, should return 0.3 baseline")
 }
 
+func TestTrustCalculator_RecordIsolationAttestation_Success(t *testing.T) {
+	mockIsolationRepo := new(MockIsolationAttestationRepository)
+	calculator := &TrustCalculator{}
+	calculator.SetIsolationRepo(mockIsolationRepo)
+
+	agentID := uuid.New()
+
+	// The server must compute the score from the posture; the agent never sends one.
+	// Docker(0.20)+Firewall(0.10)+Tmpfs(0.12)+Seccomp(0.10) = 0.52
+	var persisted *domain.IsolationAttestation
+	mockIsolationRepo.On("Create", mock.AnythingOfType("*domain.IsolationAttestation")).
+		Run(func(args mock.Arguments) {
+			persisted = args.Get(0).(*domain.IsolationAttestation)
+		}).Return(nil)
+
+	att, err := calculator.RecordIsolationAttestation(context.Background(), agentID,
+		domain.SandboxDocker, domain.NetworkFirewall, domain.FilesystemTmpfs, domain.ProcessSeccomp)
+
+	assert.NoError(t, err)
+	require.NotNil(t, att)
+	assert.Equal(t, agentID, att.AgentID)
+	assert.InDelta(t, 0.52, att.Score, 0.001, "score must be computed server-side from posture")
+	assert.NotEqual(t, uuid.Nil, att.ID)
+	require.NotNil(t, persisted)
+	assert.Equal(t, att.Score, persisted.Score, "the persisted score must match the returned one")
+	mockIsolationRepo.AssertExpectations(t)
+}
+
+func TestTrustCalculator_RecordIsolationAttestation_InvalidPosture(t *testing.T) {
+	mockIsolationRepo := new(MockIsolationAttestationRepository)
+	calculator := &TrustCalculator{}
+	calculator.SetIsolationRepo(mockIsolationRepo)
+
+	// An unrecognized sandbox value must be rejected before anything is persisted,
+	// not silently scored as zero.
+	att, err := calculator.RecordIsolationAttestation(context.Background(), uuid.New(),
+		domain.SandboxType("totally-bogus"), domain.NetworkNone, domain.FilesystemNone, domain.ProcessNone)
+
+	assert.Error(t, err)
+	assert.Nil(t, att)
+	mockIsolationRepo.AssertNotCalled(t, "Create", mock.Anything)
+}
+
+func TestTrustCalculator_RecordIsolationAttestation_NoRepo(t *testing.T) {
+	calculator := &TrustCalculator{}
+
+	att, err := calculator.RecordIsolationAttestation(context.Background(), uuid.New(),
+		domain.SandboxDocker, domain.NetworkFirewall, domain.FilesystemTmpfs, domain.ProcessSeccomp)
+
+	assert.Error(t, err)
+	assert.Nil(t, att)
+}
+
 func TestTrustCalculator_ExecutionIsolation_WithAttestation(t *testing.T) {
 	mockIsolationRepo := new(MockIsolationAttestationRepository)
 	calculator := &TrustCalculator{}

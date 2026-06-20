@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,26 +46,26 @@ const (
 type ProcessIsolation string
 
 const (
-	ProcessNone      ProcessIsolation = "none"
-	ProcessPIDNS     ProcessIsolation = "pidns"
-	ProcessSeccomp   ProcessIsolation = "seccomp"
-	ProcessAppArmor  ProcessIsolation = "apparmor"
-	ProcessSELinux   ProcessIsolation = "selinux"
-	ProcessFull      ProcessIsolation = "full" // PID namespace + seccomp + MAC
+	ProcessNone     ProcessIsolation = "none"
+	ProcessPIDNS    ProcessIsolation = "pidns"
+	ProcessSeccomp  ProcessIsolation = "seccomp"
+	ProcessAppArmor ProcessIsolation = "apparmor"
+	ProcessSELinux  ProcessIsolation = "selinux"
+	ProcessFull     ProcessIsolation = "full" // PID namespace + seccomp + MAC
 )
 
 // IsolationAttestation represents an agent's self-reported runtime isolation posture.
 // Agents submit this via SDK; the server scores it as a trust factor.
 type IsolationAttestation struct {
-	ID           uuid.UUID           `json:"id"`
-	AgentID      uuid.UUID           `json:"agentId"`
-	Sandbox      SandboxType         `json:"sandbox"`
-	Network      NetworkIsolation    `json:"network"`
-	Filesystem   FilesystemIsolation `json:"filesystem"`
-	Process      ProcessIsolation    `json:"process"`
-	Score        float64             `json:"score"`     // Computed 0-1 isolation score
-	ReportedAt   time.Time           `json:"reportedAt"`
-	CreatedAt    time.Time           `json:"createdAt"`
+	ID         uuid.UUID           `json:"id"`
+	AgentID    uuid.UUID           `json:"agentId"`
+	Sandbox    SandboxType         `json:"sandbox"`
+	Network    NetworkIsolation    `json:"network"`
+	Filesystem FilesystemIsolation `json:"filesystem"`
+	Process    ProcessIsolation    `json:"process"`
+	Score      float64             `json:"score"` // Computed 0-1 isolation score
+	ReportedAt time.Time           `json:"reportedAt"`
+	CreatedAt  time.Time           `json:"createdAt"`
 }
 
 // IsolationAttestationRepository defines persistence for isolation attestations
@@ -72,6 +73,62 @@ type IsolationAttestationRepository interface {
 	Create(attestation *IsolationAttestation) error
 	GetLatest(agentID uuid.UUID) (*IsolationAttestation, error)
 	GetHistory(agentID uuid.UUID, limit int) ([]*IsolationAttestation, error)
+}
+
+// IsValid reports whether the sandbox type is a recognized value.
+func (s SandboxType) IsValid() bool {
+	switch s {
+	case SandboxNone, SandboxDocker, SandboxVM, SandboxGVisor, SandboxFirecracker, SandboxWASM, SandboxKataVM:
+		return true
+	}
+	return false
+}
+
+// IsValid reports whether the network isolation level is a recognized value.
+func (n NetworkIsolation) IsValid() bool {
+	switch n {
+	case NetworkNone, NetworkFirewall, NetworkNamespace, NetworkVPC, NetworkAirgap:
+		return true
+	}
+	return false
+}
+
+// IsValid reports whether the filesystem isolation level is a recognized value.
+func (f FilesystemIsolation) IsValid() bool {
+	switch f {
+	case FilesystemNone, FilesystemChroot, FilesystemTmpfs, FilesystemReadOnly, FilesystemOverlay:
+		return true
+	}
+	return false
+}
+
+// IsValid reports whether the process isolation level is a recognized value.
+func (p ProcessIsolation) IsValid() bool {
+	switch p {
+	case ProcessNone, ProcessPIDNS, ProcessSeccomp, ProcessAppArmor, ProcessSELinux, ProcessFull:
+		return true
+	}
+	return false
+}
+
+// ValidateIsolationPosture rejects any unrecognized posture value. The ingest
+// path computes the score server-side via ScoreIsolation (which treats unknown
+// values as zero contribution); validating up front turns a silent zero into an
+// explicit error so a typo'd posture is never persisted as a real attestation.
+func ValidateIsolationPosture(sandbox SandboxType, network NetworkIsolation, filesystem FilesystemIsolation, process ProcessIsolation) error {
+	if !sandbox.IsValid() {
+		return fmt.Errorf("invalid sandbox type %q", sandbox)
+	}
+	if !network.IsValid() {
+		return fmt.Errorf("invalid network isolation %q", network)
+	}
+	if !filesystem.IsValid() {
+		return fmt.Errorf("invalid filesystem isolation %q", filesystem)
+	}
+	if !process.IsValid() {
+		return fmt.Errorf("invalid process isolation %q", process)
+	}
+	return nil
 }
 
 // ScoreIsolation computes an isolation score from 0.0 to 1.0 based on posture.
