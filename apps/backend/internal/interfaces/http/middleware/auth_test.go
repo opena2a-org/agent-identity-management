@@ -299,6 +299,49 @@ func TestOptionalAuthMiddleware_RejectsSDKToken(t *testing.T) {
 	assert.False(t, hasUserID, "SDK token must not set user context")
 }
 
+func TestOptionalAuthMiddleware_LegacyTokenWithoutTypeIsAnonymous(t *testing.T) {
+	const secret = "test-secret-key-for-testing-purposes-32chars"
+	t.Setenv("JWT_SECRET", secret)
+	jwtService := auth.NewJWTService()
+
+	now := time.Now()
+	// Legacy token (no `typ` claim). The access-path grace is retired, so on an
+	// optional endpoint a typ-less token must NOT set user context — the request
+	// continues anonymously rather than trusting a possible legacy refresh token.
+	legacyClaims := auth.JWTClaims{
+		UserID:         uuid.New().String(),
+		OrganizationID: uuid.New().String(),
+		Email:          "legacy@example.com",
+		Role:           "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    auth.IssuerUser,
+		},
+	}
+	legacyToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacyClaims).SignedString([]byte(secret))
+	require.NoError(t, err)
+
+	var hasUserID bool
+	app := fiber.New()
+	app.Use(OptionalAuthMiddleware(jwtService))
+	app.Get("/public", func(c fiber.Ctx) error {
+		hasUserID = c.Locals("user_id") != nil
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/public", nil)
+	req.Header.Set("Authorization", "Bearer "+legacyToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, hasUserID, "legacy typ-less token must not set user context")
+}
+
 func TestAuthMiddleware_RejectsRefreshToken(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
@@ -328,7 +371,7 @@ func TestAuthMiddleware_RejectsRefreshToken(t *testing.T) {
 	assert.Equal(t, "This token cannot be used for API access", result["error"])
 }
 
-func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
+func TestAuthMiddleware_RejectsLegacyTokenWithoutTypeOnAccessPath(t *testing.T) {
 	const secret = "test-secret-key-for-testing-purposes-32chars"
 	t.Setenv("JWT_SECRET", secret)
 	jwtService := auth.NewJWTService()
@@ -338,7 +381,10 @@ func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
 	now := time.Now()
 
 	// Craft a legacy token (no `typ` claim) the way tokens were minted before
-	// token-type separation. The grace window must still accept these.
+	// token-type separation. The access-path grace has been retired: every live
+	// access token now carries typ="access", so an empty type on the access path
+	// can only be a legacy refresh token replayed as access and must be rejected.
+	// (The refresh endpoint keeps its empty-type grace until SDK tokens age out.)
 	legacyClaims := auth.JWTClaims{
 		UserID:         userID.String(),
 		OrganizationID: orgID.String(),
@@ -355,11 +401,9 @@ func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
 	legacyToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacyClaims).SignedString([]byte(secret))
 	require.NoError(t, err)
 
-	var capturedUserID uuid.UUID
 	app := fiber.New()
 	app.Use(AuthMiddleware(jwtService))
 	app.Get("/protected", func(c fiber.Ctx) error {
-		capturedUserID = c.Locals("user_id").(uuid.UUID)
 		return c.JSON(fiber.Map{"message": "success"})
 	})
 
@@ -370,8 +414,7 @@ func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-	assert.Equal(t, userID, capturedUserID)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestAuthMiddleware_RejectsRevokedToken(t *testing.T) {
