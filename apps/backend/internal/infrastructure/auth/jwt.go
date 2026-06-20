@@ -10,6 +10,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// Token issuers. The issuer doubles as a coarse token-type marker so that a
+// long-lived SDK refresh token cannot be presented as a user access token.
+// SECURITY: the access-auth middleware rejects tokens minted with IssuerSDK.
+const (
+	// IssuerUser is the issuer for interactive user access + refresh tokens.
+	IssuerUser = "agent-identity-management"
+	// IssuerSDK is the issuer for the long-lived (90-day) SDK refresh token,
+	// which is only valid at the /auth/refresh endpoint — never as a bearer.
+	IssuerSDK = "agent-identity-management-sdk"
+)
+
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
 	UserID         string `json:"user_id"`
@@ -26,9 +37,10 @@ type JWTService struct {
 	refreshExpiry  time.Duration
 }
 
-// NewJWTService creates a new JWT service
-// SECURITY: Default access token expiry reduced to 15 minutes for enterprise security
-// Users should use refresh tokens to obtain new access tokens
+// NewJWTService creates a new JWT service.
+// Access tokens default to 2h (JWT_ACCESS_TTL); refresh tokens to 7d
+// (JWT_REFRESH_TTL) with rotation. The client enforces a shorter idle timeout
+// on top of the absolute access-token expiry.
 func NewJWTService() *JWTService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -64,6 +76,13 @@ func NewJWTService() *JWTService {
 	}
 }
 
+// AccessTTLSeconds returns the configured access-token lifetime in seconds.
+// Used so the refresh endpoint reports the real expiry to clients instead of
+// a hard-coded value.
+func (s *JWTService) AccessTTLSeconds() int {
+	return int(s.accessExpiry.Seconds())
+}
+
 // getEnv is a helper function to get env var with fallback
 func getEnv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
@@ -88,7 +107,7 @@ func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) 
 			ExpiresAt: jwt.NewNumericDate(now.Add(sdkExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    "agent-identity-management-sdk",
+			Issuer:    IssuerSDK,
 			Subject:   userID,
 			ID:        uuid.New().String(),
 		},
@@ -127,7 +146,7 @@ func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (str
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    "agent-identity-management",
+			Issuer:    IssuerUser,
 			Subject:   userID,
 			ID:        uuid.New().String(),
 		},
@@ -147,7 +166,7 @@ func (s *JWTService) GenerateRefreshToken(userID, orgID string) (string, error) 
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    "agent-identity-management",
+			Issuer:    IssuerUser,
 			Subject:   userID,
 			ID:        uuid.New().String(),
 		},
@@ -200,7 +219,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, erro
 	}
 
 	// Check if this is an SDK token (different issuer)
-	isSDKToken := claims.Issuer == "agent-identity-management-sdk"
+	isSDKToken := claims.Issuer == IssuerSDK
 
 	var newAccessToken, newRefreshToken string
 

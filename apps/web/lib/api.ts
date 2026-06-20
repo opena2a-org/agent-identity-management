@@ -520,12 +520,23 @@ class APIClient {
   }
 
   setToken(token: string, refreshToken?: string) {
+    // Detect a fresh login (logged-out -> logged-in) vs a token refresh, so the
+    // absolute session-timeout window is started on login but NOT reset on every
+    // refresh (which would defeat the 8h cap).
+    const isFreshLogin =
+      !this.token &&
+      (typeof window === "undefined" || !localStorage.getItem("auth_token"));
     this.token = token;
     if (typeof window !== "undefined") {
       localStorage.setItem("auth_token", token);
       if (refreshToken) {
         this.refreshToken = refreshToken;
         localStorage.setItem("refresh_token", refreshToken);
+      }
+      if (isFreshLogin) {
+        const t = String(Date.now());
+        localStorage.setItem("session_start", t);
+        localStorage.setItem("last_activity", t);
       }
     }
   }
@@ -552,6 +563,10 @@ class APIClient {
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth_token");
       localStorage.removeItem("refresh_token");
+      // Clear idle/absolute session-timeout bookkeeping so the next login
+      // starts a fresh session window instead of inheriting a stale start time.
+      localStorage.removeItem("session_start");
+      localStorage.removeItem("last_activity");
     }
   }
 
