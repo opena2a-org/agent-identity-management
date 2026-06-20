@@ -21,12 +21,27 @@ const (
 	IssuerSDK = "agent-identity-management-sdk"
 )
 
+// Token types. The `typ` claim separates access tokens (valid as a bearer) from
+// refresh tokens (valid only at /auth/refresh), so a refresh token cannot be
+// replayed as a session token.
+// GRACE: tokens minted before this claim existed have an empty TokenType; the
+// access middleware and refresh endpoint treat an empty type as legacy and
+// allow it, so this rolls out without breaking live sessions. Newly issued
+// tokens always carry a type and are enforced immediately.
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+	TokenTypeSDK     = "sdk"
+)
+
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
 	UserID         string `json:"user_id"`
 	OrganizationID string `json:"organization_id"`
 	Email          string `json:"email"`
 	Role           string `json:"role"`
+	// TokenType is "access" | "refresh" | "sdk". Empty on legacy tokens.
+	TokenType string `json:"typ,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -103,6 +118,7 @@ func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) 
 		OrganizationID: orgID,
 		Email:          email,
 		Role:           role,
+		TokenType:      TokenTypeSDK,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(sdkExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -142,6 +158,7 @@ func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (str
 		OrganizationID: orgID,
 		Email:          email,
 		Role:           role,
+		TokenType:      TokenTypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -162,6 +179,7 @@ func (s *JWTService) GenerateRefreshToken(userID, orgID string) (string, error) 
 	claims := JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
+		TokenType:      TokenTypeRefresh,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -203,6 +221,12 @@ func (s *JWTService) RefreshAccessToken(refreshToken string) (string, error) {
 		return "", err
 	}
 
+	// An access token must not be usable to mint another access token. (Empty
+	// TokenType = legacy token issued before this claim; allowed during grace.)
+	if claims.TokenType == TokenTypeAccess {
+		return "", fmt.Errorf("access token cannot be used to refresh")
+	}
+
 	// Generate new access token
 	return s.GenerateAccessToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
 }
@@ -216,6 +240,12 @@ func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, erro
 	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
 		return "", "", err
+	}
+
+	// An access token must not be replayed at the refresh endpoint. (Empty
+	// TokenType = legacy token issued before this claim; allowed during grace.)
+	if claims.TokenType == TokenTypeAccess {
+		return "", "", fmt.Errorf("access token cannot be used to refresh")
 	}
 
 	// Check if this is an SDK token (different issuer)
