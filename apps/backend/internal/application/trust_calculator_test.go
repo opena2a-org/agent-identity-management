@@ -15,6 +15,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockCapabilityRepository for testing
@@ -744,8 +745,126 @@ func TestTrustCalculator_CalculateUserFeedback_Baseline(t *testing.T) {
 
 	feedback := calculator.calculateUserFeedback(agent)
 
-	// Should return neutral 0.5 when no feedback collection mechanism exists
-	assert.Equal(t, 0.5, feedback, "User feedback should return neutral 0.5 when no feedback data exists")
+	// Should return neutral 0.5 when no feedback repository is wired
+	assert.Equal(t, 0.5, feedback, "User feedback should return neutral 0.5 when no feedback repo is configured")
+}
+
+// MockUserFeedbackRepository mocks domain.UserFeedbackRepository for trust calculator tests
+type MockUserFeedbackRepository struct {
+	mock.Mock
+}
+
+func (m *MockUserFeedbackRepository) Create(feedback *domain.UserFeedback) error {
+	args := m.Called(feedback)
+	return args.Error(0)
+}
+
+func (m *MockUserFeedbackRepository) GetByAgentID(agentID uuid.UUID, limit, offset int) ([]*domain.UserFeedback, error) {
+	args := m.Called(agentID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.UserFeedback), args.Error(1)
+}
+
+func (m *MockUserFeedbackRepository) GetStats(agentID uuid.UUID) (*domain.UserFeedbackStats, error) {
+	args := m.Called(agentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.UserFeedbackStats), args.Error(1)
+}
+
+func TestTrustCalculator_CalculateUserFeedback_Formula(t *testing.T) {
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID}
+
+	cases := []struct {
+		name  string
+		stats *domain.UserFeedbackStats
+		want  float64
+	}{
+		{"no feedback rows -> neutral", &domain.UserFeedbackStats{Total: 0}, 0.5},
+		{"sustained negatives (>5) -> 0.0", &domain.UserFeedbackStats{Total: 6, NegativeCount: 6}, 0.0},
+		{"some negatives (>2) -> 0.5", &domain.UserFeedbackStats{Total: 4, NegativeCount: 3}, 0.5},
+		{"strong positives (>10) -> 1.0", &domain.UserFeedbackStats{Total: 11, PositiveCount: 11}, 1.0},
+		{"mild positive / mixed -> 0.75", &domain.UserFeedbackStats{Total: 3, PositiveCount: 2, NeutralCount: 1}, 0.75},
+		// Negatives dominate: many positives AND many negatives must NOT reward.
+		{"many positives but >5 negatives -> 0.0", &domain.UserFeedbackStats{Total: 20, PositiveCount: 14, NegativeCount: 6}, 0.0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := new(MockUserFeedbackRepository)
+			repo.On("GetStats", agentID).Return(tc.stats, nil)
+
+			calc := &TrustCalculator{}
+			calc.SetUserFeedbackRepo(repo)
+
+			got := calc.calculateUserFeedback(agent)
+			assert.Equal(t, tc.want, got, tc.name)
+		})
+	}
+}
+
+func TestTrustCalculator_CalculateUserFeedback_RepoError_Neutral(t *testing.T) {
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID}
+
+	repo := new(MockUserFeedbackRepository)
+	repo.On("GetStats", agentID).Return(nil, assert.AnError)
+
+	calc := &TrustCalculator{}
+	calc.SetUserFeedbackRepo(repo)
+
+	// A failed stats query must not penalize or reward the agent.
+	assert.Equal(t, 0.5, calc.calculateUserFeedback(agent))
+}
+
+func TestTrustCalculator_RecordUserFeedback(t *testing.T) {
+	ctx := context.Background()
+	agentID := uuid.New()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	t.Run("persists a valid rating scoped to agent+org", func(t *testing.T) {
+		repo := new(MockUserFeedbackRepository)
+		var saved *domain.UserFeedback
+		repo.On("Create", mock.Anything).Run(func(args mock.Arguments) {
+			saved = args.Get(0).(*domain.UserFeedback)
+		}).Return(nil)
+
+		calc := &TrustCalculator{}
+		calc.SetUserFeedbackRepo(repo)
+
+		fb, err := calc.RecordUserFeedback(ctx, agentID, orgID, &userID, 4, "solid")
+		require.NoError(t, err)
+		require.NotNil(t, fb)
+		assert.Equal(t, agentID, saved.AgentID)
+		assert.Equal(t, orgID, saved.OrganizationID)
+		assert.Equal(t, 4, saved.Rating)
+		assert.Equal(t, "solid", saved.Comment)
+		assert.NotEqual(t, uuid.Nil, saved.ID)
+		repo.AssertExpectations(t)
+	})
+
+	t.Run("rejects out-of-range ratings without touching the repo", func(t *testing.T) {
+		repo := new(MockUserFeedbackRepository)
+		calc := &TrustCalculator{}
+		calc.SetUserFeedbackRepo(repo)
+
+		for _, r := range []int{0, 6, -1} {
+			_, err := calc.RecordUserFeedback(ctx, agentID, orgID, &userID, r, "")
+			assert.Error(t, err, "rating %d must be rejected", r)
+		}
+		repo.AssertNotCalled(t, "Create", mock.Anything)
+	})
+
+	t.Run("errors when no repo is configured", func(t *testing.T) {
+		calc := &TrustCalculator{}
+		_, err := calc.RecordUserFeedback(ctx, agentID, orgID, &userID, 5, "")
+		assert.Error(t, err)
+	})
 }
 
 // ===========================

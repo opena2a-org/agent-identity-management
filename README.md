@@ -154,7 +154,7 @@ Available in Self-hosted and AIM Cloud modes.
 *Agent registry with trust scores and verification status per agent.*
 
 ![Per-agent trust score breakdown](docs/images/agent-trust-score.png)
-*Per-agent 8-factor trust score breakdown with weighted signal contributions.*
+*Per-agent 9-factor trust score breakdown with weighted signal contributions.*
 
 ![MCP supply chain](docs/images/supply-chain.png)
 *MCP server dependencies with multi-agent attestation status.*

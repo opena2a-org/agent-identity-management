@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -808,4 +810,115 @@ func TestTrustScoreHandler_getAuditService_ReturnsInterface(t *testing.T) {
 
 	result := handler.getAuditService()
 	assert.Equal(t, auditMock, result)
+}
+
+// ===========================
+// SubmitUserFeedback Tests
+// ===========================
+
+func submitFeedbackRequest(agentID uuid.UUID, jsonBody string) *http.Request {
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/feedback", strings.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func TestTrustScoreHandler_SubmitUserFeedback_Success(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+	}
+
+	var captured struct {
+		agentID, orgID uuid.UUID
+		userID         *uuid.UUID
+		rating         int
+		comment        string
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordUserFeedbackFunc: func(ctx context.Context, aID, oID uuid.UUID, uID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error) {
+			captured.agentID, captured.orgID, captured.userID, captured.rating, captured.comment = aID, oID, uID, rating, comment
+			return &domain.UserFeedback{ID: uuid.New(), AgentID: aID, OrganizationID: oID, UserID: uID, Rating: rating, Comment: comment, CreatedAt: time.Now()}, nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	app := createTrustScoreTestApp(handler.SubmitUserFeedback, orgID, userID)
+	app.Post("/agents/:id/feedback", handler.SubmitUserFeedback)
+
+	resp, err := app.Test(submitFeedbackRequest(agentID, `{"rating":5,"comment":"great agent"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+	// The handler must scope persistence to the caller's org + agent, not trust the body.
+	assert.Equal(t, agentID, captured.agentID)
+	assert.Equal(t, orgID, captured.orgID)
+	require.NotNil(t, captured.userID)
+	assert.Equal(t, userID, *captured.userID)
+	assert.Equal(t, 5, captured.rating)
+	assert.Equal(t, "great agent", captured.comment)
+}
+
+func TestTrustScoreHandler_SubmitUserFeedback_InvalidRating(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+	}
+	// RecordUserFeedback must NOT be called for an out-of-range rating.
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordUserFeedbackFunc: func(ctx context.Context, aID, oID uuid.UUID, uID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error) {
+			t.Fatalf("RecordUserFeedback should not be called for invalid rating %d", rating)
+			return nil, nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	app := createTrustScoreTestApp(handler.SubmitUserFeedback, orgID, userID)
+	app.Post("/agents/:id/feedback", handler.SubmitUserFeedback)
+
+	for _, body := range []string{`{"rating":0}`, `{"rating":6}`, `{"rating":-1}`} {
+		resp, err := app.Test(submitFeedbackRequest(agentID, body))
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode, "body %s should be rejected", body)
+		resp.Body.Close()
+	}
+}
+
+func TestTrustScoreHandler_SubmitUserFeedback_CrossOrgDenied(t *testing.T) {
+	orgID := uuid.New()
+	otherOrgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	// Agent belongs to a different org than the caller.
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: otherOrgID, Name: "other-org-agent"}, nil
+		},
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordUserFeedbackFunc: func(ctx context.Context, aID, oID uuid.UUID, uID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error) {
+			t.Fatal("RecordUserFeedback should not be called for a cross-org agent")
+			return nil, nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	app := createTrustScoreTestApp(handler.SubmitUserFeedback, orgID, userID)
+	app.Post("/agents/:id/feedback", handler.SubmitUserFeedback)
+
+	resp, err := app.Test(submitFeedbackRequest(agentID, `{"rating":5}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }

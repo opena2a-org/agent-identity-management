@@ -1523,6 +1523,7 @@ type MockTrustCalculatorServicerImpl struct {
 	CalculateTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetLatestTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetTrustScoreHistoryAuditTrailFunc func(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
+	RecordUserFeedbackFunc             func(ctx context.Context, agentID, orgID uuid.UUID, userID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error)
 }
 
 func (m *MockTrustCalculatorServicerImpl) CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error) {
@@ -1556,6 +1557,21 @@ func (m *MockTrustCalculatorServicerImpl) GetTrustScoreHistoryAuditTrail(ctx con
 		return m.GetTrustScoreHistoryAuditTrailFunc(ctx, agentID, limit)
 	}
 	return []*domain.TrustScoreHistoryEntry{}, nil
+}
+
+func (m *MockTrustCalculatorServicerImpl) RecordUserFeedback(ctx context.Context, agentID, orgID uuid.UUID, userID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error) {
+	if m.RecordUserFeedbackFunc != nil {
+		return m.RecordUserFeedbackFunc(ctx, agentID, orgID, userID, rating, comment)
+	}
+	return &domain.UserFeedback{
+		ID:             uuid.New(),
+		AgentID:        agentID,
+		OrganizationID: orgID,
+		UserID:         userID,
+		Rating:         rating,
+		Comment:        comment,
+		CreatedAt:      time.Now(),
+	}, nil
 }
 
 // ===========================

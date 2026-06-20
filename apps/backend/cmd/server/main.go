@@ -512,6 +512,12 @@ type Repositories struct {
 	SecretCredential    *repository.SecretCredentialRepository
 	SecretAudit         *repository.SecretAuditRepository
 	SecretBackendConfig *repository.SecretBackendConfigRepository
+	// Trust score integrity repositories (factors 5, 8, 9 + TME enrichment)
+	ComplianceSnapshot   *repository.ComplianceSnapshotRepository   // Factor 5: compliance reader
+	ComplianceEvidence   *repository.ComplianceEvidenceRepository   // Compliance evidence (full compliance service)
+	IsolationAttestation *repository.IsolationAttestationRepository // Factor 9: execution isolation
+	UserFeedback         *repository.UserFeedbackRepository         // Factor 8: user feedback
+	NanoMindTME          *repository.NanoMindTMERepository          // TME enrichment of security alerts
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -566,6 +572,12 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		SecretCredential:    repository.NewSecretCredentialRepository(db),
 		SecretAudit:         repository.NewSecretAuditRepository(db),
 		SecretBackendConfig: repository.NewSecretBackendConfigRepository(db),
+		// Trust score integrity
+		ComplianceSnapshot:   repository.NewComplianceSnapshotRepository(db),
+		ComplianceEvidence:   repository.NewComplianceEvidenceRepository(db),
+		IsolationAttestation: repository.NewIsolationAttestationRepository(db),
+		UserFeedback:         repository.NewUserFeedbackRepository(db),
+		NanoMindTME:          repository.NewNanoMindTMERepository(db),
 	}, oauthRepo
 }
 
@@ -642,6 +654,16 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Alert,             // For security alerts scoring
 		repos.VerificationEvent, // For real verification statistics
 	)
+	// Wire the remaining trust factors so the 9-factor score computes honestly
+	// instead of falling back to neutral hardcodes:
+	//   Factor 5 (compliance):  read the latest AIM compliance snapshot
+	//   Factor 8 (user feedback): read sentiment-bucketed feedback counts
+	//   Factor 9 (execution isolation): read the latest isolation attestation
+	//   TME enrichment: blend NanoMind threat-model evaluation into security alerts
+	trustCalculator.SetSnapshotRepo(repos.ComplianceSnapshot)
+	trustCalculator.SetUserFeedbackRepo(repos.UserFeedback)
+	trustCalculator.SetIsolationRepo(repos.IsolationAttestation)
+	trustCalculator.SetTMEProvider(repos.NanoMindTME)
 
 	// ✅ Initialize drift detection service BEFORE verification event service
 	driftDetectionService := application.NewDriftDetectionService(
@@ -710,10 +732,15 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	// ✅ Wire DataTransferRepository into SecurityPolicyService for exfiltration detection
 	securityPolicyService.SetDataTransferRepository(repos.DataTransfer)
 
-	complianceService := application.NewComplianceService(
+	// Full compliance service: wires the snapshot repo so RecordComplianceSnapshot
+	// persists the point-in-time AIM score that trust factor 5 reads back.
+	complianceService := application.NewComplianceServiceFull(
 		repos.AuditLog,
 		repos.Agent,
 		repos.User,
+		repos.Alert,
+		repos.ComplianceEvidence,
+		repos.ComplianceSnapshot,
 		repos.MCPServer,
 	)
 
@@ -1442,6 +1469,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	trust.Get("/agents/:id", h.TrustScore.GetTrustScore)
 	trust.Get("/agents/:id/breakdown", h.TrustScore.GetTrustScoreBreakdown) // Detailed breakdown with weights and contributions
 	trust.Get("/agents/:id/history", h.TrustScore.GetTrustScoreHistory)
+	trust.Post("/agents/:id/feedback", h.TrustScore.SubmitUserFeedback) // Submit a 1-5 user rating (feeds the user feedback trust factor)
 
 	// Remediation tracking (public, rate-limited, no auth -- receives reports from agentpwn and HMA)
 	remediation := v1.Group("/remediation")

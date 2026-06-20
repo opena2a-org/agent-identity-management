@@ -22,6 +22,7 @@ type TrustCalculator struct {
 	verificationEventRepo  domain.VerificationEventRepository
 	snapshotRepo           domain.ComplianceSnapshotRepository
 	isolationRepo          domain.IsolationAttestationRepository
+	userFeedbackRepo       domain.UserFeedbackRepository
 	tmeProvider            NanoMindTMEProvider
 }
 
@@ -85,6 +86,12 @@ func (c *TrustCalculator) SetIsolationRepo(repo domain.IsolationAttestationRepos
 	c.isolationRepo = repo
 }
 
+// SetUserFeedbackRepo sets the user feedback repository for the user feedback factor.
+// Optional; when not set, the user feedback factor returns a neutral 0.5 score.
+func (c *TrustCalculator) SetUserFeedbackRepo(repo domain.UserFeedbackRepository) {
+	c.userFeedbackRepo = repo
+}
+
 // SetTMEProvider sets the NanoMind TME provider for behavioral trust enrichment.
 // Optional; when not set, TME has no effect on scoring.
 func (c *TrustCalculator) SetTMEProvider(provider NanoMindTMEProvider) {
@@ -92,7 +99,7 @@ func (c *TrustCalculator) SetTMEProvider(provider NanoMindTMEProvider) {
 }
 
 // Calculate calculates trust score for an agent
-// Implements the 8-factor algorithm with weighted average
+// Implements the 9-factor algorithm with weighted average
 func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, error) {
 	factors, err := c.CalculateFactors(agent)
 	if err != nil {
@@ -469,23 +476,40 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 }
 
 // Factor 8: User Feedback (2% weight)
-// Measures explicit feedback from users.
+// Measures explicit feedback from users, scored by sentiment-bucket counts.
 //
-// Currently returns 0.5 (neutral) because no user feedback collection
-// mechanism exists yet. To implement real feedback scoring:
-//   - Add a UserFeedback domain entity with agent_id, rating (1-5), comment
-//   - Add a UserFeedbackRepository with GetByAgentID, GetAverageRating
-//   - Wire the repository into TrustCalculator
-//   - Scoring formula from documentation:
-//     negative_feedback > 5: 0.0
-//     negative_feedback > 2: 0.50
-//     positive_feedback > 10: 1.0
-//     else: 0.75
+// Returns 0.5 (neutral) when no feedback repository is wired or no feedback
+// exists, so agents are neither penalized nor rewarded without real data.
+//
+// Scoring formula (sentiment buckets from domain.FeedbackSentiment, rating 1-5):
+//
+//	negative_feedback > 5:  0.00  (sustained dissatisfaction)
+//	negative_feedback > 2:  0.50  (some dissatisfaction)
+//	positive_feedback > 10: 1.00  (strong positive track record)
+//	else:                   0.75  (mild positive / mixed)
+//
+// Negative checks precede positive so that an agent with many positives AND
+// many negatives is not rewarded; sustained complaints dominate.
 func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) float64 {
-	// No user feedback collection mechanism exists yet.
-	// Return neutral score so agents are not penalized or rewarded
-	// without actual feedback data.
-	return 0.5
+	if c.userFeedbackRepo == nil {
+		return 0.5 // Neutral when feedback collection not configured
+	}
+
+	stats, err := c.userFeedbackRepo.GetStats(agent.ID)
+	if err != nil || stats == nil || stats.Total == 0 {
+		return 0.5 // Neutral when no feedback data exists
+	}
+
+	if stats.NegativeCount > 5 {
+		return 0.0
+	}
+	if stats.NegativeCount > 2 {
+		return 0.5
+	}
+	if stats.PositiveCount > 10 {
+		return 1.0
+	}
+	return 0.75
 }
 
 // Factor 9: Execution Isolation (10% weight)
@@ -619,4 +643,32 @@ func (c *TrustCalculator) GetTrustScoreHistory(ctx context.Context, agentID uuid
 // This includes who changed it, when, and why - for frontend UI display
 func (c *TrustCalculator) GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error) {
 	return c.trustScoreRepo.GetHistoryAuditTrail(agentID, limit)
+}
+
+// RecordUserFeedback persists a user's explicit rating for an agent. This is the
+// collection side of the user feedback factor (factor 8): without it the factor
+// has nothing to read and stays at the neutral 0.5 baseline. Rating must be 1-5.
+func (c *TrustCalculator) RecordUserFeedback(ctx context.Context, agentID, orgID uuid.UUID, userID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error) {
+	if c.userFeedbackRepo == nil {
+		return nil, fmt.Errorf("user feedback repository not configured")
+	}
+	if rating < 1 || rating > 5 {
+		return nil, fmt.Errorf("rating must be between 1 and 5, got %d", rating)
+	}
+
+	feedback := &domain.UserFeedback{
+		ID:             uuid.New(),
+		AgentID:        agentID,
+		OrganizationID: orgID,
+		UserID:         userID,
+		Rating:         rating,
+		Comment:        comment,
+		CreatedAt:      time.Now(),
+	}
+
+	if err := c.userFeedbackRepo.Create(feedback); err != nil {
+		return nil, fmt.Errorf("failed to record user feedback: %w", err)
+	}
+
+	return feedback, nil
 }
