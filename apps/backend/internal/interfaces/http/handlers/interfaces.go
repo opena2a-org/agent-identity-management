@@ -309,6 +309,7 @@ type TrustCalculatorServicer interface {
 	CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetLatestTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetTrustScoreHistoryAuditTrail(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
+	RecordUserFeedback(ctx context.Context, agentID, orgID uuid.UUID, userID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error)
 }
 
 // ===========================

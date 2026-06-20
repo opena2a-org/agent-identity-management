@@ -215,7 +215,7 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 	}
 	// NOTE: We intentionally do NOT auto-sync/recalculate trust scores here.
 	// The agent.TrustScore may differ from stored score.Score due to direct penalties
-	// from violations. Recalculating would cause double-counting because the 8-factor
+	// from violations. Recalculating would cause double-counting because the 9-factor
 	// algorithm also considers security alerts created by violations.
 	// Trust score recalculation should only happen on explicit user request or scheduled intervals.
 
@@ -226,16 +226,19 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		})
 	}
 
-	// Define weights (matches trust_calculator.go weights)
+	// Define weights (must match the 9-factor weights in trust_calculator.go;
+	// these sum to exactly 1.0). Age, drift, and user feedback were reduced to
+	// make room for the 10% execution isolation factor.
 	weights := map[string]float64{
 		"verificationStatus": 0.25,
 		"uptime":             0.15,
 		"successRate":        0.15,
 		"securityAlerts":     0.15,
 		"compliance":         0.10,
-		"age":                0.10,
-		"driftDetection":     0.05,
-		"userFeedback":       0.05,
+		"age":                0.05,
+		"driftDetection":     0.03,
+		"userFeedback":       0.02,
+		"executionIsolation": 0.10,
 	}
 
 	// Calculate contributions (factor value × weight)
@@ -248,6 +251,7 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		"age":                score.Factors.Age * weights["age"],
 		"driftDetection":     score.Factors.DriftDetection * weights["driftDetection"],
 		"userFeedback":       score.Factors.UserFeedback * weights["userFeedback"],
+		"executionIsolation": score.Factors.ExecutionIsolation * weights["executionIsolation"],
 	}
 
 	return c.JSON(fiber.Map{
@@ -263,11 +267,84 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 			"age":                score.Factors.Age,
 			"driftDetection":     score.Factors.DriftDetection,
 			"userFeedback":       score.Factors.UserFeedback,
+			"executionIsolation": score.Factors.ExecutionIsolation,
 		},
 		"weights":       weights,
 		"contributions": contributions,
 		"confidence":    score.Confidence,
 		"calculatedAt":  score.LastCalculated,
+	})
+}
+
+// SubmitUserFeedback records an explicit user rating (1-5) for an agent. This is
+// the collection side of the user feedback trust factor: ratings persisted here
+// are what calculateUserFeedback reads on the next score computation.
+func (h *TrustScoreHandler) SubmitUserFeedback(c fiber.Ctx) error {
+	orgID := c.Locals("organization_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to the caller's organization before accepting feedback
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	var body struct {
+		Rating  int    `json:"rating"`
+		Comment string `json:"comment"`
+	}
+	if err := c.Bind().JSON(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+	if body.Rating < 1 || body.Rating > 5 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Rating must be an integer between 1 and 5",
+		})
+	}
+
+	feedback, err := h.getTrustCalculator().RecordUserFeedback(c.Context(), agentID, orgID, &userID, body.Rating, body.Comment)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to record user feedback",
+		})
+	}
+
+	h.getAuditService().LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionCreate,
+		"user_feedback",
+		agentID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"agentName": agent.Name,
+			"rating":    body.Rating,
+		},
+	)
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"id":        feedback.ID,
+		"agentId":   feedback.AgentID,
+		"rating":    feedback.Rating,
+		"comment":   feedback.Comment,
+		"createdAt": feedback.CreatedAt,
 	})
 }
 
