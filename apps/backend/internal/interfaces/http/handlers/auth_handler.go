@@ -274,6 +274,17 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		)
 	}
 
+	// SECURITY: revoke the presented tokens server-side so they cannot be reused
+	// before they expire. Best-effort: no-op if revocation isn't configured or the
+	// token is absent/invalid. Covers both the access token (header or cookie) and
+	// the refresh token (so a logged-out session can't be silently renewed).
+	if accessToken := bearerToken(c); accessToken != "" {
+		_ = h.jwtService.RevokeToken(c.Context(), accessToken)
+	}
+	if refreshToken := c.Cookies("refresh_token"); refreshToken != "" {
+		_ = h.jwtService.RevokeToken(c.Context(), refreshToken)
+	}
+
 	// Clear cookies
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
@@ -292,4 +303,16 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Logged out successfully",
 	})
+}
+
+// bearerToken extracts the JWT from the Authorization header ("Bearer <token>")
+// or, failing that, the access_token cookie.
+func bearerToken(c fiber.Ctx) string {
+	if authHeader := c.Get("Authorization"); authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			return parts[1]
+		}
+	}
+	return c.Cookies("access_token")
 }

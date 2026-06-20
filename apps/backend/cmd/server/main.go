@@ -148,6 +148,18 @@ func main() {
 	// Initialize infrastructure services
 	jwtService := auth.NewJWTService()
 
+	// Wire server-side token revocation (logout / denylist) to Redis when
+	// available. Fails CLOSED on a store outage by default; set
+	// AUTH_REVOCATION_FAIL_OPEN=true to prefer availability over strict
+	// revocation. Without Redis, revocation is disabled (tokens still expire).
+	if cacheService != nil {
+		failOpen := strings.EqualFold(os.Getenv("AUTH_REVOCATION_FAIL_OPEN"), "true")
+		jwtService.SetRevoker(auth.NewTokenRevoker(cacheService, failOpen))
+		log.Printf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
+	} else {
+		log.Println("ℹ️  Token revocation disabled (no Redis configured)")
+	}
+
 	// Initialize email service
 	emailService, err := initEmailService()
 	if err != nil {
