@@ -25,10 +25,12 @@ const (
 // Token types. The `typ` claim separates access tokens (valid as a bearer) from
 // refresh tokens (valid only at /auth/refresh), so a refresh token cannot be
 // replayed as a session token.
-// GRACE: tokens minted before this claim existed have an empty TokenType; the
-// access middleware and refresh endpoint treat an empty type as legacy and
-// allow it, so this rolls out without breaking live sessions. Newly issued
-// tokens always carry a type and are enforced immediately.
+// GRACE: tokens minted before this claim existed have an empty TokenType.
+// The access middleware no longer accepts an empty type (retired once all
+// short-lived legacy access tokens had aged out within their TTL). The refresh
+// endpoint still treats an empty type as a legacy refresh/SDK token and allows
+// it, so long-lived (up to 90-day SDK) tokens keep working until they age out.
+// Newly issued tokens always carry a type and are enforced immediately.
 const (
 	TokenTypeAccess  = "access"
 	TokenTypeRefresh = "refresh"
