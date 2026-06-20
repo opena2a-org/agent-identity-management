@@ -56,15 +56,23 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 		})
 	}
 
+	// Resolve the organization name so clients can show the user's org scope
+	// without a second request. Best-effort: omit on lookup failure.
+	var organizationName string
+	if org, orgErr := h.orgRepo.GetByID(user.OrganizationID); orgErr == nil && org != nil {
+		organizationName = org.Name
+	}
+
 	return c.JSON(fiber.Map{
-		"id":             user.ID,
-		"email":          user.Email,
-		"name":           user.Name,
-		"role":           user.Role,
-		"organizationId": user.OrganizationID,
-		"lastLoginAt":    user.LastLoginAt,
-		"createdAt":      user.CreatedAt,
-		"status":         user.Status,
+		"id":               user.ID,
+		"email":            user.Email,
+		"name":             user.Name,
+		"role":             user.Role,
+		"organizationId":   user.OrganizationID,
+		"organizationName": organizationName,
+		"lastLoginAt":      user.LastLoginAt,
+		"createdAt":        user.CreatedAt,
+		"status":           user.Status,
 	})
 }
 

@@ -215,6 +215,73 @@ func TestAuthMiddleware_SkipsIfAPIKeyAuthenticated(t *testing.T) {
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
 
+func TestAuthMiddleware_RejectsSDKToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	// A 90-day SDK refresh token must NOT be usable as a bearer access token.
+	sdkToken, err := jwtService.GenerateSDKRefreshToken(
+		uuid.New().String(),
+		uuid.New().String(),
+		"sdk@example.com",
+		"admin",
+	)
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+sdkToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	assert.Equal(t, "SDK tokens cannot be used for API access; exchange it at /auth/refresh", result["error"])
+}
+
+func TestOptionalAuthMiddleware_RejectsSDKToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	sdkToken, err := jwtService.GenerateSDKRefreshToken(
+		uuid.New().String(),
+		uuid.New().String(),
+		"sdk@example.com",
+		"admin",
+	)
+	require.NoError(t, err)
+
+	var hasUserID bool
+
+	app := fiber.New()
+	app.Use(OptionalAuthMiddleware(jwtService))
+	app.Get("/public", func(c fiber.Ctx) error {
+		hasUserID = c.Locals("user_id") != nil
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/public", nil)
+	req.Header.Set("Authorization", "Bearer "+sdkToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Request still succeeds (optional), but the SDK token must not authenticate.
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, hasUserID, "SDK token must not set user context")
+}
+
 func TestOptionalAuthMiddleware_NoToken(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()

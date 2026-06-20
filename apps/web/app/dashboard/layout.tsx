@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { IdleTimeoutGuard } from "@/components/idle-timeout-guard";
 import { useDeactivationCheck } from "@/hooks/use-deactivation-check";
 
 export default function DashboardLayout({
@@ -14,6 +15,8 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Idle / absolute session timeout (30m idle, 8h cap) */}
+      <IdleTimeoutGuard />
       <Sidebar />
 
       {/* Main Content Area with Header */}

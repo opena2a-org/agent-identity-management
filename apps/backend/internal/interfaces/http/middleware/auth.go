@@ -65,6 +65,16 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			})
 		}
 
+		// SECURITY: SDK refresh tokens (90-day) must never be accepted as bearer
+		// access tokens. They are only valid at the /auth/refresh endpoint, where
+		// they are exchanged for a short-lived access token. Rejecting them here
+		// stops a long-lived SDK token from being used as a session token.
+		if claims.Issuer == auth.IssuerSDK {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "SDK tokens cannot be used for API access; exchange it at /auth/refresh",
+			})
+		}
+
 		// Parse UUIDs from claims
 		userID, err := uuid.Parse(claims.UserID)
 		if err != nil {
@@ -116,6 +126,12 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		claims, err := jwtService.ValidateToken(token)
 		if err != nil {
 			// Invalid token, but don't fail - just continue without auth
+			return c.Next()
+		}
+
+		// SECURITY: never treat an SDK refresh token as an authenticated bearer
+		// (see AuthMiddleware). Continue unauthenticated instead.
+		if claims.Issuer == auth.IssuerSDK {
 			return c.Next()
 		}
 
