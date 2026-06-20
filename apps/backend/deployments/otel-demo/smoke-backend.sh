@@ -68,6 +68,20 @@ SMOKE_PG_CONTAINER="${SMOKE_PG_CONTAINER:-aim-smoke-postgres}"
 SMOKE_PG_PASSWORD="${SMOKE_PG_PASSWORD:-smoke_postgres_password}"
 SMOKE_PG_DB="${SMOKE_PG_DB:-identity}"
 
+# These two flow into `docker run` arguments and the psql connection below.
+# They default to safe constants but are env-overridable, so validate them
+# against a strict allow-list before use — a value containing shell
+# metacharacters or whitespace must never reach a command line. Fail closed on
+# anything outside the pattern.
+case "$SMOKE_PG_CONTAINER" in
+    *[!A-Za-z0-9_.-]*|"")
+        echo "FAIL: SMOKE_PG_CONTAINER must match [A-Za-z0-9_.-]+ (got '$SMOKE_PG_CONTAINER')"; exit 1 ;;
+esac
+case "$SMOKE_PG_DB" in
+    *[!A-Za-z0-9_]*|"")
+        echo "FAIL: SMOKE_PG_DB must match [A-Za-z0-9_]+ (got '$SMOKE_PG_DB')"; exit 1 ;;
+esac
+
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@opena2a.org}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-AIM2025!Smoke}"
 
@@ -87,7 +101,10 @@ echo "    Tempo HTTP  : localhost:${TEMPO_HTTP_PORT}"
 # 1. Pre-flight.
 echo
 echo "==> [1/8] Pre-flight"
-for tool in docker curl jq go; do
+# psql + pg_isready let us reach the throwaway Postgres over its published
+# TCP port instead of `docker exec`-ing into the container. Talking to the
+# published port keeps shell variables out of any docker exec argument list.
+for tool in docker curl jq go psql pg_isready; do
     command -v "$tool" >/dev/null || { echo "FAIL: $tool not on PATH"; exit 1; }
 done
 
@@ -120,7 +137,7 @@ docker run -d --name "$SMOKE_PG_CONTAINER" \
     timescale/timescaledb:latest-pg16 >/dev/null || { echo "FAIL: docker run postgres"; exit 2; }
 attempt=0
 while [ $attempt -lt 30 ]; do
-    if docker exec "$SMOKE_PG_CONTAINER" pg_isready -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then
+    if pg_isready -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then
         echo "    postgres ready"
         break
     fi
@@ -242,8 +259,7 @@ echo "    admin seeded"
 # 5. Reset force_password_change.
 echo
 echo "==> [5/8] Reset admin force_password_change"
-docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
-    psql -U postgres -d "$SMOKE_PG_DB" -c \
+PGPASSWORD="$SMOKE_PG_PASSWORD" psql -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" -c \
     "UPDATE users SET force_password_change = FALSE WHERE email = '${ADMIN_EMAIL}';" >/dev/null
 
 # 6. HTTP exercise.
@@ -278,8 +294,7 @@ echo "    agent created id=${AGENT_ID}"
 # The fga_engine reads it via fetchASCRiskSummary; missing rows fail open
 # silently, which would let agent.scan_verdict drop off the parent span
 # unnoticed and weaken the Slide 14 SemConv proposal credibility.
-docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
-    psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
+PGPASSWORD="$SMOKE_PG_PASSWORD" psql -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
     "CREATE TABLE IF NOT EXISTS agent_security_contexts (
         agent_id        UUID PRIMARY KEY,
         overall_risk    TEXT NOT NULL DEFAULT 'LOW',
@@ -289,8 +304,7 @@ docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
         atx_trust_level INTEGER,
         scan_verdict    TEXT NOT NULL DEFAULT 'UNKNOWN'
      );" >/dev/null
-docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
-    psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
+PGPASSWORD="$SMOKE_PG_PASSWORD" psql -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -c \
     "INSERT INTO agent_security_contexts (agent_id, overall_risk, drift_score, active_alerts, atc_trust_level, scan_verdict)
      VALUES ('${AGENT_ID}', 'LOW', 0.05, 0, 3, 'CLEAN')
      ON CONFLICT (agent_id) DO UPDATE SET scan_verdict='CLEAN';" >/dev/null
