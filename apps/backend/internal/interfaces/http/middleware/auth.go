@@ -75,6 +75,16 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			})
 		}
 
+		// SECURITY: only access tokens are valid bearers. A refresh token (or any
+		// non-access type) must not be replayed as a session token. An empty type
+		// is a legacy token issued before the `typ` claim existed — allowed during
+		// the rollout grace window; legacy tokens age out within their TTL.
+		if claims.TokenType != "" && claims.TokenType != auth.TokenTypeAccess {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "This token cannot be used for API access",
+			})
+		}
+
 		// Parse UUIDs from claims
 		userID, err := uuid.Parse(claims.UserID)
 		if err != nil {
@@ -132,6 +142,13 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		// SECURITY: never treat an SDK refresh token as an authenticated bearer
 		// (see AuthMiddleware). Continue unauthenticated instead.
 		if claims.Issuer == auth.IssuerSDK {
+			return c.Next()
+		}
+
+		// SECURITY: only access tokens authenticate. A non-access type (e.g. a
+		// refresh token) must not set user context. Empty type = legacy, allowed
+		// during the grace window (see AuthMiddleware).
+		if claims.TokenType != "" && claims.TokenType != auth.TokenTypeAccess {
 			return c.Next()
 		}
 
