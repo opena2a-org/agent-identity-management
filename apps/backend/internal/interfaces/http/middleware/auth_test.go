@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/stretchr/testify/assert"
@@ -280,6 +282,81 @@ func TestOptionalAuthMiddleware_RejectsSDKToken(t *testing.T) {
 	// Request still succeeds (optional), but the SDK token must not authenticate.
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 	assert.False(t, hasUserID, "SDK token must not set user context")
+}
+
+func TestAuthMiddleware_RejectsRefreshToken(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	// A refresh token (typ=refresh) must not be usable as a bearer access token.
+	refreshToken, err := jwtService.GenerateRefreshToken(uuid.New().String(), uuid.New().String())
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+refreshToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	assert.Equal(t, "This token cannot be used for API access", result["error"])
+}
+
+func TestAuthMiddleware_AllowsLegacyTokenWithoutType(t *testing.T) {
+	const secret = "test-secret-key-for-testing-purposes-32chars"
+	t.Setenv("JWT_SECRET", secret)
+	jwtService := auth.NewJWTService()
+
+	userID := uuid.New()
+	orgID := uuid.New()
+	now := time.Now()
+
+	// Craft a legacy token (no `typ` claim) the way tokens were minted before
+	// token-type separation. The grace window must still accept these.
+	legacyClaims := auth.JWTClaims{
+		UserID:         userID.String(),
+		OrganizationID: orgID.String(),
+		Email:          "legacy@example.com",
+		Role:           "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    auth.IssuerUser,
+			Subject:   userID.String(),
+		},
+	}
+	legacyToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacyClaims).SignedString([]byte(secret))
+	require.NoError(t, err)
+
+	var capturedUserID uuid.UUID
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		capturedUserID = c.Locals("user_id").(uuid.UUID)
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+legacyToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, userID, capturedUserID)
 }
 
 func TestOptionalAuthMiddleware_NoToken(t *testing.T) {

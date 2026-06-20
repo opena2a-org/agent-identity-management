@@ -290,6 +290,49 @@ func TestJWTService_RefreshTokenPair(t *testing.T) {
 	assert.Equal(t, userID, refreshClaims.UserID)
 }
 
+func TestJWTService_RefreshTokenPair_RejectsAccessToken(t *testing.T) {
+	cleanup := setupJWTTest(t)
+	defer cleanup()
+
+	service := NewJWTService()
+	userID := uuid.New().String()
+	orgID := uuid.New().String()
+
+	// An access token must not be replayable at the refresh endpoint.
+	accessToken, err := service.GenerateAccessToken(userID, orgID, "test@example.com", "admin")
+	require.NoError(t, err)
+
+	_, _, err = service.RefreshTokenPair(accessToken)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "access token cannot be used to refresh")
+}
+
+func TestJWTService_TokenTypesAreSet(t *testing.T) {
+	cleanup := setupJWTTest(t)
+	defer cleanup()
+
+	service := NewJWTService()
+	userID := uuid.New().String()
+	orgID := uuid.New().String()
+
+	access, refresh, err := service.GenerateTokenPair(userID, orgID, "t@example.com", "admin")
+	require.NoError(t, err)
+	sdk, err := service.GenerateSDKRefreshToken(userID, orgID, "t@example.com", "admin")
+	require.NoError(t, err)
+
+	ac, err := service.ValidateToken(access)
+	require.NoError(t, err)
+	assert.Equal(t, TokenTypeAccess, ac.TokenType)
+
+	rc, err := service.ValidateToken(refresh)
+	require.NoError(t, err)
+	assert.Equal(t, TokenTypeRefresh, rc.TokenType)
+
+	sc, err := service.ValidateToken(sdk)
+	require.NoError(t, err)
+	assert.Equal(t, TokenTypeSDK, sc.TokenType)
+}
+
 func TestJWTService_RefreshTokenPair_SDKToken(t *testing.T) {
 	cleanup := setupJWTTest(t)
 	defer cleanup()
