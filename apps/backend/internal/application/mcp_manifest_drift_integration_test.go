@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -218,5 +219,108 @@ func TestMCPManifestDrift_Wiring(t *testing.T) {
 		require.Equal(t, []string{"tool:list_files"}, drift.ChangedTools, "reshaped schema must be detected")
 		require.Equal(t, domain.DriftSeverityHigh, drift.Severity, "exec_command addition escalates to high")
 		require.Equal(t, 1, driftCount(t, serverID))
+	})
+
+	// Issue #276: the well-known recompute folds the baseline read, drift insert, and baseline replace
+	// into one transaction under a per-server advisory lock, so concurrent recomputes for the same
+	// server serialize instead of interleaving into duplicate or orphaned drift rows.
+	t.Run("#276 concurrent well-known recomputes record exactly one drift row", func(t *testing.T) {
+		serverID := seedServer(t)
+		addTool(t, serverID, "list_files")
+		_, err := svc.RecomputeFromWellKnown(ctx, serverID) // seed baseline {list_files}
+		require.NoError(t, err)
+		require.Equal(t, 0, driftCount(t, serverID))
+
+		// Server silently adds a high-risk tool after being trusted.
+		addTool(t, serverID, "exec_command")
+
+		// Fire many concurrent recomputes for the SAME server. The advisory lock must serialize them:
+		// exactly one records drift and advances the baseline; the rest observe the already-advanced
+		// baseline (hash matches) and record nothing.
+		const concurrency = 8
+		var wg sync.WaitGroup
+		errs := make([]error, concurrency)
+		drifts := make([]*domain.MCPManifestDrift, concurrency)
+		wg.Add(concurrency)
+		for i := 0; i < concurrency; i++ {
+			go func(i int) {
+				defer wg.Done()
+				drifts[i], errs[i] = svc.RecomputeFromWellKnown(ctx, serverID)
+			}(i)
+		}
+		wg.Wait()
+
+		nonNilDrift := 0
+		for i := 0; i < concurrency; i++ {
+			require.NoErrorf(t, errs[i], "recompute %d failed", i)
+			if drifts[i] != nil {
+				nonNilDrift++
+			}
+		}
+		require.Equal(t, 1, nonNilDrift, "exactly one concurrent recompute must record drift")
+		require.Equal(t, 1, driftCount(t, serverID), "no duplicate drift rows under concurrency")
+
+		// Exactly one current baseline, and its hash equals the recorded drift's new_hash: the surviving
+		// baseline is not desynced from its drift history.
+		var currentCount int
+		require.NoError(t, db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM mcp_manifest_baselines WHERE mcp_server_id = $1 AND is_current = TRUE`,
+			serverID).Scan(&currentCount))
+		require.Equal(t, 1, currentCount, "exactly one current baseline after concurrent recomputes")
+
+		baseline, _, err := manifestRepo.GetCurrentBaseline(serverID)
+		require.NoError(t, err)
+		require.Equal(t, 2, baseline.ToolCount)
+		var driftNewHash string
+		require.NoError(t, db.QueryRowContext(ctx,
+			`SELECT new_hash FROM mcp_manifest_drift WHERE mcp_server_id = $1`, serverID).Scan(&driftNewHash))
+		require.Equal(t, baseline.ManifestHash, driftNewHash,
+			"surviving baseline hash must match the recorded drift's new_hash")
+	})
+
+	// Issue #275: a recorded drift raises an operator-facing alert (AlertMCPManifestDrift) with severity
+	// mapped from the drift grade, via the centralized raiseDriftAlert hook in the manifest service.
+	t.Run("#275 recorded drift raises an operator alert", func(t *testing.T) {
+		serverID := seedServer(t)
+		t.Cleanup(func() {
+			_, _ = db.ExecContext(ctx, `DELETE FROM alerts WHERE resource_id = $1`, serverID)
+		})
+
+		alertingSvc := NewMCPManifestService(capabilityRepo, manifestRepo)
+		alertingSvc.SetAlerting(repository.NewAlertRepository(db), repository.NewMCPServerRepository(db))
+
+		driftAlerts := func() []domain.Alert {
+			rows, err := db.QueryContext(ctx,
+				`SELECT alert_type, severity FROM alerts WHERE resource_id = $1 AND alert_type = $2`,
+				serverID, string(domain.AlertMCPManifestDrift))
+			require.NoError(t, err)
+			defer rows.Close()
+			var out []domain.Alert
+			for rows.Next() {
+				var a domain.Alert
+				require.NoError(t, rows.Scan(&a.AlertType, &a.Severity))
+				out = append(out, a)
+			}
+			require.NoError(t, rows.Err())
+			return out
+		}
+
+		// First capture seeds the baseline; no drift, so no alert.
+		addTool(t, serverID, "list_files")
+		_, err := alertingSvc.RecomputeFromWellKnown(ctx, serverID)
+		require.NoError(t, err)
+		require.Empty(t, driftAlerts(), "first capture must not raise an alert")
+
+		// Adding a high-risk tool records HIGH drift and must raise one HIGH-severity alert.
+		addTool(t, serverID, "exec_command")
+		drift, err := alertingSvc.RecomputeFromWellKnown(ctx, serverID)
+		require.NoError(t, err)
+		require.NotNil(t, drift)
+		require.Equal(t, domain.DriftSeverityHigh, drift.Severity)
+
+		alerts := driftAlerts()
+		require.Len(t, alerts, 1, "high-severity drift must raise exactly one alert")
+		require.Equal(t, domain.AlertMCPManifestDrift, alerts[0].AlertType)
+		require.Equal(t, domain.AlertSeverityHigh, alerts[0].Severity)
 	})
 }

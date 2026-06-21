@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -46,6 +47,8 @@ func filterAttestedToolNames(names []string) []string {
 type MCPManifestService struct {
 	capabilityRepo *repository.MCPServerCapabilityRepository
 	manifestRepo   *repository.MCPManifestRepository
+	alertRepo      *repository.AlertRepository
+	mcpRepo        *repository.MCPServerRepository
 }
 
 func NewMCPManifestService(
@@ -53,6 +56,16 @@ func NewMCPManifestService(
 	manifestRepo *repository.MCPManifestRepository,
 ) *MCPManifestService {
 	return &MCPManifestService{capabilityRepo: capabilityRepo, manifestRepo: manifestRepo}
+}
+
+// SetAlerting wires the alert + MCP-server repositories so a recorded drift raises an operator-facing
+// alert (issue #275). Optional and injected via a setter so the existing constructor, its callers, and
+// the drift integration tests stay unchanged; when unset, drift is still recorded and logged but no
+// alert is raised. The MCP-server repo is needed to resolve the server's organization and name for the
+// alert. Best-effort: see raiseDriftAlert.
+func (s *MCPManifestService) SetAlerting(alertRepo *repository.AlertRepository, mcpRepo *repository.MCPServerRepository) {
+	s.alertRepo = alertRepo
+	s.mcpRepo = mcpRepo
 }
 
 // RecomputeFromWellKnown rebuilds the manifest from the server's stored capabilities (populated by a
@@ -66,11 +79,6 @@ func (s *MCPManifestService) RecomputeFromWellKnown(ctx context.Context, serverI
 	}
 	entries, hash, tools, resources, prompts := domain.BuildManifest(caps)
 
-	baseline, prevEntries, err := s.manifestRepo.GetCurrentBaseline(serverID)
-	if err != nil {
-		return nil, err
-	}
-
 	newBaseline := &domain.MCPManifestBaseline{
 		MCPServerID:   serverID,
 		ManifestHash:  hash,
@@ -80,32 +88,103 @@ func (s *MCPManifestService) RecomputeFromWellKnown(ctx context.Context, serverI
 		CapturedFrom:  domain.ManifestSourceWellKnown,
 	}
 
-	if baseline == nil {
-		// First capture: establish baseline, no drift.
-		return nil, s.manifestRepo.ReplaceBaseline(newBaseline, entries)
-	}
-	if baseline.ManifestHash == hash {
-		return nil, nil
-	}
-
-	added, removed, changed := domain.DiffManifests(prevEntries, entries)
-	drift := &domain.MCPManifestDrift{
-		MCPServerID:  serverID,
-		PrevHash:     baseline.ManifestHash,
-		NewHash:      hash,
-		AddedTools:   added,
-		RemovedTools: removed,
-		ChangedTools: changed,
-		Severity:     domain.ClassifyDriftSeverity(added, removed, changed),
-		Source:       domain.ManifestSourceWellKnown,
-	}
-	if err := s.manifestRepo.InsertDrift(drift); err != nil {
+	// The baseline read, drift insert, and baseline replace run in a single transaction under a
+	// per-server advisory lock (issue #276), so two concurrent well-known recomputes for the same
+	// server serialize instead of interleaving into a duplicate or orphaned drift row. The diff against
+	// the locked baseline is computed in the callback; returning nil means the manifest is unchanged
+	// (no drift, no baseline move). First capture (prev == nil) seeds the baseline without calling it.
+	drift, err := s.manifestRepo.AtomicRecomputeWellKnown(serverID, newBaseline, entries,
+		func(prev *domain.MCPManifestBaseline, prevEntries []domain.ManifestEntry) *domain.MCPManifestDrift {
+			if prev.ManifestHash == hash {
+				return nil
+			}
+			added, removed, changed := domain.DiffManifests(prevEntries, entries)
+			return &domain.MCPManifestDrift{
+				MCPServerID:  serverID,
+				PrevHash:     prev.ManifestHash,
+				NewHash:      hash,
+				AddedTools:   added,
+				RemovedTools: removed,
+				ChangedTools: changed,
+				Severity:     domain.ClassifyDriftSeverity(added, removed, changed),
+				Source:       domain.ManifestSourceWellKnown,
+			}
+		})
+	if err != nil {
 		return nil, err
 	}
-	if err := s.manifestRepo.ReplaceBaseline(newBaseline, entries); err != nil {
-		return nil, err
+	if drift != nil {
+		s.raiseDriftAlert(serverID, drift)
 	}
 	return drift, nil
+}
+
+// raiseDriftAlert surfaces a recorded manifest drift to operators via the alert stream. It is the
+// single choke point for both the well-known and attestation drift sources, so an operator sees a
+// trusted server's tool surface changing (e.g. a verified server silently adding an exec_* tool)
+// regardless of which feed detected it (issue #275). Severity maps the drift grade onto the alert
+// scale: high -> high, medium -> warning, low -> info.
+//
+// Best-effort and nil-safe: alerting is optional (wired via SetAlerting), and an alert-write failure
+// must never fail capability detection or attestation, so every failure path logs and returns rather
+// than propagating an error.
+func (s *MCPManifestService) raiseDriftAlert(serverID uuid.UUID, drift *domain.MCPManifestDrift) {
+	if s.alertRepo == nil || s.mcpRepo == nil {
+		return
+	}
+	server, err := s.mcpRepo.GetByID(serverID)
+	if err != nil || server == nil {
+		fmt.Printf("⚠️  Failed to load MCP server %s for drift alert: %v\n", serverID, err)
+		return
+	}
+
+	var severity domain.AlertSeverity
+	switch drift.Severity {
+	case domain.DriftSeverityHigh:
+		severity = domain.AlertSeverityHigh
+	case domain.DriftSeverityMedium:
+		severity = domain.AlertSeverityWarning
+	default:
+		severity = domain.AlertSeverityInfo
+	}
+
+	alert := &domain.Alert{
+		ID:             uuid.New(),
+		OrganizationID: server.OrganizationID,
+		AlertType:      domain.AlertMCPManifestDrift,
+		Severity:       severity,
+		Title:          fmt.Sprintf("MCP manifest drift detected: %s", server.Name),
+		Description: fmt.Sprintf(
+			"The tool manifest for MCP server '%s' changed after it was trusted (source: %s, severity: %s): +%d added, -%d removed, ~%d changed.",
+			server.Name, drift.Source, drift.Severity,
+			len(drift.AddedTools), len(drift.RemovedTools), len(drift.ChangedTools)),
+		ResourceType: "mcp_server",
+		ResourceID:   serverID,
+		Metadata: map[string]interface{}{
+			"mcpServerId":   serverID.String(),
+			"mcpServerName": server.Name,
+			"source":        string(drift.Source),
+			"driftSeverity": string(drift.Severity),
+			"prevHash":      drift.PrevHash,
+			"newHash":       drift.NewHash,
+			"addedTools":    orEmpty(drift.AddedTools),
+			"removedTools":  orEmpty(drift.RemovedTools),
+			"changedTools":  orEmpty(drift.ChangedTools),
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.alertRepo.Create(alert); err != nil {
+		fmt.Printf("⚠️  Failed to create MCP manifest drift alert for %s: %v\n", server.Name, err)
+		return
+	}
+	fmt.Printf("🚨 Created MCP manifest drift alert for %s (severity=%s)\n", server.Name, severity)
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // RecomputeFromAttestation compares the tool names an agent reported against the current baseline's
@@ -207,5 +286,6 @@ func (s *MCPManifestService) RecomputeFromAttestation(ctx context.Context, serve
 	if err := s.manifestRepo.InsertDrift(drift); err != nil {
 		return nil, err
 	}
+	s.raiseDriftAlert(serverID, drift)
 	return drift, nil
 }

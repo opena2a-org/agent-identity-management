@@ -21,6 +21,7 @@ const (
 	AlertLowTrustAttestation      AlertType = "low_trust_attestation"       // Low-trust agent attempted MCP attestation
 	AlertLowTrustAttestationBlock AlertType = "low_trust_attestation_block" // Low-trust agent blocked from attestation
 	AlertMCPCapabilityDrift       AlertType = "mcp_capability_drift"        // MCP server capability added/removed/stale
+	AlertMCPManifestDrift         AlertType = "mcp_manifest_drift"          // MCP server tool-manifest baseline drifted after it was trusted
 
 	// Authentication failure alerts
 	AlertAuthFailurePattern  AlertType = "auth_failure_pattern"  // Multiple failed auth attempts detected

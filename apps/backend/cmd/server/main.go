@@ -785,6 +785,9 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	)
 	mcpCapabilityService.SetManifestService(mcpManifestService)
 	mcpAttestationService.SetManifestService(mcpManifestService)
+	// Surface recorded manifest drift to operators as an alert (issue #275). Best-effort: when unset,
+	// drift is still recorded and logged but no alert is raised.
+	mcpManifestService.SetAlerting(repos.Alert, repos.MCPServer)
 
 	securityService := application.NewSecurityService(
 		repos.Security,
