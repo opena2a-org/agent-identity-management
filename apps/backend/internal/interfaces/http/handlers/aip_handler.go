@@ -36,6 +36,7 @@ func (h *AIPHandler) WellKnownAIP(c fiber.Ctx) error {
 			"verify":       "/api/v1/agents/{agentId}/verify",
 			"capabilities": "/api/v1/capabilities",
 			"trustScore":   "/api/v1/agents/{agentId}/trust",
+			"atc":          "/api/v1/agents/{agentId}/atc",
 			"audit":        "/api/v1/agents/{agentId}/audit",
 			"didResolve":   "/api/v1/did/{did}",
 		},
@@ -104,7 +105,7 @@ func (h *AIPHandler) ResolveDID(c fiber.Ctx) error {
 	}
 
 	// Build W3C DID Document (https://www.w3.org/TR/did-core/)
-	did := fmt.Sprintf("did:aip:aim_%s", agent.ID.String())
+	did := domain.BuildAgentDID(agent.ID)
 
 	// Build verification methods from agent's public key
 	verificationMethods := []fiber.Map{}

@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
   ThumbsUp,
+  Lock,
   Info,
   History
 } from 'lucide-react';
@@ -134,7 +135,26 @@ const factorMetadata = {
     color: 'text-pink-600',
     bgColor: 'bg-pink-500/10',
   },
+  executionIsolation: {
+    icon: Lock,
+    label: 'Execution Isolation',
+    description: 'Sandboxing and runtime isolation of agent execution (self-reported until isolation verification ships)',
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-500/10',
+  },
 };
+
+// Fallback rendering metadata for any factor key the backend emits that is not
+// yet in factorMetadata. Prevents a newly added trust factor from crashing the
+// entire breakdown tab (regression guard: the 9th factor "executionIsolation"
+// shipped server-side before this map was updated).
+const fallbackFactorMetadata = {
+  icon: Shield,
+  label: 'Trust Factor',
+  description: 'Contributing trust factor',
+  color: 'text-gray-600',
+  bgColor: 'bg-gray-500/10',
+} as const;
 
 export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScoreUpdate }: TrustScoreBreakdownProps) {
   const [breakdown, setBreakdown] = useState<TrustScoreBreakdown | null>(null);
@@ -271,7 +291,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           </CardHeader>
           <CardContent className="space-y-4">
             {Object.entries(breakdown.factors).map(([key, value]) => {
-              const metadata = factorMetadata[key as keyof typeof factorMetadata];
+              const metadata = factorMetadata[key as keyof typeof factorMetadata] ?? fallbackFactorMetadata;
               const Icon = metadata.icon;
               const weight = breakdown.weights[key as keyof typeof breakdown.weights];
               const contribution = breakdown.contributions[key as keyof typeof breakdown.contributions];
