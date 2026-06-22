@@ -99,34 +99,37 @@ type AgentTrustCredential struct {
 	Raw json.RawMessage `json:"-"`
 }
 
-// Client calls the Registry's ATC issuance endpoint.
-type Client struct {
+// ATCClient calls the Registry's ATC issuance endpoint. It is named distinctly
+// from the registry bridge Client (a separate, cloud-deployment registry client
+// in this same package) so the two do not collide when the cloud build composes
+// both into package registry.
+type ATCClient struct {
 	baseURL    string
 	token      string
 	httpClient *http.Client
 }
 
-// NewClientFromEnv builds a Client from REGISTRY_BRIDGE_URL (shared with the
-// bridge service, default https://api.oa2a.org) and REGISTRY_ATC_TOKEN (the
+// NewATCClientFromEnv builds an ATCClient from REGISTRY_BRIDGE_URL (shared with
+// the bridge service, default https://api.oa2a.org) and REGISTRY_ATC_TOKEN (the
 // new service-account bearer provisioned in Phase C).
-func NewClientFromEnv() *Client {
+func NewATCClientFromEnv() *ATCClient {
 	base := strings.TrimSpace(os.Getenv("REGISTRY_BRIDGE_URL"))
 	if base == "" {
 		base = defaultRegistryURL
 	}
-	return &Client{
+	return &ATCClient{
 		baseURL:    strings.TrimRight(base, "/"),
 		token:      strings.TrimSpace(os.Getenv("REGISTRY_ATC_TOKEN")),
 		httpClient: &http.Client{Timeout: atcClientTimeout},
 	}
 }
 
-// NewClient builds a Client with explicit configuration (used by tests).
-func NewClient(baseURL, token string, httpClient *http.Client) *Client {
+// NewATCClient builds an ATCClient with explicit configuration (used by tests).
+func NewATCClient(baseURL, token string, httpClient *http.Client) *ATCClient {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: atcClientTimeout}
 	}
-	return &Client{
+	return &ATCClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		token:      strings.TrimSpace(token),
 		httpClient: httpClient,
@@ -136,7 +139,7 @@ func NewClient(baseURL, token string, httpClient *http.Client) *Client {
 // IssueATC POSTs the issuance request to the Registry and returns the signed
 // credential. Errors fail closed: a missing token, a transport failure, or a
 // non-2xx status all return an error rather than a partial credential.
-func (c *Client) IssueATC(ctx context.Context, req ATCIssuanceRequest) (*AgentTrustCredential, error) {
+func (c *ATCClient) IssueATC(ctx context.Context, req ATCIssuanceRequest) (*AgentTrustCredential, error) {
 	if c.token == "" {
 		return nil, ErrTokenNotConfigured
 	}
