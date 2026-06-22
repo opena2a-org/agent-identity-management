@@ -65,7 +65,7 @@ func TestClient_IssueATC_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, "secret-token", nil)
+	c := NewATCClient(srv.URL, "secret-token", nil)
 	cred, err := c.IssueATC(context.Background(), sampleRequest())
 	if err != nil {
 		t.Fatalf("IssueATC returned error: %v", err)
@@ -112,7 +112,7 @@ func TestClient_IssueATC_Success(t *testing.T) {
 }
 
 func TestClient_IssueATC_MissingToken(t *testing.T) {
-	c := NewClient("https://example.invalid", "", nil)
+	c := NewATCClient("https://example.invalid", "", nil)
 	_, err := c.IssueATC(context.Background(), sampleRequest())
 	if !errors.Is(err, ErrTokenNotConfigured) {
 		t.Fatalf("expected ErrTokenNotConfigured, got %v", err)
@@ -126,7 +126,7 @@ func TestClient_IssueATC_Non2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, "tok", nil)
+	c := NewATCClient(srv.URL, "tok", nil)
 	_, err := c.IssueATC(context.Background(), sampleRequest())
 	if err == nil {
 		t.Fatal("expected error on 403, got nil")

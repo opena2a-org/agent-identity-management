@@ -886,7 +886,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Agent,
 		repos.Organization,
 		trustCalculator,
-		registry.NewClientFromEnv(),
+		registry.NewATCClientFromEnv(),
 	)
 
 	// Community Intelligence: opt-in anonymized trust factor telemetry
