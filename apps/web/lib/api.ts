@@ -986,6 +986,7 @@ class APIClient {
       age: number;
       driftDetection: number;
       userFeedback: number;
+      executionIsolation: number;
     };
     weights: {
       verificationStatus: number;
@@ -996,6 +997,7 @@ class APIClient {
       age: number;
       driftDetection: number;
       userFeedback: number;
+      executionIsolation: number;
     };
     contributions: {
       verificationStatus: number;
@@ -1006,6 +1008,7 @@ class APIClient {
       age: number;
       driftDetection: number;
       userFeedback: number;
+      executionIsolation: number;
     };
     confidence: number;
     calculatedAt: string;

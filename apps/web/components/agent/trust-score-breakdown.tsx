@@ -13,7 +13,7 @@ import {
   Clock,
   TrendingUp,
   ThumbsUp,
-  Lock,
+  Box,
   Info,
   History
 } from 'lucide-react';
@@ -40,6 +40,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   weights: {
     verificationStatus: number;
@@ -50,6 +51,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   contributions: {
     verificationStatus: number;
@@ -60,6 +62,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   confidence: number;
   calculatedAt: string;
@@ -136,11 +139,11 @@ const factorMetadata = {
     bgColor: 'bg-pink-500/10',
   },
   executionIsolation: {
-    icon: Lock,
+    icon: Box,
     label: 'Execution Isolation',
-    description: 'Sandboxing and runtime isolation of agent execution (self-reported until isolation verification ships)',
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-500/10',
+    description: 'Self-reported runtime isolation posture (sandbox, network, filesystem, process). Defaults to a low baseline until the agent reports it.',
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-500/10',
   },
 };
 
@@ -221,7 +224,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardDescription>Loading trust score analysis...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(9)].map((_, i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-4 w-48" />
               <Skeleton className="h-3 w-full" />
@@ -256,7 +259,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardHeader>
             <CardTitle>Overall Trust Score</CardTitle>
             <CardDescription>
-              Weighted average of 8 behavioral and security factors
+              Weighted average of 9 behavioral and security factors
             </CardDescription>
           </CardHeader>
           <CardContent>

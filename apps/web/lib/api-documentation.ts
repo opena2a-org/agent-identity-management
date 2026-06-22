@@ -3035,6 +3035,63 @@ export const apiDocumentation: EndpointCategory[] = [
 }`,
       },
       {
+        method: "POST",
+        path: "/api/v1/sdk-api/agents/:id/isolation",
+        description:
+          "Self-report the agent's runtime isolation posture (sandbox, network, filesystem, process). The server computes the execution-isolation trust factor from the posture; the agent cannot submit a score directly, and an agent may only attest its own posture. The posture is self-reported and not independently verified.",
+        summary: "SDK: Report isolation posture",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "trust", "isolation"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            sandbox: {
+              type: "string",
+              description:
+                "Sandbox type: none, docker, vm, gvisor, firecracker, wasm, kata",
+              required: true,
+            },
+            network: {
+              type: "string",
+              description:
+                "Network isolation: none, firewall, namespace, vpc, airgap",
+              required: true,
+            },
+            filesystem: {
+              type: "string",
+              description:
+                "Filesystem isolation: none, chroot, tmpfs, readonly, overlay",
+              required: true,
+            },
+            process: {
+              type: "string",
+              description:
+                "Process isolation: none, pidns, seccomp, apparmor, selinux, full",
+              required: true,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Attestation record ID" },
+            agentId: { type: "string", description: "Agent ID" },
+            score: {
+              type: "number",
+              description: "Computed isolation score (0-1)",
+            },
+            reportedAt: { type: "string", description: "Report timestamp" },
+          },
+        },
+        example: `{
+  "sandbox": "firecracker",
+  "network": "airgap",
+  "filesystem": "readonly",
+  "process": "full"
+}`,
+      },
+      {
         method: "GET",
         path: "/api/v1/sdk-api/agents/:id/mcp-servers",
         description:
