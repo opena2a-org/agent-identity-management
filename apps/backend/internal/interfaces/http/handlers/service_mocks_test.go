@@ -38,6 +38,7 @@ type MockAgentServiceImpl struct {
 	VerifyCapabilityFunc           func(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (allowed bool, reason string, auditID uuid.UUID, err error)
 	LogCapabilityResultFunc        func(ctx context.Context, agentID uuid.UUID, auditID uuid.UUID, success bool, errorMsg string, result map[string]interface{}) error
 	HasCapabilityFunc              func(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
+	HasCapabilityNoAlertFunc       func(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
 	UpdateLastActiveFunc           func(ctx context.Context, agentID uuid.UUID) error
 	DetectMCPServersFromConfigFunc func(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
 	// PQC methods
@@ -197,6 +198,16 @@ func (m *MockAgentServiceImpl) LogCapabilityResult(ctx context.Context, agentID 
 }
 
 func (m *MockAgentServiceImpl) HasCapability(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error) {
+	if m.HasCapabilityFunc != nil {
+		return m.HasCapabilityFunc(ctx, agentID, capabilityToCheck, resource)
+	}
+	return true, nil
+}
+
+func (m *MockAgentServiceImpl) HasCapabilityNoAlert(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error) {
+	if m.HasCapabilityNoAlertFunc != nil {
+		return m.HasCapabilityNoAlertFunc(ctx, agentID, capabilityToCheck, resource)
+	}
 	if m.HasCapabilityFunc != nil {
 		return m.HasCapabilityFunc(ctx, agentID, capabilityToCheck, resource)
 	}
@@ -387,6 +398,7 @@ type MockCapabilityServiceImpl struct {
 	VerifyActionFunc                  func(ctx context.Context, agentID uuid.UUID, requestedCapability string, signature []byte, payload []byte, sourceIP *string, metadata map[string]interface{}) (*application.VerificationResult, error)
 	GrantCapabilityFunc               func(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error)
 	RevokeCapabilityFunc              func(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
+	MarkHoneytokenFunc                func(ctx context.Context, capabilityID uuid.UUID, honeytoken bool, markedBy *uuid.UUID) (*domain.AgentCapability, error)
 	GetCapabilityByIDFunc             func(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error)
 	GetAgentCapabilitiesFunc          func(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
 	GetCapabilitiesByAgentIDsFunc     func(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error)
@@ -417,6 +429,13 @@ func (m *MockCapabilityServiceImpl) RevokeCapability(ctx context.Context, capabi
 		return m.RevokeCapabilityFunc(ctx, capabilityID, revokedBy)
 	}
 	return nil
+}
+
+func (m *MockCapabilityServiceImpl) MarkHoneytoken(ctx context.Context, capabilityID uuid.UUID, honeytoken bool, markedBy *uuid.UUID) (*domain.AgentCapability, error) {
+	if m.MarkHoneytokenFunc != nil {
+		return m.MarkHoneytokenFunc(ctx, capabilityID, honeytoken, markedBy)
+	}
+	return nil, nil
 }
 
 func (m *MockCapabilityServiceImpl) GetCapabilityByID(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error) {

@@ -706,6 +706,10 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Organization,       // ✅ NEW: Inject OrganizationRepository for checking enforcement mode
 		capabilityRequestService, // NEW: For mode-aware capability approval workflow on re-registration
 	)
+	// Wire the audit-log repo so a honeytoken verification hit records an audit
+	// event alongside the high-severity alert (issue #293). Setter-injected to keep
+	// the constructor signature stable.
+	agentService.SetHoneytokenAuditing(repos.AuditLog)
 
 	apiKeyService := application.NewAPIKeyService(
 		repos.APIKey,
@@ -1751,6 +1755,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Get("/:id/capabilities", h.Capability.GetAgentCapabilities)
 	agents.Post("/:id/capabilities", middleware.ManagerMiddleware(), h.Capability.GrantCapability)
 	agents.Delete("/:id/capabilities/:capabilityId", middleware.ManagerMiddleware(), h.Capability.RevokeCapability)
+	agents.Put("/:id/capabilities/:capabilityId/honeytoken", middleware.ManagerMiddleware(), h.Capability.MarkHoneytoken) // issue #293: operator marks/unmarks a granted capability as a honeytoken decoy
 
 	// Agent violation routes (under /agents/:id/violations)
 	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)

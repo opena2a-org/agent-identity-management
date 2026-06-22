@@ -420,6 +420,11 @@ func (m *SharedMockCapabilityRepository) DeleteCapability(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *SharedMockCapabilityRepository) SetHoneytoken(id uuid.UUID, honeytoken bool) error {
+	args := m.Called(id, honeytoken)
+	return args.Error(0)
+}
+
 func (m *SharedMockCapabilityRepository) UpdateCapability(capability *domain.AgentCapability) error {
 	args := m.Called(capability)
 	return args.Error(0)

@@ -297,7 +297,10 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Medium/High-risk actions: Alert if action is denied or lacks capability
 	// SECURITY: No debug logging to prevent information leakage
 	shouldCreateAlert := false
-	hasCapability, err := h.getAgentService().HasCapability(c.Context(), agentID, req.Capability, req.Resource)
+	// HasCapabilityNoAlert (not HasCapability): VerifyCapability above already ran
+	// honeytoken detection for this request; using the alerting variant here would
+	// double-fire the honeytoken alert/audit for a single verification (#293).
+	hasCapability, err := h.getAgentService().HasCapabilityNoAlert(c.Context(), agentID, req.Capability, req.Resource)
 	if err == nil && !hasCapability {
 		// Determine if this action warrants an alert based on risk level and approval status
 		isLowRisk := isLowRiskCapability(req.Capability)

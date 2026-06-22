@@ -154,6 +154,15 @@ func (m *MockCapabilityRepoForCapReq) RevokeCapability(id uuid.UUID, revokedAt t
 	return nil
 }
 
+func (m *MockCapabilityRepoForCapReq) SetHoneytoken(id uuid.UUID, honeytoken bool) error {
+	cap, ok := m.capabilities[id]
+	if !ok {
+		return errors.New("capability not found")
+	}
+	cap.Honeytoken = honeytoken
+	return nil
+}
+
 func (m *MockCapabilityRepoForCapReq) DeleteCapability(id uuid.UUID) error {
 	delete(m.capabilities, id)
 	return nil
