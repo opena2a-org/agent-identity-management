@@ -34,10 +34,11 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		Action:     "read",
 	}
 
-	t.Run("non-empty class is classified", func(t *testing.T) {
+	t.Run("classified non-empty class is classified and blocks", func(t *testing.T) {
 		srv := stubDaemon(t, map[string]interface{}{
-			"attackClass": "exfiltration_pattern",
-			"confidence":  0.95,
+			"attackClass":    "exfiltration_pattern",
+			"confidence":     0.95,
+			"classification": "classified",
 		})
 		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
 		got := engine.checkIntentSync(context.Background(), req)
@@ -46,7 +47,38 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		assert.True(t, got.Blocked)
 	})
 
-	t.Run("empty class is abstain", func(t *testing.T) {
+	t.Run("classified empty class is a confident benign, not abstain", func(t *testing.T) {
+		// The #131 Stage 1 distinction: an explicit "classified" with an empty
+		// attack class is a confident benign — it must NOT read as abstain.
+		srv := stubDaemon(t, map[string]interface{}{
+			"attackClass":    "",
+			"confidence":     0.95,
+			"classification": "classified",
+		})
+		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
+		got := engine.checkIntentSync(context.Background(), req)
+		require.NotNil(t, got)
+		assert.Equal(t, intentStatusClassified, got.Status)
+		assert.False(t, got.Blocked)
+	})
+
+	t.Run("explicit abstain is abstain", func(t *testing.T) {
+		srv := stubDaemon(t, map[string]interface{}{
+			"attackClass":    "",
+			"confidence":     0.31,
+			"classification": "abstain",
+		})
+		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
+		got := engine.checkIntentSync(context.Background(), req)
+		require.NotNil(t, got)
+		assert.Equal(t, intentStatusAbstain, got.Status)
+		assert.False(t, got.Blocked)
+	})
+
+	t.Run("legacy empty class is abstain via fallback", func(t *testing.T) {
+		// Pre-0.4.0 daemon: no classification field. The fallback heuristic
+		// (empty attackClass == abstain) preserves behavior for mixed-version
+		// deploys.
 		srv := stubDaemon(t, map[string]interface{}{
 			"attackClass": "",
 			"confidence":  0.95,
@@ -55,6 +87,47 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		got := engine.checkIntentSync(context.Background(), req)
 		require.NotNil(t, got)
 		assert.Equal(t, intentStatusAbstain, got.Status)
+		assert.False(t, got.Blocked)
+	})
+
+	t.Run("abstain label with live high-confidence attack fails closed", func(t *testing.T) {
+		// A self-contradictory daemon response (abstain label + live attack
+		// class) must not be silently allowed. Evidence beats label: it blocks
+		// and is recorded as classified. This is the symmetric defense to the
+		// 500-path "status wins" guard, applied to the 2xx body.
+		srv := stubDaemon(t, map[string]interface{}{
+			"attackClass":    "exfiltration_pattern",
+			"confidence":     0.99,
+			"classification": "abstain",
+		})
+		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
+		got := engine.checkIntentSync(context.Background(), req)
+		require.NotNil(t, got)
+		assert.True(t, got.Blocked, "a live high-confidence attack must block regardless of an abstain label")
+		assert.Equal(t, intentStatusClassified, got.Status)
+	})
+
+	t.Run("daemon non-2xx is fail_open not abstain", func(t *testing.T) {
+		// The closed hole: a daemon HTTP 500 (engine error) used to decode to
+		// attackClass:"" and be counted as a clean abstain, hiding the infra
+		// failure. It must now be fail_open. The daemon's 500 body still carries
+		// classification:"abstain" as a fallback for dumber consumers; the
+		// status code wins here.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":          "inference_error",
+				"attackClass":    "",
+				"classification": "abstain",
+				"confidence":     0,
+			})
+		}))
+		t.Cleanup(srv.Close)
+		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
+		got := engine.checkIntentSync(context.Background(), req)
+		require.NotNil(t, got)
+		assert.Equal(t, intentStatusFailOpen, got.Status)
 		assert.False(t, got.Blocked)
 	})
 
