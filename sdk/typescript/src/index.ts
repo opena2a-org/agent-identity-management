@@ -226,9 +226,14 @@ export {
 // powered by the shared conformance-locked @opena2a/atx-verify verifier).
 export {
   LocalVerifier,
+  CrlCache,
   type LocalVerificationConfig,
   type LocalAuthorizationOptions,
   type LocalAuthorizationResult,
+  type CrlData,
+  type CrlStalePolicy,
+  type CrlCacheConfig,
+  type CrlCacheStatus,
   type Atx,
   type AtxPublicKey,
   type AtxTrustAnchors,

@@ -922,3 +922,230 @@ func TestTrustScoreHandler_SubmitUserFeedback_CrossOrgDenied(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
+
+// ===========================
+// SubmitIsolationAttestation Tests
+// ===========================
+
+func submitIsolationRequest(agentID uuid.UUID, jsonBody string) *http.Request {
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/isolation", strings.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+// agentAuthIsolationApp mimics the SDK (Ed25519) path: the agent-auth middleware
+// sets organization_id and agent_id (the authenticated caller), but NOT user_id.
+func agentAuthIsolationApp(handler fiber.Handler, orgID, authAgentID uuid.UUID) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("agent_id", authAgentID)
+		return c.Next()
+	})
+	app.Post("/agents/:id/isolation", handler)
+	return app
+}
+
+// userAuthIsolationApp mimics the JWT path: organization_id and user_id are set
+// (an operator), but there is no agent_id.
+func userAuthIsolationApp(handler fiber.Handler, orgID, userID uuid.UUID) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", userID)
+		return c.Next()
+	})
+	app.Post("/agents/:id/isolation", handler)
+	return app
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_AgentSelfReport(t *testing.T) {
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+	}
+
+	var captured struct {
+		agentID    uuid.UUID
+		sandbox    domain.SandboxType
+		network    domain.NetworkIsolation
+		filesystem domain.FilesystemIsolation
+		process    domain.ProcessIsolation
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordIsolationAttestationFunc: func(ctx context.Context, aID uuid.UUID, s domain.SandboxType, n domain.NetworkIsolation, f domain.FilesystemIsolation, p domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
+			captured.agentID, captured.sandbox, captured.network, captured.filesystem, captured.process = aID, s, n, f, p
+			return &domain.IsolationAttestation{ID: uuid.New(), AgentID: aID, Sandbox: s, Network: n, Filesystem: f, Process: p, Score: domain.ScoreIsolation(s, n, f, p), ReportedAt: time.Now()}, nil
+		},
+	}
+
+	// Agent (Ed25519) auth has no user_id, so the handler must use the agent audit path.
+	loggedAgentAction := false
+	auditMock := &MockAuditServiceImpl{
+		LogActionFunc: func(ctx context.Context, oID, uID uuid.UUID, action domain.AuditAction, rt string, rID uuid.UUID, ip, ua string, md map[string]interface{}) error {
+			t.Fatal("LogAction (user audit) should not be called for agent self-report")
+			return nil
+		},
+		LogAgentActionFunc: func(ctx context.Context, oID, aID uuid.UUID, action domain.AuditAction, rt string, rID uuid.UUID, ip, ua string, md map[string]interface{}) error {
+			loggedAgentAction = true
+			return nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, auditMock)
+	app := agentAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, agentID)
+
+	resp, err := app.Test(submitIsolationRequest(agentID, `{"sandbox":"firecracker","network":"airgap","filesystem":"readonly","process":"full"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+	assert.Equal(t, agentID, captured.agentID, "must scope to the path agent, not the body")
+	assert.Equal(t, domain.SandboxFirecracker, captured.sandbox)
+	assert.Equal(t, domain.NetworkAirgap, captured.network)
+	assert.True(t, loggedAgentAction, "agent self-report must be audited via LogAgentAction")
+
+	var result map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 1.0, result["score"], "max posture must yield score 1.0 computed server-side")
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_InvalidPosture(t *testing.T) {
+	orgID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordIsolationAttestationFunc: func(ctx context.Context, aID uuid.UUID, s domain.SandboxType, n domain.NetworkIsolation, f domain.FilesystemIsolation, p domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
+			return nil, domain.ValidateIsolationPosture(s, n, f, p)
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	app := agentAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, agentID)
+
+	// An unrecognized value on any enum, and a missing (empty) posture, must all
+	// be rejected with 400 rather than persisted as a real zero-score attestation.
+	for _, body := range []string{
+		`{"sandbox":"bogus-sandbox","network":"none","filesystem":"none","process":"none"}`,
+		`{"sandbox":"docker","network":"mesh","filesystem":"none","process":"none"}`,
+		`{"sandbox":"docker","network":"none","filesystem":"none"}`, // process empty -> invalid
+		`{}`, // nothing reported -> empty enums -> invalid
+	} {
+		resp, err := app.Test(submitIsolationRequest(agentID, body))
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode, "body %s should be a 400, not a silent zero-score attestation", body)
+		resp.Body.Close()
+	}
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_CrossOrgDenied(t *testing.T) {
+	orgID := uuid.New()
+	otherOrgID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: otherOrgID, Name: "other-org-agent"}, nil
+		},
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordIsolationAttestationFunc: func(ctx context.Context, aID uuid.UUID, s domain.SandboxType, n domain.NetworkIsolation, f domain.FilesystemIsolation, p domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
+			t.Fatal("RecordIsolationAttestation should not be called for a cross-org agent")
+			return nil, nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	app := agentAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, agentID)
+
+	resp, err := app.Test(submitIsolationRequest(agentID, `{"sandbox":"docker","network":"firewall","filesystem":"tmpfs","process":"seccomp"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_CrossAgentDenied(t *testing.T) {
+	orgID := uuid.New()
+	authAgentID := uuid.New()   // the authenticated SDK caller
+	targetAgentID := uuid.New() // a DIFFERENT agent in the same org
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: targetAgentID, OrganizationID: orgID, Name: "sibling-agent"}, nil
+		},
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{
+		RecordIsolationAttestationFunc: func(ctx context.Context, aID uuid.UUID, s domain.SandboxType, n domain.NetworkIsolation, f domain.FilesystemIsolation, p domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
+			t.Fatal("an agent must not be able to attest for a different agent, even in its own org")
+			return nil, nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
+	// Authenticated as authAgentID, but POSTing to a different agent's path.
+	app := agentAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, authAgentID)
+
+	resp, err := app.Test(submitIsolationRequest(targetAgentID, `{"sandbox":"firecracker","network":"airgap","filesystem":"readonly","process":"full"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode, "an agent self-report endpoint must not let one agent attest for another")
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_UserJWTPathAuditsAsUser(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	agentMock := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+	}
+	trustMock := &MockTrustCalculatorServicerImpl{}
+
+	loggedUserAction := false
+	auditMock := &MockAuditServiceImpl{
+		LogActionFunc: func(ctx context.Context, oID, uID uuid.UUID, action domain.AuditAction, rt string, rID uuid.UUID, ip, ua string, md map[string]interface{}) error {
+			loggedUserAction = true
+			assert.Equal(t, userID, uID, "user audit must attribute to the JWT user")
+			return nil
+		},
+		LogAgentActionFunc: func(ctx context.Context, oID, aID uuid.UUID, action domain.AuditAction, rt string, rID uuid.UUID, ip, ua string, md map[string]interface{}) error {
+			t.Fatal("LogAgentAction should not be called when a user (JWT) submits the attestation")
+			return nil
+		},
+	}
+
+	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, auditMock)
+	// JWT/operator path: user_id present, no agent_id -> may attest on the agent's behalf.
+	app := userAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, userID)
+
+	resp, err := app.Test(submitIsolationRequest(agentID, `{"sandbox":"docker","network":"firewall","filesystem":"tmpfs","process":"seccomp"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+	assert.True(t, loggedUserAction, "operator (JWT) submission must be audited via LogAction")
+}
+
+func TestTrustScoreHandler_SubmitIsolationAttestation_MissingOrgContext(t *testing.T) {
+	agentID := uuid.New()
+	handler := NewTrustScoreHandlerWithInterfaces(&MockTrustCalculatorServicerImpl{}, &MockAgentServiceImpl{}, &MockAuditServiceImpl{})
+
+	// No locals set at all (neither org nor user) -> unauthenticated.
+	app := fiber.New()
+	app.Post("/agents/:id/isolation", handler.SubmitIsolationAttestation)
+
+	resp, err := app.Test(submitIsolationRequest(agentID, `{"sandbox":"docker","network":"none","filesystem":"none","process":"none"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}

@@ -28,8 +28,8 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 
 	query := `
 		INSERT INTO agent_capabilities (
-			id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, created_at, updated_at, honeytoken
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	capability.ID = uuid.New()
@@ -49,6 +49,7 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 		capability.GrantedAt,
 		capability.CreatedAt,
 		capability.UpdatedAt,
+		capability.Honeytoken,
 	)
 
 	return err
@@ -57,7 +58,7 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 // GetCapabilityByID retrieves a capability by ID
 func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at, honeytoken
 		FROM agent_capabilities
 		WHERE id = $1
 	`
@@ -78,6 +79,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.
 		&revokedAt,
 		&capability.CreatedAt,
 		&capability.UpdatedAt,
+		&capability.Honeytoken,
 	)
 
 	if err != nil {
@@ -100,7 +102,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilityByID(id uuid.UUID) (*domain.
 // GetCapabilitiesByAgentID retrieves all capabilities for an agent
 func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUID) ([]*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at, honeytoken
 		FROM agent_capabilities
 		WHERE agent_id = $1
 		ORDER BY created_at DESC
@@ -130,6 +132,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUI
 			&revokedAt,
 			&capability.CreatedAt,
 			&capability.UpdatedAt,
+			&capability.Honeytoken,
 		)
 
 		if err != nil {
@@ -155,7 +158,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentID(agentID uuid.UUI
 // GetActiveCapabilitiesByAgentID retrieves only non-revoked capabilities
 func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uuid.UUID) ([]*domain.AgentCapability, error) {
 	query := `
-		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at, honeytoken
 		FROM agent_capabilities
 		WHERE agent_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at DESC
@@ -185,6 +188,7 @@ func (r *CapabilityRepositoryPostgres) GetActiveCapabilitiesByAgentID(agentID uu
 			&revokedAt,
 			&capability.CreatedAt,
 			&capability.UpdatedAt,
+			&capability.Honeytoken,
 		)
 
 		if err != nil {
@@ -225,7 +229,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentIDs(agentIDs []uuid
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at
+		SELECT id, agent_id, capability_type, capability_scope, execution_mode, granted_by, granted_at, revoked_at, created_at, updated_at, honeytoken
 		FROM agent_capabilities
 		WHERE agent_id IN (%s)`, strings.Join(placeholders, ","))
 	if activeOnly {
@@ -256,6 +260,7 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentIDs(agentIDs []uuid
 			&revokedAt,
 			&capability.CreatedAt,
 			&capability.UpdatedAt,
+			&capability.Honeytoken,
 		)
 
 		if err != nil {
@@ -287,6 +292,18 @@ func (r *CapabilityRepositoryPostgres) RevokeCapability(id uuid.UUID, revokedAt 
 	`
 
 	_, err := r.db.Exec(query, revokedAt, time.Now(), id)
+	return err
+}
+
+// SetHoneytoken marks or unmarks a granted capability as a honeytoken (issue #293).
+func (r *CapabilityRepositoryPostgres) SetHoneytoken(id uuid.UUID, honeytoken bool) error {
+	query := `
+		UPDATE agent_capabilities
+		SET honeytoken = $1, updated_at = $2
+		WHERE id = $3
+	`
+
+	_, err := r.db.Exec(query, honeytoken, time.Now(), id)
 	return err
 }
 

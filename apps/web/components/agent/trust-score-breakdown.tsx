@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
   ThumbsUp,
+  Box,
   Info,
   History
 } from 'lucide-react';
@@ -39,6 +40,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   weights: {
     verificationStatus: number;
@@ -49,6 +51,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   contributions: {
     verificationStatus: number;
@@ -59,6 +62,7 @@ interface TrustScoreBreakdown {
     age: number;
     driftDetection: number;
     userFeedback: number;
+    executionIsolation: number;
   };
   confidence: number;
   calculatedAt: string;
@@ -134,7 +138,26 @@ const factorMetadata = {
     color: 'text-pink-600',
     bgColor: 'bg-pink-500/10',
   },
+  executionIsolation: {
+    icon: Box,
+    label: 'Execution Isolation',
+    description: 'Self-reported runtime isolation posture (sandbox, network, filesystem, process). Defaults to a low baseline until the agent reports it.',
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-500/10',
+  },
 };
+
+// Fallback rendering metadata for any factor key the backend emits that is not
+// yet in factorMetadata. Prevents a newly added trust factor from crashing the
+// entire breakdown tab (regression guard: the 9th factor "executionIsolation"
+// shipped server-side before this map was updated).
+const fallbackFactorMetadata = {
+  icon: Shield,
+  label: 'Trust Factor',
+  description: 'Contributing trust factor',
+  color: 'text-gray-600',
+  bgColor: 'bg-gray-500/10',
+} as const;
 
 export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScoreUpdate }: TrustScoreBreakdownProps) {
   const [breakdown, setBreakdown] = useState<TrustScoreBreakdown | null>(null);
@@ -201,7 +224,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardDescription>Loading trust score analysis...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(9)].map((_, i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-4 w-48" />
               <Skeleton className="h-3 w-full" />
@@ -236,7 +259,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardHeader>
             <CardTitle>Overall Trust Score</CardTitle>
             <CardDescription>
-              Weighted average of 8 behavioral and security factors
+              Weighted average of 9 behavioral and security factors
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -271,7 +294,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           </CardHeader>
           <CardContent className="space-y-4">
             {Object.entries(breakdown.factors).map(([key, value]) => {
-              const metadata = factorMetadata[key as keyof typeof factorMetadata];
+              const metadata = factorMetadata[key as keyof typeof factorMetadata] ?? fallbackFactorMetadata;
               const Icon = metadata.icon;
               const weight = breakdown.weights[key as keyof typeof breakdown.weights];
               const contribution = breakdown.contributions[key as keyof typeof breakdown.contributions];

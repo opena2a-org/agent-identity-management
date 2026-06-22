@@ -159,3 +159,46 @@ func TestScoreIsolation_PartialIsolation(t *testing.T) {
 	score2 := ScoreIsolation(SandboxNone, NetworkNamespace, FilesystemOverlay, ProcessAppArmor)
 	assert.InDelta(t, 0.42, score2, 0.001)
 }
+
+// ============================================================================
+// TEST: posture validation (ingest guard)
+// ============================================================================
+
+func TestValidateIsolationPosture_AllValid(t *testing.T) {
+	err := ValidateIsolationPosture(SandboxFirecracker, NetworkAirgap, FilesystemReadOnly, ProcessFull)
+	assert.NoError(t, err)
+
+	// "none" across the board is a legitimate posture (no isolation), not invalid.
+	err = ValidateIsolationPosture(SandboxNone, NetworkNone, FilesystemNone, ProcessNone)
+	assert.NoError(t, err)
+}
+
+func TestValidateIsolationPosture_RejectsUnknownValues(t *testing.T) {
+	cases := []struct {
+		name       string
+		sandbox    SandboxType
+		network    NetworkIsolation
+		filesystem FilesystemIsolation
+		process    ProcessIsolation
+	}{
+		{"bad sandbox", SandboxType("xen"), NetworkNone, FilesystemNone, ProcessNone},
+		{"bad network", SandboxDocker, NetworkIsolation("mesh"), FilesystemNone, ProcessNone},
+		{"bad filesystem", SandboxDocker, NetworkNone, FilesystemIsolation("zfs"), ProcessNone},
+		{"bad process", SandboxDocker, NetworkNone, FilesystemNone, ProcessIsolation("nacl")},
+		{"empty sandbox", SandboxType(""), NetworkNone, FilesystemNone, ProcessNone},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Error(t, ValidateIsolationPosture(tc.sandbox, tc.network, tc.filesystem, tc.process))
+		})
+	}
+}
+
+func TestIsolationPosture_IsValid(t *testing.T) {
+	assert.True(t, SandboxKataVM.IsValid())
+	assert.True(t, NetworkVPC.IsValid())
+	assert.True(t, FilesystemOverlay.IsValid())
+	assert.True(t, ProcessSELinux.IsValid())
+	assert.False(t, SandboxType("bogus").IsValid())
+	assert.False(t, NetworkIsolation("").IsValid())
+}

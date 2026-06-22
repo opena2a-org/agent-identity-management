@@ -114,7 +114,7 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 		map[string]interface{}{
 			"agentName":  agent.Name,
 			"trustScore": score.Score,
-			"factors":     score.Factors,
+			"factors":    score.Factors,
 		},
 	)
 
@@ -170,11 +170,11 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"agentId":       agentID,
-		"agentName":     agent.Name,
-		"score":         score.Score,
-		"factors":       score.Factors,
-		"calculatedAt":  score.LastCalculated,
+		"agentId":      agentID,
+		"agentName":    agent.Name,
+		"score":        score.Score,
+		"factors":      score.Factors,
+		"calculatedAt": score.LastCalculated,
 	})
 }
 
@@ -348,6 +348,119 @@ func (h *TrustScoreHandler) SubmitUserFeedback(c fiber.Ctx) error {
 	})
 }
 
+// SubmitIsolationAttestation records an agent's self-reported runtime isolation
+// posture. This is the collection (write) side of the execution isolation trust
+// factor (factor 9): without it the factor has nothing to read and stays at the
+// 0.3 baseline. Agents call this over the SDK (Ed25519 agent auth), so the
+// posture is self-asserted and NOT independently verified; the server computes
+// the score from the posture (the agent cannot send a score) and rejects
+// unrecognized posture values.
+func (h *TrustScoreHandler) SubmitIsolationAttestation(c fiber.Ctx) error {
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Missing organization context",
+		})
+	}
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify the agent belongs to the caller's organization before accepting an
+	// attestation. Under agent (Ed25519) auth the caller is the agent itself; the
+	// org on the resolved agent must match the org the middleware authenticated.
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	// Self-attestation guard: an agent may only report its OWN posture. Under
+	// agent (Ed25519) auth the middleware sets agent_id to the authenticated
+	// caller; reject an attempt to attest for a different agent in the same org.
+	// A user/JWT caller (no agent_id local, e.g. an operator) may attest on an
+	// agent's behalf, still constrained to the org check above.
+	if authAgentID, ok := c.Locals("agent_id").(uuid.UUID); ok && authAgentID != agentID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "An agent may only attest its own isolation posture",
+		})
+	}
+
+	var body struct {
+		Sandbox    string `json:"sandbox"`
+		Network    string `json:"network"`
+		Filesystem string `json:"filesystem"`
+		Process    string `json:"process"`
+	}
+	if err := c.Bind().JSON(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	attestation, err := h.getTrustCalculator().RecordIsolationAttestation(
+		c.Context(),
+		agentID,
+		domain.SandboxType(body.Sandbox),
+		domain.NetworkIsolation(body.Network),
+		domain.FilesystemIsolation(body.Filesystem),
+		domain.ProcessIsolation(body.Process),
+	)
+	if err != nil {
+		// Unrecognized posture values are a client error; everything else is a 500.
+		if domain.ValidateIsolationPosture(
+			domain.SandboxType(body.Sandbox),
+			domain.NetworkIsolation(body.Network),
+			domain.FilesystemIsolation(body.Filesystem),
+			domain.ProcessIsolation(body.Process),
+		) != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to record isolation attestation",
+		})
+	}
+
+	// Audit: this endpoint is reachable by both agent (Ed25519) and user (JWT)
+	// auth. Attribute the action to whichever actor the middleware authenticated.
+	metadata := map[string]interface{}{
+		"agentName":    agent.Name,
+		"sandbox":      string(attestation.Sandbox),
+		"network":      string(attestation.Network),
+		"filesystem":   string(attestation.Filesystem),
+		"process":      string(attestation.Process),
+		"score":        attestation.Score,
+		"selfReported": true,
+	}
+	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
+		h.getAuditService().LogAction(c.Context(), orgID, userID, domain.AuditActionAttest, "isolation_attestation", agentID, c.IP(), c.Get("User-Agent"), metadata)
+	} else {
+		h.getAuditService().LogAgentAction(c.Context(), orgID, agentID, domain.AuditActionAttest, "isolation_attestation", agentID, c.IP(), c.Get("User-Agent"), metadata)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"id":         attestation.ID,
+		"agentId":    attestation.AgentID,
+		"sandbox":    attestation.Sandbox,
+		"network":    attestation.Network,
+		"filesystem": attestation.Filesystem,
+		"process":    attestation.Process,
+		"score":      attestation.Score,
+		"reportedAt": attestation.ReportedAt,
+	})
+}
+
 // GetTrustScoreHistory returns trust score audit trail for an agent
 // Returns complete audit trail with who changed it, when, and why
 func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
@@ -394,7 +507,7 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"agentId":   agentID,
 		"agentName": agent.Name,
-		"history":    history,
-		"total":      len(history),
+		"history":   history,
+		"total":     len(history),
 	})
 }

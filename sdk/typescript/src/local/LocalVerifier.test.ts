@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as crypto from 'node:crypto';
 import { canonicalPayload, canonicalPayloadV11 } from '@opena2a/atx-verify';
 import type { Atx } from '@opena2a/atx-verify';
-import { LocalVerifier, type LocalVerificationConfig } from './LocalVerifier';
+import { LocalVerifier, CrlCache, type LocalVerificationConfig } from './LocalVerifier';
 
 // --- test helpers: mint real Ed25519 keys and sign real ATX credentials so the
 // tests exercise the actual shared verifier, not a mock. ---
@@ -241,5 +241,105 @@ describe('LocalVerifier.authorize (local broker policy)', () => {
     expect(res.verified).toBe(false);
     expect(res.actionAllowed).toBe(false);
     expect(res.rejectCategory).toBe('EXPIRED');
+  });
+});
+
+describe('LocalVerifier with a CrlCache (async-refreshed revocation)', () => {
+  // Cache clock is independent of the ATX verification clock (FIXED_NOW).
+  function cacheClock(start = 0) {
+    let t = start;
+    return { now: () => t, advance: (ms: number) => (t += ms) };
+  }
+
+  it('rejects a credential listed in the fresh cached CRL', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const cache = new CrlCache({
+      fetch: async () => ({ entries: [{ agentId: 'agent-123', reason: 'key compromise' }] }),
+      ttlMs: 1000,
+      now: cacheClock().now,
+    });
+    await cache.refreshNow();
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const result = await verifier.verifyCredential(atx);
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('REVOKED');
+  });
+
+  it('verifies when the agent is absent from the fresh cached CRL', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const cache = new CrlCache({
+      fetch: async () => ({ entries: [{ agentId: 'someone-else' }] }),
+      ttlMs: 1000,
+      now: cacheClock().now,
+    });
+    await cache.refreshNow();
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const result = await verifier.verifyCredential(atx);
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('soft-opens on revocation when the cache is stale (default policy)', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const ck = cacheClock();
+    const cache = new CrlCache({
+      // The list WOULD revoke this agent, but it goes stale before verification.
+      fetch: async () => ({ entries: [{ agentId: 'agent-123' }] }),
+      ttlMs: 1000,
+      now: ck.now,
+    });
+    await cache.refreshNow();
+    ck.advance(1001); // stale: beyond TTL
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const result = await verifier.verifyCredential(atx);
+
+    // Revocation is not enforced on a stale list (signature/expiry/issuer stay hard).
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails closed on a stale cache when onStale is "reject"', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const ck = cacheClock();
+    const cache = new CrlCache({
+      fetch: async () => ({ entries: [] }), // even an empty (no-revocations) list
+      ttlMs: 1000,
+      onStale: 'reject',
+      now: ck.now,
+    });
+    await cache.refreshNow();
+    ck.advance(1001); // stale
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const result = await verifier.verifyCredential(atx);
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('REVOKED');
+    expect(result.reason).toMatch(/stale/i);
+  });
+
+  it('authorize() denies a revoked-by-cache credential', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const cache = new CrlCache({
+      fetch: async () => ({ entries: [{ agentId: 'agent-123' }] }),
+      ttlMs: 1000,
+      now: cacheClock().now,
+    });
+    await cache.refreshNow();
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const res = await verifier.authorize(atx, { action: 'file:read' });
+
+    expect(res.verified).toBe(false);
+    expect(res.actionAllowed).toBe(false);
+    expect(res.rejectCategory).toBe('REVOKED');
   });
 });
