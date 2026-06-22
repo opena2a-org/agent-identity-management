@@ -24,6 +24,14 @@ type TrustCalculator struct {
 	isolationRepo         domain.IsolationAttestationRepository
 	userFeedbackRepo      domain.UserFeedbackRepository
 	tmeProvider           NanoMindTMEProvider
+	mcpConnRepo           MCPConnectionLister
+}
+
+// MCPConnectionLister resolves the MCP servers an agent is connected to. The drift
+// factor needs it because MCP drift alerts are keyed by server ID, not agent ID, so
+// an agent's drift signal must be gathered across the servers it actually uses (#314).
+type MCPConnectionLister interface {
+	ListByAgent(ctx context.Context, agentID uuid.UUID) ([]*domain.AgentMCPConnection, error)
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -90,6 +98,14 @@ func (c *TrustCalculator) SetIsolationRepo(repo domain.IsolationAttestationRepos
 // Optional; when not set, the user feedback factor returns a neutral 0.5 score.
 func (c *TrustCalculator) SetUserFeedbackRepo(repo domain.UserFeedbackRepository) {
 	c.userFeedbackRepo = repo
+}
+
+// SetMCPConnectionRepo sets the agent-MCP connection repository so the drift factor
+// can attribute server-keyed MCP drift alerts to the agents connected to those servers
+// (#314). Optional; when not set, the drift factor only sees agent-keyed alerts (the
+// pre-#314 behavior, in which MCP drift never affected trust).
+func (c *TrustCalculator) SetMCPConnectionRepo(repo MCPConnectionLister) {
+	c.mcpConnRepo = repo
 }
 
 // SetTMEProvider sets the NanoMind TME provider for behavioral trust enrichment.
@@ -434,10 +450,42 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 		return 0.5 // Neutral when alert repo not available
 	}
 
-	// Query recent alerts for this agent
-	alerts, err := c.alertRepo.GetByResourceID(agent.ID, 100, 0)
+	// Gather drift-relevant alerts from two key spaces:
+	//   - agent-keyed alerts (AlertTypeConfigurationDrift is created with ResourceID = agentID)
+	//   - server-keyed MCP drift alerts for every MCP server this agent is connected to
+	//     (AlertMCPCapabilityDrift / AlertMCPManifestDrift are created with ResourceID = serverID).
+	// MCP drift is a property of the server, so its alerts are server-keyed; an agent
+	// connected to a drifted server inherits that supply-chain risk. Without the
+	// connection repo wired we fall back to agent-keyed alerts only (#314).
+	seen := make(map[uuid.UUID]bool)
+	alerts := make([]*domain.Alert, 0)
+	collect := func(in []*domain.Alert) {
+		for _, a := range in {
+			if a == nil || seen[a.ID] {
+				continue
+			}
+			seen[a.ID] = true
+			alerts = append(alerts, a)
+		}
+	}
+
+	agentAlerts, err := c.alertRepo.GetByResourceID(agent.ID, 100, 0)
 	if err != nil {
 		return 0.5 // Neutral on error
+	}
+	collect(agentAlerts)
+
+	if c.mcpConnRepo != nil {
+		if conns, connErr := c.mcpConnRepo.ListByAgent(context.Background(), agent.ID); connErr == nil {
+			for _, conn := range conns {
+				if conn == nil {
+					continue
+				}
+				if serverAlerts, sErr := c.alertRepo.GetByResourceID(conn.MCPServerID, 100, 0); sErr == nil {
+					collect(serverAlerts)
+				}
+			}
+		}
 	}
 
 	if len(alerts) == 0 {
@@ -455,7 +503,8 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 
 		// Only consider drift-related alert types
 		if alert.AlertType != domain.AlertTypeConfigurationDrift &&
-			alert.AlertType != domain.AlertMCPCapabilityDrift {
+			alert.AlertType != domain.AlertMCPCapabilityDrift &&
+			alert.AlertType != domain.AlertMCPManifestDrift {
 			continue
 		}
 
