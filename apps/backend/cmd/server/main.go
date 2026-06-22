@@ -345,6 +345,7 @@ func main() {
 	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)         // SDK MCP supply chain usage analytics
 	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                    // SDK MCP detection and integration reporting
 	sdkAPI.Post("/agents/:id/heartbeat", h.Lifecycle.Heartbeat)                                  // SDK agent heartbeat (liveness)
+	sdkAPI.Post("/agents/:id/isolation", h.TrustScore.SubmitIsolationAttestation)               // SDK self-report of runtime isolation posture (trust factor 9)
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")

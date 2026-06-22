@@ -13,17 +13,17 @@ import (
 // TrustCalculator implements domain.TrustScoreCalculator
 // Implements 9-factor trust scoring algorithm (see documentation)
 type TrustCalculator struct {
-	trustScoreRepo         domain.TrustScoreRepository
-	apiKeyRepo             domain.APIKeyRepository
-	auditRepo              domain.AuditLogRepository
-	capabilityRepo         domain.CapabilityRepository
-	agentRepo              domain.AgentRepository
-	alertRepo              domain.AlertRepository
-	verificationEventRepo  domain.VerificationEventRepository
-	snapshotRepo           domain.ComplianceSnapshotRepository
-	isolationRepo          domain.IsolationAttestationRepository
-	userFeedbackRepo       domain.UserFeedbackRepository
-	tmeProvider            NanoMindTMEProvider
+	trustScoreRepo        domain.TrustScoreRepository
+	apiKeyRepo            domain.APIKeyRepository
+	auditRepo             domain.AuditLogRepository
+	capabilityRepo        domain.CapabilityRepository
+	agentRepo             domain.AgentRepository
+	alertRepo             domain.AlertRepository
+	verificationEventRepo domain.VerificationEventRepository
+	snapshotRepo          domain.ComplianceSnapshotRepository
+	isolationRepo         domain.IsolationAttestationRepository
+	userFeedbackRepo      domain.UserFeedbackRepository
+	tmeProvider           NanoMindTMEProvider
 }
 
 // NewTrustCalculator creates a new trust calculator
@@ -36,12 +36,12 @@ func NewTrustCalculator(
 	alertRepo domain.AlertRepository,
 ) *TrustCalculator {
 	return &TrustCalculator{
-		trustScoreRepo:   trustScoreRepo,
-		apiKeyRepo:       apiKeyRepo,
-		auditRepo:        auditRepo,
-		capabilityRepo:   capabilityRepo,
-		agentRepo:        agentRepo,
-		alertRepo:        alertRepo,
+		trustScoreRepo: trustScoreRepo,
+		apiKeyRepo:     apiKeyRepo,
+		auditRepo:      auditRepo,
+		capabilityRepo: capabilityRepo,
+		agentRepo:      agentRepo,
+		alertRepo:      alertRepo,
 	}
 }
 
@@ -56,13 +56,13 @@ func NewTrustCalculatorWithVerification(
 	verificationEventRepo domain.VerificationEventRepository,
 ) *TrustCalculator {
 	return &TrustCalculator{
-		trustScoreRepo:         trustScoreRepo,
-		apiKeyRepo:             apiKeyRepo,
-		auditRepo:              auditRepo,
-		capabilityRepo:         capabilityRepo,
-		agentRepo:              agentRepo,
-		alertRepo:              alertRepo,
-		verificationEventRepo:  verificationEventRepo,
+		trustScoreRepo:        trustScoreRepo,
+		apiKeyRepo:            apiKeyRepo,
+		auditRepo:             auditRepo,
+		capabilityRepo:        capabilityRepo,
+		agentRepo:             agentRepo,
+		alertRepo:             alertRepo,
+		verificationEventRepo: verificationEventRepo,
 	}
 }
 
@@ -122,15 +122,15 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 	// Weight rebalance: Age reduced from 10% to 5%, Drift from 5% to 3%,
 	// User Feedback from 5% to 2% to make room for 10% Execution Isolation.
 	weights := map[string]float64{
-		"verification":         0.25, // Factor 1
-		"uptime":               0.15, // Factor 2
-		"success_rate":         0.15, // Factor 3
-		"security_alerts":      0.15, // Factor 4
-		"compliance":           0.10, // Factor 5
-		"age":                  0.05, // Factor 6 (reduced from 0.10)
-		"drift_detection":      0.03, // Factor 7 (reduced from 0.05)
-		"user_feedback":        0.02, // Factor 8 (reduced from 0.05)
-		"execution_isolation":  0.10, // Factor 9 (new)
+		"verification":        0.25, // Factor 1
+		"uptime":              0.15, // Factor 2
+		"success_rate":        0.15, // Factor 3
+		"security_alerts":     0.15, // Factor 4
+		"compliance":          0.10, // Factor 5
+		"age":                 0.05, // Factor 6 (reduced from 0.10)
+		"drift_detection":     0.03, // Factor 7 (reduced from 0.05)
+		"user_feedback":       0.02, // Factor 8 (reduced from 0.05)
+		"execution_isolation": 0.10, // Factor 9 (new)
 	}
 
 	score := factors.VerificationStatus*weights["verification"] +
@@ -671,4 +671,41 @@ func (c *TrustCalculator) RecordUserFeedback(ctx context.Context, agentID, orgID
 	}
 
 	return feedback, nil
+}
+
+// RecordIsolationAttestation persists an agent's self-reported runtime isolation
+// posture. This is the collection side of the execution isolation factor (factor
+// 9): without it the factor has nothing to read and stays at the 0.3 baseline.
+//
+// The posture is self-asserted by the agent and is NOT independently verified;
+// the score is computed server-side via domain.ScoreIsolation so the agent
+// cannot inject an arbitrary score, and unrecognized posture values are rejected
+// before anything is written. Independent verification of the reported posture is
+// a separate follow-up (see roadmap aim-isolation-verification).
+func (c *TrustCalculator) RecordIsolationAttestation(ctx context.Context, agentID uuid.UUID, sandbox domain.SandboxType, network domain.NetworkIsolation, filesystem domain.FilesystemIsolation, process domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
+	if c.isolationRepo == nil {
+		return nil, fmt.Errorf("isolation attestation repository not configured")
+	}
+	if err := domain.ValidateIsolationPosture(sandbox, network, filesystem, process); err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	attestation := &domain.IsolationAttestation{
+		ID:         uuid.New(),
+		AgentID:    agentID,
+		Sandbox:    sandbox,
+		Network:    network,
+		Filesystem: filesystem,
+		Process:    process,
+		Score:      domain.ScoreIsolation(sandbox, network, filesystem, process),
+		ReportedAt: now,
+		CreatedAt:  now,
+	}
+
+	if err := c.isolationRepo.Create(attestation); err != nil {
+		return nil, fmt.Errorf("failed to record isolation attestation: %w", err)
+	}
+
+	return attestation, nil
 }
