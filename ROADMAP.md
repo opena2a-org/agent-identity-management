@@ -538,7 +538,7 @@ TypeScript SDK for Node.js applications:
 
 ### Local Credential Verification in the SDKs
 **Priority**: High
-**Status**: TypeScript shipped; Java planned
+**Status**: TypeScript and Java shipped
 
 The agent trust credential is a signed credential designed to be verified
 locally: a verifier checks the signature against the issuer's cached public key in
@@ -564,6 +564,13 @@ decisions.
   key-to-issuer binding). Byte-for-byte interoperable with the TS/Go/Python
   verifiers — gated by the pinned jcs-vectors canonical hash and the shared
   conformance fixtures.
+- **Async-refreshed revocation cache — shipped (both SDKs).** A `CrlCache`
+  refreshes the revocation list on a background TTL, off the decision path; the
+  verifier reads the current cached list at verify time (never a network call).
+  When the list goes stale it soft-fails open on revocation only — signature,
+  expiry and issuer-trust stay hard — with an opt-in `reject` policy for
+  fail-closed deployments. TypeScript via `LocalVerifier`'s `crlCache`; Java via
+  `RefreshingAtxVerifier`. A warm-cache Java verify benchmarks at ~0.3 ms median.
 
 **Use Case**: High-throughput agents that must authorize actions without a central
 verification round-trip; spec-compliant offline operation.
