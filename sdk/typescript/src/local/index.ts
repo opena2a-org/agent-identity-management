@@ -3,9 +3,14 @@
  */
 export {
   LocalVerifier,
+  CrlCache,
   type LocalVerificationConfig,
   type LocalAuthorizationOptions,
   type LocalAuthorizationResult,
+  type CrlData,
+  type CrlStalePolicy,
+  type CrlCacheConfig,
+  type CrlCacheStatus,
   type Atx,
   type AtxPublicKey,
   type AtxTrustAnchors,

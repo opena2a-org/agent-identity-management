@@ -40,6 +40,10 @@ export type {
   ResolutionContext,
 } from '@opena2a/atx-verify';
 
+import { CrlCache } from './CrlCache';
+export { CrlCache } from './CrlCache';
+export type { CrlData, CrlStalePolicy, CrlCacheConfig, CrlCacheStatus } from './CrlCache';
+
 type AtxVerifyModule = typeof import('@opena2a/atx-verify');
 
 // One module load per process, shared across every LocalVerifier instance.
@@ -75,8 +79,20 @@ export interface LocalVerificationConfig {
    * controller (required to be safe with a multi-issuer anchor set).
    */
   publicKeys: AtxPublicKey[];
-  /** Cached federated revocation list. Refresh off the hot path; absence soft-fails open on revocation only. */
+  /**
+   * Static cached federated revocation list. Use this for a list you refresh yourself;
+   * for background-refreshed revocation prefer {@link LocalVerificationConfig.crlCache}.
+   * Absence soft-fails open on revocation only.
+   */
   crl?: { entries: Array<{ agentId: string; reason?: string }> };
+  /**
+   * Asynchronously-refreshed revocation cache. When set, the verifier reads the
+   * cache's current list at each verification (never on a network call) and applies
+   * the cache's stale policy: `soft-open` skips revocation once the list is beyond
+   * its TTL, `reject` fails the credential closed. Takes precedence over {@link crl}.
+   * Call {@link CrlCache.start} once to begin background refresh.
+   */
+  crlCache?: CrlCache;
   /** Injectable clock (tests). Defaults to the wall clock. */
   now?: () => Date;
 }
@@ -129,6 +145,7 @@ export interface LocalAuthorizationResult {
  */
 export class LocalVerifier {
   private readonly anchors: AtxTrustAnchors;
+  private readonly crlCache?: CrlCache;
   private verifier: AtxVerifier | null = null;
 
   constructor(config: LocalVerificationConfig) {
@@ -138,6 +155,7 @@ export class LocalVerifier {
       crl: config.crl,
       now: config.now,
     };
+    this.crlCache = config.crlCache;
   }
 
   /**
@@ -149,6 +167,19 @@ export class LocalVerifier {
   }
 
   private async getVerifier(): Promise<AtxVerifier> {
+    if (this.crlCache) {
+      // The cached CRL changes over time, so build the verifier with the current
+      // list at each call. Construction is allocation-only (it just stores the
+      // anchors); the cost is negligible next to the Ed25519 verify. `current()`
+      // is null when the list is stale — soft-open then means revocation is not
+      // enforced (signature/expiry/issuer stay hard); the `reject` policy is
+      // handled in verifyCredential before we get here.
+      const { LocalAtxVerifier } = await loadAtxVerify();
+      const crl = this.crlCache.current() ?? undefined;
+      return new LocalAtxVerifier({ ...this.anchors, crl });
+    }
+    // No CRL cache: the verifier is immutable, so build it once and reuse it (the
+    // module is loaded only on that first build, not on every call).
     if (!this.verifier) {
       const { LocalAtxVerifier } = await loadAtxVerify();
       this.verifier = new LocalAtxVerifier(this.anchors);
@@ -158,6 +189,19 @@ export class LocalVerifier {
 
   /** Cryptographically verify an ATX credential offline. No network access. */
   async verifyCredential(atx: Atx): Promise<AtxVerificationResult> {
+    // Fail-closed stale policy: when a revocation cache is configured with
+    // onStale='reject' and its list is beyond TTL, we cannot confirm the
+    // credential is unrevoked, so deny rather than soft-open. Treated as REVOKED
+    // (the closest spec category) with a reason that distinguishes it from a real
+    // revocation. soft-open caches fall through and simply verify without a CRL.
+    if (this.crlCache && this.crlCache.onStale === 'reject' && !this.crlCache.isFresh()) {
+      return {
+        valid: false,
+        rejectCategory: 'REVOKED' as RejectCategory,
+        reason:
+          'revocation list is stale (beyond TTL) and the cache stale-policy is "reject"; failing closed',
+      } as AtxVerificationResult;
+    }
     const verifier = await this.getVerifier();
     return verifier.verify(atx);
   }
