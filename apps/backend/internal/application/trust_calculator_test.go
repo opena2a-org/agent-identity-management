@@ -524,7 +524,7 @@ func TestTrustCalculator_Calculate_AllFactorsPerfectScore(t *testing.T) {
 		RepositoryURL:    "https://github.com/test/repo",
 		DocumentationURL: "https://docs.example.com",
 		Description:      "This is a comprehensive description that is definitely longer than 50 characters to ensure proper scoring.",
-		UpdatedAt:        time.Now().Add(-15 * 24 * time.Hour), // Updated recently
+		UpdatedAt:        time.Now().Add(-15 * 24 * time.Hour),  // Updated recently
 		CreatedAt:        time.Now().Add(-200 * 24 * time.Hour), // Old enough for max age score
 		Version:          "1.0.0",
 	}
@@ -1215,13 +1215,13 @@ func TestTrustCalculator_VerifiedAgentWithIsolation_HigherScore(t *testing.T) {
 
 	// Mock isolation repo to return a high-isolation attestation
 	mockIsolationRepo.On("GetLatest", agentID).Return(&domain.IsolationAttestation{
-		ID:        uuid.New(),
-		AgentID:   agentID,
-		Sandbox:   domain.SandboxFirecracker,
-		Network:   domain.NetworkAirgap,
+		ID:         uuid.New(),
+		AgentID:    agentID,
+		Sandbox:    domain.SandboxFirecracker,
+		Network:    domain.NetworkAirgap,
 		Filesystem: domain.FilesystemReadOnly,
-		Process:   domain.ProcessFull,
-		Score:     1.0, // Max isolation
+		Process:    domain.ProcessFull,
+		Score:      1.0, // Max isolation
 	}, nil)
 
 	// Calculate without isolation repo (defaults to 0.3 baseline)
