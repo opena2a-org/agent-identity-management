@@ -21,6 +21,7 @@ const (
 	AlertLowTrustAttestation      AlertType = "low_trust_attestation"       // Low-trust agent attempted MCP attestation
 	AlertLowTrustAttestationBlock AlertType = "low_trust_attestation_block" // Low-trust agent blocked from attestation
 	AlertMCPCapabilityDrift       AlertType = "mcp_capability_drift"        // MCP server capability added/removed/stale
+	AlertHoneytokenTriggered      AlertType = "honeytoken_triggered"        // A verification request matched a honeytoken capability (a decoy no real workflow uses)
 
 	// Authentication failure alerts
 	AlertAuthFailurePattern  AlertType = "auth_failure_pattern"  // Multiple failed auth attempts detected

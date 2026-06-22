@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -469,6 +470,87 @@ func (h *CapabilityHandler) RevokeCapability(c fiber.Ctx) error {
 	})
 }
 
+// MarkHoneytoken godoc
+// @Summary Mark a capability as a honeytoken
+// @Description Mark (or unmark) a granted capability as a honeytoken decoy (issue #293). Any later verification request that matches a honeytoken capability raises a high-severity alert and records an audit event. Operator-only.
+// @Tags capabilities
+// @Accept json
+// @Produce json
+// @Param agentId path string true "Agent ID"
+// @Param capabilityId path string true "Capability ID"
+// @Param request body MarkHoneytokenRequest true "Honeytoken flag"
+// @Success 200 {object} domain.AgentCapability
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /agents/{agentId}/capabilities/{capabilityId}/honeytoken [put]
+func (h *CapabilityHandler) MarkHoneytoken(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	capabilityID, err := uuid.Parse(c.Params("capabilityId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid capability ID",
+		})
+	}
+
+	var req MarkHoneytokenRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Invalid request body",
+		})
+	}
+
+	userID, err := h.getUserIDFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error: "Unauthorized",
+		})
+	}
+
+	// SECURITY: tenant-scope the capability before mutating it. MarkHoneytoken
+	// does NOT enforce org scoping internally — without this check a caller in
+	// org A could flag a capability in org B by passing the foreign UUID. Load
+	// the capability, resolve its owning agent, verify the agent's org matches
+	// the caller's. Returns 404 (not 403) for both "not found" and "exists in
+	// another org" to avoid a cross-tenant existence side channel (mirrors
+	// RevokeCapability).
+	capSvc := h.getCapabilityService()
+	capability, err := capSvc.GetCapabilityByID(c.Context(), capabilityID)
+	if err != nil || capability == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	agent, err := h.agentRepo.GetByID(capability.AgentID)
+	if err != nil || agent == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	if agent.OrganizationID != orgID {
+		respondResourceNotFound(c)
+		return nil
+	}
+
+	updated, err := capSvc.MarkHoneytoken(c.Context(), capabilityID, req.Honeytoken, &userID)
+	if err != nil {
+		// Wildcard/collision rejections are client validation errors -> 400, not 500.
+		if errors.Is(err, application.ErrHoneytokenNotAllowed) {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+				Error: err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error: err.Error(),
+		})
+	}
+
+	return c.JSON(updated)
+}
+
 // VerifyAction godoc
 // @Summary Verify an action
 // @Description Verify if an agent is authorized to perform a specific action
@@ -672,6 +754,11 @@ type GrantCapabilityRequest struct {
 	CapabilityType string                 `json:"capabilityType" validate:"required"`
 	Scope          map[string]interface{} `json:"scope,omitempty"`
 	ExecutionMode  string                 `json:"executionMode,omitempty"` // auto, notify, review
+}
+
+// MarkHoneytokenRequest toggles the honeytoken flag on a granted capability (issue #293).
+type MarkHoneytokenRequest struct {
+	Honeytoken bool `json:"honeytoken"`
 }
 
 type VerifyActionRequest struct {

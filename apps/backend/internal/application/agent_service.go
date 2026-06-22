@@ -43,6 +43,16 @@ type AgentService struct {
 	userRepo                 domain.UserRepository         // ✅ For looking up user details (audit trail)
 	orgRepo                  domain.OrganizationRepository // ✅ For checking enforcement mode
 	capabilityRequestService *CapabilityRequestService     // For routing re-registration capability adds through the mode-aware approval workflow (monitoring auto-approves, strict creates pending request)
+	auditRepo                domain.AuditLogRepository      // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
+}
+
+// SetHoneytokenAuditing wires an audit-log repository so a honeytoken verification
+// hit records an audit event in addition to the high-severity alert (issue #293).
+// Injected via a setter — mirroring SetAlerting on the MCP manifest service (#275)
+// — so the constructor and its many callers/tests stay unchanged. When unset, a
+// honeytoken hit still raises the alert; only the audit-log write is skipped.
+func (s *AgentService) SetHoneytokenAuditing(auditRepo domain.AuditLogRepository) {
+	s.auditRepo = auditRepo
 }
 
 // NewAgentService creates a new agent service
@@ -882,14 +892,170 @@ func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, cap
 		return false, nil
 	}
 
-	// Check if capability matches any granted capability
+	// Check if capability matches any granted capability. We scan every granted
+	// capability (rather than returning on the first match) so a honeytoken match
+	// is never missed when a non-honeytoken capability happens to match first.
+	hasCapability := false
+	hasHoneytokenMatch := false
+	for _, cap := range capabilities {
+		if !s.matchesCapability(capabilityToCheck, resource, cap.CapabilityType) {
+			continue
+		}
+		hasCapability = true
+		if cap.Honeytoken {
+			hasHoneytokenMatch = true
+		}
+	}
+
+	// 🍯 Honeytoken tripwire (issue #293): a match on a decoy capability is a
+	// high-confidence compromise indicator. Raise the alert/audit but keep the
+	// normal authorization result (indistinguishability — the caller, e.g. the
+	// FGA engine, gets the same answer it would without the flag). Best-effort:
+	// the agent is fetched lazily only on a (rare) honeytoken hit.
+	if hasHoneytokenMatch {
+		if agent, aerr := s.agentRepo.GetByID(agentID); aerr == nil {
+			s.detectHoneytoken(agent, capabilities, capabilityToCheck, resource, "")
+		}
+	}
+
+	return hasCapability, nil
+}
+
+// HasCapabilityNoAlert reports whether the agent has a granted capability matching
+// the request WITHOUT firing honeytoken detection. It exists for a secondary
+// has-capability check inside a request that has ALREADY run detection — notably the
+// SDK /verify handler (CreateVerification), which calls VerifyCapability first and
+// then needs the raw boolean to decide capability-violation alerting. Using
+// HasCapability there would double-fire the honeytoken alert/audit for one request.
+func (s *AgentService) HasCapabilityNoAlert(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error) {
+	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get capabilities: %w", err)
+	}
 	for _, cap := range capabilities {
 		if s.matchesCapability(capabilityToCheck, resource, cap.CapabilityType) {
 			return true, nil
 		}
 	}
-
 	return false, nil
+}
+
+// detectHoneytoken scans an agent's granted capabilities for a honeytoken that
+// matches this verification request and, on a match, raises a high-severity alert
+// and records an audit event (issue #293). Side-effect-only and best-effort: it
+// never changes the authorization decision, and an alert/audit write failure never
+// fails verification. A honeytoken is a decoy no legitimate workflow exercises, so
+// a match is a high-confidence compromise indicator with near-zero false-positive
+// cost. The zero-FP property rests on the operator keeping the decoy out of real
+// workflows; MarkHoneytoken refuses to flag a type that overlaps a live grant
+// (capability_service.go) so the common footgun cannot create false positives.
+func (s *AgentService) detectHoneytoken(
+	agent *domain.Agent,
+	capabilities []*domain.AgentCapability,
+	requestedCapability string,
+	resource string,
+	sourceIP string,
+) {
+	if agent == nil {
+		return
+	}
+	for _, cap := range capabilities {
+		if cap == nil || !cap.Honeytoken {
+			continue
+		}
+		if !s.matchesCapability(requestedCapability, resource, cap.CapabilityType) {
+			continue
+		}
+		raiseHoneytokenAlert(s.alertRepo, s.auditRepo, agent, cap, requestedCapability, resource, sourceIP)
+	}
+}
+
+// raiseHoneytokenAlert records the audit event and the high-severity alert for a
+// honeytoken verification hit (issue #293). Package-level so both the AgentService
+// verification paths and CapabilityService.VerifyAction raise an identical tripwire.
+// Mirrors the best-effort, nil-safe alert wiring used for MCP manifest drift (#275):
+// write failures are logged and swallowed so capability verification is never blocked
+// by alerting. The audit event is written first (when an audit repo is wired) so the
+// alert can link to it through Alert.AuditID.
+func raiseHoneytokenAlert(
+	alertRepo domain.AlertRepository,
+	auditRepo domain.AuditLogRepository,
+	agent *domain.Agent,
+	cap *domain.AgentCapability,
+	requestedCapability string,
+	resource string,
+	sourceIP string,
+) {
+	if agent == nil || cap == nil {
+		return
+	}
+
+	// Audit event first so the alert can reference it.
+	var auditID *uuid.UUID
+	if auditRepo != nil {
+		entry := &domain.AuditLog{
+			ID:             uuid.New(),
+			OrganizationID: agent.OrganizationID,
+			AgentID:        &agent.ID,
+			Action:         domain.AuditActionHoneytokenTriggered,
+			ResourceType:   "capability",
+			ResourceID:     cap.ID,
+			IPAddress:      sourceIP,
+			Metadata: map[string]interface{}{
+				"honeytoken":           true,
+				"capabilityId":         cap.ID.String(),
+				"honeytokenCapability": cap.CapabilityType,
+				"requestedCapability":  requestedCapability,
+				"resource":             resource,
+				"agentName":            agent.DisplayName,
+			},
+			Timestamp: time.Now().UTC(),
+		}
+		if err := auditRepo.Create(entry); err != nil {
+			fmt.Printf("⚠️  Failed to record honeytoken audit event for capability %s: %v\n", cap.ID, err)
+		} else {
+			id := entry.ID
+			auditID = &id
+		}
+	}
+
+	if alertRepo == nil {
+		return
+	}
+	alert := &domain.Alert{
+		ID:             uuid.New(),
+		OrganizationID: agent.OrganizationID,
+		AlertType:      domain.AlertHoneytokenTriggered,
+		Severity:       domain.AlertSeverityHigh,
+		Title:          fmt.Sprintf("Honeytoken capability triggered: %s", agent.DisplayName),
+		Description: fmt.Sprintf(
+			"Agent '%s' issued a verification request against honeytoken capability '%s' "+
+				"(requested: '%s', resource: '%s'). No legitimate workflow exercises a honeytoken, "+
+				"so this is a high-confidence compromise indicator. The authorization decision was "+
+				"left unchanged; this alert is a tripwire only.",
+			agent.DisplayName, cap.CapabilityType, requestedCapability, resource),
+		ResourceType: "capability",
+		ResourceID:   cap.ID,
+		AuditID:      auditID,
+		AgentName:    agent.DisplayName,
+		SourceIP:     sourceIP,
+		Metadata: map[string]interface{}{
+			"honeytoken":           true,
+			"agentId":              agent.ID.String(),
+			"capabilityId":         cap.ID.String(),
+			"honeytokenCapability": cap.CapabilityType,
+			"requestedCapability":  requestedCapability,
+			"resource":             resource,
+		},
+		IsAcknowledged: false,
+		CreatedAt:      time.Now().UTC(),
+	}
+	if err := alertRepo.Create(alert); err != nil {
+		fmt.Printf("⚠️  Failed to create honeytoken alert for capability %s: %v\n", cap.ID, err)
+		return
+	}
+	fmt.Printf("🚨 Honeytoken triggered: agent %s matched honeytoken capability %s (severity=high)\n",
+		agent.DisplayName, cap.CapabilityType)
 }
 
 // VerifyCapability verifies if an agent can use a capability
@@ -909,6 +1075,19 @@ func (s *AgentService) VerifyCapability(
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return false, "Agent not found", uuid.Nil, err
+	}
+
+	// 🍯 HONEYTOKEN DETECTION (issue #293) — runs before the status/enforcement
+	// branches so ANY verification request matching a honeytoken capability is
+	// caught regardless of the downstream allow/deny decision (including the
+	// monitoring-mode and unverified early returns below). The fetched slice is
+	// reused by the CBAC check (step 4), so this adds no extra query on the hot
+	// path. Detection is a tripwire only: it never changes the authorization
+	// outcome (indistinguishability — a probing attacker gets the normal decision
+	// and no signal that the decoy was tripped).
+	activeCapabilities, capFetchErr := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	if capFetchErr == nil {
+		s.detectHoneytoken(agent, activeCapabilities, capability, resource, sourceIP)
 	}
 
 	// 2. Check agent status - MUST be verified (unless MONITORING mode)
@@ -1004,10 +1183,11 @@ func (s *AgentService) VerifyCapability(
 	// - Scope violations like CVE-2025-32711 (EchoLeak)
 	// - Unclear approval chains (full audit trail via granted_by, granted_at)
 
-	// ✅ Fetch GRANTED capabilities (single source of truth for enforcement)
-	activeCapabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
-	if err != nil {
-		return false, fmt.Sprintf("Failed to fetch agent capabilities: %v", err), auditID, err
+	// ✅ Fetch GRANTED capabilities (single source of truth for enforcement).
+	// Reuses the slice fetched above for honeytoken detection to avoid a second
+	// query on the hot verification path.
+	if capFetchErr != nil {
+		return false, fmt.Sprintf("Failed to fetch agent capabilities: %v", capFetchErr), auditID, capFetchErr
 	}
 
 	// Build list of granted capability types for error messages

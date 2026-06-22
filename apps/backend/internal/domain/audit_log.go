@@ -22,6 +22,11 @@ const (
 	AuditActionAttest AuditAction = "attest" // ✅ For agent attestation of MCPs
 	AuditActionView   AuditAction = "view"
 
+	// Honeytoken (issue #293): a verification request matched a decoy capability
+	AuditActionHoneytokenTriggered AuditAction = "honeytoken_triggered"
+	// Honeytoken flag set/cleared on a granted capability by an operator
+	AuditActionHoneytokenMarked AuditAction = "honeytoken_marked"
+
 	// API Key actions
 	AuditActionRevoke AuditAction = "revoke"
 
