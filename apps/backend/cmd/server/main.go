@@ -34,6 +34,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
 	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
@@ -612,6 +613,7 @@ type Services struct {
 	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
 	Secrets                 *application.SecretsService                 // For identity-native secrets management
 	FGA                     *application.FGAEngine                      // Fine-Grained Authorization engine (5-step decision flow)
+	ATCIssuance             *application.ATCIssuanceService             // Issues Registry-signed ATCs carrying AIM's behavioral score
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -878,6 +880,16 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		)
 	}
 
+	// ATC issuance: compute the agent's 9-factor behavioral score and delegate
+	// credential signing + transparency-log recording to the Registry (the CA).
+	// Uses REGISTRY_BRIDGE_URL (shared) + REGISTRY_ATC_TOKEN (service-account bearer).
+	atcIssuanceService := application.NewATCIssuanceService(
+		repos.Agent,
+		repos.Organization,
+		trustCalculator,
+		registry.NewATCClientFromEnv(),
+	)
+
 	// Community Intelligence: opt-in anonymized trust factor telemetry
 	ciService := application.NewCommunityIntelligenceService(
 		repos.Organization,
@@ -1051,6 +1063,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
 		Secrets:                 secretsService,                                       // For identity-native secrets management
 		FGA:                     fgaEngine,                                            // Fine-Grained Authorization engine
+		ATCIssuance:             atcIssuanceService,                                   // Registry-delegated ATC issuance
 	}, keyVault
 }
 
@@ -1092,6 +1105,7 @@ type Handlers struct {
 	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
 	Secrets                 *handlers.SecretsHandler                 // For identity-native secrets management
 	Authorize               *handlers.AuthorizeHandler               // POST /agents/:id/authorize -- FGA decision endpoint
+	ATCIssuance             *handlers.ATCIssuanceHandler             // POST /agents/:id/atc -- Registry-delegated ATC issuance
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1282,6 +1296,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			repos.Agent, // A3d-iii: namespace-path-id handlers verify namespace.AgentID -> agent.OrganizationID via LoadOwnedViaAgent
 		),
 		Authorize: handlers.NewAuthorizeHandler(services.FGA, repos.Agent),
+		ATCIssuance: handlers.NewATCIssuanceHandler(
+			services.ATCIssuance,
+			services.Agent,
+			services.Audit,
+		),
 	}
 }
 
@@ -1422,6 +1441,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Post("/:id/log-capability/:audit_id", h.Agent.LogCapabilityResult)
 	// Fine-Grained Authorization (5-step decision flow with OTel span tree)
 	agents.Post("/:id/authorize", h.Authorize.Authorize)
+	// Agent Trust Credential issuance - computes the behavioral score and delegates
+	// signing + transparency-log recording to the Registry (Certificate Authority)
+	agents.Post("/:id/atc", middleware.ManagerMiddleware(), h.ATCIssuance.IssueATC)
 	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
 	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
