@@ -107,12 +107,18 @@ type FGAResult struct {
 // IntentCheckResult contains NanoMind daemon intent verification results.
 //
 // Status records why Step 5 reached the verdict it did, so the silent
-// fail-open in #131 becomes observable: "classified" means the daemon
-// returned a non-empty attack class; "abstain" means it answered cleanly but
-// with no classification (the common case until NanoMind is fine-tuned on the
-// FGA prompt format); "fail_open" means the daemon was unreachable, the
-// request could not be built, or the response could not be decoded, so the
-// action proceeds without an intent verdict.
+// fail-open in #131 becomes observable. As of @nanomind/daemon 0.4.0 (Stage 1)
+// the daemon emits an explicit `classification` field that drives this:
+//   - "classified": the daemon produced a usable verdict — a confident benign
+//     (attackClass "") OR a non-empty attack class. Step 5 blocks only on the
+//     latter, above the confidence threshold.
+//   - "abstain": the daemon ran but could not produce a usable verdict (its
+//     classification was "abstain", or — for a pre-0.4.0 daemon — it returned an
+//     empty attack class, the legacy fallback). Action proceeds; the abstain is
+//     now distinct from a confident benign, which was the #131 conflation.
+//   - "fail_open": the daemon was unreachable, returned a non-2xx status, the
+//     request could not be built, or the response could not be decoded, so the
+//     action proceeds without an intent verdict.
 type IntentCheckResult struct {
 	IntentClass string  `json:"intentClass"`
 	Confidence  float64 `json:"confidence"`
@@ -127,6 +133,13 @@ const (
 	intentStatusAbstain    = "abstain"
 	intentStatusFailOpen   = "fail_open"
 )
+
+// intentBlockConfidence is the minimum daemon confidence (strictly greater) for
+// a non-empty attack class to block in Step 5. The @nanomind/daemon v0.5.0
+// classifier saturates confidence near 1.0, so 0.8 is effectively binary today;
+// the daemon README recommends 0.95. Raising it is a calibration call owned by
+// CDS/CA and is tracked as a separate follow-up, not changed here.
+const intentBlockConfidence = 0.8
 
 // FGAPolicy represents a stored FGA policy.
 type FGAPolicy struct {
@@ -965,10 +978,32 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	}
 	defer resp.Body.Close()
 
+	// A non-2xx response means the daemon ran but could not classify (the
+	// engine-error 500 path: model not loaded, ORT failure). That is an
+	// operational failure — recorded as fail_open, distinct from a healthy
+	// model that deliberately abstained on a usable input. Before #131 Stage 1
+	// the 500 body decoded to attackClass:"" and was silently counted as a
+	// clean abstain, hiding the infrastructure failure; checking the status
+	// code closes that hole. The daemon's 500 body also carries
+	// classification:"abstain" as a fallback for consumers that don't inspect
+	// the status code — we inspect it, so the status wins. Decision unchanged:
+	// not blocked.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		e.logger.Debug("NanoMind daemon returned non-2xx for intent check", "status", resp.StatusCode)
+		return &IntentCheckResult{
+			IntentClass: "unknown",
+			Confidence:  0,
+			Blocked:     false,
+			LatencyMs:   time.Since(start).Milliseconds(),
+			Status:      intentStatusFailOpen,
+		}
+	}
+
 	var inferResp struct {
-		Result      string  `json:"result"`
-		Confidence  float64 `json:"confidence"`
-		AttackClass string  `json:"attackClass"`
+		Result         string  `json:"result"`
+		Confidence     float64 `json:"confidence"`
+		AttackClass    string  `json:"attackClass"`
+		Classification string  `json:"classification"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&inferResp); err != nil {
 		// Undecodable response is one of the fail-open modes #131 is about.
@@ -984,11 +1019,43 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 		}
 	}
 
-	blocked := inferResp.AttackClass != "" && inferResp.Confidence > 0.8
+	// Map the daemon's explicit classification (@nanomind/daemon 0.4.0+) to the
+	// Step 5 status. This is the #131 Stage 1 fix: a confident benign
+	// ("classified", attackClass "") is now distinguishable from "model couldn't
+	// answer" ("abstain", attackClass ""), which previously both read as abstain.
+	//
+	// Evidence beats label: a concrete attack class above the block threshold
+	// blocks regardless of the classification label. A well-behaved 0.4.0 daemon
+	// forces attackClass="" whenever it abstains, so this only matters for a
+	// buggy / downgraded / mixed-version daemon that sends a self-contradictory
+	// response (classification:"abstain" carrying a live attackClass) — there we
+	// fail closed rather than dropping the attack evidence, which also keeps this
+	// from being a weakening vs the pre-#131 criterion. It mirrors the 500-path
+	// "status wins" defense, applied here to the 2xx body.
+	blocked := inferResp.AttackClass != "" && inferResp.Confidence > intentBlockConfidence
 
-	status := intentStatusClassified
-	if inferResp.AttackClass == "" {
+	var status string
+	switch {
+	case blocked:
+		// A usable, blocking verdict is always classified, whatever the label says.
+		status = intentStatusClassified
+	case inferResp.Classification == intentStatusClassified:
+		// A usable verdict that does not block — a confident benign, or a
+		// non-empty class below the threshold.
+		status = intentStatusClassified
+	case inferResp.Classification == intentStatusAbstain:
+		// The model could not produce a usable verdict (and carried no blocking
+		// attack class, per the blocked check above).
 		status = intentStatusAbstain
+	default:
+		// Pre-0.4.0 daemon (no classification field, or JSON null): fall back to
+		// the legacy heuristic (empty attackClass == abstain) so a mixed-version
+		// deploy keeps working.
+		if inferResp.AttackClass == "" {
+			status = intentStatusAbstain
+		} else {
+			status = intentStatusClassified
+		}
 	}
 
 	return &IntentCheckResult{
