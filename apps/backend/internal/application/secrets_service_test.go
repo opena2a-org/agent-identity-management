@@ -144,6 +144,7 @@ func (m *mockCapabilityRepo) CreateCapability(_ *domain.AgentCapability) error  
 func (m *mockCapabilityRepo) GetCapabilityByID(_ uuid.UUID) (*domain.AgentCapability, error)       { return nil, nil }
 func (m *mockCapabilityRepo) GetCapabilitiesByAgentID(_ uuid.UUID) ([]*domain.AgentCapability, error) { return nil, nil }
 func (m *mockCapabilityRepo) RevokeCapability(_ uuid.UUID, _ time.Time) error                      { return nil }
+func (m *mockCapabilityRepo) SetHoneytoken(_ uuid.UUID, _ bool) error                              { return nil }
 func (m *mockCapabilityRepo) DeleteCapability(_ uuid.UUID) error                                   { return nil }
 func (m *mockCapabilityRepo) CreateViolation(_ *domain.CapabilityViolation) error                  { return nil }
 func (m *mockCapabilityRepo) GetViolationByID(_ uuid.UUID) (*domain.CapabilityViolation, error)    { return nil, nil }

@@ -23,8 +23,13 @@ type AgentCapability struct {
 	GrantedBy       *uuid.UUID             `json:"grantedBy,omitempty"`
 	GrantedAt       time.Time              `json:"grantedAt"`
 	RevokedAt       *time.Time             `json:"revokedAt,omitempty"`
-	CreatedAt       time.Time              `json:"createdAt"`
-	UpdatedAt       time.Time              `json:"updatedAt"`
+	// Honeytoken marks this grant as a decoy that no legitimate workflow should
+	// ever exercise (issue #293). Operator-set only; when a verification request
+	// matches a honeytoken capability the verification path raises a high-severity
+	// alert and records an audit event without changing the allow/deny decision.
+	Honeytoken bool      `json:"honeytoken"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // CapabilityViolation represents an attempt to perform an action outside capability scope
@@ -52,6 +57,8 @@ type CapabilityRepository interface {
 	GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*AgentCapability, error)
 	RevokeCapability(id uuid.UUID, revokedAt time.Time) error
 	DeleteCapability(id uuid.UUID) error
+	// SetHoneytoken marks or unmarks a granted capability as a honeytoken (issue #293).
+	SetHoneytoken(id uuid.UUID, honeytoken bool) error
 
 	// Violation tracking
 	CreateViolation(violation *CapabilityViolation) error

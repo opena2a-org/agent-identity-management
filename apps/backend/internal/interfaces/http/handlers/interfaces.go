@@ -38,6 +38,7 @@ type AgentServicer interface {
 	VerifyCapability(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (allowed bool, reason string, auditID uuid.UUID, err error)
 	LogCapabilityResult(ctx context.Context, agentID uuid.UUID, auditID uuid.UUID, success bool, errorMsg string, result map[string]interface{}) error
 	HasCapability(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
+	HasCapabilityNoAlert(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error)
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
 	DetectMCPServersFromConfig(ctx context.Context, agentID uuid.UUID, req *application.DetectMCPServersRequest, mcpService *application.MCPService, orgID, userID uuid.UUID) (*application.DetectMCPServersResult, error)
 	// PQC (Post-Quantum Cryptography) methods
@@ -76,6 +77,7 @@ type CapabilityServicer interface {
 	VerifyAction(ctx context.Context, agentID uuid.UUID, requestedCapability string, signature []byte, payload []byte, sourceIP *string, metadata map[string]interface{}) (*application.VerificationResult, error)
 	GrantCapability(ctx context.Context, agentID uuid.UUID, capabilityType string, scope map[string]interface{}, grantedBy *uuid.UUID, executionMode string) (*domain.AgentCapability, error)
 	RevokeCapability(ctx context.Context, capabilityID uuid.UUID, revokedBy *uuid.UUID) error
+	MarkHoneytoken(ctx context.Context, capabilityID uuid.UUID, honeytoken bool, markedBy *uuid.UUID) (*domain.AgentCapability, error)
 	GetCapabilityByID(ctx context.Context, capabilityID uuid.UUID) (*domain.AgentCapability, error)
 	GetAgentCapabilities(ctx context.Context, agentID uuid.UUID, activeOnly bool) ([]*domain.AgentCapability, error)
 	GetCapabilitiesByAgentIDs(ctx context.Context, agentIDs []uuid.UUID, activeOnly bool) (map[uuid.UUID][]*domain.AgentCapability, error)

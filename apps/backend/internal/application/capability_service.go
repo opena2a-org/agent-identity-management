@@ -4,12 +4,20 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrHoneytokenNotAllowed is returned by MarkHoneytoken when a capability cannot be
+// flagged as a honeytoken without creating false positives (a wildcard type, or a
+// type that collides with another active grant). It is a client/validation error —
+// handlers should map it to HTTP 400, not 500 (issue #293).
+var ErrHoneytokenNotAllowed = errors.New("capability cannot be marked as a honeytoken")
 
 // VerificationResult represents the result of an action verification
 type VerificationResult struct {
@@ -93,6 +101,20 @@ func (s *CapabilityService) VerifyAction(
 	}
 
 	inScope := s.hasCapability(capabilities, requestedCapability)
+
+	// 🍯 Honeytoken tripwire (issue #293): if this verification matches a honeytoken
+	// decoy, raise a high-severity alert + audit. Side-effect only — the authorization
+	// outcome below is unchanged (indistinguishability). Honeytokens are exact types
+	// (MarkHoneytoken rejects wildcards), matching this path's exact-match semantics.
+	for _, cap := range capabilities {
+		if cap != nil && cap.Honeytoken && cap.CapabilityType == requestedCapability {
+			sip := ""
+			if sourceIP != nil {
+				sip = *sourceIP
+			}
+			raiseHoneytokenAlert(s.alertRepo, s.auditRepo, agent, cap, requestedCapability, "", sip)
+		}
+	}
 
 	if !inScope {
 		// 4. Record violation
@@ -395,6 +417,87 @@ func (s *CapabilityService) RevokeCapability(
 	}
 
 	return nil
+}
+
+// MarkHoneytoken marks (or unmarks) a granted capability as a honeytoken (issue #293).
+// A honeytoken is a decoy that no legitimate workflow should ever exercise; any later
+// verification request that matches it raises a high-severity alert and records an
+// audit event. This is an operator action — exposed only on the admin grant surface,
+// never the SDK self-register path, so an agent can neither set nor discover the flag.
+// Returns the updated capability for the caller to echo back.
+func (s *CapabilityService) MarkHoneytoken(
+	ctx context.Context,
+	capabilityID uuid.UUID,
+	honeytoken bool,
+	markedBy *uuid.UUID,
+) (*domain.AgentCapability, error) {
+	capability, err := s.capabilityRepo.GetCapabilityByID(capabilityID)
+	if err != nil {
+		return nil, fmt.Errorf("capability not found: %w", err)
+	}
+
+	agent, err := s.agentRepo.GetByID(capability.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	// Guard the zero-false-positive contract at mark time (issue #293). A honeytoken
+	// only works if no legitimate workflow ever exercises it, so refuse the two ways
+	// a mark could create false positives:
+	//   1. A wildcard type (e.g. "file:*") matches broad real traffic — a decoy must
+	//      be a specific, never-used capability.
+	//   2. Another ACTIVE non-honeytoken grant on the same agent has the same type, so
+	//      real use of that type would trip the alert.
+	// (A later duplicate grant of the same type remains the operator's responsibility;
+	// this guard covers the state observable at mark time.)
+	if honeytoken {
+		if strings.Contains(capability.CapabilityType, "*") {
+			return nil, fmt.Errorf("%w: '%s' is a wildcard that would match legitimate traffic; use a specific decoy capability", ErrHoneytokenNotAllowed, capability.CapabilityType)
+		}
+		siblings, sErr := s.capabilityRepo.GetActiveCapabilitiesByAgentID(capability.AgentID)
+		if sErr != nil {
+			return nil, fmt.Errorf("failed to check for conflicting capabilities: %w", sErr)
+		}
+		for _, sib := range siblings {
+			if sib == nil || sib.ID == capabilityID || sib.Honeytoken {
+				continue
+			}
+			if sib.CapabilityType == capability.CapabilityType {
+				return nil, fmt.Errorf("%w: agent has another active grant of type '%s', so legitimate use would raise false alerts", ErrHoneytokenNotAllowed, capability.CapabilityType)
+			}
+		}
+	}
+
+	if err := s.capabilityRepo.SetHoneytoken(capabilityID, honeytoken); err != nil {
+		return nil, err
+	}
+	capability.Honeytoken = honeytoken
+
+	// Audit the operator action so there is a record of who turned the tripwire on/off.
+	action := "marked as honeytoken"
+	if !honeytoken {
+		action = "unmarked as honeytoken"
+	}
+	auditLog := &domain.AuditLog{
+		OrganizationID: agent.OrganizationID,
+		UserID:         markedBy,
+		Action:         domain.AuditActionHoneytokenMarked,
+		ResourceType:   "capability",
+		ResourceID:     capabilityID,
+		Metadata: map[string]interface{}{
+			"capabilityType": capability.CapabilityType,
+			"capabilityId":   capabilityID.String(),
+			"agentId":        capability.AgentID.String(),
+			"honeytoken":     honeytoken,
+			"description":    fmt.Sprintf("Capability '%s' on agent %s %s", capability.CapabilityType, agent.DisplayName, action),
+		},
+	}
+	if err := s.auditRepo.Create(auditLog); err != nil {
+		// Log error but don't fail the request — the flag is already persisted.
+		fmt.Printf("Warning: failed to create honeytoken-mark audit log: %v\n", err)
+	}
+
+	return capability, nil
 }
 
 // AutoDetectCapabilities attempts to automatically detect and register capabilities for MCP servers

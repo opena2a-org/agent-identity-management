@@ -57,6 +57,11 @@ func (m *MockCapabilityRepository) RevokeCapability(id uuid.UUID, revokedAt time
 	return args.Error(0)
 }
 
+func (m *MockCapabilityRepository) SetHoneytoken(id uuid.UUID, honeytoken bool) error {
+	args := m.Called(id, honeytoken)
+	return args.Error(0)
+}
+
 func (m *MockCapabilityRepository) DeleteCapability(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)
