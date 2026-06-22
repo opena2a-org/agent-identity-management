@@ -1386,3 +1386,150 @@ func (m *MockCapabilityRepository) GetCapabilitiesByAgentIDs(agentIDs []uuid.UUI
 	}
 	return result, nil
 }
+
+// --- #314: MCP drift alerts (server-keyed) must affect the connected agent's drift factor ---
+
+type mockMCPConnLister struct {
+	conns []*domain.AgentMCPConnection
+	err   error
+}
+
+func (m *mockMCPConnLister) ListByAgent(_ context.Context, _ uuid.UUID) ([]*domain.AgentMCPConnection, error) {
+	return m.conns, m.err
+}
+
+// The bug (#314): an agent connected to an MCP server whose manifest drifted must see
+// its drift factor reduced, even though the alert is keyed by the server ID.
+func TestCalculateDriftDetection_ConnectedServerManifestDrift_ReducesScore(t *testing.T) {
+	agentID := uuid.New()
+	serverID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil)
+	mockAlert.On("GetByResourceID", serverID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertMCPManifestDrift, Severity: domain.AlertSeverityHigh, CreatedAt: time.Now()},
+	}, nil)
+
+	c := &TrustCalculator{
+		alertRepo:   mockAlert,
+		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.InDelta(t, 0.85, score, 0.001, "a high-severity manifest drift on a connected server should subtract 0.15")
+}
+
+// Capability drift on a connected server also counts, and multiple drifts stack.
+func TestCalculateDriftDetection_ConnectedServerCapabilityDrift_Stacks(t *testing.T) {
+	agentID := uuid.New()
+	serverID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil)
+	mockAlert.On("GetByResourceID", serverID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertMCPCapabilityDrift, Severity: domain.AlertSeverityCritical, CreatedAt: time.Now()},
+		{ID: uuid.New(), AlertType: domain.AlertMCPManifestDrift, Severity: domain.AlertSeverityWarning, CreatedAt: time.Now()},
+	}, nil)
+
+	c := &TrustCalculator{
+		alertRepo:   mockAlert,
+		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.InDelta(t, 0.65, score, 0.001, "critical (-0.30) + warning (-0.05) on a connected server should subtract 0.35")
+}
+
+// No false positives: drift on a server the agent is NOT connected to must not affect it.
+func TestCalculateDriftDetection_UnconnectedServerDrift_NoEffect(t *testing.T) {
+	agentID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil)
+
+	c := &TrustCalculator{
+		alertRepo:   mockAlert,
+		mcpConnRepo: &mockMCPConnLister{conns: nil}, // agent connected to nothing
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Equal(t, 1.0, score, "drift on a server the agent is not connected to must not affect its score")
+}
+
+// Without the connection repo wired, the factor degrades to agent-keyed alerts only
+// (the pre-#314 fallback) and never throws.
+func TestCalculateDriftDetection_NoConnectionRepo_FallsBackToAgentKeyed(t *testing.T) {
+	agentID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertTypeConfigurationDrift, Severity: domain.AlertSeverityWarning, CreatedAt: time.Now()},
+	}, nil)
+
+	c := &TrustCalculator{alertRepo: mockAlert} // mcpConnRepo nil
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.InDelta(t, 0.95, score, 0.001, "agent-keyed configuration drift still counts (warning -0.05)")
+}
+
+// A connection-graph lookup failure must degrade gracefully to agent-keyed alerts,
+// not poison the whole factor (it must NOT return the 0.5 error sentinel).
+func TestCalculateDriftDetection_ConnectionLookupError_FallsBackGracefully(t *testing.T) {
+	agentID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertTypeConfigurationDrift, Severity: domain.AlertSeverityWarning, CreatedAt: time.Now()},
+	}, nil)
+
+	c := &TrustCalculator{
+		alertRepo:   mockAlert,
+		mcpConnRepo: &mockMCPConnLister{err: assert.AnError},
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.InDelta(t, 0.95, score, 0.001, "a connection lookup error degrades to agent-keyed alerts, not the 0.5 error sentinel")
+}
+
+// Server-keyed drift older than the 30-day window must not affect the score.
+func TestCalculateDriftDetection_StaleServerDrift_Ignored(t *testing.T) {
+	agentID := uuid.New()
+	serverID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil)
+	mockAlert.On("GetByResourceID", serverID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertMCPManifestDrift, Severity: domain.AlertSeverityCritical, CreatedAt: time.Now().AddDate(0, 0, -31)},
+	}, nil)
+
+	c := &TrustCalculator{
+		alertRepo:   mockAlert,
+		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Equal(t, 1.0, score, "drift older than 30 days is outside the window and must not reduce the score")
+}
+
+// Two active connections to the same server must not double-subtract (the seen guard).
+func TestCalculateDriftDetection_DuplicateServerConnections_CountedOnce(t *testing.T) {
+	agentID := uuid.New()
+	serverID := uuid.New()
+
+	mockAlert := new(TrustCalcMockAlertRepository)
+	mockAlert.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil)
+	mockAlert.On("GetByResourceID", serverID, 100, 0).Return([]*domain.Alert{
+		{ID: uuid.New(), AlertType: domain.AlertMCPManifestDrift, Severity: domain.AlertSeverityHigh, CreatedAt: time.Now()},
+	}, nil)
+
+	c := &TrustCalculator{
+		alertRepo: mockAlert,
+		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{
+			{MCPServerID: serverID},
+			{MCPServerID: serverID}, // same server again
+		}},
+	}
+
+	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.InDelta(t, 0.85, score, 0.001, "the same alert reached via two connections must subtract only once")
+}

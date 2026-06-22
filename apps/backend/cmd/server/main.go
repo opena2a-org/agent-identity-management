@@ -667,6 +667,8 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	trustCalculator.SetUserFeedbackRepo(repos.UserFeedback)
 	trustCalculator.SetIsolationRepo(repos.IsolationAttestation)
 	trustCalculator.SetTMEProvider(repos.NanoMindTME)
+	// Let the drift factor attribute server-keyed MCP drift alerts to connected agents (#314).
+	trustCalculator.SetMCPConnectionRepo(repos.AgentMCPConnection)
 
 	// ✅ Initialize drift detection service BEFORE verification event service
 	driftDetectionService := application.NewDriftDetectionService(
