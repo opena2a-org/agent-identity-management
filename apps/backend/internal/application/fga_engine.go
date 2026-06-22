@@ -54,19 +54,21 @@ type asyncIntentJob struct {
 // Steps 1-4 must complete in < 10ms P99 (no external calls).
 // Step 5 (NanoMind intent check) adds < 800ms for HIGH risk, async for MEDIUM, skip for LOW.
 type FGAEngine struct {
-	db              *sql.DB
-	agentSvc        *AgentService
-	daemonURL       string // NanoMind daemon URL
-	registryASCURL  string // Registry ASC endpoint
-	logger          *slog.Logger
+	db             *sql.DB
+	agentSvc       *AgentService
+	daemonURL      string // NanoMind daemon URL
+	registryASCURL string // Registry ASC endpoint
+	logger         *slog.Logger
 
 	// OTel instruments. Captured in NewFGAEngine so they bind to the
 	// real provider installed by telemetry.Init, not to the noop global
 	// at package-init time.
-	tracer       trace.Tracer
-	decisions    metric.Int64Counter
-	latency      metric.Int64Histogram
-	asyncDropped metric.Int64Counter
+	tracer        trace.Tracer
+	decisions     metric.Int64Counter
+	latency       metric.Int64Histogram
+	asyncDropped  metric.Int64Counter
+	intentChecks  metric.Int64Counter // Step 5 evaluations that reached the daemon
+	intentSkipped metric.Int64Counter // Authorizes where Step 5 was skipped (LOW)
 
 	// Async intent-check worker pool. Owned by the engine, drained by
 	// Shutdown. asyncDone is closed exactly once by Shutdown to signal
@@ -93,22 +95,38 @@ type FGARequest struct {
 
 // FGAResult represents the authorization decision.
 type FGAResult struct {
-	Allowed       bool     `json:"allowed"`
-	Outcome       string   `json:"outcome"`       // ALLOW, DENY, DENY_INTENT, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
-	StepsTriggered []string `json:"stepsTriggered"` // which steps evaluated
-	DeniedBy      string   `json:"deniedBy,omitempty"` // which step denied
-	DeniedReason  string   `json:"deniedReason,omitempty"`
-	LatencyMs     int64    `json:"latencyMs"`
-	IntentCheck   *IntentCheckResult `json:"intentCheck,omitempty"`
+	Allowed        bool               `json:"allowed"`
+	Outcome        string             `json:"outcome"`            // ALLOW, DENY, DENY_INTENT, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
+	StepsTriggered []string           `json:"stepsTriggered"`     // which steps evaluated
+	DeniedBy       string             `json:"deniedBy,omitempty"` // which step denied
+	DeniedReason   string             `json:"deniedReason,omitempty"`
+	LatencyMs      int64              `json:"latencyMs"`
+	IntentCheck    *IntentCheckResult `json:"intentCheck,omitempty"`
 }
 
 // IntentCheckResult contains NanoMind daemon intent verification results.
+//
+// Status records why Step 5 reached the verdict it did, so the silent
+// fail-open in #131 becomes observable: "classified" means the daemon
+// returned a non-empty attack class; "abstain" means it answered cleanly but
+// with no classification (the common case until NanoMind is fine-tuned on the
+// FGA prompt format); "fail_open" means the daemon was unreachable, the
+// request could not be built, or the response could not be decoded, so the
+// action proceeds without an intent verdict.
 type IntentCheckResult struct {
 	IntentClass string  `json:"intentClass"`
 	Confidence  float64 `json:"confidence"`
 	Blocked     bool    `json:"blocked"`
 	LatencyMs   int64   `json:"latencyMs"`
+	Status      string  `json:"status,omitempty"`
 }
+
+// Step 5 intent-check outcome statuses. See IntentCheckResult.Status.
+const (
+	intentStatusClassified = "classified"
+	intentStatusAbstain    = "abstain"
+	intentStatusFailOpen   = "fail_open"
+)
 
 // FGAPolicy represents a stored FGA policy.
 type FGAPolicy struct {
@@ -172,6 +190,30 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	if err != nil {
 		logger.Warn("fga async_intent_dropped counter init failed", "error", err)
 	}
+	// Step 5 observability (issue #131, Stage 3). intentChecks is incremented
+	// once per Step 5 evaluation that reached the daemon call, attributed by
+	// risk tier, sync/async mode, and outcome status (classified / abstain /
+	// fail_open). intentSkipped counts Authorizes where Step 5 never ran (LOW
+	// risk). Together they let operators compute Step 5's classification rate,
+	// fail-open rate, and skip rate per tier — today these show that Step 5
+	// almost never produces a real classification (it abstains or fails open),
+	// which is the evidence #131 exists to quantify. Per-agent breakdown stays
+	// in the structured fga.decision log (agent.id + trace correlation), NOT in
+	// metric labels, to keep Prometheus cardinality bounded.
+	intentChecks, err := meter.Int64Counter(
+		"fga.intent_checks",
+		metric.WithDescription("FGA Step 5 intent evaluations that reached the NanoMind daemon, by risk tier, mode, and outcome status"),
+	)
+	if err != nil {
+		logger.Warn("fga intent_checks counter init failed", "error", err)
+	}
+	intentSkipped, err := meter.Int64Counter(
+		"fga.intent_skipped",
+		metric.WithDescription("FGA authorizations where Step 5 intent check was skipped, by risk tier"),
+	)
+	if err != nil {
+		logger.Warn("fga intent_skipped counter init failed", "error", err)
+	}
 
 	e := &FGAEngine{
 		db:             db,
@@ -183,6 +225,8 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 		decisions:      decisions,
 		latency:        latency,
 		asyncDropped:   asyncDropped,
+		intentChecks:   intentChecks,
+		intentSkipped:  intentSkipped,
 		asyncQueue:     make(chan asyncIntentJob, fgaAsyncQueueSize),
 		asyncDone:      make(chan struct{}),
 	}
@@ -521,6 +565,7 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		)
 		intentResult := e.checkIntentSync(intentCtx, req)
 		result.IntentCheck = intentResult
+		e.recordIntentCheck(intentCtx, "HIGH", "sync", intentResult)
 		if intentResult != nil {
 			intentSpan.SetAttributes(
 				attribute.String("fga.intent_class", intentResult.IntentClass),
@@ -577,8 +622,18 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 			}
 		}
 		asyncSpan.End()
+	} else {
+		// LOW (or any non-HIGH/MEDIUM risk level): Step 5 is skipped entirely.
+		// Counting the skip per tier is what makes the skip rate observable —
+		// without it, a skipped check is indistinguishable from one that ran
+		// and abstained. riskTier is the raw policy value so an unexpected
+		// level shows up as its own series rather than being silently bucketed.
+		if e.intentSkipped != nil {
+			e.intentSkipped.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("fga.risk_tier", policy.RiskLevel),
+			))
+		}
 	}
-	// LOW: skip intent check entirely
 
 	// All checks passed
 	result.Allowed = true
@@ -819,7 +874,7 @@ func (e *FGAEngine) checkChain(ctx context.Context, req *FGARequest, policy *FGA
 	}
 
 	var rules struct {
-		MaxCallsPerHour    *int    `json:"maxCallsPerHour"`
+		MaxCallsPerHour     *int    `json:"maxCallsPerHour"`
 		DenyAfterCapability *string `json:"denyAfterCapability"`
 	}
 	if err := json.Unmarshal(policy.ChainRules, &rules); err != nil {
@@ -891,6 +946,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 			Confidence:  0,
 			Blocked:     false,
 			LatencyMs:   time.Since(start).Milliseconds(),
+			Status:      intentStatusFailOpen,
 		}
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -904,6 +960,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 			Confidence:  0,
 			Blocked:     false, // fail open if daemon unavailable or ctx cancelled
 			LatencyMs:   time.Since(start).Milliseconds(),
+			Status:      intentStatusFailOpen,
 		}
 	}
 	defer resp.Body.Close()
@@ -914,22 +971,64 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 		AttackClass string  `json:"attackClass"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&inferResp); err != nil {
-		return nil
+		// Undecodable response is one of the fail-open modes #131 is about.
+		// Return a measured fail_open result (decision unchanged: not blocked)
+		// rather than nil, so this path is counted instead of vanishing.
+		e.logger.Debug("intent check response decode failed", "error", err)
+		return &IntentCheckResult{
+			IntentClass: "unknown",
+			Confidence:  0,
+			Blocked:     false,
+			LatencyMs:   time.Since(start).Milliseconds(),
+			Status:      intentStatusFailOpen,
+		}
 	}
 
 	blocked := inferResp.AttackClass != "" && inferResp.Confidence > 0.8
+
+	status := intentStatusClassified
+	if inferResp.AttackClass == "" {
+		status = intentStatusAbstain
+	}
 
 	return &IntentCheckResult{
 		IntentClass: inferResp.AttackClass,
 		Confidence:  inferResp.Confidence,
 		Blocked:     blocked,
 		LatencyMs:   time.Since(start).Milliseconds(),
+		Status:      status,
 	}
+}
+
+// recordIntentCheck emits the fga.intent_checks counter for one Step 5
+// evaluation. mode is "sync" (HIGH) or "async" (MEDIUM); riskTier is the
+// policy risk level that triggered the check. result carries the status set by
+// checkIntentSync. Safe to call with a nil result (counted as fail_open) or a
+// nil instrument (no-op).
+func (e *FGAEngine) recordIntentCheck(ctx context.Context, riskTier, mode string, result *IntentCheckResult) {
+	if e.intentChecks == nil {
+		return
+	}
+	status := intentStatusFailOpen
+	blocked := false
+	if result != nil {
+		if result.Status != "" {
+			status = result.Status
+		}
+		blocked = result.Blocked
+	}
+	e.intentChecks.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("fga.risk_tier", riskTier),
+		attribute.String("fga.intent_mode", mode),
+		attribute.String("fga.intent_status", status),
+		attribute.Bool("fga.intent_blocked", blocked),
+	))
 }
 
 func (e *FGAEngine) checkIntentAsync(ctx context.Context, req *FGARequest) {
 	// Fire-and-forget intent check for MEDIUM risk
 	result := e.checkIntentSync(ctx, req)
+	e.recordIntentCheck(ctx, "MEDIUM", "async", result)
 	if result != nil && result.Blocked {
 		e.logger.Warn("async intent check flagged suspicious activity",
 			"agentId", req.AgentID,
@@ -1090,4 +1189,3 @@ func (s *pqStringArray) parse(str string) error {
 	*s.arr = result
 	return nil
 }
-
