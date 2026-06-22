@@ -921,25 +921,6 @@ func (s *AgentService) HasCapability(ctx context.Context, agentID uuid.UUID, cap
 	return hasCapability, nil
 }
 
-// HasCapabilityNoAlert reports whether the agent has a granted capability matching
-// the request WITHOUT firing honeytoken detection. It exists for a secondary
-// has-capability check inside a request that has ALREADY run detection — notably the
-// SDK /verify handler (CreateVerification), which calls VerifyCapability first and
-// then needs the raw boolean to decide capability-violation alerting. Using
-// HasCapability there would double-fire the honeytoken alert/audit for one request.
-func (s *AgentService) HasCapabilityNoAlert(ctx context.Context, agentID uuid.UUID, capabilityToCheck string, resource string) (bool, error) {
-	capabilities, err := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
-	if err != nil {
-		return false, fmt.Errorf("failed to get capabilities: %w", err)
-	}
-	for _, cap := range capabilities {
-		if s.matchesCapability(capabilityToCheck, resource, cap.CapabilityType) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // detectHoneytoken scans an agent's granted capabilities for a honeytoken that
 // matches this verification request and, on a match, raises a high-severity alert
 // and records an audit event (issue #293). Side-effect-only and best-effort: it
