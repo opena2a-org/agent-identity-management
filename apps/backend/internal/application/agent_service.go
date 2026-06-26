@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -1930,19 +1931,65 @@ func (s *AgentService) DetectMCPServersFromConfig(
 	}, nil
 }
 
+// knownClaudeDesktopConfigPaths returns the standard per-OS locations of the
+// Claude Desktop config file, all under the current user's home directory.
+func knownClaudeDesktopConfigPaths() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return []string{
+		// macOS
+		filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+		// Linux
+		filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"),
+		// Windows
+		filepath.Join(home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
+	}, nil
+}
+
+// validateClaudeDesktopConfigPath resolves a user-supplied config path and
+// allowlists it against the standard Claude Desktop config locations. The
+// detect-MCP endpoint is authenticated but member-level, and without this an
+// authenticated caller could point os.ReadFile at any file on the server
+// (arbitrary file read / LFI, e.g. /etc/passwd or /proc/self/environ). The
+// feature only ever needs to read the Claude Desktop config in its standard
+// location, so we accept nothing else. A leading "~" is expanded; the cleaned
+// path must exactly match a known location (which also rejects ".." traversal).
+func validateClaudeDesktopConfigPath(configPath string) (string, error) {
+	if configPath == "" {
+		return "", fmt.Errorf("config path is required")
+	}
+	if configPath == "~" || strings.HasPrefix(configPath, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		configPath = home + strings.TrimPrefix(configPath, "~")
+	}
+	cleaned := filepath.Clean(configPath)
+	allowed, err := knownClaudeDesktopConfigPaths()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range allowed {
+		if cleaned == p {
+			return cleaned, nil
+		}
+	}
+	return "", fmt.Errorf("config path is not a recognized Claude Desktop config location")
+}
+
 // parseClaudeDesktopConfig parses Claude Desktop config JSON file
 func (s *AgentService) parseClaudeDesktopConfig(configPath string) ([]DetectedMCPServer, error) {
-	// Expand tilde (~) in path to home directory
-	if len(configPath) > 0 && configPath[0] == '~' {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		configPath = homeDir + configPath[1:]
+	validatedPath, err := validateClaudeDesktopConfigPath(configPath)
+	if err != nil {
+		return nil, err
 	}
 
-	// Read config file
-	data, err := os.ReadFile(configPath)
+	// Read config file. validatedPath is allowlisted to the standard Claude
+	// Desktop config location above, so this is not attacker-controlled.
+	data, err := os.ReadFile(validatedPath) //nolint:gosec // G304: validatedPath is allowlisted to the standard Claude Desktop config location by validateClaudeDesktopConfigPath
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}

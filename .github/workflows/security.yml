@@ -252,8 +252,15 @@ jobs:
           npm ci
           npx license-checker --failOn "GPL-2.0;GPL-3.0;AGPL-1.0;AGPL-3.0;SSPL-1.0" --summary
 
-  go-lint:
-    name: Go Lint
+  # The security linters (gosec audit mode, bodyclose, sqlclosecheck) are BLOCKING: this
+  # is the class we cannot ship regressions in. The broader quality linters (staticcheck,
+  # unused) run as a separate NON-BLOCKING job while their pre-existing backlog is burned
+  # down. action@v8 installs golangci-lint v2 (the v6 line caps at v1, whose binary is
+  # built on go1.24 and refuses our go1.25 target); pin the linter explicitly so CI and
+  # local runs use the identical build. Both jobs share one .golangci.yml; the linter set
+  # is selected per job via --default=none --enable=... (security) vs the full config.
+  go-lint-security:
+    name: Go Lint (security)
     needs: changes
     if: >-
       github.event_name == 'schedule' ||
@@ -270,17 +277,37 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
-      - name: Run golangci-lint
-        # action@v8 installs golangci-lint v2 (the v6 line caps at v1, whose binary is
-        # built on go1.24 and refuses our go1.25 target — that guard failure was being
-        # swallowed by continue-on-error and reported green). Pin the linter explicitly so
-        # CI and local runs use the identical build.
+      - name: Run golangci-lint (security linters, blocking)
         uses: golangci/golangci-lint-action@v8
-        # NON-BLOCKING on purpose: the v2 migration surfaced a 177-finding backlog
-        # (153 staticcheck + 13 unused + 8 gosec + 3 bodyclose). Findings post as inline
-        # PR annotations so they're visible, but don't wedge every backend PR while the
-        # backlog is triaged. Flip to blocking (security linters first) per
-        # todo/2026-06-26-aim-golangci-lint-silently-disabled.md once findings are resolved.
+        with:
+          version: v2.12.2
+          working-directory: apps/backend
+          args: --config ../../.golangci.yml --default=none --enable=gosec,bodyclose,sqlclosecheck
+
+  go-lint-quality:
+    name: Go Lint (quality)
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Run golangci-lint (full set, non-blocking)
+        # NON-BLOCKING: staticcheck/unused carry a pre-existing 166-finding backlog.
+        # Findings post as inline PR annotations so they stay visible; this job is made
+        # blocking once the backlog reaches zero. Tracked in
+        # todo/2026-06-26-aim-golangci-lint-silently-disabled.md.
+        uses: golangci/golangci-lint-action@v8
         continue-on-error: true
         with:
           version: v2.12.2
