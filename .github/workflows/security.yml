@@ -271,9 +271,18 @@ jobs:
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # action@v8 installs golangci-lint v2 (the v6 line caps at v1, whose binary is
+        # built on go1.24 and refuses our go1.25 target — that guard failure was being
+        # swallowed by continue-on-error and reported green). Pin the linter explicitly so
+        # CI and local runs use the identical build.
+        uses: golangci/golangci-lint-action@v8
+        # NON-BLOCKING on purpose: the v2 migration surfaced a 177-finding backlog
+        # (153 staticcheck + 13 unused + 8 gosec + 3 bodyclose). Findings post as inline
+        # PR annotations so they're visible, but don't wedge every backend PR while the
+        # backlog is triaged. Flip to blocking (security linters first) per
+        # todo/2026-06-26-aim-golangci-lint-silently-disabled.md once findings are resolved.
         continue-on-error: true
         with:
-          version: latest
+          version: v2.12.2
           working-directory: apps/backend
           args: --config ../../.golangci.yml
